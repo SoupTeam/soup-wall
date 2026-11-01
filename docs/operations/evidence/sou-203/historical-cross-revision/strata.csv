@@ -1,0 +1,9 @@
+profile,condition,role,stratum,planned,qualified_run_trials,measured,failed,timed_out,incomplete,not_run,runs,continuation_p50_ms,continuation_p95_ms,continuation_max_ms
+filesystem,post_cache_drop_setup_rewarmed,baseline,not_comparable,40,40,40,0,0,0,0,2,991.618394,1058.548487,1107.635712
+filesystem,post_cache_drop_setup_rewarmed,candidate,not_comparable,40,40,40,0,0,0,0,2,1198.990163,1265.400298,1298.161406
+filesystem,warm,baseline,not_comparable,40,40,40,0,0,0,0,2,993.350227,1035.453202,1064.643873
+filesystem,warm,candidate,not_comparable,40,40,40,0,0,0,0,2,1205.856493,1256.82629,1270.179619
+git,post_cache_drop_setup_rewarmed,baseline,not_comparable,40,40,40,0,0,0,0,2,1365.538841,1413.237771,1520.750287
+git,post_cache_drop_setup_rewarmed,candidate,not_comparable,40,40,40,0,0,0,0,2,1579.629562,1678.917396,1692.213688
+git,warm,baseline,not_comparable,40,40,40,0,0,0,0,2,1335.429502,1409.760721,1425.507663
+git,warm,candidate,not_comparable,40,40,40,0,0,0,0,2,1593.970563,1634.924643,1665.005933

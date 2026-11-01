@@ -1,0 +1,2673 @@
+{
+  "basis": "identity_control",
+  "classification": "compatible",
+  "contract": "sw-native-performance-comparison/1",
+  "dimensions": [
+    {
+      "baseline": "3065fdacd2c0ea3053fa5709ac5b54e7e0c2e3544a3f4baf7a8957cc2c56bc43",
+      "candidate": "3065fdacd2c0ea3053fa5709ac5b54e7e0c2e3544a3f4baf7a8957cc2c56bc43",
+      "code": null,
+      "detail": null,
+      "dimension": "evidence_identity",
+      "fields": [
+        "input.evidence_sha256"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": "native_linux",
+      "candidate": "native_linux",
+      "code": null,
+      "detail": null,
+      "dimension": "platform",
+      "fields": [
+        "environment.platform_kind"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": "6.17.0-1022-azure",
+      "candidate": "6.17.0-1022-azure",
+      "code": null,
+      "detail": null,
+      "dimension": "kernel",
+      "fields": [
+        "environment.kernel"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": "x86_64",
+      "candidate": "x86_64",
+      "code": null,
+      "detail": null,
+      "dimension": "machine",
+      "fields": [
+        "environment.machine"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": [
+        4
+      ],
+      "candidate": [
+        4
+      ],
+      "code": null,
+      "detail": null,
+      "dimension": "cpu_count",
+      "fields": [
+        "environment.cpu_count"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": [
+        16373452
+      ],
+      "candidate": [
+        16373452
+      ],
+      "code": null,
+      "detail": null,
+      "dimension": "memory",
+      "fields": [
+        "environment.mem_total_kb"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": null,
+      "detail": "same original evidence",
+      "dimension": "host_instance",
+      "fields": [
+        "environment.host_instance"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": {
+        "fallback_possible": true,
+        "mode": "seccomp-bpf",
+        "syscalls": "execve,openat,write,writev,clone,clone3,exit,exit_group"
+      },
+      "candidate": {
+        "fallback_possible": true,
+        "mode": "seccomp-bpf",
+        "syscalls": "execve,openat,write,writev,clone,clone3,exit,exit_group"
+      },
+      "code": null,
+      "detail": null,
+      "dimension": "trace_requested",
+      "fields": [
+        "trace.requested"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": 20,
+      "candidate": 20,
+      "code": null,
+      "detail": null,
+      "dimension": "design",
+      "fields": [
+        "design.samples_per_profile"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": null,
+      "detail": "same original evidence",
+      "dimension": "source",
+      "fields": [
+        "provenance.source"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": null,
+      "detail": "same original evidence",
+      "dimension": "binaries",
+      "fields": [
+        "provenance.binaries"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": null,
+      "detail": "same original evidence",
+      "dimension": "build",
+      "fields": [
+        "provenance.build"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": null,
+      "detail": "same original evidence",
+      "dimension": "workload",
+      "fields": [
+        "provenance.workload"
+      ],
+      "status": "match"
+    }
+  ],
+  "engineering_targets": {
+    "continuation_p95_ms": 3000,
+    "first_pending_ms": 5000,
+    "note": "existing criteria, evaluated per side and stratum only; not a comparison verdict, not protection, effectiveness or readiness"
+  },
+  "global_pooled_comparison": null,
+  "global_pooled_comparison_reason": "never computed: profiles and conditions are separate strata",
+  "inference": {
+    "hosts": 1,
+    "independent_clusters_per_stratum": [
+      2
+    ],
+    "intervals": null,
+    "reasons": [
+      "independent_clusters_below_minimum: at most 2 runs per stratum, minimum 10 effective clusters (DEC-SOU153-20261027)",
+      "no_accepted_performance_cluster_method: the SOU-153 bootstrap is approved only for AgentDojo semantic families",
+      "repeated_trials_within_a_run_are_dependent: one qualifier process and host per run"
+    ],
+    "status": "descriptive_only"
+  },
+  "observations": {
+    "baseline": {
+      "contract": "sw-native-performance-observation/1",
+      "design": {
+        "cluster_unit": "run (one qualifier process per run)",
+        "host_unit": "one dispatch / runner per report",
+        "pairing_design": null,
+        "plan": [
+          "cold",
+          "warm",
+          "cold",
+          "warm"
+        ],
+        "profiles": [
+          "filesystem",
+          "git"
+        ],
+        "samples_per_profile": 20
+      },
+      "endpoints": {
+        "continuation_ms": {
+          "clock": "qualifier_harness_monotonic",
+          "end": "correlated original-server result",
+          "metric": "operator_attempt_to_correlated_original_result_monotonic",
+          "observer": "scripts/qualify-pilot-ask.py harness",
+          "role": "continuation engineering criterion (p95 <= 3000 ms)",
+          "source_field": "decision_to_result_ms",
+          "start": "operator approval attempt",
+          "unit": "ms"
+        },
+        "first_pending_asset_verification_ms": {
+          "clock": "collector_monotonic",
+          "end": "pass-1 asset verification end, before the pending approval is published",
+          "metric": "collector_pass_1_asset_verification_sum",
+          "observer": "collector mcp_asset_verification_timing",
+          "role": "lower bound of the operator-visible first-pending wait; never the 5 s pending measurement",
+          "source_field": "sum of pass-1 runtime_and_libraries, package_tree, selected_profile (same clock, sequential)",
+          "start": "collector pass-1 asset verification start",
+          "unit": "ms"
+        },
+        "post_observed_total_ms": {
+          "clock": "collector_monotonic",
+          "end": "result inspection complete",
+          "metric": "collector_post_observed_total",
+          "observer": "collector mcp_real_approval_timing",
+          "role": "internal verification after approval; never a substitute for continuation",
+          "source_field": "post_observed_ms",
+          "start": "collector observation of the approval",
+          "unit": "ms"
+        }
+      },
+      "environment": {
+        "cpu_count": [
+          4
+        ],
+        "host_instance": {
+          "detail": "all runs of one series ran in one dispatch; the runner instance is not recorded",
+          "status": "not_retained"
+        },
+        "kernel": "6.17.0-1022-azure",
+        "machine": "x86_64",
+        "mem_total_kb": [
+          16373452
+        ],
+        "platform_kind": "native_linux"
+      },
+      "input": {
+        "custody": {
+          "bytes": 720925,
+          "git_blob": "35bb5839ac231789f0c2e4eee5accd5ca289c6c3",
+          "introduced_by": "020e2c1fed0a9923a0ece396f895fe4beae9fdd4",
+          "method": "local git object store: blob id of the bytes read",
+          "normalization": "crlf_to_lf_checkout",
+          "original_sha256": "e11625ecad25734ee4ab6848d6d8cdcc5d25b50ca291e5ce632e4908c662f0c2",
+          "status": "committed_blob"
+        },
+        "evidence_sha256": "3065fdacd2c0ea3053fa5709ac5b54e7e0c2e3544a3f4baf7a8957cc2c56bc43",
+        "manifest": {
+          "custody": {
+            "bytes": 1962,
+            "git_blob": "efa63daa7edbfdf4b4e1a545ae3a9ccc4e7d2b38",
+            "introduced_by": "020e2c1fed0a9923a0ece396f895fe4beae9fdd4",
+            "method": "local git object store: blob id of the bytes read",
+            "normalization": "crlf_to_lf_checkout",
+            "original_sha256": "326de15d02f97c8d0865277ba9372f533c40cd31a0f41ffb6ff6890aaf6fdf75",
+            "status": "committed_blob"
+          },
+          "declared_at": "2026-10-26T15:17:19Z",
+          "name": "docs/operations/evidence/sou-141/native-final-ask-series-manifest.json"
+        },
+        "name": "docs/operations/evidence/sou-141/native-final-ask-series-summary.json",
+        "producer": "scripts/qualify-ask-series.py",
+        "producer_format": "sw-ask-series/1"
+      },
+      "not_retained": {
+        "cleanup": "cleanup is inside run wall_seconds only",
+        "external_build_time": "not part of the series",
+        "first_observable_pending": "host-visible pending time is measured by SOU-105 acceptance, not by this series",
+        "preparation_elapsed": "qualifier setup is inside run wall_seconds only; no per-trial setup clock is retained",
+        "raw_stage_events": "stage-events.jsonl is not retained; `stages` aggregates are reported, not reproduced",
+        "trace_observed": "the qualification report (and its actual strace mode) is not retained in the summary"
+      },
+      "provenance": {
+        "binaries": {
+          "detail": "manifest self-declaration; the binaries are not retained",
+          "sha256": {
+            "agentfw": "995bbc240d1908e1a6626f2c7a9d040e5551aa0c97ffc908e693ad232325685e",
+            "bwrap": "5e59dde511adb95e974b93e559d6cefe942d340140bbbbe93d9b4fbfc5674363",
+            "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+            "git": "f345902d1f8d23d5ead793016958818e172e11aed198e0ab1d5b0c48a241056e",
+            "git_launcher": "f83825091d90a259198a9f158eae4dca74e0e187325c30fc3b6a7804546e52a0",
+            "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+            "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+            "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+          },
+          "status": "declared_only"
+        },
+        "build": {
+          "detail": "no sw-native-pilot-agent-source-build/1 receipt was supplied",
+          "profile": null,
+          "receipt_sha256": null,
+          "status": "not_retained"
+        },
+        "profiles_and_policy": {
+          "detail": "profiles/ and policies are tracked files under source.files_sha256",
+          "status": "bound_via_source_tree"
+        },
+        "source": {
+          "commit": "4b99b6efee6bfd3e603b207d841015d179962977",
+          "files_sha256": "e81c2fd13be1e7e4ee9702b6558ad0a6b95beaddd62db5cddcbafdd0a12392d7",
+          "method": "git commit tree equality and files_sha256 recomputed from every committed blob",
+          "status": "verified_git_objects",
+          "tree": "5db4a81ee8e65e389663c974abb690d5fb34ed6a"
+        },
+        "workload": {
+          "definition": "qualify-pilot-ask.py --approval-samples N, approve case, profiles filesystem,git",
+          "harness_sha256_at_source": {
+            "scripts/pilot_ask_latency.py": "9456ee929bf9c45002f37e6ee6f429e69c343d1ea7262c752b130db12b9f7aaf",
+            "scripts/qualify-pilot-ask.py": "c5be28449d78d3be2f840fbc7f89bf039ab8661197ea658836e41bd1cc114a3d"
+          },
+          "status": "verified_git_objects"
+        }
+      },
+      "reproduction": {
+        "checked": [
+          "runs[].summary.latency",
+          "pooled",
+          "status",
+          "performance_blockers",
+          "attempts",
+          "runs[].summary.diagnostic_samples",
+          "runs[].summary.diagnostics"
+        ],
+        "not_reproduced": [
+          "runs[].summary.stages (raw stage-events.jsonl not retained)"
+        ],
+        "status": "reproduced_from_retained_trials"
+      },
+      "role": "baseline",
+      "runs": [
+        {
+          "cache_drop": {
+            "cached_kb_after": 313792,
+            "cached_kb_before": 5446144,
+            "error": null,
+            "performed": true,
+            "requested": true
+          },
+          "condition": "post_cache_drop_setup_rewarmed",
+          "conditions": {
+            "conditions_after": {
+              "cached_kb": 976232,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=6.49 avg60=8.18 avg300=6.62 total=50223124",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "2.26",
+                "1.98",
+                "1.34"
+              ],
+              "mem_total_kb": 16373452
+            },
+            "conditions_before": {
+              "cached_kb": 313792,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=0.03 avg60=0.32 avg300=0.76 total=7737430",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "1.29",
+                "1.23",
+                "0.65"
+              ],
+              "mem_total_kb": 16373452
+            }
+          },
+          "declared_kind": "cold",
+          "disqualification": null,
+          "exit_code": 0,
+          "failure": null,
+          "index": 1,
+          "qualified": true,
+          "wall_seconds": 622.2
+        },
+        {
+          "cache_drop": null,
+          "condition": "warm",
+          "conditions": {
+            "conditions_after": {
+              "cached_kb": 1042408,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=6.41 avg60=8.32 avg300=7.34 total=92193415",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "2.56",
+                "2.18",
+                "1.68"
+              ],
+              "mem_total_kb": 16373452
+            },
+            "conditions_before": {
+              "cached_kb": 1033752,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=5.32 avg60=7.91 avg300=6.57 total=50236883",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "2.26",
+                "1.98",
+                "1.34"
+              ],
+              "mem_total_kb": 16373452
+            }
+          },
+          "declared_kind": "warm",
+          "disqualification": null,
+          "exit_code": 0,
+          "failure": null,
+          "index": 2,
+          "qualified": true,
+          "wall_seconds": 613.4
+        },
+        {
+          "cache_drop": {
+            "cached_kb_after": 315332,
+            "cached_kb_before": 1042564,
+            "error": null,
+            "performed": true,
+            "requested": true
+          },
+          "condition": "post_cache_drop_setup_rewarmed",
+          "conditions": {
+            "conditions_after": {
+              "cached_kb": 990716,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=6.00 avg60=7.99 avg300=7.36 total=134347156",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "2.39",
+                "2.28",
+                "1.91"
+              ],
+              "mem_total_kb": 16373452
+            },
+            "conditions_before": {
+              "cached_kb": 315332,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=6.41 avg60=8.32 avg300=7.34 total=92202898",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "2.56",
+                "2.18",
+                "1.68"
+              ],
+              "mem_total_kb": 16373452
+            }
+          },
+          "declared_kind": "cold",
+          "disqualification": null,
+          "exit_code": 0,
+          "failure": null,
+          "index": 3,
+          "qualified": true,
+          "wall_seconds": 614.7
+        },
+        {
+          "cache_drop": null,
+          "condition": "warm",
+          "conditions": {
+            "conditions_after": {
+              "cached_kb": 1048648,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=7.23 avg60=8.68 avg300=7.66 total=177143819",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "2.28",
+                "2.25",
+                "2.03"
+              ],
+              "mem_total_kb": 16373452
+            },
+            "conditions_before": {
+              "cached_kb": 1048260,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=5.09 avg60=7.76 avg300=7.32 total=134358465",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "2.39",
+                "2.28",
+                "1.91"
+              ],
+              "mem_total_kb": 16373452
+            }
+          },
+          "declared_kind": "warm",
+          "disqualification": null,
+          "exit_code": 0,
+          "failure": null,
+          "index": 4,
+          "qualified": true,
+          "wall_seconds": 613.4
+        }
+      ],
+      "stage_clock": {
+        "clock": "collector_monotonic",
+        "observer": "collector mcp_asset_verification_timing / mcp_real_approval_timing",
+        "unit": "ms"
+      },
+      "status_counts": {
+        "failed": 0,
+        "incomplete": 0,
+        "measured": 160,
+        "not_run": 0,
+        "timed_out": 0
+      },
+      "status_mapping": {
+        "failed": "trial row present, passed is not true (the producer counts it in `failed`)",
+        "incomplete": "no trial row in a recorded run (the producer counts it in `incomplete`)",
+        "measured": "trial row present, passed is true, finite non-negative decision_to_result_ms",
+        "not_run": "the planned run was never recorded",
+        "timed_out": "no trial row, and the run failed with the series `series_<n>_timeout` reason"
+      },
+      "trace": {
+        "observed": "not_retained",
+        "requested": {
+          "fallback_possible": true,
+          "mode": "seccomp-bpf",
+          "syscalls": "execve,openat,write,writev,clone,clone3,exit,exit_group"
+        },
+        "requested_basis": "the producer accepted only qualification reports whose trace_requested equals this value (validate_report); qualified runs [1, 2, 3, 4]"
+      },
+      "trial_count": 160
+    },
+    "candidate": {
+      "contract": "sw-native-performance-observation/1",
+      "design": {
+        "cluster_unit": "run (one qualifier process per run)",
+        "host_unit": "one dispatch / runner per report",
+        "pairing_design": null,
+        "plan": [
+          "cold",
+          "warm",
+          "cold",
+          "warm"
+        ],
+        "profiles": [
+          "filesystem",
+          "git"
+        ],
+        "samples_per_profile": 20
+      },
+      "endpoints": {
+        "continuation_ms": {
+          "clock": "qualifier_harness_monotonic",
+          "end": "correlated original-server result",
+          "metric": "operator_attempt_to_correlated_original_result_monotonic",
+          "observer": "scripts/qualify-pilot-ask.py harness",
+          "role": "continuation engineering criterion (p95 <= 3000 ms)",
+          "source_field": "decision_to_result_ms",
+          "start": "operator approval attempt",
+          "unit": "ms"
+        },
+        "first_pending_asset_verification_ms": {
+          "clock": "collector_monotonic",
+          "end": "pass-1 asset verification end, before the pending approval is published",
+          "metric": "collector_pass_1_asset_verification_sum",
+          "observer": "collector mcp_asset_verification_timing",
+          "role": "lower bound of the operator-visible first-pending wait; never the 5 s pending measurement",
+          "source_field": "sum of pass-1 runtime_and_libraries, package_tree, selected_profile (same clock, sequential)",
+          "start": "collector pass-1 asset verification start",
+          "unit": "ms"
+        },
+        "post_observed_total_ms": {
+          "clock": "collector_monotonic",
+          "end": "result inspection complete",
+          "metric": "collector_post_observed_total",
+          "observer": "collector mcp_real_approval_timing",
+          "role": "internal verification after approval; never a substitute for continuation",
+          "source_field": "post_observed_ms",
+          "start": "collector observation of the approval",
+          "unit": "ms"
+        }
+      },
+      "environment": {
+        "cpu_count": [
+          4
+        ],
+        "host_instance": {
+          "detail": "all runs of one series ran in one dispatch; the runner instance is not recorded",
+          "status": "not_retained"
+        },
+        "kernel": "6.17.0-1022-azure",
+        "machine": "x86_64",
+        "mem_total_kb": [
+          16373452
+        ],
+        "platform_kind": "native_linux"
+      },
+      "input": {
+        "custody": {
+          "bytes": 720925,
+          "git_blob": "35bb5839ac231789f0c2e4eee5accd5ca289c6c3",
+          "introduced_by": "020e2c1fed0a9923a0ece396f895fe4beae9fdd4",
+          "method": "local git object store: blob id of the bytes read",
+          "normalization": "crlf_to_lf_checkout",
+          "original_sha256": "e11625ecad25734ee4ab6848d6d8cdcc5d25b50ca291e5ce632e4908c662f0c2",
+          "status": "committed_blob"
+        },
+        "evidence_sha256": "3065fdacd2c0ea3053fa5709ac5b54e7e0c2e3544a3f4baf7a8957cc2c56bc43",
+        "manifest": {
+          "custody": {
+            "bytes": 1962,
+            "git_blob": "efa63daa7edbfdf4b4e1a545ae3a9ccc4e7d2b38",
+            "introduced_by": "020e2c1fed0a9923a0ece396f895fe4beae9fdd4",
+            "method": "local git object store: blob id of the bytes read",
+            "normalization": "crlf_to_lf_checkout",
+            "original_sha256": "326de15d02f97c8d0865277ba9372f533c40cd31a0f41ffb6ff6890aaf6fdf75",
+            "status": "committed_blob"
+          },
+          "declared_at": "2026-10-26T15:17:19Z",
+          "name": "docs/operations/evidence/sou-141/native-final-ask-series-manifest.json"
+        },
+        "name": "docs/operations/evidence/sou-141/native-final-ask-series-summary.json",
+        "producer": "scripts/qualify-ask-series.py",
+        "producer_format": "sw-ask-series/1"
+      },
+      "not_retained": {
+        "cleanup": "cleanup is inside run wall_seconds only",
+        "external_build_time": "not part of the series",
+        "first_observable_pending": "host-visible pending time is measured by SOU-105 acceptance, not by this series",
+        "preparation_elapsed": "qualifier setup is inside run wall_seconds only; no per-trial setup clock is retained",
+        "raw_stage_events": "stage-events.jsonl is not retained; `stages` aggregates are reported, not reproduced",
+        "trace_observed": "the qualification report (and its actual strace mode) is not retained in the summary"
+      },
+      "provenance": {
+        "binaries": {
+          "detail": "manifest self-declaration; the binaries are not retained",
+          "sha256": {
+            "agentfw": "995bbc240d1908e1a6626f2c7a9d040e5551aa0c97ffc908e693ad232325685e",
+            "bwrap": "5e59dde511adb95e974b93e559d6cefe942d340140bbbbe93d9b4fbfc5674363",
+            "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+            "git": "f345902d1f8d23d5ead793016958818e172e11aed198e0ab1d5b0c48a241056e",
+            "git_launcher": "f83825091d90a259198a9f158eae4dca74e0e187325c30fc3b6a7804546e52a0",
+            "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+            "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+            "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+          },
+          "status": "declared_only"
+        },
+        "build": {
+          "detail": "no sw-native-pilot-agent-source-build/1 receipt was supplied",
+          "profile": null,
+          "receipt_sha256": null,
+          "status": "not_retained"
+        },
+        "profiles_and_policy": {
+          "detail": "profiles/ and policies are tracked files under source.files_sha256",
+          "status": "bound_via_source_tree"
+        },
+        "source": {
+          "commit": "4b99b6efee6bfd3e603b207d841015d179962977",
+          "files_sha256": "e81c2fd13be1e7e4ee9702b6558ad0a6b95beaddd62db5cddcbafdd0a12392d7",
+          "method": "git commit tree equality and files_sha256 recomputed from every committed blob",
+          "status": "verified_git_objects",
+          "tree": "5db4a81ee8e65e389663c974abb690d5fb34ed6a"
+        },
+        "workload": {
+          "definition": "qualify-pilot-ask.py --approval-samples N, approve case, profiles filesystem,git",
+          "harness_sha256_at_source": {
+            "scripts/pilot_ask_latency.py": "9456ee929bf9c45002f37e6ee6f429e69c343d1ea7262c752b130db12b9f7aaf",
+            "scripts/qualify-pilot-ask.py": "c5be28449d78d3be2f840fbc7f89bf039ab8661197ea658836e41bd1cc114a3d"
+          },
+          "status": "verified_git_objects"
+        }
+      },
+      "reproduction": {
+        "checked": [
+          "runs[].summary.latency",
+          "pooled",
+          "status",
+          "performance_blockers",
+          "attempts",
+          "runs[].summary.diagnostic_samples",
+          "runs[].summary.diagnostics"
+        ],
+        "not_reproduced": [
+          "runs[].summary.stages (raw stage-events.jsonl not retained)"
+        ],
+        "status": "reproduced_from_retained_trials"
+      },
+      "role": "candidate",
+      "runs": [
+        {
+          "cache_drop": {
+            "cached_kb_after": 313792,
+            "cached_kb_before": 5446144,
+            "error": null,
+            "performed": true,
+            "requested": true
+          },
+          "condition": "post_cache_drop_setup_rewarmed",
+          "conditions": {
+            "conditions_after": {
+              "cached_kb": 976232,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=6.49 avg60=8.18 avg300=6.62 total=50223124",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "2.26",
+                "1.98",
+                "1.34"
+              ],
+              "mem_total_kb": 16373452
+            },
+            "conditions_before": {
+              "cached_kb": 313792,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=0.03 avg60=0.32 avg300=0.76 total=7737430",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "1.29",
+                "1.23",
+                "0.65"
+              ],
+              "mem_total_kb": 16373452
+            }
+          },
+          "declared_kind": "cold",
+          "disqualification": null,
+          "exit_code": 0,
+          "failure": null,
+          "index": 1,
+          "qualified": true,
+          "wall_seconds": 622.2
+        },
+        {
+          "cache_drop": null,
+          "condition": "warm",
+          "conditions": {
+            "conditions_after": {
+              "cached_kb": 1042408,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=6.41 avg60=8.32 avg300=7.34 total=92193415",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "2.56",
+                "2.18",
+                "1.68"
+              ],
+              "mem_total_kb": 16373452
+            },
+            "conditions_before": {
+              "cached_kb": 1033752,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=5.32 avg60=7.91 avg300=6.57 total=50236883",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "2.26",
+                "1.98",
+                "1.34"
+              ],
+              "mem_total_kb": 16373452
+            }
+          },
+          "declared_kind": "warm",
+          "disqualification": null,
+          "exit_code": 0,
+          "failure": null,
+          "index": 2,
+          "qualified": true,
+          "wall_seconds": 613.4
+        },
+        {
+          "cache_drop": {
+            "cached_kb_after": 315332,
+            "cached_kb_before": 1042564,
+            "error": null,
+            "performed": true,
+            "requested": true
+          },
+          "condition": "post_cache_drop_setup_rewarmed",
+          "conditions": {
+            "conditions_after": {
+              "cached_kb": 990716,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=6.00 avg60=7.99 avg300=7.36 total=134347156",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "2.39",
+                "2.28",
+                "1.91"
+              ],
+              "mem_total_kb": 16373452
+            },
+            "conditions_before": {
+              "cached_kb": 315332,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=6.41 avg60=8.32 avg300=7.34 total=92202898",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "2.56",
+                "2.18",
+                "1.68"
+              ],
+              "mem_total_kb": 16373452
+            }
+          },
+          "declared_kind": "cold",
+          "disqualification": null,
+          "exit_code": 0,
+          "failure": null,
+          "index": 3,
+          "qualified": true,
+          "wall_seconds": 614.7
+        },
+        {
+          "cache_drop": null,
+          "condition": "warm",
+          "conditions": {
+            "conditions_after": {
+              "cached_kb": 1048648,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=7.23 avg60=8.68 avg300=7.66 total=177143819",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "2.28",
+                "2.25",
+                "2.03"
+              ],
+              "mem_total_kb": 16373452
+            },
+            "conditions_before": {
+              "cached_kb": 1048260,
+              "cpu_count": 4,
+              "cpu_pressure": [
+                "some avg10=5.09 avg60=7.76 avg300=7.32 total=134358465",
+                "full avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+              ],
+              "loadavg": [
+                "2.39",
+                "2.28",
+                "1.91"
+              ],
+              "mem_total_kb": 16373452
+            }
+          },
+          "declared_kind": "warm",
+          "disqualification": null,
+          "exit_code": 0,
+          "failure": null,
+          "index": 4,
+          "qualified": true,
+          "wall_seconds": 613.4
+        }
+      ],
+      "stage_clock": {
+        "clock": "collector_monotonic",
+        "observer": "collector mcp_asset_verification_timing / mcp_real_approval_timing",
+        "unit": "ms"
+      },
+      "status_counts": {
+        "failed": 0,
+        "incomplete": 0,
+        "measured": 160,
+        "not_run": 0,
+        "timed_out": 0
+      },
+      "status_mapping": {
+        "failed": "trial row present, passed is not true (the producer counts it in `failed`)",
+        "incomplete": "no trial row in a recorded run (the producer counts it in `incomplete`)",
+        "measured": "trial row present, passed is true, finite non-negative decision_to_result_ms",
+        "not_run": "the planned run was never recorded",
+        "timed_out": "no trial row, and the run failed with the series `series_<n>_timeout` reason"
+      },
+      "trace": {
+        "observed": "not_retained",
+        "requested": {
+          "fallback_possible": true,
+          "mode": "seccomp-bpf",
+          "syscalls": "execve,openat,write,writev,clone,clone3,exit,exit_group"
+        },
+        "requested_basis": "the producer accepted only qualification reports whose trace_requested equals this value (validate_report); qualified runs [1, 2, 3, 4]"
+      },
+      "trial_count": 160
+    }
+  },
+  "pairing": {
+    "basis": "identical_original_evidence",
+    "reason": null,
+    "valid": true
+  },
+  "percentile_definition": "nearest rank: the value at rank ceil(q * n) of the ascending sample, unrounded (pilot_ask_latency.summarize). Published sw-ask-series/1 distributions round to 0.001 ms first; reproduction uses that producer convention.",
+  "reasons": [],
+  "scope": [
+    "Engineering latency diagnostics for recorded native Ask series only.",
+    "Not a security or protection qualification, not task effectiveness, not product or pilot readiness.",
+    "Trace-on is the only observer mode of this producer; no trace-off result exists here, and none would qualify protection.",
+    "The 3000 ms continuation p95 criterion and the 5000 ms first-pending bound are existing engineering criteria, reported separately; no new budget is approved.",
+    "A same-report identity control proves the comparator, not a performance change between revisions."
+  ],
+  "status": "evaluated",
+  "strata": [
+    {
+      "baseline": {
+        "attempted": 40,
+        "complete_denominator": true,
+        "continuation_by_run": {
+          "1": {
+            "max": 1298.161406,
+            "min": 1098.183618,
+            "n": 20,
+            "p50": 1198.990163,
+            "p95": 1264.333229
+          },
+          "3": {
+            "max": 1267.42957,
+            "min": 1148.449322,
+            "n": 20,
+            "p50": 1198.699556,
+            "p95": 1265.400298
+          }
+        },
+        "continuation_highest": [
+          {
+            "ms": 1298.161406,
+            "trial": "r01/filesystem/019"
+          },
+          {
+            "ms": 1267.42957,
+            "trial": "r03/filesystem/013"
+          },
+          {
+            "ms": 1265.400298,
+            "trial": "r03/filesystem/000"
+          }
+        ],
+        "continuation_ms": {
+          "max": 1298.161406,
+          "min": 1098.183618,
+          "n": 40,
+          "p50": 1198.990163,
+          "p95": 1265.400298
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1329.518 ms"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_pending_asset_verification_ms": {
+          "max": 1329.517708,
+          "min": 1145.1383720000001,
+          "n": 40,
+          "p50": 1233.075503,
+          "p95": 1318.743438
+        },
+        "first_trial_per_run_ms": [
+          {
+            "ms": 1234.892207,
+            "trial": "r01/filesystem/000"
+          },
+          {
+            "ms": 1265.400298,
+            "trial": "r03/filesystem/000"
+          }
+        ],
+        "independent_clusters": 2,
+        "planned": 40,
+        "post_observed_total_ms": {
+          "max": 1171.926741,
+          "min": 1063.1954910000002,
+          "n": 40,
+          "p50": 1125.407853,
+          "p95": 1157.149968
+        },
+        "qualified_run_trials": 40,
+        "runs": [
+          1,
+          3
+        ],
+        "stages_ms": {
+          "approval/classifier": {
+            "max": 94.00803,
+            "min": 67.37137,
+            "n": 40,
+            "p50": 78.067813,
+            "p95": 89.04682
+          },
+          "approval/daemon_redemption": {
+            "max": 35.027848,
+            "min": 17.874759,
+            "n": 40,
+            "p50": 22.297764,
+            "p95": 29.496161999999998
+          },
+          "approval/original_dispatch": {
+            "max": 11.437277,
+            "min": 6.756533,
+            "n": 40,
+            "p50": 8.500848999999999,
+            "p95": 10.803842
+          },
+          "approval/original_response": {
+            "max": 18.493554999999997,
+            "min": 11.039122,
+            "n": 40,
+            "p50": 12.918989,
+            "p95": 17.319637
+          },
+          "approval/policy_boundary": {
+            "max": 12.036323,
+            "min": 4.528884000000001,
+            "n": 40,
+            "p50": 6.527059,
+            "p95": 9.474866
+          },
+          "approval/profile_and_assets": {
+            "max": 1027.414587,
+            "min": 922.80629,
+            "n": 40,
+            "p50": 982.947226,
+            "p95": 1013.4316830000001
+          },
+          "approval/result_inspection": {
+            "max": 16.755573,
+            "min": 7.80345,
+            "n": 40,
+            "p50": 10.499066,
+            "p95": 14.602103999999999
+          },
+          "asset/package_tree/pass_1": {
+            "max": 1207.851588,
+            "min": 1029.304252,
+            "n": 40,
+            "p50": 1122.732987,
+            "p95": 1200.683566
+          },
+          "asset/package_tree/pass_2": {
+            "max": 950.133993,
+            "min": 882.52964,
+            "n": 40,
+            "p50": 922.224582,
+            "p95": 940.4522010000001
+          },
+          "asset/runtime_and_libraries/pass_1": {
+            "max": 142.01068899999999,
+            "min": 106.034473,
+            "n": 40,
+            "p50": 118.951242,
+            "p95": 131.186807
+          },
+          "asset/runtime_and_libraries/pass_2": {
+            "max": 14.866019,
+            "min": 10.084173,
+            "n": 40,
+            "p50": 11.256643,
+            "p95": 13.203031000000001
+          },
+          "asset/selected_profile/pass_1": {
+            "max": 0.851536,
+            "min": 0.422998,
+            "n": 40,
+            "p50": 0.534345,
+            "p95": 0.686369
+          }
+        },
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        }
+      },
+      "candidate": {
+        "attempted": 40,
+        "complete_denominator": true,
+        "continuation_by_run": {
+          "1": {
+            "max": 1298.161406,
+            "min": 1098.183618,
+            "n": 20,
+            "p50": 1198.990163,
+            "p95": 1264.333229
+          },
+          "3": {
+            "max": 1267.42957,
+            "min": 1148.449322,
+            "n": 20,
+            "p50": 1198.699556,
+            "p95": 1265.400298
+          }
+        },
+        "continuation_highest": [
+          {
+            "ms": 1298.161406,
+            "trial": "r01/filesystem/019"
+          },
+          {
+            "ms": 1267.42957,
+            "trial": "r03/filesystem/013"
+          },
+          {
+            "ms": 1265.400298,
+            "trial": "r03/filesystem/000"
+          }
+        ],
+        "continuation_ms": {
+          "max": 1298.161406,
+          "min": 1098.183618,
+          "n": 40,
+          "p50": 1198.990163,
+          "p95": 1265.400298
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1329.518 ms"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_pending_asset_verification_ms": {
+          "max": 1329.517708,
+          "min": 1145.1383720000001,
+          "n": 40,
+          "p50": 1233.075503,
+          "p95": 1318.743438
+        },
+        "first_trial_per_run_ms": [
+          {
+            "ms": 1234.892207,
+            "trial": "r01/filesystem/000"
+          },
+          {
+            "ms": 1265.400298,
+            "trial": "r03/filesystem/000"
+          }
+        ],
+        "independent_clusters": 2,
+        "planned": 40,
+        "post_observed_total_ms": {
+          "max": 1171.926741,
+          "min": 1063.1954910000002,
+          "n": 40,
+          "p50": 1125.407853,
+          "p95": 1157.149968
+        },
+        "qualified_run_trials": 40,
+        "runs": [
+          1,
+          3
+        ],
+        "stages_ms": {
+          "approval/classifier": {
+            "max": 94.00803,
+            "min": 67.37137,
+            "n": 40,
+            "p50": 78.067813,
+            "p95": 89.04682
+          },
+          "approval/daemon_redemption": {
+            "max": 35.027848,
+            "min": 17.874759,
+            "n": 40,
+            "p50": 22.297764,
+            "p95": 29.496161999999998
+          },
+          "approval/original_dispatch": {
+            "max": 11.437277,
+            "min": 6.756533,
+            "n": 40,
+            "p50": 8.500848999999999,
+            "p95": 10.803842
+          },
+          "approval/original_response": {
+            "max": 18.493554999999997,
+            "min": 11.039122,
+            "n": 40,
+            "p50": 12.918989,
+            "p95": 17.319637
+          },
+          "approval/policy_boundary": {
+            "max": 12.036323,
+            "min": 4.528884000000001,
+            "n": 40,
+            "p50": 6.527059,
+            "p95": 9.474866
+          },
+          "approval/profile_and_assets": {
+            "max": 1027.414587,
+            "min": 922.80629,
+            "n": 40,
+            "p50": 982.947226,
+            "p95": 1013.4316830000001
+          },
+          "approval/result_inspection": {
+            "max": 16.755573,
+            "min": 7.80345,
+            "n": 40,
+            "p50": 10.499066,
+            "p95": 14.602103999999999
+          },
+          "asset/package_tree/pass_1": {
+            "max": 1207.851588,
+            "min": 1029.304252,
+            "n": 40,
+            "p50": 1122.732987,
+            "p95": 1200.683566
+          },
+          "asset/package_tree/pass_2": {
+            "max": 950.133993,
+            "min": 882.52964,
+            "n": 40,
+            "p50": 922.224582,
+            "p95": 940.4522010000001
+          },
+          "asset/runtime_and_libraries/pass_1": {
+            "max": 142.01068899999999,
+            "min": 106.034473,
+            "n": 40,
+            "p50": 118.951242,
+            "p95": 131.186807
+          },
+          "asset/runtime_and_libraries/pass_2": {
+            "max": 14.866019,
+            "min": 10.084173,
+            "n": 40,
+            "p50": 11.256643,
+            "p95": 13.203031000000001
+          },
+          "asset/selected_profile/pass_1": {
+            "max": 0.851536,
+            "min": 0.422998,
+            "n": 40,
+            "p50": 0.534345,
+            "p95": 0.686369
+          }
+        },
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        }
+      },
+      "comparable": true,
+      "condition": "post_cache_drop_setup_rewarmed",
+      "marginal_differences": {
+        "continuation_ms": {
+          "max": 0.0,
+          "p50": 0.0,
+          "p95": 0.0
+        },
+        "direction": "candidate_minus_baseline",
+        "kind": "difference_of_marginal_percentiles_not_percentile_of_paired_differences",
+        "stages_ms": {
+          "approval/classifier": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/daemon_redemption": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/original_dispatch": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/original_response": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/policy_boundary": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/profile_and_assets": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/result_inspection": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/package_tree/pass_1": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/package_tree/pass_2": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/runtime_and_libraries/pass_1": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/runtime_and_libraries/pass_2": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/selected_profile/pass_1": {
+            "p50": 0.0,
+            "p95": 0.0
+          }
+        },
+        "stages_one_side_only": [],
+        "unit": "ms"
+      },
+      "paired_differences": {
+        "all_zero": true,
+        "direction": "candidate_minus_baseline",
+        "kind": "distribution_of_paired_differences",
+        "max": 0.0,
+        "min": 0.0,
+        "n": 40,
+        "p50": 0.0,
+        "p95": 0.0,
+        "unit": "ms"
+      },
+      "profile": "filesystem",
+      "reasons": []
+    },
+    {
+      "baseline": {
+        "attempted": 40,
+        "complete_denominator": true,
+        "continuation_by_run": {
+          "2": {
+            "max": 1270.179619,
+            "min": 1150.095031,
+            "n": 20,
+            "p50": 1220.608745,
+            "p95": 1256.82629
+          },
+          "4": {
+            "max": 1267.778263,
+            "min": 1155.632695,
+            "n": 20,
+            "p50": 1201.0502,
+            "p95": 1245.458277
+          }
+        },
+        "continuation_highest": [
+          {
+            "ms": 1270.179619,
+            "trial": "r02/filesystem/015"
+          },
+          {
+            "ms": 1267.778263,
+            "trial": "r04/filesystem/015"
+          },
+          {
+            "ms": 1256.82629,
+            "trial": "r02/filesystem/016"
+          }
+        ],
+        "continuation_ms": {
+          "max": 1270.179619,
+          "min": 1150.095031,
+          "n": 40,
+          "p50": 1205.856493,
+          "p95": 1256.82629
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1314.974 ms"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_pending_asset_verification_ms": {
+          "max": 1314.9738630000002,
+          "min": 1107.48385,
+          "n": 40,
+          "p50": 1246.428154,
+          "p95": 1305.5330410000001
+        },
+        "first_trial_per_run_ms": [
+          {
+            "ms": 1186.260891,
+            "trial": "r02/filesystem/000"
+          },
+          {
+            "ms": 1201.120638,
+            "trial": "r04/filesystem/000"
+          }
+        ],
+        "independent_clusters": 2,
+        "planned": 40,
+        "post_observed_total_ms": {
+          "max": 1152.431943,
+          "min": 1050.417179,
+          "n": 40,
+          "p50": 1125.626913,
+          "p95": 1145.9161410000002
+        },
+        "qualified_run_trials": 40,
+        "runs": [
+          2,
+          4
+        ],
+        "stages_ms": {
+          "approval/classifier": {
+            "max": 96.215007,
+            "min": 69.05082,
+            "n": 40,
+            "p50": 77.53263100000001,
+            "p95": 88.896216
+          },
+          "approval/daemon_redemption": {
+            "max": 33.284056,
+            "min": 17.855363999999998,
+            "n": 40,
+            "p50": 22.118655,
+            "p95": 28.030013999999998
+          },
+          "approval/original_dispatch": {
+            "max": 11.161291,
+            "min": 6.1708359999999995,
+            "n": 40,
+            "p50": 8.439580000000001,
+            "p95": 10.187861
+          },
+          "approval/original_response": {
+            "max": 16.903291,
+            "min": 11.028497999999999,
+            "n": 40,
+            "p50": 13.703826000000001,
+            "p95": 16.276836
+          },
+          "approval/policy_boundary": {
+            "max": 14.304261,
+            "min": 3.9721699999999998,
+            "n": 40,
+            "p50": 6.178375,
+            "p95": 8.927979
+          },
+          "approval/profile_and_assets": {
+            "max": 1009.623913,
+            "min": 917.191512,
+            "n": 40,
+            "p50": 986.658429,
+            "p95": 1005.188787
+          },
+          "approval/result_inspection": {
+            "max": 14.617818,
+            "min": 8.224022,
+            "n": 40,
+            "p50": 10.604082,
+            "p95": 12.686116
+          },
+          "asset/package_tree/pass_1": {
+            "max": 1197.782094,
+            "min": 997.60724,
+            "n": 40,
+            "p50": 1128.717384,
+            "p95": 1190.5126070000001
+          },
+          "asset/package_tree/pass_2": {
+            "max": 950.0372729999999,
+            "min": 880.846623,
+            "n": 40,
+            "p50": 924.630787,
+            "p95": 944.567582
+          },
+          "asset/runtime_and_libraries/pass_1": {
+            "max": 139.520427,
+            "min": 107.578067,
+            "n": 40,
+            "p50": 118.201408,
+            "p95": 132.952911
+          },
+          "asset/runtime_and_libraries/pass_2": {
+            "max": 13.083186999999999,
+            "min": 10.242154999999999,
+            "n": 40,
+            "p50": 11.188274,
+            "p95": 12.851742
+          },
+          "asset/selected_profile/pass_1": {
+            "max": 0.741474,
+            "min": 0.44318599999999997,
+            "n": 40,
+            "p50": 0.524798,
+            "p95": 0.6888340000000001
+          }
+        },
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        }
+      },
+      "candidate": {
+        "attempted": 40,
+        "complete_denominator": true,
+        "continuation_by_run": {
+          "2": {
+            "max": 1270.179619,
+            "min": 1150.095031,
+            "n": 20,
+            "p50": 1220.608745,
+            "p95": 1256.82629
+          },
+          "4": {
+            "max": 1267.778263,
+            "min": 1155.632695,
+            "n": 20,
+            "p50": 1201.0502,
+            "p95": 1245.458277
+          }
+        },
+        "continuation_highest": [
+          {
+            "ms": 1270.179619,
+            "trial": "r02/filesystem/015"
+          },
+          {
+            "ms": 1267.778263,
+            "trial": "r04/filesystem/015"
+          },
+          {
+            "ms": 1256.82629,
+            "trial": "r02/filesystem/016"
+          }
+        ],
+        "continuation_ms": {
+          "max": 1270.179619,
+          "min": 1150.095031,
+          "n": 40,
+          "p50": 1205.856493,
+          "p95": 1256.82629
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1314.974 ms"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_pending_asset_verification_ms": {
+          "max": 1314.9738630000002,
+          "min": 1107.48385,
+          "n": 40,
+          "p50": 1246.428154,
+          "p95": 1305.5330410000001
+        },
+        "first_trial_per_run_ms": [
+          {
+            "ms": 1186.260891,
+            "trial": "r02/filesystem/000"
+          },
+          {
+            "ms": 1201.120638,
+            "trial": "r04/filesystem/000"
+          }
+        ],
+        "independent_clusters": 2,
+        "planned": 40,
+        "post_observed_total_ms": {
+          "max": 1152.431943,
+          "min": 1050.417179,
+          "n": 40,
+          "p50": 1125.626913,
+          "p95": 1145.9161410000002
+        },
+        "qualified_run_trials": 40,
+        "runs": [
+          2,
+          4
+        ],
+        "stages_ms": {
+          "approval/classifier": {
+            "max": 96.215007,
+            "min": 69.05082,
+            "n": 40,
+            "p50": 77.53263100000001,
+            "p95": 88.896216
+          },
+          "approval/daemon_redemption": {
+            "max": 33.284056,
+            "min": 17.855363999999998,
+            "n": 40,
+            "p50": 22.118655,
+            "p95": 28.030013999999998
+          },
+          "approval/original_dispatch": {
+            "max": 11.161291,
+            "min": 6.1708359999999995,
+            "n": 40,
+            "p50": 8.439580000000001,
+            "p95": 10.187861
+          },
+          "approval/original_response": {
+            "max": 16.903291,
+            "min": 11.028497999999999,
+            "n": 40,
+            "p50": 13.703826000000001,
+            "p95": 16.276836
+          },
+          "approval/policy_boundary": {
+            "max": 14.304261,
+            "min": 3.9721699999999998,
+            "n": 40,
+            "p50": 6.178375,
+            "p95": 8.927979
+          },
+          "approval/profile_and_assets": {
+            "max": 1009.623913,
+            "min": 917.191512,
+            "n": 40,
+            "p50": 986.658429,
+            "p95": 1005.188787
+          },
+          "approval/result_inspection": {
+            "max": 14.617818,
+            "min": 8.224022,
+            "n": 40,
+            "p50": 10.604082,
+            "p95": 12.686116
+          },
+          "asset/package_tree/pass_1": {
+            "max": 1197.782094,
+            "min": 997.60724,
+            "n": 40,
+            "p50": 1128.717384,
+            "p95": 1190.5126070000001
+          },
+          "asset/package_tree/pass_2": {
+            "max": 950.0372729999999,
+            "min": 880.846623,
+            "n": 40,
+            "p50": 924.630787,
+            "p95": 944.567582
+          },
+          "asset/runtime_and_libraries/pass_1": {
+            "max": 139.520427,
+            "min": 107.578067,
+            "n": 40,
+            "p50": 118.201408,
+            "p95": 132.952911
+          },
+          "asset/runtime_and_libraries/pass_2": {
+            "max": 13.083186999999999,
+            "min": 10.242154999999999,
+            "n": 40,
+            "p50": 11.188274,
+            "p95": 12.851742
+          },
+          "asset/selected_profile/pass_1": {
+            "max": 0.741474,
+            "min": 0.44318599999999997,
+            "n": 40,
+            "p50": 0.524798,
+            "p95": 0.6888340000000001
+          }
+        },
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        }
+      },
+      "comparable": true,
+      "condition": "warm",
+      "marginal_differences": {
+        "continuation_ms": {
+          "max": 0.0,
+          "p50": 0.0,
+          "p95": 0.0
+        },
+        "direction": "candidate_minus_baseline",
+        "kind": "difference_of_marginal_percentiles_not_percentile_of_paired_differences",
+        "stages_ms": {
+          "approval/classifier": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/daemon_redemption": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/original_dispatch": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/original_response": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/policy_boundary": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/profile_and_assets": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/result_inspection": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/package_tree/pass_1": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/package_tree/pass_2": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/runtime_and_libraries/pass_1": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/runtime_and_libraries/pass_2": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/selected_profile/pass_1": {
+            "p50": 0.0,
+            "p95": 0.0
+          }
+        },
+        "stages_one_side_only": [],
+        "unit": "ms"
+      },
+      "paired_differences": {
+        "all_zero": true,
+        "direction": "candidate_minus_baseline",
+        "kind": "distribution_of_paired_differences",
+        "max": 0.0,
+        "min": 0.0,
+        "n": 40,
+        "p50": 0.0,
+        "p95": 0.0,
+        "unit": "ms"
+      },
+      "profile": "filesystem",
+      "reasons": []
+    },
+    {
+      "baseline": {
+        "attempted": 40,
+        "complete_denominator": true,
+        "continuation_by_run": {
+          "1": {
+            "max": 1692.213688,
+            "min": 1517.411383,
+            "n": 20,
+            "p50": 1562.345374,
+            "p95": 1678.917396
+          },
+          "3": {
+            "max": 1682.455202,
+            "min": 1556.058703,
+            "n": 20,
+            "p50": 1585.301605,
+            "p95": 1670.129514
+          }
+        },
+        "continuation_highest": [
+          {
+            "ms": 1692.213688,
+            "trial": "r01/git/017"
+          },
+          {
+            "ms": 1682.455202,
+            "trial": "r03/git/010"
+          },
+          {
+            "ms": 1678.917396,
+            "trial": "r01/git/001"
+          }
+        ],
+        "continuation_ms": {
+          "max": 1692.213688,
+          "min": 1517.411383,
+          "n": 40,
+          "p50": 1579.629562,
+          "p95": 1678.917396
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1611.232 ms"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_pending_asset_verification_ms": {
+          "max": 1611.2319770000001,
+          "min": 1427.608756,
+          "n": 40,
+          "p50": 1503.06502,
+          "p95": 1560.8920649999998
+        },
+        "first_trial_per_run_ms": [
+          {
+            "ms": 1545.537348,
+            "trial": "r01/git/000"
+          },
+          {
+            "ms": 1670.129514,
+            "trial": "r03/git/000"
+          }
+        ],
+        "independent_clusters": 2,
+        "planned": 40,
+        "post_observed_total_ms": {
+          "max": 1623.7750330000001,
+          "min": 1464.6816469999999,
+          "n": 40,
+          "p50": 1507.675185,
+          "p95": 1574.670464
+        },
+        "qualified_run_trials": 40,
+        "runs": [
+          1,
+          3
+        ],
+        "stages_ms": {
+          "approval/classifier": {
+            "max": 87.570569,
+            "min": 62.989846,
+            "n": 40,
+            "p50": 74.53369599999999,
+            "p95": 82.965248
+          },
+          "approval/daemon_redemption": {
+            "max": 22.759387999999998,
+            "min": 10.666148,
+            "n": 40,
+            "p50": 13.426134,
+            "p95": 19.910906999999998
+          },
+          "approval/original_dispatch": {
+            "max": 13.018168,
+            "min": 5.458991,
+            "n": 40,
+            "p50": 7.743765,
+            "p95": 10.731823
+          },
+          "approval/original_response": {
+            "max": 36.561882,
+            "min": 27.929095,
+            "n": 40,
+            "p50": 32.610229999999994,
+            "p95": 36.009924999999996
+          },
+          "approval/policy_boundary": {
+            "max": 9.338368999999998,
+            "min": 3.8789160000000003,
+            "n": 40,
+            "p50": 5.747942,
+            "p95": 7.421638000000001
+          },
+          "approval/profile_and_assets": {
+            "max": 1454.162403,
+            "min": 1302.3658659999999,
+            "n": 40,
+            "p50": 1349.3319829999998,
+            "p95": 1404.618279
+          },
+          "approval/result_inspection": {
+            "max": 38.072061999999995,
+            "min": 21.905806,
+            "n": 40,
+            "p50": 24.608110999999997,
+            "p95": 33.76302
+          },
+          "asset/package_tree/pass_1": {
+            "max": 1542.728139,
+            "min": 1357.6390680000002,
+            "n": 40,
+            "p50": 1434.805408,
+            "p95": 1489.1418899999999
+          },
+          "asset/package_tree/pass_2": {
+            "max": 1377.734499,
+            "min": 1243.46893,
+            "n": 40,
+            "p50": 1266.9113300000001,
+            "p95": 1310.489266
+          },
+          "asset/runtime_and_libraries/pass_1": {
+            "max": 71.73704000000001,
+            "min": 62.352004,
+            "n": 40,
+            "p50": 66.599283,
+            "p95": 70.895736
+          },
+          "asset/runtime_and_libraries/pass_2": {
+            "max": 32.764402999999994,
+            "min": 24.144624999999998,
+            "n": 40,
+            "p50": 28.906053,
+            "p95": 30.794728
+          },
+          "asset/selected_profile/pass_1": {
+            "max": 3.238832,
+            "min": 2.2527369999999998,
+            "n": 40,
+            "p50": 2.422764,
+            "p95": 2.846202
+          }
+        },
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        }
+      },
+      "candidate": {
+        "attempted": 40,
+        "complete_denominator": true,
+        "continuation_by_run": {
+          "1": {
+            "max": 1692.213688,
+            "min": 1517.411383,
+            "n": 20,
+            "p50": 1562.345374,
+            "p95": 1678.917396
+          },
+          "3": {
+            "max": 1682.455202,
+            "min": 1556.058703,
+            "n": 20,
+            "p50": 1585.301605,
+            "p95": 1670.129514
+          }
+        },
+        "continuation_highest": [
+          {
+            "ms": 1692.213688,
+            "trial": "r01/git/017"
+          },
+          {
+            "ms": 1682.455202,
+            "trial": "r03/git/010"
+          },
+          {
+            "ms": 1678.917396,
+            "trial": "r01/git/001"
+          }
+        ],
+        "continuation_ms": {
+          "max": 1692.213688,
+          "min": 1517.411383,
+          "n": 40,
+          "p50": 1579.629562,
+          "p95": 1678.917396
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1611.232 ms"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_pending_asset_verification_ms": {
+          "max": 1611.2319770000001,
+          "min": 1427.608756,
+          "n": 40,
+          "p50": 1503.06502,
+          "p95": 1560.8920649999998
+        },
+        "first_trial_per_run_ms": [
+          {
+            "ms": 1545.537348,
+            "trial": "r01/git/000"
+          },
+          {
+            "ms": 1670.129514,
+            "trial": "r03/git/000"
+          }
+        ],
+        "independent_clusters": 2,
+        "planned": 40,
+        "post_observed_total_ms": {
+          "max": 1623.7750330000001,
+          "min": 1464.6816469999999,
+          "n": 40,
+          "p50": 1507.675185,
+          "p95": 1574.670464
+        },
+        "qualified_run_trials": 40,
+        "runs": [
+          1,
+          3
+        ],
+        "stages_ms": {
+          "approval/classifier": {
+            "max": 87.570569,
+            "min": 62.989846,
+            "n": 40,
+            "p50": 74.53369599999999,
+            "p95": 82.965248
+          },
+          "approval/daemon_redemption": {
+            "max": 22.759387999999998,
+            "min": 10.666148,
+            "n": 40,
+            "p50": 13.426134,
+            "p95": 19.910906999999998
+          },
+          "approval/original_dispatch": {
+            "max": 13.018168,
+            "min": 5.458991,
+            "n": 40,
+            "p50": 7.743765,
+            "p95": 10.731823
+          },
+          "approval/original_response": {
+            "max": 36.561882,
+            "min": 27.929095,
+            "n": 40,
+            "p50": 32.610229999999994,
+            "p95": 36.009924999999996
+          },
+          "approval/policy_boundary": {
+            "max": 9.338368999999998,
+            "min": 3.8789160000000003,
+            "n": 40,
+            "p50": 5.747942,
+            "p95": 7.421638000000001
+          },
+          "approval/profile_and_assets": {
+            "max": 1454.162403,
+            "min": 1302.3658659999999,
+            "n": 40,
+            "p50": 1349.3319829999998,
+            "p95": 1404.618279
+          },
+          "approval/result_inspection": {
+            "max": 38.072061999999995,
+            "min": 21.905806,
+            "n": 40,
+            "p50": 24.608110999999997,
+            "p95": 33.76302
+          },
+          "asset/package_tree/pass_1": {
+            "max": 1542.728139,
+            "min": 1357.6390680000002,
+            "n": 40,
+            "p50": 1434.805408,
+            "p95": 1489.1418899999999
+          },
+          "asset/package_tree/pass_2": {
+            "max": 1377.734499,
+            "min": 1243.46893,
+            "n": 40,
+            "p50": 1266.9113300000001,
+            "p95": 1310.489266
+          },
+          "asset/runtime_and_libraries/pass_1": {
+            "max": 71.73704000000001,
+            "min": 62.352004,
+            "n": 40,
+            "p50": 66.599283,
+            "p95": 70.895736
+          },
+          "asset/runtime_and_libraries/pass_2": {
+            "max": 32.764402999999994,
+            "min": 24.144624999999998,
+            "n": 40,
+            "p50": 28.906053,
+            "p95": 30.794728
+          },
+          "asset/selected_profile/pass_1": {
+            "max": 3.238832,
+            "min": 2.2527369999999998,
+            "n": 40,
+            "p50": 2.422764,
+            "p95": 2.846202
+          }
+        },
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        }
+      },
+      "comparable": true,
+      "condition": "post_cache_drop_setup_rewarmed",
+      "marginal_differences": {
+        "continuation_ms": {
+          "max": 0.0,
+          "p50": 0.0,
+          "p95": 0.0
+        },
+        "direction": "candidate_minus_baseline",
+        "kind": "difference_of_marginal_percentiles_not_percentile_of_paired_differences",
+        "stages_ms": {
+          "approval/classifier": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/daemon_redemption": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/original_dispatch": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/original_response": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/policy_boundary": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/profile_and_assets": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/result_inspection": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/package_tree/pass_1": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/package_tree/pass_2": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/runtime_and_libraries/pass_1": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/runtime_and_libraries/pass_2": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/selected_profile/pass_1": {
+            "p50": 0.0,
+            "p95": 0.0
+          }
+        },
+        "stages_one_side_only": [],
+        "unit": "ms"
+      },
+      "paired_differences": {
+        "all_zero": true,
+        "direction": "candidate_minus_baseline",
+        "kind": "distribution_of_paired_differences",
+        "max": 0.0,
+        "min": 0.0,
+        "n": 40,
+        "p50": 0.0,
+        "p95": 0.0,
+        "unit": "ms"
+      },
+      "profile": "git",
+      "reasons": []
+    },
+    {
+      "baseline": {
+        "attempted": 40,
+        "complete_denominator": true,
+        "continuation_by_run": {
+          "2": {
+            "max": 1634.924643,
+            "min": 1527.605878,
+            "n": 20,
+            "p50": 1586.38139,
+            "p95": 1621.305661
+          },
+          "4": {
+            "max": 1665.005933,
+            "min": 1528.451134,
+            "n": 20,
+            "p50": 1598.419751,
+            "p95": 1639.882843
+          }
+        },
+        "continuation_highest": [
+          {
+            "ms": 1665.005933,
+            "trial": "r04/git/019"
+          },
+          {
+            "ms": 1639.882843,
+            "trial": "r04/git/006"
+          },
+          {
+            "ms": 1634.924643,
+            "trial": "r02/git/018"
+          }
+        ],
+        "continuation_ms": {
+          "max": 1665.005933,
+          "min": 1527.605878,
+          "n": 40,
+          "p50": 1593.970563,
+          "p95": 1634.924643
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1552.939 ms"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_pending_asset_verification_ms": {
+          "max": 1552.939286,
+          "min": 1434.584006,
+          "n": 40,
+          "p50": 1501.222959,
+          "p95": 1542.6912779999998
+        },
+        "first_trial_per_run_ms": [
+          {
+            "ms": 1591.36837,
+            "trial": "r02/git/000"
+          },
+          {
+            "ms": 1541.651504,
+            "trial": "r04/git/000"
+          }
+        ],
+        "independent_clusters": 2,
+        "planned": 40,
+        "post_observed_total_ms": {
+          "max": 1592.700368,
+          "min": 1474.7690010000001,
+          "n": 40,
+          "p50": 1517.733499,
+          "p95": 1572.4506959999999
+        },
+        "qualified_run_trials": 40,
+        "runs": [
+          2,
+          4
+        ],
+        "stages_ms": {
+          "approval/classifier": {
+            "max": 88.272501,
+            "min": 66.808504,
+            "n": 40,
+            "p50": 74.83259000000001,
+            "p95": 83.093929
+          },
+          "approval/daemon_redemption": {
+            "max": 21.084369,
+            "min": 9.570281,
+            "n": 40,
+            "p50": 13.941545,
+            "p95": 18.624023
+          },
+          "approval/original_dispatch": {
+            "max": 11.692475,
+            "min": 5.792987,
+            "n": 40,
+            "p50": 7.814671000000001,
+            "p95": 11.192532
+          },
+          "approval/original_response": {
+            "max": 37.850899,
+            "min": 28.621575,
+            "n": 40,
+            "p50": 30.74482,
+            "p95": 35.837205
+          },
+          "approval/policy_boundary": {
+            "max": 8.468521999999998,
+            "min": 4.122661,
+            "n": 40,
+            "p50": 6.216223,
+            "p95": 8.184287
+          },
+          "approval/profile_and_assets": {
+            "max": 1418.439363,
+            "min": 1316.642028,
+            "n": 40,
+            "p50": 1352.5406520000001,
+            "p95": 1402.783639
+          },
+          "approval/result_inspection": {
+            "max": 38.680535,
+            "min": 22.002226999999998,
+            "n": 40,
+            "p50": 25.537106,
+            "p95": 36.735220999999996
+          },
+          "asset/package_tree/pass_1": {
+            "max": 1485.061484,
+            "min": 1366.714475,
+            "n": 40,
+            "p50": 1432.833751,
+            "p95": 1474.012648
+          },
+          "asset/package_tree/pass_2": {
+            "max": 1323.391628,
+            "min": 1242.273355,
+            "n": 40,
+            "p50": 1270.910838,
+            "p95": 1303.0970379999999
+          },
+          "asset/runtime_and_libraries/pass_1": {
+            "max": 72.22983500000001,
+            "min": 62.118598999999996,
+            "n": 40,
+            "p50": 66.418604,
+            "p95": 70.201343
+          },
+          "asset/runtime_and_libraries/pass_2": {
+            "max": 32.661546,
+            "min": 24.643377,
+            "n": 40,
+            "p50": 27.870307,
+            "p95": 30.835706000000002
+          },
+          "asset/selected_profile/pass_1": {
+            "max": 3.86251,
+            "min": 2.262506,
+            "n": 40,
+            "p50": 2.4623589999999997,
+            "p95": 3.133978
+          }
+        },
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        }
+      },
+      "candidate": {
+        "attempted": 40,
+        "complete_denominator": true,
+        "continuation_by_run": {
+          "2": {
+            "max": 1634.924643,
+            "min": 1527.605878,
+            "n": 20,
+            "p50": 1586.38139,
+            "p95": 1621.305661
+          },
+          "4": {
+            "max": 1665.005933,
+            "min": 1528.451134,
+            "n": 20,
+            "p50": 1598.419751,
+            "p95": 1639.882843
+          }
+        },
+        "continuation_highest": [
+          {
+            "ms": 1665.005933,
+            "trial": "r04/git/019"
+          },
+          {
+            "ms": 1639.882843,
+            "trial": "r04/git/006"
+          },
+          {
+            "ms": 1634.924643,
+            "trial": "r02/git/018"
+          }
+        ],
+        "continuation_ms": {
+          "max": 1665.005933,
+          "min": 1527.605878,
+          "n": 40,
+          "p50": 1593.970563,
+          "p95": 1634.924643
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1552.939 ms"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_pending_asset_verification_ms": {
+          "max": 1552.939286,
+          "min": 1434.584006,
+          "n": 40,
+          "p50": 1501.222959,
+          "p95": 1542.6912779999998
+        },
+        "first_trial_per_run_ms": [
+          {
+            "ms": 1591.36837,
+            "trial": "r02/git/000"
+          },
+          {
+            "ms": 1541.651504,
+            "trial": "r04/git/000"
+          }
+        ],
+        "independent_clusters": 2,
+        "planned": 40,
+        "post_observed_total_ms": {
+          "max": 1592.700368,
+          "min": 1474.7690010000001,
+          "n": 40,
+          "p50": 1517.733499,
+          "p95": 1572.4506959999999
+        },
+        "qualified_run_trials": 40,
+        "runs": [
+          2,
+          4
+        ],
+        "stages_ms": {
+          "approval/classifier": {
+            "max": 88.272501,
+            "min": 66.808504,
+            "n": 40,
+            "p50": 74.83259000000001,
+            "p95": 83.093929
+          },
+          "approval/daemon_redemption": {
+            "max": 21.084369,
+            "min": 9.570281,
+            "n": 40,
+            "p50": 13.941545,
+            "p95": 18.624023
+          },
+          "approval/original_dispatch": {
+            "max": 11.692475,
+            "min": 5.792987,
+            "n": 40,
+            "p50": 7.814671000000001,
+            "p95": 11.192532
+          },
+          "approval/original_response": {
+            "max": 37.850899,
+            "min": 28.621575,
+            "n": 40,
+            "p50": 30.74482,
+            "p95": 35.837205
+          },
+          "approval/policy_boundary": {
+            "max": 8.468521999999998,
+            "min": 4.122661,
+            "n": 40,
+            "p50": 6.216223,
+            "p95": 8.184287
+          },
+          "approval/profile_and_assets": {
+            "max": 1418.439363,
+            "min": 1316.642028,
+            "n": 40,
+            "p50": 1352.5406520000001,
+            "p95": 1402.783639
+          },
+          "approval/result_inspection": {
+            "max": 38.680535,
+            "min": 22.002226999999998,
+            "n": 40,
+            "p50": 25.537106,
+            "p95": 36.735220999999996
+          },
+          "asset/package_tree/pass_1": {
+            "max": 1485.061484,
+            "min": 1366.714475,
+            "n": 40,
+            "p50": 1432.833751,
+            "p95": 1474.012648
+          },
+          "asset/package_tree/pass_2": {
+            "max": 1323.391628,
+            "min": 1242.273355,
+            "n": 40,
+            "p50": 1270.910838,
+            "p95": 1303.0970379999999
+          },
+          "asset/runtime_and_libraries/pass_1": {
+            "max": 72.22983500000001,
+            "min": 62.118598999999996,
+            "n": 40,
+            "p50": 66.418604,
+            "p95": 70.201343
+          },
+          "asset/runtime_and_libraries/pass_2": {
+            "max": 32.661546,
+            "min": 24.643377,
+            "n": 40,
+            "p50": 27.870307,
+            "p95": 30.835706000000002
+          },
+          "asset/selected_profile/pass_1": {
+            "max": 3.86251,
+            "min": 2.262506,
+            "n": 40,
+            "p50": 2.4623589999999997,
+            "p95": 3.133978
+          }
+        },
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 40,
+          "not_run": 0,
+          "timed_out": 0
+        }
+      },
+      "comparable": true,
+      "condition": "warm",
+      "marginal_differences": {
+        "continuation_ms": {
+          "max": 0.0,
+          "p50": 0.0,
+          "p95": 0.0
+        },
+        "direction": "candidate_minus_baseline",
+        "kind": "difference_of_marginal_percentiles_not_percentile_of_paired_differences",
+        "stages_ms": {
+          "approval/classifier": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/daemon_redemption": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/original_dispatch": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/original_response": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/policy_boundary": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/profile_and_assets": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "approval/result_inspection": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/package_tree/pass_1": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/package_tree/pass_2": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/runtime_and_libraries/pass_1": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/runtime_and_libraries/pass_2": {
+            "p50": 0.0,
+            "p95": 0.0
+          },
+          "asset/selected_profile/pass_1": {
+            "p50": 0.0,
+            "p95": 0.0
+          }
+        },
+        "stages_one_side_only": [],
+        "unit": "ms"
+      },
+      "paired_differences": {
+        "all_zero": true,
+        "direction": "candidate_minus_baseline",
+        "kind": "distribution_of_paired_differences",
+        "max": 0.0,
+        "min": 0.0,
+        "n": 40,
+        "p50": 0.0,
+        "p95": 0.0,
+        "unit": "ms"
+      },
+      "profile": "git",
+      "reasons": []
+    }
+  ]
+}

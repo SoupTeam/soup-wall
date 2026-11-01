@@ -109,3 +109,6 @@ in `docs/operations/evidence/sou-141/`.
   `package_tree` hashing dominates both passes.
 - Run-to-run variance on shared or small machines is real. The series reports it
   instead of hiding it; a single slow cold run is not by itself a code defect.
+
+To compare retained series offline (custody, reproduction from per-trial values and
+compatibility classification), use the [SOU-203 comparison](NATIVE_PERFORMANCE_COMPARISON.md).
