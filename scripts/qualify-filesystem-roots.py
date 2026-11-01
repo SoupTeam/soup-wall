@@ -2,6 +2,8 @@
 """Owned installed multi-root original filesystem qualification, independent of Git worktrees."""
 import argparse
 import json
+import re
+import hashlib
 from pathlib import Path
 import subprocess
 
@@ -128,6 +130,18 @@ def qualify(args, door, home, env, report, installed):
     row,results,outcome=q.run_case(selected,target,report,'multi-roots',proposals)
     evidence['last_run']={key:row.get(key) for key in ('exit','status','reason','live_status','process_cleanup')}
     evidence['last_run']['stage']=outcome.get('stage')
+    labels = ('Soup Wall withheld MCP result', 'Soup Wall withheld MCP invocation',
+              'MCP arguments violate the selected input profile', 'Filesystem resource root',
+              'MCP path refused before execution', 'ENOENT', 'EACCES', 'ENOTDIR', 'EISDIR')
+    evidence['result_boundaries'] = {}
+    for identifier, result in results.items():
+        text = json.dumps(result.get('content'), ensure_ascii=True)
+        codes = sorted(set(re.findall(r'\b(?:native|filesystem|classifier|result|profile)_[a-z0-9_-]{1,100}\b', text)))
+        evidence['result_boundaries'][identifier] = {
+            'is_error':result['is_error'], 'fixed_messages':[label for label in labels if label in text],
+            'reason_codes':codes[:16], 'content_sha256':hashlib.sha256(text.encode()).hexdigest()}
+    evidence['post_run_sources_unchanged'] = baseline == [q.snapshot(path) for path in (*roots,third,args.project,args.repository)]
+    evidence['processes_stopped'] = row['process_cleanup']['all_stopped']
     require(row['exit']==0 and row['live_status'].get('protection')=='observed-live', 'filesystem_roots_live_host_unverified')
     ids=['toolu_front_multi-roots_'+str(i) for i in range(len(proposals))]
     require(set(results)==set(ids), 'filesystem_roots_correlated_results_missing')
