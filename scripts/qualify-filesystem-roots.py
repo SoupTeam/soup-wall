@@ -141,7 +141,7 @@ def qualify(args, door, home, env, report, installed):
             pid=re.match(r'^\s*(\d+)\s+',line)
             if pid is None: continue
             pid=pid[1]
-            if 'execve(' in line and '"mcp", "--id", "filesystem"' in line:
+            if re.search(r'\bexecve(?:at)?\(',line) and '"mcp", "--id", "filesystem"' in line:
                 collectors[pid]='filesystem'
             if pid not in collectors or not re.search(r'\bwrite(?:v)?\(2,',line): continue
             match=re.search(r'\bwrite\(2,\s*("(?:\\.|[^"\\])*")',line)
@@ -162,6 +162,19 @@ def qualify(args, door, home, env, report, installed):
     evidence['collector_failures']=failures[:2]
     evidence['last_run']={key:row.get(key) for key in ('exit','status','reason','live_status','process_cleanup')}
     evidence['last_run']['stage']=outcome.get('stage')
+    # Compare the accepted sibling even when a new-profile result fails, so an
+    # existing transport failure cannot be mislabeled as a root-binding defect.
+    begin('single-root-sibling-retained')
+    sibling,sibling_results,_=q.run_case(args,door,report,'single-root-sibling',[
+        ('mcp__filesystem__read_text_file',{'path':'/workspace/README.md'})])
+    sibling_passed=(sibling['exit']==0 and sibling['live_status'].get('protection')=='observed-live'
+        and sibling_results.get('toolu_front_single-root-sibling_0',{}).get('is_error') is False
+        and q.README.strip() in json.dumps(sibling_results))
+    evidence['sibling_control']={'passed':sibling_passed,'exit':sibling['exit'],
+        'live_status':sibling['live_status'],'process_cleanup':sibling['process_cleanup'],
+        'result_errors':{key:value['is_error'] for key,value in sibling_results.items()}}
+    if sibling_passed: passed('single-root-sibling-retained', original_default=True, observed_live=True)
+    begin('useful-original-read-list-search')
     labels = ('Soup Wall withheld MCP result', 'Soup Wall withheld MCP invocation',
               'MCP arguments violate the selected input profile', 'Filesystem resource root',
               'MCP path refused before execution', 'ENOENT', 'EACCES', 'ENOTDIR', 'EISDIR')
@@ -180,7 +193,7 @@ def qualify(args, door, home, env, report, installed):
                 text=text.replace(path,'<owned-input>')
             evidence['owned_first_errors'][identifier]=re.sub(r'[A-Za-z0-9_+/-]{32,}','<opaque>',text)
     evidence['post_run_sources_unchanged'] = baseline == [q.snapshot(path) for path in (*roots,third,args.project,args.repository)]
-    evidence['processes_stopped'] = row['process_cleanup']['all_stopped']
+    evidence['processes_stopped'] = row['process_cleanup']['all_stopped'] and sibling['process_cleanup']['all_stopped']
     require(row['exit']==0 and row['live_status'].get('protection')=='observed-live', 'filesystem_roots_live_host_unverified')
     ids=['toolu_front_multi-roots_'+str(i) for i in range(len(proposals))]
     require(set(results)==set(ids), 'filesystem_roots_correlated_results_missing')
@@ -198,13 +211,7 @@ def qualify(args, door, home, env, report, installed):
     require('Owned independent read-only root' not in json.dumps(results[ids[7]])
             and 'SOU202-UNSELECTED-NEVER-READ' not in json.dumps(results), 'filesystem_roots_partial_or_unselected_content_released')
     passed('whole-call-cross-root-refusals', no_partial_first_path=True, healthy_followup=True)
-    begin('single-root-sibling-retained')
-    sibling,sibling_results,_=q.run_case(args,door,report,'single-root-sibling',[
-        ('mcp__filesystem__read_text_file',{'path':'/workspace/README.md'})])
-    require(sibling['exit']==0 and sibling['live_status'].get('protection')=='observed-live'
-            and sibling_results['toolu_front_single-root-sibling_0']['is_error'] is False
-            and q.README.strip() in json.dumps(sibling_results), 'filesystem_roots_sibling_behavior_changed')
-    passed('single-root-sibling-retained', original_default=True, observed_live=True)
+    require(evidence['sibling_control']['passed'], 'filesystem_roots_sibling_behavior_changed')
     begin('source-preservation')
     require(baseline==[q.snapshot(path) for path in (*roots,third,args.project,args.repository)],'filesystem_roots_source_changed')
     passed('source-preservation', selected_and_unselected_unchanged=True)

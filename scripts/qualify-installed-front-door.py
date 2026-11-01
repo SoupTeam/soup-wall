@@ -1097,7 +1097,7 @@ def main():
     summary = {"status": report["status"], "cases": len(report["cases"]), "error": report.get("error")}
     if args.filesystem_roots_only:
         roots = report.get('filesystem_roots', {})
-        summary['filesystem_roots'] = {k: roots.get(k) for k in ('status', 'active_case', 'last_cli', 'last_run', 'result_boundaries', 'post_run_sources_unchanged', 'processes_stopped', 'collector_failures', 'owned_first_errors')}
+        summary['filesystem_roots'] = {k: roots.get(k) for k in ('status', 'active_case', 'last_cli', 'last_run', 'result_boundaries', 'post_run_sources_unchanged', 'processes_stopped', 'collector_failures', 'owned_first_errors', 'sibling_control')}
     print(json.dumps(summary))
     return 0 if report["status"] == "passed" else 1
 
