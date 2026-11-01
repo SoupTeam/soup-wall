@@ -161,6 +161,12 @@ jobs:
     needs: impact
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'test')
     runs-on: ubuntu-latest
+    # Full workspace debug/test executables can exhaust the hosted runner disk.
+    # Omit DWARF and incremental state; keep debug assertions and every test.
+    env:
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      CARGO_INCREMENTAL: '0'
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -171,7 +177,7 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ci-${{ runner.os }}-${{ runner.arch }}
+          shared-key: ci-workspace-no-dwarf-v1-${{ runner.os }}-${{ runner.arch }}
           key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
           # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
           save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
