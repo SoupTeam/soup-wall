@@ -400,6 +400,92 @@ class AgentHistoryBrowserTests(unittest.TestCase):
         self.wait_status("Snapshot refused")
         self.assertTrue(self.page.locator("#history-snapshot").is_hidden())
 
+    def timed(self, seq, state, issued, applied=None):
+        return dict(dep(seq, state, None if applied is None else T0 + applied), issued_at_unix=T0 + issued)
+
+    def preview_ms(self):
+        # The synchronous derivation runs inside this click; it must be bounded.
+        return self.page.evaluate("() => { const t = performance.now(); document.getElementById('history-preview').click(); return performance.now() - t; }")
+
+    def test_high_sparse_sequence_stays_responsive(self):
+        self.history[(TENANT, "edge-1")] = [dep(1, "applied", T0 + 150), dep(100000000, "issued")]
+        self.open()
+        started = self.page.evaluate("performance.now()")
+        self.pick()
+        self.wait_status("No older pages")
+        self.assertLess(self.page.evaluate("performance.now()") - started, 5000)
+        self.assertLess(self.preview_ms(), 250)
+        snap = json.loads(self.page.locator("#history-snapshot").text_content())
+        self.assertEqual(snap["coverage"]["expected_deployments"], 100000000)
+        self.assertEqual(snap["coverage"]["missing_sequence_ranges"], [[2, 99999999]])
+        self.assertIn("sequence_gap", [r["code"] for r in snap["completeness"]["reasons"]])
+        self.assertTrue(snap["partial"])
+        self.assertIn("Loaded 2 of 100000000", self.summary())
+
+    def test_largest_safe_sequence_is_finite(self):
+        self.history[(TENANT, "edge-1")] = [self.timed(9007199254740991, "issued", 100)]
+        self.open()
+        self.pick()
+        self.wait_status("No older pages")
+        self.assertLess(self.preview_ms(), 250)
+        snap = json.loads(self.page.locator("#history-snapshot").text_content())
+        self.assertEqual(snap["coverage"]["missing_sequence_ranges"], [[1, 9007199254740990]])
+        self.assertIn("history_missing", [r["code"] for r in snap["completeness"]["reasons"]])
+
+    def test_unsafe_sequences_are_refused_not_rounded(self):
+        unsafe = dep(1, "issued") | {"sequence": "9999999999999999"}
+        self.history[(TENANT, "edge-1")] = [unsafe]
+        self.open()
+        self.pick()
+        self.wait_status("unexpected shape")
+        self.assertEqual(self.events(), [])
+        self.assertTrue(self.page.locator("#history-preview").is_disabled())
+        self.assertIn("unexpected shape", self.page.locator("#history-status").inner_text())
+        # An unsafe record or cursor on an otherwise valid page is dropped.
+        good = self.detail(TENANT, "edge-2", 50, None)
+        self.history[(TENANT, "edge-2")] = [dep(1, "applied", T0 + 150)]
+        good = self.detail(TENANT, "edge-2", 50, None)
+        self.pages[("edge-2", None)] = dict(good, deployments=good["deployments"] + [unsafe | {"sequence": "10000000000000000"}],
+                                            next_before_sequence="9999999999999999")
+        self.pick("edge-2")
+        self.wait_status("No older pages")
+        self.assertLess(self.preview_ms(), 250)
+        snap = json.loads(self.page.locator("#history-snapshot").text_content())
+        codes = [r["code"] for r in snap["completeness"]["reasons"]]
+        self.assertIn("malformed_records", codes)
+        self.assertIn("invalid_cursor", codes)
+        self.assertEqual(snap["coverage"]["loaded_deployments"], 1)
+        self.assertNotIn("10000000000000000", json.dumps(snap["events"]))
+
+    def test_known_times_sort_chronologically_and_impossible_overlap_is_contradictory(self):
+        self.history[(TENANT, "edge-1")] = [self.timed(1, "applied", 110, 140), self.timed(2, "applied", 120, 130)]
+        self.open()
+        self.pick()
+        self.wait_status("No older pages")
+        snap = self.snapshot()
+        dated = [e["at_unix"] - T0 for e in snap["events"] if e["at_unix"] is not None]
+        self.assertEqual(dated, [0, 110, 120, 130, 140])
+        self.assertEqual([(e["kind"], e["sequence"]) for e in snap["events"]],
+                         [("enrolled", None), ("issued", "1"), ("issued", "2"), ("applied", "2"), ("applied", "1")])
+        self.assertEqual(snap["completeness"]["status"], "contradictory")
+        self.assertIn("applied_after_superseded", [c["code"] for c in snap["completeness"]["contradictions"]])
+        self.assertEqual([e.split(" · ")[0] for e in self.events()], ["Enrolled", "Issued", "Issued", "Applied", "Applied"])
+
+    def test_untimed_events_stay_beside_their_deployment(self):
+        self.history[(TENANT, "edge-1")] = [self.timed(1, "rejected", 110), self.timed(2, "applied", 120, 125),
+                                            self.timed(3, "delivered", 200)]
+        self.revoked[(TENANT, "edge-1")] = T0 + 300
+        self.open()
+        self.pick()
+        self.wait_status("No older pages")
+        snap = self.snapshot()
+        self.assertEqual([(e["kind"], e["sequence"]) for e in snap["events"]],
+                         [("enrolled", None), ("issued", "1"), ("rejected", "1"), ("issued", "2"), ("applied", "2"),
+                          ("issued", "3"), ("fetched", "3"), ("pending", "3"), ("revoked", None)])
+        dated = [e["at_unix"] for e in snap["events"] if e["at_unix"] is not None]
+        self.assertEqual(dated, sorted(dated))
+        self.assertEqual(snap["completeness"]["status"], "complete_records")
+
 
 if __name__ == "__main__":
     unittest.main()

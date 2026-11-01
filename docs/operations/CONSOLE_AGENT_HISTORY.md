@@ -51,10 +51,14 @@ The history is one of:
   page, or a bound reached.
 - **Contradictory records**: two reads disagree about the same deployment, a
   summary does not match its record, or times are impossible (applied before
-  issued, issued before enrollment or after revocation).
+  issued, applied after the next deployment was issued, issued before
+  enrollment or after revocation).
 
 Deployment sequences are contiguous per Agent, so the latest issued sequence is
-the denominator: "Loaded 50 of 56 deployment records in 1 page(s)".
+the denominator: "Loaded 50 of 56 deployment records in 1 page(s)". Missing
+ranges are computed from the loaded records only, so their cost does not grow
+with the sequence number. Sequences must be exact integers up to 2^53 - 1; a
+larger value is treated as malformed, never rounded.
 
 ## Bounds and paging
 

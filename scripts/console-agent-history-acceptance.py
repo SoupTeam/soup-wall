@@ -258,6 +258,8 @@ def main():
                 check("export-scope-and-source-ids", full["scope"] == {"tenant_id": alpha, "agent_id": "edge-history"}
                       and all(e["event_id"].startswith(f"{alpha}/edge-history/") for e in full["events"])
                       and len({e["event_id"] for e in full["events"]}) == len(full["events"]))
+                dated = [e["at_unix"] for e in full["events"] if e["at_unix"] is not None]
+                check("export-dated-events-chronological", dated == sorted(dated) and len(dated) == 8)
                 check("export-names-unrecorded-rotation", "credential_rotations_not_recorded" in [r["code"] for r in full["completeness"]["reasons"]])
                 exports = {"edge-history": text}
                 # Pagination: 56 records, 50 per page.

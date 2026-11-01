@@ -29,7 +29,9 @@ const agentHistory = (() => {
     if (typeof r.sequence !== "string" || !SEQ.test(r.sequence) || typeof r.revision !== "string" || !ID.test(r.revision)
       || typeof r.policy_sha256 !== "string" || !DIGEST.test(r.policy_sha256) || !ACTIONS.includes(r.action)
       || !STATES.includes(r.recorded_state) || r.issued_at_unix == null || (d.reported_applied_at_unix != null && r.reported_applied_at_unix == null)) return null;
+    // Only exact integers: a 16-digit value above 2^53 would round.
     r.seq = Number(r.sequence);
+    if (!Number.isSafeInteger(r.seq)) return null;
     return r;
   }
   const sameOrNull = (a, b) => (a == null && b == null) || (a != null && b != null && same(a, b));
@@ -38,15 +40,16 @@ const agentHistory = (() => {
     if (!state.contradictions.some(c => c.code === code && c.sequence === sequence)) state.contradictions.push({ code, sequence, detail });
   }
 
-  // Merges one validated page. Returns false when the response belongs to
-  // another scope; then nothing from it is kept.
+  // Merges one validated page. Returns "scope" when the response belongs to
+  // another scope and "malformed" when its Agent summary cannot be trusted;
+  // then nothing from it is kept.
   function merge(data, before) {
     const a = data?.agent;
-    if (data?.contract_version !== CONTRACT || a?.tenant_id !== state.tenant || a?.agent_id !== state.agent || !Array.isArray(data.deployments)) return false;
+    if (data?.contract_version !== CONTRACT || a?.tenant_id !== state.tenant || a?.agent_id !== state.agent || !Array.isArray(data.deployments)) return "scope";
     const enrolled = int(a.enrolled_at_unix), revoked = a.revoked_at_unix == null ? null : int(a.revoked_at_unix);
-    if (enrolled == null || (a.revoked_at_unix != null && revoked == null)) return false;
+    if (enrolled == null || (a.revoked_at_unix != null && revoked == null)) return "malformed";
     const latest = a.latest_issued ? record(a.latest_issued) : null, applied = a.last_reported_applied ? record(a.last_reported_applied) : null;
-    if ((a.latest_issued && !latest) || (a.last_reported_applied && !applied)) return false;
+    if ((a.latest_issued && !latest) || (a.last_reported_applied && !applied)) return "malformed";
     if (!state.summary) state.summary = { enrolled, revoked, latest, applied, observed: int(data.observed_at_unix) };
     else if (state.summary.enrolled !== enrolled || state.summary.revoked !== revoked || !sameOrNull(state.summary.latest, latest) || !sameOrNull(state.summary.applied, applied))
       reason("records_changed_while_paging", "Enrollment or latest deployment changed between page reads; rebuild the history.");
@@ -64,7 +67,7 @@ const agentHistory = (() => {
     state.pages.push(page);
     const next = data.next_before_sequence;
     if (next == null) state.exhausted = true;
-    else if (typeof next === "string" && SEQ.test(next) && (before == null || Number(next) < before)) state.cursor = Number(next);
+    else if (typeof next === "string" && SEQ.test(next) && Number.isSafeInteger(Number(next)) && (before == null || Number(next) < before)) state.cursor = Number(next);
     else { state.exhausted = true; reason("invalid_cursor", "The server returned a cursor that does not move to older records; paging stopped."); }
     return true;
   }
@@ -80,16 +83,20 @@ const agentHistory = (() => {
     if (s.latest && top > expected) contradiction("newer_than_latest", `Deployment #${top} is newer than the summary's latest issued #${expected}.`);
     if (s.latest && state.records.has(expected) && !same(state.records.get(expected), s.latest)) contradiction("summary_mismatch", `Latest issued summary differs from the record for #${expected}.`, s.latest.sequence);
     if (s.applied && state.records.has(s.applied.seq) && !same(state.records.get(s.applied.seq), s.applied)) contradiction("summary_mismatch", `Last applied summary differs from the record for #${s.applied.seq}.`, s.applied.sequence);
+    // Missing ranges come from the sorted loaded set (at most the bounded
+    // number of records), never from walking the numeric sequence space.
     const missing = [];
-    for (let n = expected, run = null; n >= 1; n--) {
-      if (state.records.has(n)) { if (run) { missing.push(run); run = null; } continue; }
-      if (run) run[0] = n; else run = [n, n];
-      if (n === 1 && run) missing.push(run);
+    let previous = 0;
+    for (const n of seqs) {
+      if (n > expected) break;
+      if (n > previous + 1) missing.push([previous + 1, n - 1]);
+      previous = n;
     }
+    if (expected > previous) missing.push([previous + 1, expected]);
     const lowest = seqs.length ? seqs[0] : null;
     // A missing run above the lowest loaded record is a hole between pages;
     // one below it is older history that was not (or could not be) loaded.
-    if (missing.some(([, hi]) => lowest != null && hi > lowest)) reason("sequence_gap", "Loaded pages skip deployment sequences; the timeline between them is unknown.");
+    if (missing.some(([lo]) => lowest != null && lo > lowest)) reason("sequence_gap", "Loaded pages skip deployment sequences; the timeline between them is unknown.");
     if (missing.some(([, hi]) => lowest == null || hi < lowest)) {
       if (state.exhausted) reason("history_missing", "The server reported no older records, but earlier sequences are absent (missing or expired history).");
       else reason("older_records_not_loaded", "Older records exist beyond the loaded pages.");
@@ -106,6 +113,11 @@ const agentHistory = (() => {
       if (s.revoked != null && r.issued_at_unix > s.revoked) contradiction("issued_after_revocation", `Deployment #${n} was issued after revocation.`, r.sequence);
       if ((r.recorded_state === "applied") !== (r.reported_applied_at_unix != null)) contradiction("applied_time_mismatch", `Deployment #${n} has an applied time that does not match its state.`, r.sequence);
       if (r.reported_applied_at_unix != null && r.reported_applied_at_unix < r.issued_at_unix) contradiction("applied_before_issued", `Deployment #${n} reports applied before it was issued.`, r.sequence);
+      // The Console accepts an acknowledgement only for the latest deployment,
+      // so an applied time after the next deployment was issued is impossible.
+      const following = state.records.get(n + 1);
+      if (r.reported_applied_at_unix != null && following && r.reported_applied_at_unix > following.issued_at_unix)
+        contradiction("applied_after_superseded", `Deployment #${n} reports applied after #${n + 1} was issued.`, r.sequence);
       ev(`deployment/${n}/issued`, "issued", r.issued_at_unix, r, `${r.action === "rollback" ? "Rollback" : "Activation"} issued.`);
       if (r.recorded_state === "delivered") ev(`deployment/${n}/fetched`, "fetched", null, r, "Fetched by the Agent; time not recorded.");
       if (r.recorded_state === "applied") ev(`deployment/${n}/applied`, "applied", r.reported_applied_at_unix, r, "Agent reported applied (historical report, not current protection).");
@@ -116,18 +128,20 @@ const agentHistory = (() => {
         out.unresolved.push(`${state.tenant}/${state.agent}/${id}`);
       }
     }
-    // Chronological: recorded times first by time; an unrecorded time stays
-    // beside its own deployment's issue time and never moves to "now".
+    // Chronological: an event with a recorded time sorts by that time. An
+    // event without one stays beside its own deployment's issue time and
+    // never moves to "now".
     const order = { enrolled: 0, issued: 1, fetched: 2, applied: 3, rejected: 3, pending: 4, superseded: 4, revoked: 5 };
     // Within one second: enrollment first, revocation last, then by sequence.
     const group = e => e.kind === "enrolled" ? 0 : e.kind === "revoked" ? 2 : 1;
-    out.events.sort((x, y) => (x._anchor - y._anchor) || (group(x) - group(y)) || ((x.sequence ? Number(x.sequence) : 0) - (y.sequence ? Number(y.sequence) : 0)) || (order[x.kind] - order[y.kind]) || ((x.at_unix ?? x._anchor) - (y.at_unix ?? y._anchor)));
+    const key = e => e.at_unix ?? e._anchor, seq = e => e.sequence ? Number(e.sequence) : 0;
+    out.events.sort((x, y) => (key(x) - key(y)) || (group(x) - group(y)) || (seq(x) - seq(y)) || (order[x.kind] - order[y.kind]));
     out.events.forEach(e => delete e._anchor);
     if (state.error) reason(state.error.code, state.error.detail);
     if (!state.exhausted && state.pages.length >= BOUNDS.max_pages) reason("page_bound_reached", `Stopped at the ${BOUNDS.max_pages}-page bound for one build; older records were not read.`);
     out.reasons = [...derived].map(([code, detail]) => ({ code, detail }));
     const ranges = []; for (const n of seqs) { const last = ranges[ranges.length - 1]; if (last && last[1] === n - 1) last[1] = n; else ranges.push([n, n]); }
-    out.coverage = { expected_deployments: expected, loaded_deployments: seqs.length, loaded_sequence_ranges: ranges, missing_sequence_ranges: missing.reverse(),
+    out.coverage = { expected_deployments: expected, loaded_deployments: seqs.length, loaded_sequence_ranges: ranges, missing_sequence_ranges: missing,
       pages: state.pages.map(p => ({ ...p })), malformed_records_dropped: state.malformed, bounds: { ...BOUNDS } };
     const blocking = out.reasons.filter(r => !["credential_rotations_not_recorded", "fetch_and_rejection_times_not_recorded"].includes(r.code));
     out.status = state.contradictions.length ? "contradictory" : blocking.length ? "incomplete" : "complete_records";
@@ -223,7 +237,9 @@ const agentHistory = (() => {
       const size = new TextEncoder().encode(JSON.stringify(data ?? null)).length;
       if (size > BOUNDS.max_page_bytes || mine.bytes + size > BOUNDS.max_total_bytes) { mine.error = { code: "byte_bound_reached", detail: "A page exceeded the size bound and was not used.", terminal: true }; return; }
       mine.bytes += size;
-      if (!merge(data, before)) { mine.error = { code: "scope_mismatch", detail: "A response did not match the selected tenant and Agent; it was discarded and paging stopped.", terminal: true }; return; }
+      const merged = merge(data, before);
+      if (merged === "scope") { mine.error = { code: "scope_mismatch", detail: "A response did not match the selected tenant and Agent; it was discarded and paging stopped.", terminal: true }; return; }
+      if (merged === "malformed") { mine.error = { code: "malformed_summary", detail: "The Agent summary had an unexpected shape (for example an out-of-range sequence); the response was not used and paging stopped.", terminal: true }; return; }
     } catch (e) {
       if (generation !== epoch || state !== mine) return;
       if (e.status === 401 || e.status === 403) {
@@ -236,7 +252,7 @@ const agentHistory = (() => {
       clearTimeout(timer);
       if (generation === epoch && state === mine) {
         mine.busy = false; render(); controls();
-        if (!mine.summary) status(mine.error?.code === "scope_mismatch" ? mine.error.detail : "Unable to load Agent history. Select the Agent again to retry.", "outcome-block");
+        if (!mine.summary) status(["scope_mismatch", "malformed_summary"].includes(mine.error?.code) ? mine.error.detail : "Unable to load Agent history. Select the Agent again to retry.", "outcome-block");
         else if (mine.error) status(mine.error.detail, "outcome-other");
         else status(`History for ${mine.agent} read ${when(mine.pages[mine.pages.length - 1]?.observed_at_unix ?? null)}. ${mine.exhausted ? "No older pages." : "Older records may exist."}`);
       }
