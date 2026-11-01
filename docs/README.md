@@ -49,6 +49,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Sandboxed real filesystem MCP](operations/MCP_REAL_FILESYSTEM.md) | Explicit pinned Linux read-only server, bounded overlap/cancellation and required actual-host acceptance |
 | [Installed two-server pilot qualification](operations/INSTALLED_PILOT_QUALIFICATION.md) | Actual Claude Code, installed filesystem/Git MCP, independent refusal witnesses and bounded recovery |
 | [Private named pilot providers](operations/PILOT_PROVIDER_PROFILES.md) | Explicit owner-private provider setup and installed host selection |
+| [Private pilot configuration recovery](operations/PILOT_CONFIGURATION_RECOVERY.md) | Read-only inventory, private declarative backup and fresh-home restore without session authority |
 | [Exact-candidate pilot evidence dossier](operations/PILOT_EVIDENCE_DOSSIER.md) | Selected evidence identities, blocker ledger and historical/current pilot scorecard |
 | [Offline pilot workspace inspection](operations/PILOT_WORKSPACE_INSPECTION.md) | Versioned compatibility reasons, profile boundaries and independent no-effect witnesses |
 | [Fixed-source installed readiness](operations/SOU145_INSTALLED_READINESS.md) | Complete native Linux inventories, actual NOT_READY result, cleanup and retained attempts |

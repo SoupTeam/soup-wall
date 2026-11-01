@@ -140,6 +140,14 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum DiagnosticCommands {
+    /// Internal bounded configuration projection; reads only supplied stdin bytes.
+    #[command(hide = true)]
+    ConfigurationProject {
+        #[arg(long, conflicts_with = "policy")]
+        config: bool,
+        #[arg(long, conflicts_with = "config")]
+        policy: bool,
+    },
     /// Verify and resume an opt-in Linux audit segment store after a stopped writer.
     AuditRetentionRecover {
         /// Agent profile containing config.yaml.
@@ -595,6 +603,9 @@ fn main() -> anyhow::Result<()> {
 #[inline(never)]
 fn dispatch(command: Cmd) -> anyhow::Result<()> {
     match command {
+        Cmd::Diagnostics(DiagnosticCommands::ConfigurationProject { config: _, policy }) => {
+            std::process::exit(agentfw::configuration_recovery::run_cli(policy));
+        }
         Cmd::Diagnostics(DiagnosticCommands::AuditRetentionRecover { home }) => {
             let home = home.unwrap_or(Config::home_path()?);
             let cfg = Config::from_yaml(&std::fs::read_to_string(home.join("config.yaml"))?)?;

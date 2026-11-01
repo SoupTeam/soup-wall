@@ -101,6 +101,7 @@ def main():
         subprocess.run(["cargo", "build", "--locked", "-p", "llm-firewall", "-p", "agentfw"], cwd=ROOT, check=True)
     console_binary, agent_binary = ROOT / "target/debug/llm-firewall", ROOT / "target/debug/agentfw"
     checks, snapshots, private = {}, {}, []
+    loss_probe = {}
     report = {"format": FORMAT, "backend": args.backend, "status": "failed", "checks": checks, "snapshots": snapshots,
               "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
               "source_tree": subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=ROOT, text=True).strip(),
@@ -310,8 +311,25 @@ def main():
                 # 4. Ambiguous rotation: committed, response lost; confirmed only by
                 #    the identical request.
                 def lose(route):
-                    route.fetch()
-                    route.abort("failed")
+                    loss_probe["started"] = True
+                    try:
+                        response = route.fetch()
+                        loss_probe["downstream_status"] = response.status
+                        assert response.status == 200, "Loss probe did not receive a committed rotation response"
+                    except Exception as error:
+                        loss_probe["fetch_error_type"] = type(error).__name__[:60]
+                        raise
+                    finally:
+                        # Even a failed probe must release the paused browser request.
+                        route.abort("failed")
+                        loss_probe["abort_requested"] = True
+
+                def failed_rotation(request):
+                    if request.method == "POST" and request.url.endswith("/credential-rotations"):
+                        known = {"net::ERR_FAILED", "net::ERR_ABORTED", "net::ERR_CONNECTION_RESET", "net::ERR_CONNECTION_CLOSED"}
+                        loss_probe["network_failure"] = request.failure if request.failure in known else "other"
+
+                page.on("requestfailed", failed_rotation)
 
                 page.route("**/agents/edge-1/credential-rotations", lose, times=1)
                 before = len(posts)
@@ -330,6 +348,7 @@ def main():
                 deploy("r3")
                 D.wait_for("r3 applied", lambda: applied("r3", 3), timeout=120)
                 shot("rotated")
+                loss_probe.clear()
 
                 # 5. Delayed enrollment response after a tenant switch.
                 held = []
@@ -442,6 +461,9 @@ def main():
         report["status"] = "passed"
     except Exception as error:
         message = str(error)
+        if loss_probe:
+            # Finite phase/status codes only: never headers, URLs, tokens or bodies.
+            message = "rotation_loss_probe=" + json.dumps(loss_probe, sort_keys=True) + "; " + message
         for value in private:
             message = message.replace(value, "<private>")
         report["error"] = re.sub(r"\s+", " ", message)[:400]
