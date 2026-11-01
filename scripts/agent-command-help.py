@@ -14,6 +14,16 @@ import os
 ALLOWED_READER = None
 
 
+def effects(parts):
+    if parts in (['preview'], ['status'], ['help'], ['provider', 'preview']):
+        return 'read_only'
+    if parts == ['provider', 'check']:
+        return 'read_only_unless_transport_is_selected'
+    if parts == ['run']:
+        return 'launch_and_provider'
+    return 'may_mutate_launch_or_contact_provider_review_parser_help'
+
+
 def guard(event, args):
     if event in ('os.mkdir', 'os.remove', 'os.rename', 'os.rmdir'):
         raise ValueError('help lookup attempted a filesystem change')
@@ -59,13 +69,14 @@ def discover(path, expected):
                                   'takes_value': action.nargs != 0,
                                   'type': getattr(action.type, '__name__', 'string') if action.nargs != 0 else 'boolean'})
         rows.append({'command': parts, 'flags': flags,
-                     'effects': 'review_command_help_before_execution',
+                     'effects': effects(parts),
                      'confirmation_flags': [f['name'] for f in flags if f['name'] in ('--apply', '--transport')]})
     walk(parser, [])
     if len(rows) > 256:
         raise ValueError('catalog exceeds command limit')
     return {'schema': 'sw-agent-command-catalog/2', 'component_sha256': expected,
-            'platform': 'native Ubuntu 24.04 pilot; lookup uses Python 3.11+', 'commands': rows}
+            'platform': 'native Ubuntu 24.04 pilot; lookup uses Python 3.11+',
+            'outcome_references': sorted(key for key in getattr(module, 'HINTS', {}) if re.fullmatch('[a-z][a-z0-9_]{0,79}', key))[:256], 'commands': rows}
 
 
 def completion(data, shell):
