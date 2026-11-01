@@ -82,3 +82,4 @@ scripts/tests/test_pilot_configuration_backup.py text eol=lf
 scripts/qualify-configuration-backup.py text eol=lf
 scripts/tests/test_configuration_backup_qualification.py text eol=lf
 scripts/benchmarks/pilot-readiness-policies/*.yaml text eol=lf
+docs/operations/evidence/configuration-recovery/** text eol=lf

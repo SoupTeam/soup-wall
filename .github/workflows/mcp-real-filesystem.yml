@@ -1418,12 +1418,35 @@ jobs:
       - name: Prepare, repeat, and recover from a rejected digest
         if: github.event.inputs.operator_results_only != 'true'
         shell: bash
+        env:
+          CONFIGURATION_RECOVERY_ONLY: ${{ github.event.inputs.configuration_recovery_only }}
         run: |
           set -euo pipefail
           asset="$RUNNER_TEMP/sou111-assets"
           output="$RUNNER_TEMP/sou111-preparation"
           mkdir -m 700 "$output"
           commit="$(git rev-parse HEAD)"
+          filesystem_classifier="$PWD/rule_baseline/rule_baseline.py"
+          git_classifier="$PWD/rule_baseline/git_readonly_v1/rule_baseline.py"
+          if [[ "$CONFIGURATION_RECOVERY_ONLY" == true ]]; then
+            python3 -B - "$asset" <<'PY'
+          import hashlib, os, subprocess, sys
+          from pathlib import Path
+          asset = Path(sys.argv[1])
+          for relative, name in (('rule_baseline/rule_baseline.py', 'filesystem-classifier.py'),
+                                 ('rule_baseline/git_readonly_v1/rule_baseline.py', 'git-classifier.py')):
+              raw = Path(relative).read_bytes()
+              tracked = subprocess.check_output(['git', 'show', 'HEAD:' + relative], timeout=10)
+              assert raw == tracked and 0 < len(raw) <= 1048576
+              target = asset / name
+              with target.open('xb') as stream:
+                  os.fchmod(stream.fileno(), 0o600)
+                  stream.write(raw)
+              assert hashlib.sha256(target.read_bytes()).digest() == hashlib.sha256(tracked).digest()
+          PY
+            filesystem_classifier="$asset/filesystem-classifier.py"
+            git_classifier="$asset/git-classifier.py"
+          fi
           args=(--output "$output" --expected-commit "$commit"
             --agentfw "$SOU119_AGENTFW"
             --git-launcher "$SOU119_GIT_LAUNCHER"
@@ -1432,8 +1455,8 @@ jobs:
             --git "$SOU115_GIT"
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude"
             --python "$(command -v python3)"
-            --filesystem-classifier "$PWD/rule_baseline/rule_baseline.py"
-            --git-classifier "$PWD/rule_baseline/git_readonly_v1/rule_baseline.py"
+            --filesystem-classifier "$filesystem_classifier"
+            --git-classifier "$git_classifier"
             --policy "$asset/policy.yaml" --allow-download)
           capacity_assets=()
           if [[ "$PILOT_CAPACITY_ONLY" == 1 ]]; then
