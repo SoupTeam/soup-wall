@@ -1,51 +1,156 @@
 #!/usr/bin/env python3
-"""Show the installed offline command catalog and safe shell completion."""
-from __future__ import annotations
-import argparse, json, sys
+"""Discover offline help from an explicitly selected installed Python pilot."""
+import argparse
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+import re
+import sys
+import subprocess
+import tempfile
+import os
 
-CATALOG = {"schema": "sw-agent-command-catalog/1", "version": "0.3.0", "commands": [
-    {"name": "doctor", "kind": "read", "flags": ["--json", "--support-bundle"]},
-    {"name": "doctor compare", "kind": "read", "flags": ["--json-out", "--markdown-out"]},
-    {"name": "protection-status", "kind": "read", "flags": ["--json"]},
-    {"name": "preflight", "kind": "read", "flags": ["--require-enforce", "--timeout-seconds"]},
-    {"name": "lifecycle status", "kind": "read", "flags": []},
-    {"name": "lifecycle start", "kind": "mutate", "confirmation": "required", "flags": []},
-    {"name": "lifecycle stop", "kind": "mutate", "confirmation": "required", "flags": []},
-    {"name": "mcp self-test", "kind": "read", "flags": ["--json"]},
-]}
+ALLOWED_READER = None
 
-def catalog(raw: str | None) -> dict:
-    value = CATALOG if raw is None else json.loads(raw)
-    if value.get("schema") != CATALOG["schema"] or value.get("version") != CATALOG["version"]:
-        raise ValueError("catalog version mismatch")
-    commands = value.get("commands")
-    if not isinstance(commands, list) or len(commands) > 64: raise ValueError("invalid catalog")
-    for item in commands:
-        if not isinstance(item, dict) or not isinstance(item.get("name"), str): raise ValueError("invalid command")
-        if any(ch in item["name"] for ch in "\r\n;|&$`<>"): raise ValueError("unsafe command name")
-        if any(not isinstance(x, str) or x.startswith("/") or any(ch in x for ch in "\r\n;|&$`<>") for x in item.get("flags", [])): raise ValueError("unsafe flag")
-    return value
 
-def main(argv=None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("action", choices=("list", "topic", "completion"))
-    p.add_argument("value", nargs="?")
-    p.add_argument("--shell", choices=("bash", "zsh", "fish"))
-    p.add_argument("--catalog-json", help="test-only catalog JSON; never executed")
-    args = p.parse_args(argv)
-    try: data = catalog(args.catalog_json)
-    except (ValueError, json.JSONDecodeError) as exc:
-        print(f"error: {exc}", file=sys.stderr); return 2
-    items = data["commands"]
-    if args.action == "list": print(json.dumps(data, indent=2)); return 0
-    if args.action == "topic":
-        if not args.value: print("error: topic is required", file=sys.stderr); return 2
-        for item in items:
-            if item["name"] == args.value: print(json.dumps(item, indent=2)); return 0
-        print("error: unknown topic", file=sys.stderr); return 2
-    if not args.shell: print("error: --shell is required", file=sys.stderr); return 2
-    names = sorted({x for item in items for x in [item["name"].split()[0], *item["name"].split()[1:], *item.get("flags", [])]})
-    if args.shell == "fish": print("\n".join(f"complete -c agentfw -f -a '{x}'" for x in names))
-    else: print(" ".join(names))
-    return 0
-if __name__ == "__main__": sys.exit(main())
+def guard(event, args):
+    if event in ('os.mkdir', 'os.remove', 'os.rename', 'os.rmdir'):
+        raise ValueError('help lookup attempted a filesystem change')
+    if event == 'open':
+        mode, flags = args[1:3]
+        if (isinstance(mode, str) and any(c in mode for c in 'wax+')) or (isinstance(flags, int) and flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC)):
+            raise ValueError('help lookup attempted a file write')
+    if event == 'subprocess.Popen' and ALLOWED_READER is not None:
+        executable, command = args[:2]
+        if executable == ALLOWED_READER and isinstance(command, list) and command[-1] == '--help' and all(re.fullmatch('[a-z][a-z0-9-]*', word) for word in command[1:-1]):
+            return
+    if event in ('subprocess.Popen', 'os.system', 'os.exec', 'os.posix_spawn', 'socket.connect', 'socket.bind', 'socket.getaddrinfo'):
+        raise ValueError('help lookup attempted a process or network operation')
+
+
+def discover(path, expected):
+    if path.is_symlink() or any(parent.is_symlink() for parent in path.absolute().parents):
+        raise ValueError('linked component path')
+    with path.open('rb') as stream:
+        raw = stream.read(1024 * 1024 + 1)
+    if len(raw) > 1024 * 1024 or hashlib.sha256(raw).hexdigest() != expected:
+        raise ValueError('selected component digest mismatch')
+    sys.dont_write_bytecode = True
+    sys.addaudithook(guard)
+    spec = importlib.util.spec_from_file_location('selected_pilot', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    parser = module.parser()
+    rows = []
+    def walk(node, parts):
+        flags = []
+        for action in node._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                for name, child in action.choices.items():
+                    if not re.fullmatch('[a-z][a-z0-9-]{0,63}', name):
+                        raise ValueError('unsafe command name')
+                    walk(child, parts + [name])
+            elif action.help != argparse.SUPPRESS:
+                for flag in action.option_strings:
+                    if not re.fullmatch('-{1,2}[a-zA-Z0-9][a-zA-Z0-9-]*', flag):
+                        raise ValueError('unsafe flag')
+                    flags.append({'name': flag, 'required': action.required,
+                                  'takes_value': action.nargs != 0,
+                                  'type': getattr(action.type, '__name__', 'string') if action.nargs != 0 else 'boolean'})
+        rows.append({'command': parts, 'flags': flags,
+                     'effects': 'review_command_help_before_execution',
+                     'confirmation_flags': [f['name'] for f in flags if f['name'] in ('--apply', '--transport')]})
+    walk(parser, [])
+    if len(rows) > 256:
+        raise ValueError('catalog exceeds command limit')
+    return {'schema': 'sw-agent-command-catalog/2', 'component_sha256': expected,
+            'platform': 'native Ubuntu 24.04 pilot; lookup uses Python 3.11+', 'commands': rows}
+
+
+def completion(data, shell):
+    words = sorted({word for row in data['commands'] for word in row['command']} |
+                   {flag['name'] for row in data['commands'] for flag in row['flags']})
+    joined = ' '.join(words)
+    if shell == 'bash':
+        return "_pilot_help_complete() { COMPREPLY=( $(compgen -W '" + joined + "' -- \"${COMP_WORDS[COMP_CWORD]}\") ); }\ncomplete -F _pilot_help_complete pilot\n"
+    if shell == 'zsh':
+        return "#compdef pilot\n_pilot_help_complete() { compadd -- " + joined + "; }\ncompdef _pilot_help_complete pilot\n"
+    return '\n'.join("complete -c pilot -f " + ("-l '" + word[2:] + "'" if word.startswith('--') else "-s '" + word[1:] + "'" if word.startswith('-') else "-a '" + word + "'") for word in words) + '\n'
+
+
+def rust_catalog(path, expected):
+    global ALLOWED_READER
+    if path.is_symlink() or any(parent.is_symlink() for parent in path.absolute().parents) or not path.is_file() or path.stat().st_size > 256 * 1024 * 1024:
+        raise ValueError('unsafe binary')
+    with path.open('rb') as stream:
+        actual = hashlib.file_digest(stream, 'sha256').hexdigest()
+    if actual != expected:
+        raise ValueError('binary digest mismatch')
+    ALLOWED_READER = str(path.absolute())
+    rows, pending = [], [[]]
+    while pending:
+        parts = pending.pop(0)
+        if len(rows) >= 256 or len(parts) > 8:
+            raise ValueError('command tree exceeds cap')
+        with tempfile.TemporaryFile() as output:
+            child = subprocess.Popen([ALLOWED_READER, *parts, '--help'], stdout=output, stderr=subprocess.DEVNULL)
+            try:
+                status = child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
+                raise ValueError('help reader timed out')
+            output.seek(0)
+            raw = output.read(65537)
+        if status or len(raw) > 65536:
+            raise ValueError('help reader failed or exceeded cap')
+        flags, section = [], ''
+        for line in raw.decode('utf-8').splitlines():
+            if line and not line[0].isspace():
+                section = line
+            elif section == 'Commands:':
+                match = re.match(r'  ([a-z][a-z0-9-]*)\s', line)
+                if match and match[1] != 'help':
+                    pending.append(parts + [match[1]])
+            elif section == 'Options:':
+                for flag in re.findall(r'(?<!\w)--?[a-zA-Z][a-zA-Z0-9-]*', re.split(r'\s{2,}', line.strip(), maxsplit=1)[0]):
+                    flags.append({'name': flag, 'required': False, 'takes_value': '<' in line, 'type': 'parser_help'})
+        rows.append({'command': parts, 'flags': flags, 'effects': 'review_command_help_before_execution'})
+    return {'schema': 'sw-agent-command-catalog/2', 'component_sha256': expected, 'commands': rows}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--pilot', type=Path)
+    parser.add_argument('--agentfw', type=Path)
+    parser.add_argument('--sha256', required=True)
+    parser.add_argument('action', choices=('list', 'topic', 'completion'))
+    parser.add_argument('topic', nargs='*')
+    parser.add_argument('--shell', choices=('bash', 'zsh', 'fish'))
+    args = parser.parse_args(argv)
+    try:
+        if not re.fullmatch('[0-9a-f]{64}', args.sha256):
+            raise ValueError('invalid component digest')
+        if (args.pilot is None) == (args.agentfw is None):
+            raise ValueError('select one component')
+        data = discover(args.pilot, args.sha256) if args.pilot else rust_catalog(args.agentfw, args.sha256)
+        if args.action == 'completion':
+            if not args.shell:
+                raise ValueError('shell is required')
+            print(completion(data, args.shell), end='')
+        elif args.action == 'topic':
+            rows = [row for row in data['commands'] if row['command'] == args.topic]
+            if len(rows) != 1:
+                raise ValueError('unknown topic')
+            print(json.dumps(rows[0], indent=2))
+        else:
+            print(json.dumps(data, indent=2))
+        return 0
+    except (OSError, ValueError, AttributeError, ImportError):
+        print('error: unsupported or changed installed component', file=sys.stderr)
+        return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main())

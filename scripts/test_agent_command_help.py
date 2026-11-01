@@ -1,16 +1,48 @@
-import json, subprocess, sys
+import hashlib
+import json
 from pathlib import Path
-TOOL = Path(__file__).parent / "agent-command-help.py"
-def run(*args): return subprocess.run([sys.executable, str(TOOL), *args], capture_output=True, text=True)
-def main():
-    assert run("list").returncode == 0
-    assert "doctor" in run("topic", "doctor").stdout
-    assert run("completion", "--shell", "bash").returncode == 0
-    assert run("completion", "--shell", "zsh").returncode == 0
-    assert run("completion", "--shell", "fish").returncode == 0
-    stale = json.dumps({"schema": "sw-agent-command-catalog/1", "version": "old", "commands": []})
-    assert run("list", "--catalog-json", stale).returncode == 2
-    hostile = json.dumps({"schema": "sw-agent-command-catalog/1", "version": "0.3.0", "commands": [{"name": "x;touch", "flags": []}]})
-    assert run("list", "--catalog-json", hostile).returncode == 2
-    print("command help tests passed")
-if __name__ == "__main__": main()
+import subprocess
+import sys
+import tempfile
+import unittest
+import shutil
+
+TOOL = Path(__file__).with_name('agent-command-help.py')
+
+
+class Controls(unittest.TestCase):
+    def test_accepted_pilot_outside_checkout(self):
+        with tempfile.TemporaryDirectory() as temp:
+            scripts = Path(temp) / 'scripts'
+            shutil.copytree(TOOL.parent, scripts, ignore=shutil.ignore_patterns('__pycache__'))
+            entry = scripts / 'pilot.py'
+            result = subprocess.run([sys.executable, '-B', str(scripts / TOOL.name), '--pilot', str(entry), '--sha256', hashlib.sha256(entry.read_bytes()).hexdigest(), 'topic', 'provider', 'update'], capture_output=True, text=True, cwd=temp)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('--expected-version', result.stdout)
+
+    def test_installed_parser_and_stale_digest(self):
+        with tempfile.TemporaryDirectory() as temp:
+            entry = Path(temp) / 'pilot.py'
+            entry.write_text("import argparse\ndef parser():\n p=argparse.ArgumentParser()\n s=p.add_subparsers()\n c=s.add_parser('preview')\n c.add_argument('--json', action='store_true')\n return p\n")
+            digest = hashlib.sha256(entry.read_bytes()).hexdigest()
+            base = [sys.executable, '-B', str(TOOL), '--pilot', str(entry), '--sha256', digest]
+            result = subprocess.run(base + ['topic', 'preview'], capture_output=True, text=True, cwd=temp)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('--json', result.stdout)
+            for shell in ('bash', 'zsh', 'fish'):
+                result = subprocess.run(base + ['completion', '--shell', shell], capture_output=True, text=True, cwd=temp)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('preview', result.stdout)
+            entry.write_text(entry.read_text() + '\n')
+            self.assertEqual(subprocess.run(base + ['list'], capture_output=True).returncode, 2)
+
+    def test_process_activity_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            entry = Path(temp) / 'pilot.py'
+            entry.write_text("import subprocess\nsubprocess.run(['should-not-run'])\n")
+            result = subprocess.run([sys.executable, '-B', str(TOOL), '--pilot', str(entry), '--sha256', hashlib.sha256(entry.read_bytes()).hexdigest(), 'list'], capture_output=True)
+            self.assertEqual(result.returncode, 2)
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -1,0 +1,22 @@
+name: SOU-208 offline controls
+on:
+  pull_request:
+    paths:
+      - scripts/agent-command-help.py
+      - scripts/test_agent_command_help.py
+      - .github/workflows/sou-208-offline.yml
+permissions:
+  contents: read
+concurrency:
+  group: sou-208-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  offline-controls:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source and offline controls
+        run: |
+          git rev-parse HEAD
+          python3 -B scripts/test_agent_command_help.py
