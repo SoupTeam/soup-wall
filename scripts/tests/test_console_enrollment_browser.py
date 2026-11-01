@@ -29,7 +29,7 @@ assert len(SYNTHETIC) == 52
 def page_html():
     html = (SRC / "admin_dashboard.html").read_text(encoding="utf-8")
     for marker, name in (("FLEET_PANEL", "fleet_panel.js"), ("ROLLOUT_PANEL", "rollout_panel.js"),
-                         ("ENROLLMENT_PANEL", "enrollment_panel.js")):
+                         ("ENROLLMENT_PANEL", "enrollment_panel.js"), ("AGENT_HISTORY", "agent_history.js")):
         html = html.replace(f"/* {marker} */", (SRC / name).read_text(encoding="utf-8"))
     return html
 
