@@ -7,6 +7,7 @@
 pub mod audit;
 pub mod classifier_runtime;
 pub mod config;
+pub mod configuration_recovery;
 pub mod decision;
 pub mod doctor;
 pub mod edit_session;
