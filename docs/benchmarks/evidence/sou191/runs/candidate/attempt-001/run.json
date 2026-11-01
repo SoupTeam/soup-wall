@@ -1,0 +1,168 @@
+{
+ "schema": "soup-wall-result-inspection-run/1",
+ "role": "candidate",
+ "attempt": 1,
+ "status": "executed",
+ "predeclaration_sha256": "1ff07638d501d9fdd021385d40079c59c55ded3aeef4e1be4eb4d9a4ca10f769",
+ "recorder": {
+  "recorder_sha256": "80a77778ae8d4380b66146f1dc6014031d3ce321c2cb26b26180b566dcafd0f1",
+  "contract_sha256": "a82f6839cba1f16df1f42c14fe9e7fdf82bc5e998ad1b89fc8b340920dc8cfe4",
+  "started_utc": "2026-10-31T13:56:09Z",
+  "finished_utc": "2026-10-31T13:59:14Z"
+ },
+ "revision": {
+  "commit": "0931bbcb5ed7cd9cc5e2e3147bbddecda2bb4b6d",
+  "tree": "fc5ee26b0f7085d792c964bf0a917d37b77f3efb",
+  "accepted_ref_commit": "7eb0c2abab4258344760be26f17e70f0829bcb5d",
+  "first_parent": true
+ },
+ "checkout": {
+  "method": "git clone --shared --no-checkout; core.autocrlf=false; checkout --detach",
+  "clean_before": true,
+  "inputs_match_blobs_before": true,
+  "status_before": [],
+  "mismatched_before": [],
+  "inputs": {
+   "rust-toolchain.toml": {
+    "blob": "246cb22c30a5f6e0e105643c35477995aff1da6f",
+    "sha256": "5a7b7b624394e3ece3fb4c9e0391aa400eeebf7a7a1efd18e74c5b68b71cd65e"
+   },
+   "Cargo.lock": {
+    "blob": "033c49f9570dba2b90928736e2c67bcb83f71878",
+    "sha256": "f4bd80d40a0408145a11bae4c91324ff954cdd59ee8172ce1f0a6e22b161f6c2"
+   },
+   "Cargo.toml": {
+    "blob": "104ca7db7dba5b4ff1c37b13a401c942b4cd3ef5",
+    "sha256": "0d81ab460cf6df3546799acae08e4676c039615a5b5ca0eeacd5789f3d10043d"
+   },
+   "crates/agentfw/Cargo.toml": {
+    "blob": "bb1a879849e91239689b7d3534934c4d53896062",
+    "sha256": "fc74e7af08019a9575479c78e216a4ff88569b46c15a32186e5073dac4a972af"
+   },
+   "crates/agentfw/examples/result_inspection_corpus.rs": {
+    "blob": "d581f86d1fd39f699cd6dc0bc8da7387dbf338ee",
+    "sha256": "20963d25efc29496bd54103b13f5677d6c6270e3b545558dc72c89b18b3059ea"
+   },
+   "eval/sou123/run_corpus.py": {
+    "blob": "88449547a882b80ecd3eab4be2b5de1949fe932a",
+    "sha256": "626ddf342ade6291a9e6da714b6e6f22724fcac38893aa53273ead4a37549706"
+   },
+   "eval/sou123/manifest.json": {
+    "blob": "56bbc5a66f856d076b83af9e0c1577e725254b0a",
+    "sha256": "3a7fd3091990d8425df42914321336dd25bdf9ff34f677450935a0c26c674e33"
+   },
+   "profiles/pilot/linux-readonly-v1/policy.yaml": {
+    "blob": "97e70757f5ac57f051c8dc0e33cb22c03761fe86",
+    "sha256": "8a8a8f7e7147a977f9d268091152bfd424fe6e61531a313c66eae1bc1fa46f5a"
+   },
+   "eval/sou123/payloads": {
+    "tree": "a0267c9e502843b532990f986b4a6cd82175a0ab"
+   }
+  },
+  "cargo_config_files": [],
+  "clean_after": true,
+  "inputs_match_blobs_after": true,
+  "status_after": [],
+  "mismatched_after": []
+ },
+ "toolchain": {
+  "requested": "1.99.1",
+  "rustc_vV": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-pc-windows-msvc\nrelease: 1.99.1\nLLVM version: 23.1.1",
+  "cargo_vV": "cargo 1.99.1 (5f94df478 2026-08-27)\nrelease: 1.99.1\ncommit-hash: 5f94df4789f005f9a352888e8355ffc645b7ed0e\ncommit-date: 2026-08-27\nhost: x86_64-pc-windows-msvc\nlibgit2: 1.9.6 (sys:0.21.0 vendored)\nlibcurl: 8.21.0-DEV (sys:0.4.90+curl-8.21.0 vendored ssl:Schannel)\nos: Windows 10.0.22631 (Windows 11 Professional) [64-bit]",
+  "rustc_release": "1.99.1",
+  "rustc_commit_hash": "58cf8f9c35b355199727627d07ae34a4e2846d67",
+  "host": "x86_64-pc-windows-msvc"
+ },
+ "environment": {
+  "refused_variables_present": [],
+  "recorded": {
+   "PROCESSOR_ARCHITECTURE": "AMD64",
+   "OS": "Windows_NT"
+  },
+  "cargo": "<home>\\.cargo\\bin\\cargo.EXE"
+ },
+ "build": {
+  "argv": [
+   "cargo",
+   "+1.99.1",
+   "build",
+   "--jobs",
+   "2",
+   "--locked",
+   "-p",
+   "agentfw",
+   "--example",
+   "result_inspection_corpus",
+   "--message-format=json-render-diagnostics"
+  ],
+  "cwd": "<work>/src",
+  "target_dir": "<work>/target",
+  "target_dir_fresh": true,
+  "exit_code": 0,
+  "timed_out": false,
+  "duration_s": 176.7,
+  "messages": {
+   "file": "build-messages.jsonl",
+   "raw_sha256": "b9c7bdebfddabe8c3f7bfbc8a7343cd346bc6b6035562331468e919c3d5078bd",
+   "raw_bytes": 192630,
+   "retained_sha256": "882187ecb2087ef618fa367ba3baf6072a5046f4cc618cb67f5ae189f3c9ea86",
+   "retained_bytes": 173389,
+   "truncated": false,
+   "sanitized": true
+  },
+  "stderr": {
+   "file": "build-stderr.txt",
+   "raw_sha256": "54588d98eec68de2d843e619a183758821ee03c1f844955083fe28511909d749",
+   "raw_bytes": 6435,
+   "retained_sha256": "cea7633ad6bd7c0e75844d0a42c919898bf3e94aa058dac933d27fbc9e2a0a1a",
+   "retained_bytes": 6315,
+   "truncated": false,
+   "sanitized": true
+  },
+  "artifact": {
+   "relative_path": "debug/examples/result_inspection_corpus.exe",
+   "sha256": "1772d62a47dafa87c26b14a09a04c5b63aed47d55e6cbf06b8df23a20a813100",
+   "bytes": 7996928
+  }
+ },
+ "execution": {
+  "argv": [
+   "<work>\\target\\debug\\examples\\result_inspection_corpus.exe",
+   "--manifest",
+   "<work>\\src\\eval\\sou123\\manifest.json",
+   "--payload-dir",
+   "<work>\\src\\eval\\sou123\\payloads",
+   "--policy",
+   "<work>\\src\\profiles\\pilot\\linux-readonly-v1\\policy.yaml"
+  ],
+  "timeout_s": 120,
+  "exit_code": 0,
+  "timed_out": false,
+  "duration_s": 0.766,
+  "artifact_sha256_before": "1772d62a47dafa87c26b14a09a04c5b63aed47d55e6cbf06b8df23a20a813100",
+  "artifact_sha256_after": "1772d62a47dafa87c26b14a09a04c5b63aed47d55e6cbf06b8df23a20a813100",
+  "stdout": {
+   "file": "adapter-stdout.json",
+   "raw_sha256": "0076a8487225ab701c9962db0322c69cb7df6de846cc800b6b717129720ccdd4",
+   "raw_bytes": 15543,
+   "retained_sha256": "0076a8487225ab701c9962db0322c69cb7df6de846cc800b6b717129720ccdd4",
+   "retained_bytes": 15543,
+   "truncated": false,
+   "sanitized": false
+  },
+  "stderr": {
+   "file": "adapter-stderr.txt",
+   "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "raw_bytes": 0,
+   "retained_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "retained_bytes": 0,
+   "truncated": false,
+   "sanitized": false
+  }
+ },
+ "report": {
+  "file": "report.json",
+  "sha256": "12c4f70bbb5c865d4db011802cc8c09ef001945e02857b91bb9eee5acb3e6394"
+ },
+ "problems": []
+}
