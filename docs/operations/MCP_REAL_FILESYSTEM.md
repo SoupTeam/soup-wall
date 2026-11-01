@@ -406,7 +406,9 @@ call remains possible unless the root set itself was withdrawn. In particular,
 to another cannot silently change a call's root binding.
 
 Support is native Ubuntu 24.04 x86-64 with the existing descriptor-consuming
-bubblewrap boundary. All entries must be owned, readable, regular files or
+bubblewrap boundary. Topology observation requires local ext4, XFS, Btrfs or tmpfs; remote, FUSE,
+overlay and other filesystems refuse even if watch registration succeeds.
+All entries must be owned, readable, regular files or
 directories without shared write. Symlinks, hardlinked files, special files,
 nested mounts, duplicate/aliased/overlapping roots, replacement, missing roots
 and mutable topology refuse conservatively. The complete set is bounded to

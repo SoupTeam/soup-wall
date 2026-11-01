@@ -182,6 +182,25 @@ mod linux {
         Ok(file)
     }
 
+    // Inotify is a sticky topology witness only on the supported local
+    // filesystems. Remote/FUSE/overlay mutations need not produce its events;
+    // never treat successful watch registration there as root confinement.
+    fn local_mount(file: &File) -> anyhow::Result<()> {
+        let mut metadata = std::mem::MaybeUninit::<libc::statfs>::uninit();
+        ensure!(
+            unsafe { libc::fstatfs(file.as_raw_fd(), metadata.as_mut_ptr()) } == 0,
+            "filesystem_roots_mount_identity_unavailable"
+        );
+        ensure!(
+            matches!(
+                unsafe { metadata.assume_init() }.f_type as u64,
+                0xef53 | 0x58465342 | 0x9123683e | 0x01021994
+            ),
+            "filesystem_roots_local_filesystem_required"
+        );
+        Ok(())
+    }
+
     fn mount_id(file: &File) -> anyhow::Result<u64> {
         let raw = fs::read_to_string(format!("/proc/self/fdinfo/{}", file.as_raw_fd()))?;
         raw.lines()
@@ -189,6 +208,14 @@ mod linux {
             .context("filesystem_roots_mount_identity_unavailable")?
             .parse()
             .map_err(Into::into)
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn filesystem_roots_reject_nonlocal_topology_observers() {
+        assert!(local_mount(&File::open("/proc").unwrap()).is_err());
+        let owned = tempfile::tempdir().unwrap();
+        local_mount(&File::open(owned.path()).unwrap()).unwrap();
     }
 
     #[derive(Debug)]
@@ -308,6 +335,7 @@ mod linux {
             let mut roots = Vec::new();
             for root in &binding.roots {
                 let file = open(root)?;
+                local_mount(&file)?;
                 observer.tree(&file, mount_id(&file)?, 0)?;
                 roots.push(file);
             }
