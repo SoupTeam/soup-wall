@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Owned installed multi-root original filesystem qualification, independent of Git worktrees."""
 import argparse
+import ast
 import json
 import re
 import hashlib
@@ -128,22 +129,37 @@ def qualify(args, door, home, env, report, installed):
         ('mcp__filesystem__read_text_file',{'path':'/workspace/beta/README.md'}),
     ]
     trace=args.output/'filesystem-roots-runtime.trace.private'
+    trace.touch(mode=0o600,exist_ok=False)
     row,results,outcome=q.run_case(selected,target,report,'multi-roots',proposals,
                                   provider_trace=trace,diagnostic_writes=True)
     # This trace stays private. Only bounded stderr error chunks over these
     # synthetic inputs enter the public report; credential-bearing exec/HTTP
     # writes are never copied. Opaque tokens and owned host paths are redacted.
-    chunks=[]
+    collectors={}; tails={}
     with trace.open(errors='replace') as stream:
         for line in stream:
-            if not re.search(r'\bwrite(?:v)?\(2,',line): continue
-            if not any(word in line for word in ('Error','error','failure','panicked','selected','filesystem_roots_')): continue
-            for path in (str(selected.prefix),str(args.output),str(args.agentfw)):
-                line=line.replace(path,'<owned-input>')
-            line=re.sub(r'[A-Za-z0-9_+/-]{32,}', '<opaque>',line)
-            chunks.append(line[:512])
-            if sum(map(len,chunks))>=4096: break
-    evidence['collector_error_chunks']=chunks[:16]
+            pid=re.match(r'^\s*(\d+)\s+',line)
+            if pid is None: continue
+            pid=pid[1]
+            if 'execve(' in line and '"mcp", "--id", "filesystem"' in line:
+                collectors[pid]='filesystem'
+            if pid not in collectors or not re.search(r'\bwrite(?:v)?\(2,',line): continue
+            match=re.search(r'\bwrite\(2,\s*("(?:\\.|[^"\\])*")',line)
+            fragments=[match[1]] if match else re.findall(r'iov_base=("(?:\\.|[^"\\])*")',line)
+            for quoted in fragments:
+                try: fragment=ast.literal_eval(quoted)
+                except (ValueError,SyntaxError): continue
+                tails[pid]=(tails.get(pid,'')+fragment)[-65536:]
+    failures=[]
+    for pid,text in tails.items():
+        start=text.rfind('Error: ')
+        if start < 0: continue
+        text=text[start:start+2048]
+        for path in (str(selected.prefix),str(args.output),str(args.agentfw)):
+            text=text.replace(path,'<owned-input>')
+        text=re.sub(r'[A-Za-z0-9_+/-]{32,}','<opaque>',text)
+        failures.append({'server':collectors[pid],'error':text})
+    evidence['collector_failures']=failures[:2]
     evidence['last_run']={key:row.get(key) for key in ('exit','status','reason','live_status','process_cleanup')}
     evidence['last_run']['stage']=outcome.get('stage')
     labels = ('Soup Wall withheld MCP result', 'Soup Wall withheld MCP invocation',

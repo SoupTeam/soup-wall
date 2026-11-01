@@ -2093,7 +2093,9 @@ jobs:
       - name: Verify native filesystem root snapshot contracts
         if: github.event.inputs.filesystem_roots_only == 'true'
         shell: bash
-        run: cargo test --locked -p agentfw --lib filesystem_roots -- --test-threads=1
+        run: |
+          cargo test --locked -p agentfw --lib filesystem_roots -- --test-threads=1
+          cargo test --locked -p agentfw --lib native::approval::tests::selected_tests -- --test-threads=1
       - name: Validate focused provider CA dispatch
         if: github.event.inputs.provider_ca_only == 'true'
         shell: bash
