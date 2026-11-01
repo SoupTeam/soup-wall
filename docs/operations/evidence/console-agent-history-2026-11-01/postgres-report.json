@@ -2,7 +2,7 @@
   "backend": "postgres",
   "binaries": {
     "agentfw": "aa27e2d7a3c5420a3a3545a94952aad7b068cdf01cb2c5071e372e86448f6857",
-    "llm-firewall": "0c5b29e16d0f6b238d51d335d8a73157849f8900e6affc04a70cebd02e8be44e"
+    "llm-firewall": "b2ff7afabea8a827a1b8cad3496b5d7318282bb09db6b3dcad9d822720863e6c"
   },
   "checks": {
     "agent-credential-refused": true,
@@ -20,6 +20,7 @@
     "cross-tenant-agent-404": true,
     "export-changed-nothing": true,
     "export-complete-records-not-healthy": true,
+    "export-dated-events-chronological": true,
     "export-free-of-private-values-edge-history": true,
     "export-free-of-private-values-edge-history-after-restart": true,
     "export-free-of-private-values-edge-many-partial": true,
@@ -37,7 +38,7 @@
     "viewer-and-operator-read": true
   },
   "config_sha256": {
-    "console": "0438d6e138b0a5782e559ba8f387fa6668c12624252ff8f7baf732034c41a72c"
+    "console": "8ae7fc36bc0be50cf2f89392a34cb839ef14da8fe196658e22fd2d3a416df057"
   },
   "format": "sw-console-agent-history-acceptance/1",
   "postgres": {
@@ -51,22 +52,22 @@
       "agent": {
         "agent_id": "edge-history",
         "current_liveness": "unknown",
-        "enrolled_at_unix": 1793532786,
+        "enrolled_at_unix": 1793540105,
         "last_reported_applied": {
           "action": "rollback",
           "delivered_at_unix": null,
-          "issued_at_unix": 1793532787,
+          "issued_at_unix": 1793540106,
           "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
           "recorded_state": "applied",
           "rejected_at_unix": null,
-          "reported_applied_at_unix": 1793532789,
+          "reported_applied_at_unix": 1793540107,
           "revision": "r1",
           "sequence": "4"
         },
         "latest_issued": {
           "action": "activate",
           "delivered_at_unix": null,
-          "issued_at_unix": 1793532789,
+          "issued_at_unix": 1793540108,
           "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
           "recorded_state": "delivered",
           "rejected_at_unix": null,
@@ -77,14 +78,14 @@
         "registry_identity": null,
         "revoked_at_unix": null,
         "runtime_coverage": "unknown",
-        "tenant_id": "tenant_geUBOmCOTWxCd2A6Sl6nfw"
+        "tenant_id": "tenant_vTNM_e2umYIqVGilM70IAQ"
       },
       "contract_version": "sw-agent-fleet/1",
       "deployments": [
         {
           "action": "activate",
           "delivered_at_unix": null,
-          "issued_at_unix": 1793532789,
+          "issued_at_unix": 1793540108,
           "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
           "recorded_state": "delivered",
           "rejected_at_unix": null,
@@ -95,18 +96,18 @@
         {
           "action": "rollback",
           "delivered_at_unix": null,
-          "issued_at_unix": 1793532787,
+          "issued_at_unix": 1793540106,
           "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
           "recorded_state": "applied",
           "rejected_at_unix": null,
-          "reported_applied_at_unix": 1793532789,
+          "reported_applied_at_unix": 1793540107,
           "revision": "r1",
           "sequence": "4"
         },
         {
           "action": "activate",
           "delivered_at_unix": null,
-          "issued_at_unix": 1793532787,
+          "issued_at_unix": 1793540105,
           "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
           "recorded_state": "rejected",
           "rejected_at_unix": null,
@@ -117,7 +118,7 @@
         {
           "action": "activate",
           "delivered_at_unix": null,
-          "issued_at_unix": 1793532787,
+          "issued_at_unix": 1793540105,
           "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
           "recorded_state": "issued",
           "rejected_at_unix": null,
@@ -128,21 +129,21 @@
         {
           "action": "activate",
           "delivered_at_unix": null,
-          "issued_at_unix": 1793532787,
+          "issued_at_unix": 1793540105,
           "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
           "recorded_state": "applied",
           "rejected_at_unix": null,
-          "reported_applied_at_unix": 1793532787,
+          "reported_applied_at_unix": 1793540105,
           "revision": "r1",
           "sequence": "1"
         }
       ],
       "next_before_sequence": null,
-      "observed_at_unix": 1793532789
+      "observed_at_unix": 1793540108
     }
   },
-  "source_commit": "08d7476991755cb4e772c485e9ee997e0c13aa5b",
+  "source_commit": "cfa02f024a5a6097d82ab1157d3055c046fabbdd",
   "source_dirty": false,
-  "source_tree": "400f9ba8204be5e9d09e123cf6bc58e8b6d21c1a",
+  "source_tree": "5f8ff82426c54899406541b9f8f4c84d63417ed0",
   "status": "passed"
 }
