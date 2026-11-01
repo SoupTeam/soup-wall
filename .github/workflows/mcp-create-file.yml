@@ -16,6 +16,10 @@ on:
         description: Focus on installed edit, stop, refresh and cumulative quota qualification
         type: boolean
         default: false
+      batch_only:
+        description: Author-only exact-source SOU-196 core and installed batch qualification, not merge admission
+        type: boolean
+        default: false
       replacement_only:
         description: Focus only on the additive SOU-159 qualification
         type: boolean
@@ -36,7 +40,7 @@ jobs:
       workflow: mcp-create-file.yml
   linux-create-file:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-create-file') && github.event.inputs.replacement_only != 'true' && github.event.inputs.edit_only != 'true' && github.event.inputs.build_mode != 'shared'
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-create-file') && github.event.inputs.replacement_only != 'true' && github.event.inputs.edit_only != 'true' && github.event.inputs.batch_only != 'true' && github.event.inputs.build_mode != 'shared'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -142,7 +146,7 @@ jobs:
 
   linux-replace-file:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-replace-file') && github.event.inputs.edit_only != 'true' && github.event.inputs.comparison_only != 'true' && github.event.inputs.build_mode != 'shared'
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-replace-file') && github.event.inputs.edit_only != 'true' && github.event.inputs.batch_only != 'true' && github.event.inputs.comparison_only != 'true' && github.event.inputs.build_mode != 'shared'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
@@ -269,12 +273,15 @@ jobs:
           cargo fetch --locked
           task_scratch="$RUNNER_TEMP/sou161-scratch"
           mkdir -m 700 "$task_scratch"
-          mkdir -m 700 "$task_scratch"/{home,cargo-home,tmp,host}
+          mkdir -m 700 "$task_scratch"/{home,cargo-home,tmp,host,low-space}
+          sudo install -o 0 -g 0 -m 600 /dev/null "$task_scratch/foreign-record"
           ln -s "$HOME/.cargo/registry" "$task_scratch/cargo-home/registry"
           cp profiles/mcp/filesystem-readonly-v1/claude-host/package*.json "$task_scratch/host/"
           npm ci --ignore-scripts --no-audit --no-fund --prefix "$task_scratch/host"
           printf '%s  %s\n' fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7 \
             "$task_scratch/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" | sha256sum --check
+          mkdir -m 700 "$task_scratch/inventory-foreign"
+          sudo mkdir -m 700 "$task_scratch/inventory-foreign/edit-90000000-0000-4000-8000-000000000002"
           git rev-parse HEAD > "$task_scratch/source.txt"
       - name: Read-only source, private scratch, offline native installed qualification
         shell: bash
@@ -283,6 +290,7 @@ jobs:
           task_scratch="$RUNNER_TEMP/sou161-scratch"
           sudo -- bwrap --unshare-net --unshare-pid --die-with-parent \
             --ro-bind / / --bind "$task_scratch" "$task_scratch" \
+            --size 65536 --perms 1777 --tmpfs "$task_scratch/low-space" \
             --proc /proc --dev /dev --cap-drop ALL \
             --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP \
             --chdir / /usr/bin/setpriv \
@@ -293,12 +301,30 @@ jobs:
             HOME="$task_scratch/home" CARGO_HOME="$task_scratch/cargo-home" \
             CARGO_TARGET_DIR="$task_scratch/target" TMPDIR="$task_scratch/tmp" \
             SOU161_SCRATCH="$task_scratch" SOU161_SOURCE="$GITHUB_WORKSPACE" CARGO_BUILD_JOBS=4 \
+            SOU196_ONLY="${{ github.event_name == 'workflow_dispatch' && inputs.batch_only == true && 'true' || 'false' }}" \
             SOU166_MODE="$SOU166_MODE" SOU166_BUNDLE="$SOU166_BUNDLE" SOU166_CONTEXT="$SOU166_CONTEXT" \
             ImageOS="$ImageOS" ImageVersion="$ImageVersion" \
             /bin/bash -euo pipefail <<'BASH'
           cd "$SOU161_SOURCE"
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-build.json" -- build --locked --offline -p agentfw --bin agentfw
+          qualify_batch() {
+            python3 -B -m unittest discover -s scripts/tests -p 'test_edit_batch.py' -v
+            gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou196_batch_fault.c -ldl -o "$SOU161_SCRATCH/batch-fault.so"
+            python3 -B scripts/qualify-edit-batch.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+              --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+              --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/batch-fault.so" --output "$SOU161_SCRATCH/batch"
+          }
+          if [ "${SOU196_ONLY:-false}" = true ]; then
+            python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-batch-unit.json" -- test --locked --offline -p agentfw --lib edit_session -- --nocapture
+            python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-batch-clippy.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings
+            cargo fmt --all --check
+            sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
+            qualify_batch
+            exit 0
+          fi
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-0.json" -- test --locked --offline -p agentfw --lib edit_session -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-review-publish.json" -- test --locked --offline -p agentfw --lib private_export -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-support-export.json" -- test --locked --offline -p agentfw --lib support_bundle -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-stop-unit.json" -- test --locked --offline -p agentfw --lib pilot_approval -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-stop-endpoint.json" -- test --locked --offline -p agentfw --test native_endpoint sou125_stop -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-1.json" -- test --locked --offline -p agentfw --lib native::execution::transport -- --nocapture
@@ -308,10 +334,41 @@ jobs:
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-clippy.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings
           cargo fmt --all --check
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_run_operations.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_run_archive.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_archive_qualification.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_front_door_component.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_quota.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit_stop.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_refresh.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_review.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_diff.py' -v
           sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
+          qualify_batch
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou189_diff_fault.c -ldl -o "$SOU161_SCRATCH/diff-fault.so"
+          python3 -B scripts/qualify-edit-diff.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/diff-fault.so" --foreign "$SOU161_SCRATCH/foreign-record" \
+            --output "$SOU161_SCRATCH/diff"
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_inventory.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_application.py' -v
+          python3 -B scripts/qualify-edit-inventory.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --foreign-state "$SOU161_SCRATCH/inventory-foreign" \
+            --output "$SOU161_SCRATCH/inventory"
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_export_set.py' -v
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou186_export_fault.c -ldl -o "$SOU161_SCRATCH/export-set-fault.so"
+          python3 -B scripts/qualify-edit-export-set.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/export-set-fault.so" --output "$SOU161_SCRATCH/export-set"
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou179_review_fault.c -ldl -o "$SOU161_SCRATCH/review-fault.so"
+          python3 -B scripts/qualify-edit-review.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/review-fault.so" --output "$SOU161_SCRATCH/review"
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou187_apply_fault.c -ldl -o "$SOU161_SCRATCH/application-fault.so"
+          python3 -B scripts/qualify-edit-application.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/application-fault.so" --output "$SOU161_SCRATCH/application"
           python3 -B scripts/qualify-installed-edit.py --run --diagnose --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/runtime"
@@ -323,6 +380,10 @@ jobs:
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --publish-fault "$SOU161_SCRATCH/publish-fault.so" \
             --output "$SOU161_SCRATCH/refresh"
+          python3 -B scripts/qualify-installed-edit-archive.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/archive-runtime" \
+            --low-space "$SOU161_SCRATCH/low-space" --foreign-record "$SOU161_SCRATCH/foreign-record"
           mkdir -m 700 "$SOU161_SCRATCH/quota-faults"
           gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=1 scripts/fixtures/sou170_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/withheld.so"
           gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=2 scripts/fixtures/sou170_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/interrupted.so"
@@ -339,7 +400,14 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/source.txt
             ${{ runner.temp }}/sou161-scratch/binary.txt
             ${{ runner.temp }}/sou161-scratch/runtime/report.json
+            ${{ runner.temp }}/sou161-scratch/archive-runtime/report.json
             ${{ runner.temp }}/sou161-scratch/quota/report.json
+            ${{ runner.temp }}/sou161-scratch/review/report.json
+            ${{ runner.temp }}/sou161-scratch/diff/report.json
+            ${{ runner.temp }}/sou161-scratch/inventory/report.json
+            ${{ runner.temp }}/sou161-scratch/export-set/report.json
+            ${{ runner.temp }}/sou161-scratch/application/report.json
+            ${{ runner.temp }}/sou161-scratch/batch/report.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.log
             ${{ runner.temp }}/sou166-context.json

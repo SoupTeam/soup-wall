@@ -50,6 +50,130 @@ for bubblewrap setup/compile. The build environment passes only selected tool
 paths and a small fixed set of variables. On timeout or cancellation it stops
 the owned process group.
 
+### Private offline download exchange (SOU-194)
+
+An explicit exchange moves only the two exact source archives above. The
+uncompressed `sw-pilot-prerequisite-download-exchange/1` tar contains exactly
+`manifest.json`, `git.tar.xz` and `bwrap.tar.xz`. The manifest binds each
+version, accepted URL, SHA-256 and byte count. The importer checks the complete
+inventory, member types, sizes, digest and the *current* repository pins before
+publishing a selected cache. This is a source cache, not a built binary, sandbox
+permission, selected runtime or active-protection claim. Compiler, Meson,
+libcap and other native build dependencies remain separate host inputs.
+
+Run these commands as a non-root operator from the same clean, reviewed source
+commit on native Ubuntu 24.04 x86_64. Replace paths with owned private `0700`
+directories outside the checkout. The online preparation uses the existing
+download/build verifier; all other exchange operations require explicit flags.
+
+```sh
+commit="$(git rev-parse HEAD)"
+online="$HOME/private-online-prerequisites"
+fresh="$HOME/private-offline-prerequisites"
+bundle_dir="$HOME/private-transfer"
+mkdir -m 700 "$bundle_dir"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-preview \
+  --output "$online" --expected-commit "$commit"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --allow-download \
+  --output "$online" --expected-commit "$commit"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-export "$bundle_dir/pinned.tar" \
+  --output "$online" --expected-commit "$commit"
+# Transfer pinned.tar through the approved private channel; keep it owner-only.
+python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-import "$bundle_dir/pinned.tar" \
+  --output "$fresh" --expected-commit "$commit"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-preview \
+  --output "$fresh" --expected-commit "$commit"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --offline-import-cache \
+  --output "$fresh" --expected-commit "$commit"
+```
+
+Supply any required `--pkg-config-libdir`, `--pkg-config-sysroot` and
+`--meson-pythonpath` arguments to both preparation calls; the archive exchange
+does not supply them. The export destination must be absent, owner-private and
+outside the cache root. A previous valid import is never overwritten. An owner
+private filesystem must support unnamed `O_TMPFILE` creation and descriptor
+linking: export, direct-cache seed and import selection publish the verified
+inode through a pinned directory descriptor, without a replaceable named
+temporary. An unsupported filesystem refuses the operation. Import rechecks
+all staged member hashes after selecting the cache, and every later consumer
+checks them again. An owner
+interrupted before selection may retry the import: only known, private files
+from its unselected stage are removed under the existing same-root lock;
+unknown or unsafe entries cause refusal. A complete selected import is checked
+again before each offline archive copy. The offline consumer never invokes the
+download path, and a fresh root is required to demonstrate that it consumed
+the import instead of reusing an already prepared generation. Import refuses a
+root with an existing selected preparation. Keep the bundle
+private; it contains source bytes and is not a release artifact.
+
+The focused `cache_exchange_only` manual job in
+[`mcp-real-filesystem.yml`](../../.github/workflows/mcp-real-filesystem.yml)
+uses two private roots outside the checkout, records separate online/exchange/
+offline timings, and executes the offline preparation in a disposable network
+namespace. It retains finite JSON diagnostics for incomplete attempts. The
+normal required CI, CodeQL and trusted admission remain separate gates.
+
+### Resumable bubblewrap download (SOU-173)
+
+The pinned bubblewrap 0.13.1 archive has an exact 129,472-byte length and the
+SHA-256 above. With explicit `--prepare --allow-download`, the preparer keeps
+its incomplete transfer in the owner's `0700` output root under
+`download-cache/`. The SOU-139 preparation claim serializes same-root callers.
+The `0600` versioned resume record binds the canonical URL, expected bytes,
+full digest, partial inode, offset and a bounded history of failed attempts.
+It is evidence, not authority: the complete archive is hashed against the
+repository pin before reuse, extraction or selection. HTTP validators and
+Content-Length are never accepted as a substitute for that digest.
+
+Each explicit invocation makes at most one HTTP request. A matching strong
+ETag permits a `Range` request; a valid `206` appends, and an ignored Range
+(`200`) starts over from byte zero within the same request. Missing validators
+start fresh. Changed validators, incorrect Content-Range, premature EOF,
+unexpected `416`, over-limit data and digest mismatches refuse publication.
+The transfer chain permits at most three attempts and at most twice the
+existing 16 MiB compressed bound of transferred data, with the existing
+120-second request budget, including connection, response headers, HTTPS
+redirects and redirect bodies, and 25-second socket timeout. A cancellation or
+disconnect retains only the recorded private prefix; an uncommitted tail is
+discarded after the next identity and prefix check. No ambient proxy,
+credentials or caller headers enter the download helper.
+
+The JSON result includes finite `download_progress` counts for the selected
+archive. A failed attempt reports its reason and retained/transferred bytes
+without URLs, headers or private paths. Keep this evidence private; do not
+publish the cache or a generation from a failed attempt. The existing
+`first-failure.json` remains the first failure, while the resume record retains
+up to three later transfer failures. On verified transfer, the bounded private
+`bwrap.transfer-evidence.json` keeps those counts and failures after the resume
+record is removed; this evidence is never archive authority. A completed cache
+entry is rehashed on every use. An offline rebuild can use it with the exact
+local Git archive:
+
+```sh
+python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --rebuild \
+  --offline-bwrap-cache --output "$HOME/private-native-prerequisites" \
+  --expected-commit "$commit" --git-archive /absolute/git-2.51.2.tar.xz
+```
+
+For an invalid or exhausted partial, inspect the bounded failure reason and
+run a fresh explicit transfer with `--prepare --rebuild --allow-download
+--clear-bwrap-cache` plus the other required inputs. That flag deletes only
+the four identity-checked private bubblewrap cache names while holding the
+same-root claim; it does not remove an installed generation or unrelated
+files. The default inventory and ordinary pilot run/status/preview never
+contact the network.
+
+The native Ubuntu 24.04 job runs the local Range/disconnect/ownership controls
+and `qualify-pilot-resumable-download.py --run` against the exact public pin.
+Its accepted Git/bubblewrap preparation also selects the bwrap archive through
+this explicitly consented transfer path, then builds, verifies and uses the
+resulting binary in the existing original-server qualification.
+Its `sou173-download.json` artifact records the complete transfer and offline
+reuse byte counts, durations and extraction result. A failed job retains a
+bounded failure report rather than treating a fixture or WSL result as native
+qualification. Record the exact job SHA and artifact digest before citing it
+as acceptance evidence.
+
 ## Prepare, reuse, and select for the accepted runtime
 
 ```sh
@@ -68,6 +192,35 @@ generation; a failure leaves `current.json`, the last valid generation, and
 unrelated files intact. The first bounded failure record stays in
 `first-failure.json`; raw build logs stay private in the incomplete generation.
 Do not copy those logs into a public issue or PR.
+
+### Explicit retry after a completed Git stage
+
+If Git finished and its private stage checkpoint was published before a later
+bubblewrap failure or cancellation, retry with the same output root and input
+arguments, adding `--resume`:
+
+```sh
+python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --resume "${args[@]}"
+```
+
+The retry acquires the normal per-output preparation lock and verifies the
+complete frozen Git stage before copying its verified binary into a new
+generation. The checkpoint binds the clean source, pinned Git archive, build
+recipe and flags, compiler/interpreter and native inputs, runtime libraries,
+file modes, and bounded stage-tree digests. Bubblewrap is built normally, and
+the final Git+bubblewrap receipt, hashes and runtime checks still run before
+`current.json` changes. The result distinguishes built and reused stages and
+reports their actual timings; preview/status commands do not build or select.
+
+`--resume` refuses an absent, incomplete, mutable, unsafe or identity-mismatched
+checkpoint. It never resumes compiler scratch or trusts a partial executable.
+Inspect the bounded failure reason, then run `--prepare` without `--resume` to
+start a fresh build after correcting the input or environment; use `--rebuild`
+when a complete generation is already selected and a new one is intended.
+Failed attempts remain private for diagnosis, and no failed or incomplete
+generation becomes the selected runtime. Existing local archive arguments
+keep this retry offline; network access still requires explicit
+`--allow-download` under the same pins and bounds.
 
 Pass the two emitted paths directly to the existing SOU-111 interface. Supply
 the remaining reviewed inputs described in

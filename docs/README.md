@@ -37,6 +37,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Claude HTTP-hook acceptance](operations/CLAUDE_HOST_ACCEPTANCE.md) | Actual host behavior with deterministic local model fixtures |
 | [First-use onboarding](operations/ONBOARDING.md) | Read-only preview, explicit journaled apply, truthful configured/verified result and undo (Linux) |
 | [Agent self-test](operations/SELF_TEST.md) | One Linux command: witnessed useful reads, a refused synthetic send, daemon loss and a versioned report |
+| [Installed private-edit self-test](operations/private-edit-self-test.md) | Explicit disposable create/replace, Ask, quota, Stop and recovery checks with the selected genuine host |
 | [Offline policy replay](operations/OFFLINE_POLICY_REPLAY.md) | Explicit bounded legacy-event policy simulation, production traces and exact-source synthetic parity |
 | [Offline Agent audit explorer](operations/AGENT_AUDIT_EXPLORER.md) | Private Linux JSONL report generation, decision timeline, filters and evidence limits |
 | [Bounded Agent audit retention](operations/AGENT_AUDIT_RETENTION.md) | Opt-in Linux segments, crash recovery, private verified export and loss-aware browsing |
@@ -47,9 +48,12 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Native MCP diagnostic output](operations/NATIVE_MCP_STDERR.md) | Bounded discarded child stderr, safe metadata, owned cleanup and required Linux evidence |
 | [Sandboxed real filesystem MCP](operations/MCP_REAL_FILESYSTEM.md) | Explicit pinned Linux read-only server, bounded overlap/cancellation and required actual-host acceptance |
 | [Installed two-server pilot qualification](operations/INSTALLED_PILOT_QUALIFICATION.md) | Actual Claude Code, installed filesystem/Git MCP, independent refusal witnesses and bounded recovery |
+| [Private named pilot providers](operations/PILOT_PROVIDER_PROFILES.md) | Explicit owner-private provider setup and installed host selection |
+| [Private pilot configuration recovery](operations/PILOT_CONFIGURATION_RECOVERY.md) | Read-only inventory, private declarative backup and fresh-home restore without session authority |
 | [Exact-candidate pilot evidence dossier](operations/PILOT_EVIDENCE_DOSSIER.md) | Selected evidence identities, blocker ledger and historical/current pilot scorecard |
 | [Offline pilot workspace inspection](operations/PILOT_WORKSPACE_INSPECTION.md) | Versioned compatibility reasons, profile boundaries and independent no-effect witnesses |
 | [Fixed-source installed readiness](operations/SOU145_INSTALLED_READINESS.md) | Complete native Linux inventories, actual NOT_READY result, cleanup and retained attempts |
+| [Installed edit output review](operations/INSTALLED_EDIT_REVIEW.md) | Read-only selected output inspection, explicit private content and create-new export |
 | [Read-only existing projects](operations/PILOT_EXISTING_PROJECT.md) | Explicit owned roots, pinned directory identities and source-preserving prepared runs |
 | [Long-running pilot exercise](operations/PILOT_LONG_SESSIONS.md) | Opt-in hour-long original filesystem/Git workload, resource observations and owned failure recovery |
 | [Linux MCP resource budgets](operations/MCP_LINUX_RESOURCE_BUDGETS.md) | Opt-in delegated aggregate memory, CPU and task limits, wall expiry and independent Linux witnesses |
@@ -86,6 +90,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [AgentDojo runtime adapter](benchmarks/agentdojo-live-fallback.md) | Pinned runtime fixtures and explicit live-evaluation prerequisites |
 | [AgentDojo matched protocol](benchmarks/agentdojo-matched-protocol.md) | SOU-36 frozen plan, live gate, pair validation and independent report (Phase 4 stays open) |
 | [Paired development regression](benchmarks/paired-regression.md) | SOU-153 offline comparison of two matched runs: input contract, comparability, completeness, transitions and family-aware uncertainty |
+| [Result-inspection comparison](benchmarks/result-inspection-comparison.md) | SOU-191 controlled recording and offline comparison of two accepted-main runs of the SOU-123 corpus: custody checks, outcome contract, denominators and trust boundary |
 | [Task 3 resilience](benchmarks/task3_resilience.md) | Malformed events, unknown tools, daemon failures and independent execution witnesses |
 | [SOU-17 verification](benchmarks/sou17_verification.md) | Failure, overlap, replay and native witnesses; exact-source reproduction and code-scanning triage |
 | [Native admission](benchmarks/native-admission.md) | Installed tool semantics, invocation binding and result/context contracts |

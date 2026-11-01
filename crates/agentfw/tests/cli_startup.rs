@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 #[test]
 fn ordinary_cli_startup_fits_a_standard_stack_before_execution() {
-    for (arguments, expected, refusal) in [
+    let probes = vec![
         (&["--help"][..], 0, None),
         (&["install"][..], 0, None),
         (
@@ -22,7 +22,22 @@ fn ordinary_cli_startup_fits_a_standard_stack_before_execution() {
             1,
             Some("operator-installed registry"),
         ),
-    ] {
+    ];
+    #[cfg(target_os = "linux")]
+    let probes = {
+        let mut probes = probes;
+        probes.extend([
+            (&["edit-session", "inventory", "--help"][..], 0, None),
+            (&["edit-session", "with-run", "--help"][..], 0, None),
+            (&["edit-session", "export-set", "--help"][..], 0, None),
+            (&["edit-session", "apply", "--help"][..], 0, None),
+            (&["edit-session", "batch", "--help"][..], 0, None),
+            (&["edit-session", "batch", "preview", "--help"][..], 0, None),
+            (&["edit-session", "archive", "--help"][..], 0, None),
+        ]);
+        probes
+    };
+    for (arguments, expected, refusal) in probes {
         let home = tempfile::tempdir().unwrap();
         let mut command = Command::new(env!("CARGO_BIN_EXE_agentfw"));
         command.args(arguments).env_clear();

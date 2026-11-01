@@ -7,6 +7,7 @@
 pub mod audit;
 pub mod classifier_runtime;
 pub mod config;
+pub mod configuration_recovery;
 pub mod decision;
 pub mod doctor;
 pub mod edit_session;
@@ -40,6 +41,8 @@ pub(crate) mod macos_create;
 pub(crate) mod macos_read;
 pub mod offline_replay;
 pub mod preflight;
+#[cfg(target_os = "linux")]
+mod private_export;
 #[cfg(windows)]
 mod private_file_windows;
 pub mod protection_status;
@@ -55,6 +58,7 @@ pub mod service;
 pub mod spans;
 pub mod support_bundle;
 pub mod token;
+pub mod tool_preview;
 #[cfg(windows)]
 pub(crate) mod windows_create;
 #[cfg(windows)]

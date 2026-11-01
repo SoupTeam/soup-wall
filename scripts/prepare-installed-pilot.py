@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import pilot_capacity as capacity
 import pilot_git_profiles as GIT_PROFILES
+import wsl_preflight
 from pilot_provider import utility_environment
 MAX_JSON = 65536
 NODE_ARCHIVE_SHA256 = "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37"
@@ -53,6 +54,12 @@ class InstallerFailure(ValueError):
         super().__init__(kind + "_installer_failed")
         self.exit_code = exit_code
         self.private_log = private_log
+
+
+class WslPreparationFailure(ValueError):
+    def __init__(self, report):
+        super().__init__("wsl_preparation_prerequisites_not_ready")
+        self.report = report
 
 
 def require(condition, code):
@@ -392,9 +399,86 @@ def supported_platform():
             "ubuntu_24_04_required")
 
 
+def wsl_input_locations(args, paths=None, workspaces=None, dependencies=None):
+    """Observe every supplied location before executing any selected input.
+
+    Mount inspection is pure: it never calls ldd, runtime --version, a selected
+    program or a namespace probe. Symlinks are resolved before the mount match.
+    """
+    inputs = {"source_tree": ROOT}
+    for role in (*PILOT.ROLES, "node_archive", "python_archive", "npm_cache", "wheelhouse",
+                 "filesystem_workspace", "git_workspace"):
+        path = getattr(args, role, None)
+        if path is not None:
+            inputs[role] = path
+    inputs.update({"selected_" + role: path for role, path in (paths or {}).items()})
+    inputs.update({"workspace_" + role: path for role, path in (workspaces or {}).items()})
+    inputs.update({"dependency_" + role: path for role, path in (dependencies or {}).items()})
+    with Path("/proc/self/mountinfo").open("r") as stream:
+        mountinfo = stream.read(4 * 1024 * 1024 + 1)
+    require(len(mountinfo) <= 4 * 1024 * 1024, "wsl_mount_observation_limit")
+    checks = []
+    for role, path in inputs.items():
+        try:
+            path = Path(path)
+            require(path.is_absolute(), "absolute_wsl_input_required")
+            resolved = path.resolve(strict=True)
+            filesystem = wsl_preflight.mount_type(resolved.as_posix(), mountinfo)
+            allowed = wsl_preflight.supported_path(resolved.as_posix(), filesystem, role)
+            checks.append({"id": "filesystem_" + role, "status": "ready" if allowed else "unsupported",
+                           "reason": "linux_ext4" if allowed else "unsupported_filesystem_or_location",
+                           "filesystem": filesystem})
+        except (OSError, ValueError, IndexError):
+            checks.append({"id": "filesystem_" + role, "status": "unavailable", "reason": "path_or_mount_unreadable"})
+    report = {"format": "sw-wsl-preparation-input-locations/1", "scope": "locations_only_no_execution",
+              "status": "ready" if all(row["status"] == "ready" for row in checks) else "unsupported",
+              "checks": checks}
+    if report["status"] != "ready":
+        raise WslPreparationFailure(report)
+    return report
+
+
+def wsl_preparation_preflight(args, paths=None, *, workspaces=None, dependencies=None):
+    """Explicit WSL2 preparation only; native defaults and run guards stay strict.
+
+    The first pass observes static prerequisites before creating a generation.
+    The second pass receives selected_paths' verified inputs and probes the
+    existing namespace/bubblewrap prerequisites before either installer runs.
+    """
+    root = args.wsl_root
+    require(root.is_absolute() and root.resolve(strict=True) == root,
+            "canonical_existing_wsl_root_required")
+    require(getattr(args, "git_profile", GIT_PROFILES.DEFAULT) == GIT_PROFILES.DEFAULT,
+            "wsl_extended_git_profile_not_qualified")
+    if args.output is not None:
+        require(args.output.is_absolute() and args.output.resolve() == args.output
+                and args.output.is_relative_to(root), "wsl_preparation_output_outside_stage")
+    # Full inspect executes namespace and selected-bwrap probes after its own
+    # mount checks. Guard source, caches and workspace paths as well first.
+    locations = wsl_input_locations(args, paths, workspaces, dependencies) if paths is not None else None
+    report = wsl_preflight.inspect(root, paths, output=args.output)
+    checks = {row["id"]: row for row in report.get("checks", [])}
+    required = {"wsl_kernel", "architecture", "distribution", "process_owner",
+                "filesystem_stage_root", "stage_owner"}
+    if args.output is not None:
+        required.add("filesystem_report_output")
+    static_ready = (required.issubset(checks)
+                    and all(row.get("status") == "ready" for key, row in checks.items()
+                            if key != "selected_runtime"))
+    if not static_ready or (paths is not None and report.get("status") != "ready"):
+        raise WslPreparationFailure(report)
+    if locations is None:
+        locations = wsl_input_locations(args)
+    report["input_locations"] = locations
+    return report
+
+
 def prepare(args):
     GIT_PROFILES.binding(getattr(args, "git_profile", GIT_PROFILES.DEFAULT))
-    supported_platform()
+    if getattr(args, "wsl_root", None) is None:
+        supported_platform()
+    else:
+        wsl_preparation_preflight(args)
     before = PILOT.source()
     require(not before["dirty"] and before["commit"] == args.expected_commit,
             "candidate_source_mismatch")
@@ -417,6 +501,9 @@ def prepare(args):
 
 def prepare_locked(args, output, requested):
     git_profile = getattr(args, "git_profile", GIT_PROFILES.DEFAULT)
+    wsl = getattr(args, "wsl_root", None) is not None
+    if wsl:
+        wsl_input_locations(args)
     generations = output / "generations"
     if not generations.exists():
         generations.mkdir(mode=0o700)
@@ -430,17 +517,40 @@ def prepare_locked(args, output, requested):
         generation = generations / record["generation"]
         require(re.fullmatch(r"[0-9a-f]{32}", record["generation"]), "completion_marker_invalid")
         inside(generation, generations)
-        selection, _ = verify_generation(generation, args.expected_commit)
+        selection, _ = (verify_generation(generation, args.expected_commit, probe_native=False)
+                        if wsl else verify_generation(generation, args.expected_commit))
         require(FS.sha(selection) == record["selection_sha256"], "completion_marker_changed")
         require(GIT_PROFILES.from_selection(PILOT.strict_json(selection.read_bytes())) == git_profile,
                 "git_profile_selection_differs_use_rebuild")
         require(PILOT.strict_json(selection.read_bytes()).get("prepared_workspaces") == requested,
                 "existing_workspace_selection_differs_use_rebuild")
-        return {"status": "reused", "selection": str(selection), "generation": record["generation"]}
+        result = {"status": "reused", "selection": str(selection), "generation": record["generation"]}
+        if wsl:
+            retained = PILOT.strict_json(selection.read_bytes())
+            _, paths = PILOT.validate_selection(retained, args.expected_commit)
+            roots = workspace_paths(retained, generation)
+            dependencies = {}
+            # verify_generation(False) has already verified these profile
+            # bytes and library hashes without execution. Include the actual
+            # package interpreter and libraries in the mount gate as well.
+            for kind in ("filesystem", "git"):
+                profile = PILOT.strict_json(bounded_file(generation / (kind + "-profile") / "profile.json", MAX_JSON).read_bytes())
+                dependencies[kind + "_runtime"] = Path(profile["runtimePath"])
+                dependencies[kind + "_package"] = Path(profile["packageRoot"])
+                for index, item in enumerate(profile["libraries"]):
+                    dependencies[kind + "_library_" + str(index)] = Path(item["path"])
+            result.update(platform="wsl2-linux-x86_64",
+                          wsl_preflight=wsl_preparation_preflight(args, paths, workspaces=roots,
+                                                                 dependencies=dependencies))
+            for role in PILOT.EXECUTABLE_ROLES:
+                check_native(paths[role])
+        return result
     generation = generations / uuid.uuid4().hex
     generation.mkdir(mode=0o700)
     capacity.bind(generation)
     paths = selected_paths(args, generation)
+    wsl_report = (wsl_preparation_preflight(args, paths)
+                  if getattr(args, "wsl_root", None) is not None else None)
     fs_workspace, git_workspace = generation / "filesystem-workspace", generation / "git-workspace"
     if requested:
         roots = workspace_paths({"prepared_workspaces": requested}, generation)
@@ -506,7 +616,10 @@ def prepare_locked(args, output, requested):
     record = {"format": "sw-pilot-preparation/1", "generation": generation.name,
               "selection_sha256": FS.sha(selection_path), "status": "prepared-not-active"}
     publish_marker(output, record)
-    return {"status": "prepared-not-active", "selection": str(selection_path), "generation": generation.name}
+    result = {"status": "prepared-not-active", "selection": str(selection_path), "generation": generation.name}
+    if wsl_report is not None:
+        result.update(platform="wsl2-linux-x86_64", wsl_preflight=wsl_report)
+    return result
 
 
 def main():
@@ -516,6 +629,8 @@ def main():
     parser.add_argument("--rebuild", action="store_true", help="prepare a new generation and retain the old one")
     parser.add_argument("--allow-download", action="store_true", help="permit locked npm/pip and pinned Python download")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--wsl-root", type=Path,
+                        help="Explicit opt-in WSL2 preparation in a private Linux ext4 /home stage; output must stay inside it")
     parser.add_argument("--filesystem-workspace", type=Path, help="canonical existing owned read-only root")
     parser.add_argument("--git-workspace", type=Path, help="canonical existing supported standalone repository")
     parser.add_argument("--git-profile", default=GIT_PROFILES.DEFAULT, action=GIT_PROFILES.SingleProfile,
@@ -544,8 +659,22 @@ def main():
         except (OSError, ValueError) as error:
             print(json.dumps({"status": "failed", "executed": False, "reason": str(error)[:240]}))
             return 2
-        supported = platform.system() == "Linux" and platform.machine() == "x86_64"
-        if supported:
+        wsl_report = None
+        if args.wsl_root is not None:
+            try:
+                wsl_report = wsl_preparation_preflight(args)
+            except WslPreparationFailure as error:
+                print(json.dumps({"status": "failed", "executed": False,
+                                  "reason": str(error), "wsl_preflight": error.report}))
+                return 2
+            except (OSError, ValueError):
+                print(json.dumps({"status": "failed", "executed": False,
+                                  "reason": "wsl_preparation_input_invalid"}))
+                return 2
+            supported = True
+        else:
+            supported = platform.system() == "Linux" and platform.machine() == "x86_64"
+        if supported and args.wsl_root is None:
             supported = re.search(r'^VERSION_ID="?24\.04"?$', Path("/etc/os-release").read_text(),
                                   re.MULTILINE) is not None
             supported = supported and os.geteuid() != 0 and "microsoft" not in Path(
@@ -578,7 +707,10 @@ def main():
                           "workspaces": workspaces or {"mode": "generated-demo"},
                           "git_selection": git_selection,
                           "capability": "read-only; all project content is untrusted",
-                          "scope": "native Ubuntu 24.04 x86-64; original filesystem and Git MCP only",
+                          "scope": ("WSL2 Ubuntu 24.04 x86-64; original filesystem and Git MCP only"
+                                    if wsl_report is not None else
+                                    "native Ubuntu 24.04 x86-64; original filesystem and Git MCP only"),
+                          **({"wsl_preflight": wsl_report} if wsl_report is not None else {}),
                           "refused_scope": ["built-in host tools and project Claude/MCP/hooks configuration",
                               "writes, outside symlink targets and server network access",
                               "unselected Git layouts, worktrees, submodules, active hooks, helpers and special files"],
@@ -607,6 +739,9 @@ def main():
     except InstallerFailure as error:
         print(json.dumps({"status": "failed", "reason": str(error),
                           "exit_code": error.exit_code, "private_log": error.private_log}))
+        return 2
+    except WslPreparationFailure as error:
+        print(json.dumps({"status": "failed", "reason": str(error), "wsl_preflight": error.report}))
         return 2
     except (OSError, ValueError, KeyError, TypeError, AttributeError, tarfile.TarError, subprocess.SubprocessError,
             PILOT.Failure) as error:

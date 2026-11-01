@@ -1720,7 +1720,18 @@ async fn tenant_admin_can_issue_and_revoke_a_proxy_token() {
     assert!(dashboard_html.contains("Control-plane administrators"));
     assert!(dashboard_html.contains("Hosted onboarding"));
     assert!(dashboard_html.contains("/onboarding"));
+    assert!(dashboard_html.contains("Managed Agent policy rollout"));
+    assert!(dashboard_html.contains("/rollout/rollback"));
+    assert!(!dashboard_html.contains("/* ROLLOUT_PANEL */"));
+    assert!(dashboard_html.contains("Agent enrollment and credentials"));
+    assert!(dashboard_html.contains("/credential-rotations"));
+    assert!(!dashboard_html.contains("/* ENROLLMENT_PANEL */"));
+    assert!(!dashboard_html.contains("/* FLEET_PANEL */"));
+    assert!(dashboard_html.contains("Recorded Agent history"));
+    assert!(dashboard_html.contains("sw-agent-incident-snapshot/1"));
+    assert!(!dashboard_html.contains("/* AGENT_HISTORY */"));
     assert!(!dashboard_html.contains("localStorage"));
+    assert!(!dashboard_html.contains("sessionStorage"));
 
     let denied = app(state.clone())
         .oneshot(

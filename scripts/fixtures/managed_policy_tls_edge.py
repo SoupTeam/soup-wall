@@ -91,11 +91,17 @@ class Handler(BaseHTTPRequestHandler):
                 return
             # Owned negative control: preserve the signed identity while
             # changing its payload in transit. The Agent must reject it.
-            if (config.get("tamper_policy") is True and self.command == "GET"
-                    and self.path == "/agent/v1/policy" and response.status == 200):
-                candidate = json.loads(payload)
-                candidate["policy_yaml"] += "\n# owned SOU-82 tamper control\n"
-                payload = json.dumps(candidate).encode("utf-8")
+            if (self.command == "GET" and self.path == "/agent/v1/policy"
+                    and response.status == 200):
+                # Payload fault injection is selected when the response exists,
+                # not when a pooled/preaccepted TLS connection was created.
+                # Keep certificate and transport mode bound to the handshake;
+                # only this independent owned negative-control flag is live.
+                fault = json.loads(self.server.configuration.read_text())
+                if fault.get("tamper_policy") is True:
+                    candidate = json.loads(payload)
+                    candidate["policy_yaml"] += "\n# owned SOU-82 tamper control\n"
+                    payload = json.dumps(candidate).encode("utf-8")
             self.send_response(response.status)
             self.send_header("Content-Length", str(len(payload)))
             # The HTTPS test edge proxies only JSON Agent API responses.

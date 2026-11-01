@@ -45,8 +45,15 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p 'test_ci_*.py' -v
           python3 -m unittest discover -s scripts/tests -p 'test_check_docs.py' -v
           python3 scripts/check_docs.py
-      - name: Pilot evidence reconciliation controls (no runtime execution)
-        run: python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_dossier.py' -v
+      - name: Pilot evidence reconciliation and scoped identity controls (no runtime execution)
+        run: |
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_dossier.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_runtime_identity.py' -v
+      - name: Declarative configuration recovery controls (no runtime execution)
+        run: |
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_configuration_backup.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_configuration_backup_qualification.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_front_door_component.py' -v
       - name: Rule classifier unit regressions
         run: python3 -m unittest discover -s rule_baseline -p 'test_*.py' -v
       - name: SOU-35 public grouped-review and custody regressions
@@ -110,8 +117,17 @@ jobs:
       workflow: ci.yml
   components:
     name: Components
-    needs: impact
-    if: (github.event_name == 'pull_request' && !github.event.pull_request.draft) || (github.event_name == 'workflow_dispatch' && !inputs.smoke_only)
+    # Existing exact-candidate Linux, macOS and Windows jobs are the early
+    # barriers. A selected failed/skipped/cancelled barrier must not start the
+    # expensive component mirror (including its always-run build consumers).
+    needs: [impact, test, native-macos-resilience, agent-windows-security]
+    if: >-
+      !cancelled() && needs.impact.result == 'success' &&
+      ((github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
+       (github.event_name == 'workflow_dispatch' && !inputs.smoke_only)) &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'test') || needs.test.result == 'success') &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-macos-resilience') || needs.native-macos-resilience.result == 'success') &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-windows-security') || needs.agent-windows-security.result == 'success')
     uses: ./.github/workflows/ci-components.yml
     with:
       plan: ${{ needs.impact.outputs.plan }}
@@ -416,8 +432,14 @@ jobs:
           if-no-files-found: warn
 
   agent-lifecycle-macos:
-    needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-lifecycle-macos')
+    needs: [impact, test, native-macos-resilience, agent-windows-security]
+    if: >-
+      !cancelled() && needs.impact.result == 'success' &&
+      contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-lifecycle-macos') &&
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'test') || needs.test.result == 'success') &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-macos-resilience') || needs.native-macos-resilience.result == 'success') &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-windows-security') || needs.agent-windows-security.result == 'success')
     name: Agent lifecycle on macOS
     runs-on: macos-15
     timeout-minutes: 45
@@ -472,8 +494,14 @@ jobs:
   # The optional ML stack is not compiled by the default-feature job.
   all-features:
     name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - all-features' || 'all-features' }}
-    needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'all-features')
+    needs: [impact, test, native-macos-resilience, agent-windows-security]
+    if: >-
+      !cancelled() && needs.impact.result == 'success' &&
+      contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'all-features') &&
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'test') || needs.test.result == 'success') &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-macos-resilience') || needs.native-macos-resilience.result == 'success') &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-windows-security') || needs.agent-windows-security.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -589,8 +617,14 @@ jobs:
           if-no-files-found: error
 
   saml-release-targets:
-    needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'saml-release-targets')
+    needs: [impact, test, native-macos-resilience, agent-windows-security]
+    if: >-
+      !cancelled() && needs.impact.result == 'success' &&
+      contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'saml-release-targets') &&
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'test') || needs.test.result == 'success') &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-macos-resilience') || needs.native-macos-resilience.result == 'success') &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-windows-security') || needs.agent-windows-security.result == 'success')
     name: SAML ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -637,8 +671,14 @@ jobs:
         run: cargo test --locked -p llm-firewall --lib --target ${{ matrix.target }} saml_auth::tests
 
   redis-integration:
-    needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'redis-integration')
+    needs: [impact, test, native-macos-resilience, agent-windows-security]
+    if: >-
+      !cancelled() && needs.impact.result == 'success' &&
+      contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'redis-integration') &&
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'test') || needs.test.result == 'success') &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-macos-resilience') || needs.native-macos-resilience.result == 'success') &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-windows-security') || needs.agent-windows-security.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -666,8 +706,14 @@ jobs:
           LLM_FW_TEST_REDIS_URL: redis://127.0.0.1:6379/15
 
   postgres-integration:
-    needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'postgres-integration')
+    needs: [impact, test, native-macos-resilience, agent-windows-security]
+    if: >-
+      !cancelled() && needs.impact.result == 'success' &&
+      contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'postgres-integration') &&
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'test') || needs.test.result == 'success') &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-macos-resilience') || needs.native-macos-resilience.result == 'success') &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-windows-security') || needs.agent-windows-security.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -745,8 +791,14 @@ jobs:
           if-no-files-found: ignore
 
   docker-build:
-    needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'docker-build')
+    needs: [impact, test, native-macos-resilience, agent-windows-security]
+    if: >-
+      !cancelled() && needs.impact.result == 'success' &&
+      contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'docker-build') &&
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'test') || needs.test.result == 'success') &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-macos-resilience') || needs.native-macos-resilience.result == 'success') &&
+      (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-windows-security') || needs.agent-windows-security.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

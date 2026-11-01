@@ -10,15 +10,23 @@ mod profile;
 pub(crate) mod quota;
 pub(crate) use profile::Profile;
 #[cfg(target_os = "linux")]
+mod application;
+#[cfg(target_os = "linux")]
+mod batch;
+#[cfg(target_os = "linux")]
 mod control;
 #[cfg(target_os = "linux")]
 mod control_io;
+#[cfg(target_os = "linux")]
+mod inventory;
 #[cfg(target_os = "linux")]
 mod launch;
 #[cfg(target_os = "linux")]
 mod record;
 #[cfg(target_os = "linux")]
 mod refresh;
+#[cfg(target_os = "linux")]
+mod review;
 #[cfg(target_os = "linux")]
 mod runtime;
 pub(crate) mod transport;
@@ -35,6 +43,30 @@ pub struct Cli {
 }
 #[derive(Subcommand, Debug)]
 enum Action {
+    /// List bounded retained run identities without executing tools or changing state.
+    #[cfg(target_os = "linux")]
+    Inventory(inventory::Args),
+    /// Hand one rechecked inventory selection to an explicitly requested existing action.
+    #[cfg(target_os = "linux")]
+    WithRun(inventory::WithRun),
+    /// Preview or atomically publish an explicitly selected private result set.
+    #[cfg(target_os = "linux")]
+    ExportSet(review::export_set::Args),
+    /// Explicit local application of one reviewed output; never an MCP grant.
+    #[cfg(target_os = "linux")]
+    Apply {
+        #[command(subcommand)]
+        action: application::Action,
+    },
+    /// Guarded finite batch publication and explicit recovery; never MCP authority.
+    #[cfg(target_os = "linux")]
+    Batch {
+        #[command(subcommand)]
+        action: batch::Action,
+    },
+    /// Review exact completed-run outputs; private content needs explicit consent.
+    #[cfg(target_os = "linux")]
+    Review(review::Args),
     /// Diagnose one selected edit run without replaying calls or changing state.
     Status(diagnostic::Args),
     /// Inspect a proposed private output profile without writes or authority.
@@ -87,6 +119,15 @@ enum Action {
         run: PathBuf,
         #[command(subcommand)]
         action: Ask,
+    },
+    /// Preview, archive or explicitly clean one completed installed edit run.
+    #[cfg(target_os = "linux")]
+    Archive {
+        /// Agent profile containing the verified installed helper component.
+        #[arg(long)]
+        home: PathBuf,
+        #[command(subcommand)]
+        action: Archive,
     },
     /// Revoke and stop one exact installed run through its verified owner.
     Stop {
@@ -150,6 +191,45 @@ pub enum Ask {
     },
 }
 
+#[cfg(target_os = "linux")]
+#[derive(Subcommand, Debug)]
+enum Archive {
+    /// Read-only exact inventory and confirmation digest; source stays intact.
+    Preview {
+        #[arg(long)]
+        run: PathBuf,
+        /// Existing private archive directory outside the selected run.
+        #[arg(long)]
+        destination: PathBuf,
+    },
+    /// Publish a sanitized archive; retain all original run state.
+    Apply(ArchivePlan),
+    /// Remove only inventoried run state after verifying the sanitized archive.
+    Cleanup {
+        #[command(flatten)]
+        selected: ArchivePlan,
+        /// Acknowledge irreversible loss of raw evidence excluded from the archive.
+        #[arg(long)]
+        acknowledge_evidence_loss: bool,
+    },
+    /// Read-only inspection of an interrupted cleanup; never resumes deletion.
+    Recover {
+        #[command(flatten)]
+        selected: ArchivePlan,
+        #[arg(long)]
+        journal: String,
+    },
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Args, Debug)]
+struct ArchivePlan {
+    #[arg(long)]
+    plan: PathBuf,
+    #[arg(long)]
+    confirm: String,
+}
+
 pub fn run(cli: Cli) -> Result<()> {
     #[cfg(target_os = "linux")]
     {
@@ -191,4 +271,64 @@ fn status(args: diagnostic::Args) -> Result<()> {
         println!("{}", diagnostic::text(&report));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod grammar_tests {
+    use super::*;
+    use clap::{CommandFactory, Parser};
+    #[derive(Parser)]
+    struct Command {
+        #[command(flatten)]
+        edit: Cli,
+    }
+    #[test]
+    fn installed_inventory_types_follow_the_executor_platform_boundary() {
+        Command::command().debug_assert();
+        let command = Command::command();
+        assert!(command.find_subcommand("status").is_some());
+        for name in ["inventory", "with-run"] {
+            assert_eq!(
+                command.find_subcommand(name).is_some(),
+                cfg!(target_os = "linux")
+            );
+        }
+        assert!(Command::try_parse_from([
+            "edit-session",
+            "status",
+            "--run",
+            "/owned/run",
+            "--json"
+        ])
+        .is_ok());
+    }
+    #[derive(Parser)]
+    struct Grammar {
+        #[command(flatten)]
+        cli: Cli,
+    }
+    #[test]
+    fn result_set_types_follow_the_executor_platform_boundary() {
+        Grammar::command().debug_assert();
+        assert!(
+            Grammar::try_parse_from(["agentfw", "status", "--run", "/private/run", "--json"])
+                .is_ok()
+        );
+        let parsed = Grammar::try_parse_from([
+            "agentfw",
+            "export-set",
+            "--run",
+            "/private/run",
+            "--sha256",
+            &"a".repeat(64),
+            "--include",
+            "a.txt",
+            "--include",
+            "b.txt",
+            "--out",
+            "/private/new",
+            "--consent-private-content",
+        ]);
+        assert_eq!(parsed.is_ok(), cfg!(target_os = "linux"));
+    }
 }

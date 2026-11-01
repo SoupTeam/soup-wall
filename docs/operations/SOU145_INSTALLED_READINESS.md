@@ -1,5 +1,9 @@
 # SOU-145 fixed-source two-server pilot readiness
 
+Fresh runs use the [scoped runtime identity contract](SCOPED_PILOT_RUNTIME_IDENTITIES.md)
+introduced by SOU-176. The original results below remain historical, readable
+NOT_READY evidence; missing legacy identities are not backfilled.
+
 ## Current execution and decision
 
 The current measurement uses source `6deafacf3854666cb1e5874d4cfcf152e4f7a6b2`,

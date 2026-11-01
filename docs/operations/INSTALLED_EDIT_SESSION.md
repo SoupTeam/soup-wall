@@ -162,6 +162,127 @@ retained, never raw model output or provider credentials. A killed daemon cannot
 approve stale records: Ask requires the matching live authenticated epoch.
 Prepare a new plan after independently inspecting an uncertain target.
 
+## Archive and clean one completed run
+
+SOU-171 adds an explicit installed entry through the verified helper component.
+It operates independently of stop/revoke and read-only incident diagnostics.
+Install the matching reviewed Agent/component first. Use an existing private
+mode-0700 archive directory outside the selected run and a canonical run path:
+
+```sh
+umask 077
+agentfw edit-session archive --home /absolute/agent-home preview \
+  --run /absolute/runs/edit-RUN_ID --destination /absolute/private-archives \
+  > /absolute/private-archives/plan.json
+
+agentfw edit-session archive --home /absolute/agent-home apply \
+  --plan /absolute/private-archives/plan.json --confirm DISPLAYED_PLAN_SHA256
+```
+
+Preview writes only JSON to stdout. It selects one exact completed run and
+enumerates its bounded file/directory inventory, identities, hashes, reclaimable
+bytes, preserved data and excluded evidence. A plan lasts 15 minutes. Apply
+rechecks the exact inventory and destination inode, then exclusively publishes
+and verifies a private sanitized ZIP; all original run state is still retained.
+The archive contains only an allowlisted audit projection and a manifest with
+hashes, finite terminal facts and explicit evidence limitations. It is **not a
+full forensic backup**. Raw audit, prompts, tool payloads, credentials, child
+authority, host state, provider inputs, environment and absolute paths are
+excluded. Unknown audit event types are counted, not presented as complete
+execution evidence. Malformed or partial raw audit refuses archival.
+
+Cleanup requires separate explicit acknowledgement of irreversible raw-evidence
+loss. Independently retain any raw evidence you still need before using it:
+
+```sh
+agentfw edit-session archive --home /absolute/agent-home cleanup \
+  --plan /absolute/private-archives/plan.json --confirm DISPLAYED_PLAN_SHA256 \
+  --acknowledge-evidence-loss
+```
+
+Only the approved run inventory is removed. Output targets, immutable plans,
+projects, shared assets and other runs are never traversed.
+Output resource roots must remain disjoint from run state. Nested Git or
+immutable-plan markers refuse the whole selection and remain in place. The accepted
+SOU-149 no-follow descriptors, exclusive staging, file identity checks and
+durable archive guard are reused. A durable private journal precedes detachment;
+completion needs a separate durable create-new commit. A missing source or PID
+does not establish completion. New launchers hold the selected daemon-home inode
+lock until terminal publication, so an active run refuses archival even if a
+terminal file is injected. The run-directory lock remains available for short
+Stop metadata transactions. Existing accepted runs require all consistent terminal
+cleanup facts and transport/run/profile/instance bindings; these are local
+owner-editable evidence, not authenticated execution proof. Failed/interrupted
+runs qualify only if their accepted terminal explicitly confirms process and
+daemon cleanup. Unknown crash state, inconsistent bindings and new or unexpected
+state members refuse and remain intact. No background pruning occurs.
+Current-main run-local `profile.json`, `profile.sha256`,
+`diagnostic-context.json` and `host-process.json` are descriptive snapshots,
+distinct from the original external immutable plan. Only the complete exact
+root set with private read-only modes is accepted. Canonical v1 and quota-v2 profile
+bytes and digest, typed nested schemas, transport resources, run/home/profile/
+session/instance bindings, process identity fields and retained control owner
+are checked through bounded no-follow reads. The walker rechecks those exact
+bytes and file identities. No profile-selected path, executable, original plan,
+PID or listener is opened or contacted by this validation. Snapshot bytes are
+inventoried for explicit cleanup and excluded from the sanitized ZIP. Arbitrary
+extra members, future schema versions and all nested plan markers still refuse.
+
+Quota-v2 profiles require the exact `sw-installed-edit-mutation-quota/1` limits:
+at most 64 mutation attempts and 262144 cumulative reserved bytes; zero is valid.
+The terminal observation must bind those same limits. All counters must be
+unsigned integers with consistent attempt partitions, byte ceilings and remaining
+credits, using the accepted runtime's bookkeeping relationships. Missing/null,
+unknown, mismatched, unavailable or unsettled quota evidence refuses archival and
+remains retained. Quota counters never establish inactivity, effects or execution;
+the existing terminal cleanup facts, lifecycle locks and explicit evidence-loss
+consent remain mandatory. Legacy v1 runs retain their original quota-free shape.
+
+Known separately versioned optional stop/control records are included in the
+private inventory and excluded from the sanitized ZIP. They never substitute
+for terminal cleanup and never authorize signaling here. Missing, inconsistent
+or unconfirmed control evidence refuses cleanup; the stop command remains
+optional. Synthetic parser fixtures complement the genuine installed
+current-main Stop-to-archive-to-cleanup qualification.
+
+`archived_source_retained`, `archived_and_cleaned`, `already_cleaned`, `refused`
+and `incomplete` distinguish the outcomes. After interruption preserve the
+archive, plan, journal and any quarantine. Inspect without resuming deletion:
+
+```sh
+agentfw edit-session archive --home /absolute/agent-home recover \
+  --plan /absolute/private-archives/plan.json --confirm DISPLAYED_PLAN_SHA256 \
+  --journal edit-cleanup-DISPLAYED_PLAN_SHA256.json
+```
+
+Recovery accepts an expired plan for read-only inspection. It never restores,
+resumes or guesses successful cleanup from absent members. Repeated cleanup
+requires the same verified archive and explicit durable completion commit; an
+interrupted removal remains incomplete. Stop, policy, approval and expiry
+semantics are unchanged. No mutation is automatically retried.
+
+`python3 -B scripts/qualify-installed-edit-archive.py` is inert. Its opt-in
+qualification uses genuine installed completed/interrupted runs, two concurrent
+active roots, independent target/plan/process/sentinel witnesses and fresh
+useful work. A namespace-private 64-KiB tmpfs supplies actual kernel `ENOSPC`;
+trusted setup supplies an empty foreign-owned fixture. Publication/removal
+interruption uses exact installed helper bytes with a qualification-only pause
+and actual SIGKILL. Those controlled fault windows and synthetic parser fixtures
+are distinguished from genuine host/CLI observations. The existing installed
+job retains exact source/binary correlation, the original edit report and the
+new archive report; failed/incomplete attempts are retained. The current
+18-case archival inventory includes ordinary v1 and quota-v2 completed runs,
+typed descriptive-snapshot refusal controls and a genuine Stop after an
+approved replacement committed. That Stop case checks diagnosis, explicit
+evidence-loss refusal, sanitized archive publication and exact acknowledged
+cleanup, with independent output/immutable-plan/sentinel/active-peer witnesses.
+The v2 case retains exact quota observations, observes a real approved replacement
+and readback, preserves source after archive publication, refuses unacknowledged
+cleanup and verifies explicit cleanup plus an already-cleaned repeat. Thirteen
+negative quota controls mutate the retained metadata of another genuine completed
+v2 run; their failures, unchanged sources/output/plans/sentinel and successful
+restored preview are recorded separately from genuine host observations.
+The earlier 14-case results remain evidence for their original source only.
 ## Stop one selected live run
 
 From a second terminal, use the **same installed Agent executable** as the run:
@@ -223,6 +344,75 @@ an observed crash cleanup never becomes an authenticated successful stop.
 For another operation on the same declared targets, use the explicit
 [plan refresh preview and confirmation](INSTALLED_EDIT_PLAN_REFRESH.md).
 Refresh never infers previous success, retries a call or approves the next Ask.
+
+## Retained run inventory and exact selection
+
+The installed Linux CLI can list retained runs directly beneath an explicitly
+selected owner-private state directory. It verifies the helper component under
+the explicit Agent home, then reuses native exact-run, profile, terminal and
+descriptor readers. It does not execute the helper, start a daemon, query a
+provider, inspect output files or follow descriptive executable/plan paths.
+
+```sh
+agentfw edit-session inventory --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --json
+agentfw edit-session inventory --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --run-id RUN_UUID --json
+```
+
+`RUN_UUID` is the exact lowercase UUID displayed by inventory, without the
+`edit-` directory prefix. Prefixes, paths, wildcards and option-like identifiers
+refuse. JSON and text show safe IDs, profile/source/component hashes, declared
+target counts, recorded host outcomes and owner-identity observations. Arbitrary
+entry names are represented only by their hash. Paths, prompts, target names and
+contents, tokens, receipts and grants are omitted. Recorded completion is not
+execution, delivery or inactivity proof. A missing terminal, absent PID or old
+boot stays explicit; inventory does not infer Ask acceptance/rejection or tool
+success from host completion. Use exact status for those separate observations.
+
+The fixed listing limits are 32 entries, 512 bounded file reads, 2 MiB of record
+bytes and a cooperative 10-second read/iteration deadline. Enumeration has one
+directory level; only the five exact run-local binding/terminal files are read.
+The existing protected absolute-ancestry limit is 128 components / 4096 bytes.
+The selected helper has its independent existing manifest/file verification
+bounds. Blocking filesystem/kernel stalls are not a hard real-time guarantee.
+The 33rd entry establishes capacity exhaustion without being inspected. Exact
+ID selection does not scan peers and can resolve a known ID beyond that cap.
+
+Malformed, inaccessible, linked, foreign, vanished or changed records produce
+unknown rows and an incomplete listing with nonzero exit status. Unsafe or
+redirected roots produce an unknown result. A partial listing is not a complete
+history or an atomic snapshot. No state is cleaned or repaired.
+
+After reviewing one row, pass its current `selection_sha256` to an explicit
+existing operation:
+
+```sh
+agentfw edit-session with-run --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --run-id RUN_UUID \
+  --selection-sha256 SELECTION_SHA256 -- status --json
+agentfw edit-session with-run --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --run-id RUN_UUID \
+  --selection-sha256 SELECTION_SHA256 -- review --sha256 PROFILE_SHA256
+agentfw edit-session with-run --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --run-id RUN_UUID \
+  --selection-sha256 SELECTION_SHA256 -- stop --output json-v1
+```
+
+The selector binds the explicit root, exact run inode, profile/context/run files
+and terminal observation, rechecks their identities immediately before handoff,
+and keeps the descriptors open. The existing command independently revalidates
+its selected run. Changed metadata requires a fresh inventory and review; the
+digest is descriptive and grants no execution, export or cleanup authority.
+`with-run` accepts only explicit status/review/stop, injects its verified exact
+`--run`, and rejects another `--run` or recursive/arbitrary commands. Existing
+review/export consent and Stop validation still apply. Inventory alone never
+performs one of these actions. The original direct `--run` grammar is preserved.
+
+This slice uses accepted main's status/review/Stop contracts. It does not depend
+on an open archival PR; archive integration can be added after that command is
+delivered. New inventory/selector CLI types share their Linux executor boundary;
+other platforms retain their existing commands and unsupported behavior.
 
 ## Qualification
 

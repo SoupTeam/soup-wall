@@ -55,6 +55,23 @@ def started():
             raise RuntimeError("simulated_build_gate_timeout")
 
 
+def resumed_bwrap_started():
+    """Independent witness for a resumed owner holding the real root lock."""
+    record = witness.with_name(witness.name + "-resumed-bwrap")
+    descriptor = os.open(record, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC, 0o600)
+    try:
+        os.write(descriptor, b"bwrap\n")
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    if gate is not None:
+        deadline = time.monotonic() + 20
+        while not gate.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        if not gate.exists():
+            raise RuntimeError("simulated_resume_gate_timeout")
+
+
 def observe_real_contention():
     """Tell the parent only after the kernel refused the waiter's first lock."""
     selected = os.environ.get("SIMULATED_CONTENDED_WITNESS")
@@ -122,6 +139,10 @@ if kind == "native":
                 raise prep.Failure("simulated_compile_failure", "git_build")
             file = cwd / "git"
         elif stage == "bwrap_build":
+            if failure == "fail-bwrap":
+                raise prep.Failure("simulated_bwrap_failure", "bwrap_build")
+            if operation in ("resume", "rebuild-resume"):
+                resumed_bwrap_started()
             file = cwd / "bwrap-build/bwrap"
             file.parent.mkdir(exist_ok=True)
         else:
@@ -142,6 +163,10 @@ if kind == "native":
                  "--wait-seconds", wait_text]
     if operation == "rebuild":
         arguments.append("--rebuild")
+    elif operation == "resume":
+        arguments.append("--resume")
+    elif operation == "rebuild-resume":
+        arguments.extend(("--rebuild", "--resume"))
     with patch.object(prep, "platform_missing", return_value=[]), \
          patch.object(prep, "tool_inventory", return_value=(tools, [])), \
          patch.object(prep, "source_identity", return_value=commit), \
