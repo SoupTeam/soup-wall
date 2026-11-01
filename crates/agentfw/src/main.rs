@@ -151,6 +151,23 @@ enum DiagnosticCommands {
         #[command(subcommand)]
         action: ClassifierPackageCmd,
     },
+    /// Preview how the installed classifier describes ONE supplied tool-call frame.
+    /// Non-executing and non-authoritative: no MCP server, provider call, tool invocation,
+    /// host-config discovery or model download; it makes no policy decision.
+    ToolPreview {
+        /// `filesystem`, `git`, or the exact format string of a shipped profile.
+        #[arg(long)]
+        profile: String,
+        /// One bounded JSON frame: a file path, or `-` for standard input.
+        #[arg(long)]
+        frame: String,
+        /// Print the machine-readable report instead of text.
+        #[arg(long)]
+        json: bool,
+        /// Also write the sanitized JSON report to this new, private file (Linux).
+        #[arg(long)]
+        export: Option<PathBuf>,
+    },
     /// Run the daemon.
     Serve,
     /// Diagnose an installed Agent without modifying host settings or starting tools.
@@ -285,7 +302,7 @@ enum McpCommands {
     /// Exercise an installed Agent end to end in an owned temporary workspace (Linux).
     ///
     /// Writes a versioned JSON report. Exit 0 passed, 3 failed, 4 incomplete, 5 unsupported.
-    SelfTest(agentfw::self_test::Args),
+    SelfTest(agentfw::self_test::Cli),
     #[cfg(windows)]
     /// Preview a native Windows Agent setup against explicitly selected local assets.
     OnboardWindows {
@@ -606,7 +623,9 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
         Cmd::Diagnostics(DiagnosticCommands::PilotObservation) => {
             std::process::exit(agentfw::pilot_observation::run())
         }
-        Cmd::Mcp(McpCommands::SelfTest(args)) => std::process::exit(agentfw::self_test::run(args)),
+        Cmd::Mcp(McpCommands::SelfTest(args)) => {
+            std::process::exit(agentfw::self_test::run_cli(args))
+        }
         #[cfg(windows)]
         Cmd::Mcp(McpCommands::OnboardWindows { command }) => {
             prepare_lifecycle_process()?;
@@ -815,6 +834,33 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
                 ttl_minutes,
                 path.display()
             );
+            Ok(())
+        }
+        Cmd::Diagnostics(DiagnosticCommands::ToolPreview {
+            profile,
+            frame,
+            json,
+            export,
+        }) => {
+            use agentfw::tool_preview as preview;
+            let home = Config::home_path()?;
+            let outcome = preview::run(&home, &profile, &frame);
+            let mut exit = outcome.exit;
+            let printed = if json {
+                preview::report_json(&outcome.report)?
+            } else {
+                preview::render_text(&outcome.report)
+            };
+            println!("{printed}");
+            if let Some(destination) = export {
+                if let Err(code) = preview::export(&outcome.report, &destination) {
+                    eprintln!("export refused: {code}");
+                    exit = preview::EXIT_EXPORT;
+                }
+            }
+            if exit != 0 {
+                std::process::exit(exit);
+            }
             Ok(())
         }
         Cmd::Diagnostics(DiagnosticCommands::ClassifierPackage { action }) => {

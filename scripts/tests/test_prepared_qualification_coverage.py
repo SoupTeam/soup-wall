@@ -28,6 +28,9 @@ def enabled(body, **overrides):
         "github.event.inputs.capacity_only": "",
         "github.event.inputs.prepared_operations_only": "",
         "github.event.inputs.coordinated_update_only": "",
+        "github.event.inputs.private_edit_self_test_only": "",
+        "github.event.inputs.provider_ca_only": "",
+        "github.event.inputs.native_preparation_only": "",
     }
     values.update(overrides)
     condition = next(line.strip()[4:] for line in body.splitlines() if line.strip().startswith("if: "))
@@ -58,6 +61,31 @@ def enabled(body, **overrides):
 
 
 class PreparedQualificationCoverage(unittest.TestCase):
+    def test_provider_ca_dispatch_is_separate_from_full_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.provider_ca_only": "true",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers",
+                              "Run the first-use demo through the prepared original host",
+                              "Qualify terminal Ask inbox through the original Claude host",
+                              "Qualify reused bounded audit engine restart and fail-safe retention"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                body = step(text, "Qualify installed provider CA custody through owned HTTPS")
+                self.assertTrue(enabled(body, **context))
+                self.assertFalse(enabled(body))
+                for missing in ("provider_ca_only", "native_preparation_only"):
+                    self.assertFalse(enabled(body, **{
+                        **context, "github.event.inputs." + missing: "",
+                    }))
+                self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
+                self.assertIn("--provider-ca-only", body)
+
     def test_update_dispatch_is_targeted_and_does_not_replace_existing_qualification(self):
         context = {"github.event_name": "workflow_dispatch",
                    "github.event.inputs.coordinated_update_only": "true"}
@@ -151,6 +179,21 @@ class PreparedQualificationCoverage(unittest.TestCase):
     def test_unknown_input_still_requires_review(self):
         with self.assertRaisesRegex(AssertionError, "Unreviewed qualification condition"):
             enabled("if: github.event.inputs.unreviewed_input == 'true'")
+
+    def test_private_edit_self_test_dispatch_does_not_claim_full_pilot_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.private_edit_self_test_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT, OPERATIONS,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify bounded storage faults and fresh-authority recovery"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                private = step(text, "Verify installed private-edit self-test outside the checkout")
+                self.assertTrue(enabled(private, **context))
+                self.assertTrue(enabled(private))
+                self.assertIn("scripts/qualify-private-edit-self-test.py", private)
 
     def test_storage_faults_are_explicit_manual_evidence_with_separate_output(self):
         for name, text in self.workflows():

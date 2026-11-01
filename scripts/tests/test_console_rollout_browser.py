@@ -35,7 +35,8 @@ PLAN = {"tenant_id": TENANT, "group_id": "fleet", "rollout_id": "ro_1", "revisio
 def page_html():
     return ((SRC / "admin_dashboard.html").read_text(encoding="utf-8")
             .replace("/* FLEET_PANEL */", (SRC / "fleet_panel.js").read_text(encoding="utf-8"))
-            .replace("/* ROLLOUT_PANEL */", (SRC / "rollout_panel.js").read_text(encoding="utf-8")))
+            .replace("/* ROLLOUT_PANEL */", (SRC / "rollout_panel.js").read_text(encoding="utf-8"))
+            .replace("/* ENROLLMENT_PANEL */", (SRC / "enrollment_panel.js").read_text(encoding="utf-8")))
 
 
 @unittest.skipUnless(AVAILABLE, "optional Playwright browser fixture dependency unavailable")
@@ -108,6 +109,8 @@ class RolloutPanelBrowserTests(unittest.TestCase):
         elif path.endswith(("/model-policy", "/limits")):
             self.json(route, None)
         elif path.endswith(("/tokens", "/audit")):
+            self.json(route, [])
+        elif method == "GET" and path.endswith("/agents"):
             self.json(route, [])
         elif method == "GET" and path.endswith("/groups"):
             tenant = path.split("/")[4]

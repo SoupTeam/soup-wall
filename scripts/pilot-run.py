@@ -45,6 +45,7 @@ SELECTION_LOCK = load("pilot_run_selection_lock", "pilot-selection-lock.py")
 AUDIT = load("pilot_run_audit", "pilot_audit.py")
 PROVIDER = load("pilot_run_provider", "pilot_provider.py")
 PROFILES = load("pilot_run_provider_profiles", "pilot_provider_profiles.py") if sys.platform.startswith("linux") else None
+PROVIDER_CA = load("pilot_run_provider_ca", "pilot_provider_ca.py") if sys.platform.startswith("linux") else None
 MAX_OUTPUT = 4 * 1024 * 1024
 OWNER_PID = os.getpid()
 PUBLIC_FAILURE_CODES = frozenset({
@@ -60,6 +61,10 @@ PUBLIC_FAILURE_CODES = frozenset({
     'provider_selection_invalid',
     'provider_selection_stale',
     'provider_source_conflict',
+    'provider_ca_input_invalid',
+    'provider_ca_material_invalid',
+    'provider_ca_source_changed',
+    'provider_ca_snapshot_unavailable',
     'linux_budget_input_invalid',
     'linux_budget_preflight_refused',
     'linux_budget_observation_unverified',
@@ -344,7 +349,7 @@ def run(args, report):
         port = reservation.getsockname()[1]
     private = None
     audit_selected = False
-    daemon = launcher = None
+    daemon = launcher = ca_snapshot = None
     streams = []
     redactors = {}
     cancelled = False
@@ -363,6 +368,10 @@ def run(args, report):
         home = private / ".agentfw"
         home.mkdir(mode=0o700)
         env = environment(paths, private)
+        if "SSL_CERT_FILE" in provider:
+            require(PROVIDER_CA is not None, "provider_ca_snapshot_unavailable")
+            ca_snapshot = PROVIDER_CA.pin(provider["SSL_CERT_FILE"])
+            report["provider"]["ca_sha256"] = ca_snapshot.sha256
         budget_snapshot = None
         if getattr(args, "linux_budget", None) is not None:
             raw = budget_input(args.linux_budget)
@@ -428,6 +437,8 @@ def run(args, report):
             require(selected(args)[0] == selection, "selection_changed_before_host")
             if provider_name is not None:
                 PROFILES.unchanged(provider_home, provider_name, provider_identity)
+            if ca_snapshot is not None:
+                ca_snapshot.verify_source()
             roots = PREP.workspace_paths(selection, args.selection.parent)
             workspace, git_workspace = roots["filesystem"], roots["git"]
             command = [str(paths["agentfw"]), "pilot-launch", "--claude", str(paths["claude"]),
@@ -449,10 +460,18 @@ def run(args, report):
             report["stage"] = "host_start"
             with PROVIDER.carrier(provider) as provider_fd:
                 command.extend(["--provider-env-fd", str(provider_fd)])
+                inherited = [provider_fd]
+                if ca_snapshot is not None:
+                    command.extend(["--provider-ca-fd", str(ca_snapshot.fd),
+                                    "--provider-ca-sha256", ca_snapshot.sha256])
+                    inherited.append(ca_snapshot.fd)
                 launcher = subprocess.Popen(command, cwd=private, env=env, stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True,
-                    pass_fds=(provider_fd,), preexec_fn=parent_death)
+                    pass_fds=tuple(inherited), preexec_fn=parent_death)
             report["host_started"] = True
+            if ca_snapshot is not None:
+                ca_snapshot.close()
+                ca_snapshot = None
             selector.register(launcher.stdout, selectors.EVENT_READ, (log, True))
             report["launcher_pid"] = launcher.pid
             report["stage"] = "run_publication"
@@ -492,6 +511,11 @@ def run(args, report):
         raise
     finally:
         errors = []
+        if ca_snapshot is not None:
+            try:
+                ca_snapshot.close()
+            except OSError:
+                errors.append("provider_ca_snapshot")
         for name, process in (("launcher", launcher), ("daemon", daemon)):
             if process is not None:
                 try:

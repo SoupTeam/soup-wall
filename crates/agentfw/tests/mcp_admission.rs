@@ -1986,7 +1986,14 @@ async fn native_mcp_rejects_ambiguous_and_unsupported_client_messages_before_exe
     for raw in [
         r#"[{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{}}}]"#,
         r#"{"jsonrpc":"2.0","id":3,"id":4,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#,
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","name":"send_http","arguments":{}}}"#,
         r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"send_http","arguments":{"url":"http://127.0.0.1:9/a","url":"http://127.0.0.1:9/b","body":"benign"}}}"#,
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{"nested":{"key":1,"key":2}}}}"#,
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{"weight":NaN}}}"#,
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{"query":"\ud800"}}}"#,
+        r#"{"jsonrpc":"2.0","id":true,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#,
+        r#"{"jsonrpc":"2.0","id":3.5,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#,
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{}}}{}"#,
         r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"unknown","arguments":{}}}"#,
         r#"{"jsonrpc":"2.0","method":"tools/call","params":{"name":"read_document","arguments":{}}}"#,
         r#"{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"file:///secret"}}"#,
@@ -2002,6 +2009,55 @@ async fn native_mcp_rejects_ambiguous_and_unsupported_client_messages_before_exe
             "unsupported raw message must fail closed: {raw}"
         );
         assert!(executed(&fixture.ledger).is_empty());
+        assert!(
+            classifications(&fixture).is_empty(),
+            "invalid wire input must not acquire a classifier decision"
+        );
+    }
+}
+
+#[tokio::test]
+async fn native_mcp_raw_byte_frames_fail_before_classifier_or_server() {
+    let call = br#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{"path":"/workspace/useful"}}}"#;
+    let mut invalid_utf8 = call.to_vec();
+    let at = invalid_utf8
+        .windows(b"/workspace/useful".len())
+        .position(|part| part == b"/workspace/useful")
+        .unwrap();
+    invalid_utf8[at] = 0xff;
+    let mut oversized = call.to_vec();
+    oversized.extend(std::iter::repeat_n(b' ', 262_145));
+    let mut depth = br#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{"extra":"#.to_vec();
+    depth.extend(std::iter::repeat_n(b'[', 130));
+    depth.push(b'0');
+    depth.extend(std::iter::repeat_n(b']', 130));
+    depth.extend_from_slice(b"}}}\n");
+    let cases = [
+        ("invalid-utf8", invalid_utf8),
+        ("incomplete-json", call[..call.len() - 1].to_vec()),
+        ("over-depth", depth),
+        ("oversized-frame", oversized),
+    ];
+    for (label, mut raw) in cases {
+        let mut fixture = Fixture::new("normal", true).await;
+        fixture.ready().await;
+        if !raw.ends_with(b"\n") {
+            raw.push(b'\n');
+        }
+        let _ = fixture.input.write_all(&raw).await;
+        assert!(
+            fixture.receive().await.is_none(),
+            "{label}: raw frame reached a response"
+        );
+        fixture.assert_gateway_failed().await;
+        assert!(
+            executed(&fixture.ledger).is_empty(),
+            "{label}: original server ran"
+        );
+        assert!(
+            classifications(&fixture).is_empty(),
+            "{label}: classifier ran"
+        );
     }
 }
 

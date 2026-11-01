@@ -92,17 +92,31 @@ class ImpactTests(unittest.TestCase):
                                         text.split("jobs:\n", 1)[1]))
             auxiliary = {"draft-checks", "main-smoke", "components"} if filename == "ci.yml" else set()
             if filename == "mcp-real-filesystem.yml":
-                auxiliary.update({"manual-long-session", "manual-native-result-profile"})
+                auxiliary.update({"manual-long-session", "manual-native-result-profile",
+                                  "sou193-provider-preflight", "manual-sou194-cache-exchange"})
             if filename == "mcp-real-git.yml":
-                auxiliary.add("manual-installed-git-profiles")
+                auxiliary.update({"manual-installed-git-profiles", "sou182-raw-boundary"})
             if filename == "mcp-create-file.yml":
                 auxiliary.update({"reuse-plan", "reuse-qualification"})
             self.assertEqual(registered, set(jobs) | {"impact"} | auxiliary, filename)
             for job in jobs:
                 body = re.split(r"\n  [a-z][a-z0-9-]*:\s*\n",
                                 text.split(f"  {job}:\n", 1)[1], maxsplit=1)[0]
-                self.assertIn("needs: impact", body, (filename, job))
+                self.assertRegex(body, r"(?m)^    needs: (?:impact|\[impact, [^\n]+\])$",
+                                 (filename, job))
                 self.assertIn("needs.impact.outputs.jobs", body, (filename, job))
+
+    def test_sou182_raw_boundary_is_manual_and_does_not_replace_required_git(self):
+        text = (ROOT / ".github/workflows/mcp-real-git.yml").read_text()
+        body = text.split("  sou182-raw-boundary:\n", 1)[1]
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.raw_boundary_only", body)
+        self.assertNotIn("needs: impact", body)
+        required = re.split(r"\n  [a-z][a-z0-9-]*:\s*\n",
+                            text.split("  required-linux-git:\n", 1)[1], maxsplit=1)[0]
+        impact = text.split("  impact:\n", 1)[1].split("  required-linux-git:\n", 1)[0]
+        self.assertIn("if: ${{ !inputs.raw_boundary_only }}", impact)
+        self.assertIn("needs: impact", required)
+        self.assertNotIn("sou182-raw-boundary", WORKFLOW_JOBS["mcp-real-git.yml"])
 
     def test_native_result_profile_remains_explicit_manual_only(self):
         text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
@@ -112,6 +126,50 @@ class ImpactTests(unittest.TestCase):
         self.assertNotIn("manual-native-result-profile", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
         central = (ROOT / ".github/workflows/ci-components.yml").read_text()
         self.assertNotIn("manual-native-result-profile", central)
+
+    def test_sou193_preflight_is_manual_and_cannot_replace_required_native_job(self):
+        text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
+        body = text.split("  sou193-provider-preflight:\n", 1)[1].split("  required-linux-sandbox-and-real-host:\n", 1)[0]
+        self.assertIn("github.event_name == 'workflow_dispatch'", body)
+        self.assertIn("provider_preflight_only == 'true'", body)
+        self.assertNotIn("needs: impact", body)
+        impact = text.split("  impact:\n", 1)[1].split("  sou193-provider-preflight:\n", 1)[0]
+        self.assertIn("provider_preflight_only != 'true'", impact)
+        self.assertNotIn("sou193-provider-preflight", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
+        self.assertNotIn("sou193-provider-preflight", (ROOT / ".github/workflows/ci-components.yml").read_text())
+
+    def test_provider_ca_qualification_requires_explicit_native_dispatch(self):
+        source = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
+        shared = (ROOT / ".github/workflows/ci-components.yml").read_text()
+        self.assertIn("      provider_ca_only:\n", source)
+        self.assertIn("inputs.get('native_preparation_only') == 'true'", source)
+        self.assertIn("github.event_name == 'workflow_dispatch' && github.event.inputs.provider_ca_only == 'true'", source)
+        self.assertIn("scripts/qualify-installed-front-door.py --run --provider-ca-only", source)
+        self.assertIn("installed-provider-ca/report.json", source)
+        self.assertIn("if: github.event_name == 'workflow_dispatch' && github.event.inputs.provider_ca_only == 'true'", shared)
+        for workflow in (source, shared):
+            for name in (
+                "Qualify exact prepared selection through enforcing daemon and original servers",
+                "Run the first-use demo through the prepared original host",
+                "Qualify the guided first-use entry point through the original host",
+                "Qualify the installed guided pilot front door through the original host",
+                "Qualify terminal Ask inbox through the original Claude host",
+                "Qualify owned prepared-selection launch and failures with the original host",
+                "Qualify prepared-run audit rotation and failed-store continuation",
+                "Qualify reused bounded audit engine restart and fail-safe retention",
+                "Targeted existing-project read-only pilot with actual host and independent effects",
+            ):
+                step = workflow.split("      - name: " + name + "\n", 1)[1]
+                condition = next(line for line in step.splitlines() if line.startswith("        if: "))
+                self.assertIn("github.event.inputs.provider_ca_only != 'true'", condition, name)
+
+    def test_sou194_native_exchange_is_manual_and_outside_required_admission(self):
+        text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
+        body = text.split("  manual-sou194-cache-exchange:\n", 1)[1].split("\n  native-ubuntu-2404:", 1)[0]
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.cache_exchange_only", body)
+        self.assertNotIn("needs: impact", body)
+        self.assertNotIn("manual-sou194-cache-exchange", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
+        self.assertIn("github.event.inputs.cache_exchange_only != 'true'", text)
 
     def test_build_producer_is_selected_only_with_compatible_consumers(self):
         for path, selected in (("README.md", False), ("eval/probe.py", False), ("crates/proxy/src/main.rs", False),

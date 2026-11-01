@@ -6,7 +6,7 @@
     pilot.py prepare --apply --prefix DIR [inputs]
     pilot.py run --prefix DIR [--prompt TEXT]
     pilot.py status --prefix DIR
-    pilot.py provider preview|create|select|remove [options]
+    pilot.py provider preview|check|create|update|restore|prune|select|remove [options]
     pilot.py help
 
 This is a front door over the accepted scripts, not a second installer:
@@ -51,7 +51,9 @@ PROFILE_FAILURE_CODES = frozenset({"provider_home_invalid", "provider_home_chang
     "provider_file_changed", "provider_profile_invalid", "provider_profile_missing", "provider_profile_exists",
     "provider_profile_limit", "provider_store_invalid", "provider_store_busy", "provider_selection_invalid",
     "provider_selection_stale", "provider_source_conflict", "provider_name_invalid", "provider_transport_invalid",
-    "provider_secret_input_invalid", "provider_terminal_required", "provider_consent_required", "provider_unavailable"})
+    "provider_secret_input_invalid", "provider_terminal_required", "provider_consent_required", "provider_unavailable",
+    "provider_version_required", "provider_version_stale", "provider_version_missing", "provider_version_in_use",
+    "provider_version_limit", "provider_index_invalid", "provider_update_no_changes"})
 HINTS = {
     "not_prepared": "No prepared selection under this prefix. Run `pilot.py preview`, then `pilot.py prepare --apply`.",
     "front_door_state_invalid": "The front-door record is unreadable or changed. Prepare again with --apply.",
@@ -92,6 +94,10 @@ def load(name, filename):
 
 def provider_profiles():
     return load("front_door_provider_profiles", "pilot_provider_profiles.py")
+
+
+def provider_preflight():
+    return load("front_door_provider_preflight", "pilot_provider_preflight.py")
 
 
 PREP = load("front_door_preparation", "prepare-installed-pilot.py")
@@ -778,8 +784,11 @@ def status(args):
 def provider_command(args):
     """Profile management is local and never starts a provider or pilot asset."""
     profiles = provider_profiles()
-    if args.provider_action != "preview" and not args.apply:
+    if args.provider_action not in ("preview", "check", "update") and not args.apply:
         raise profiles.Refusal("provider_consent_required")
+    if args.provider_action == "check":
+        return provider_preflight().check(args.agent_home or Path.home() / ".agentfw", profiles,
+                                          transport=args.transport, seconds=args.timeout_seconds)
     with profiles.Store(args.agent_home or Path.home() / ".agentfw",
                         create=args.provider_action == "create") as store:
         if args.provider_action == "preview":
@@ -801,6 +810,33 @@ def provider_command(args):
             secrets = profiles.secret_input(args)
             return {"format": profiles.SELECTED_FORMAT, "command": "provider create", "status": "saved",
                     "executed": False, **store.create(args.name, public, secrets, replace=args.replace)}
+        if args.provider_action == "update":
+            changes = {}
+            for flag, key in (("model", "model"), ("base_url", "ANTHROPIC_BASE_URL"),
+                              ("http_proxy", "HTTP_PROXY"), ("https_proxy", "HTTPS_PROXY"),
+                              ("no_proxy", "NO_PROXY"), ("ssl_cert_file", "SSL_CERT_FILE")):
+                value = getattr(args, flag)
+                if value is not None:
+                    changes[key] = value
+            rotation = args.secret_fd is not None or args.prompt_api_key or args.prompt_auth_token
+            if not args.apply:
+                return {"format": profiles.SELECTED_FORMAT, "command": "provider update",
+                        "status": "plan", "executed": False, "redacted": True,
+                        **store.preview_update(args.name, changes, rotation)}
+            if args.expected_version is None:
+                raise profiles.Refusal("provider_version_required")
+            secrets = profiles.secret_input(args) if rotation else None
+            return {"format": profiles.SELECTED_FORMAT, "command": "provider update",
+                    "status": "updated", "executed": False,
+                    **store.update(args.name, changes, secrets, args.expected_version)}
+        if args.provider_action == "restore":
+            return {"format": profiles.SELECTED_FORMAT, "command": "provider restore",
+                    "status": "restored", "executed": False,
+                    **store.restore(args.name, args.version, args.expected_version)}
+        if args.provider_action == "prune":
+            return {"format": profiles.SELECTED_FORMAT, "command": "provider prune",
+                    "status": "pruned", "executed": False,
+                    **store.prune(args.name, args.version)}
         if args.provider_action == "select":
             result = store.environment() if args.environment else store.select(args.name)
             return {"format": profiles.SELECTED_FORMAT, "command": "provider select", "status": "selected",
@@ -876,6 +912,10 @@ def parser():
     actions = provider.add_subparsers(dest="provider_action", required=True)
     preview = actions.add_parser("preview", help="read-only redacted inventory")
     preview.add_argument("--name")
+    check = actions.add_parser("check", help="validate selected profile; opt in to bounded DNS/TCP/TLS observation")
+    check.add_argument("--transport", action="store_true", help="observe the selected endpoint without an API request")
+    check.add_argument("--timeout-seconds", type=int, default=5, help="total transport deadline, 1 to 15 seconds")
+    check.add_argument("--json", action="store_true", help="print finite JSON instead of text")
     create = actions.add_parser("create", help="save one private profile with explicit consent")
     create.add_argument("--name", required=True)
     create.add_argument("--model", default="claude-sonnet-4-20250514")
@@ -887,6 +927,26 @@ def parser():
     source.add_argument("--prompt-auth-token", action="store_true")
     create.add_argument("--replace", action="store_true")
     create.add_argument("--apply", action="store_true")
+    update = actions.add_parser("update", help="preview or atomically update one existing profile")
+    update.add_argument("--name", required=True)
+    update.add_argument("--expected-version", help="non-secret version from preview; required with --apply")
+    update.add_argument("--model")
+    for flag in ("base-url", "http-proxy", "https-proxy", "no-proxy", "ssl-cert-file"):
+        update.add_argument("--" + flag)
+    update_secret = update.add_mutually_exclusive_group()
+    update_secret.add_argument("--secret-fd", type=int)
+    update_secret.add_argument("--prompt-api-key", action="store_true")
+    update_secret.add_argument("--prompt-auth-token", action="store_true")
+    update.add_argument("--apply", action="store_true")
+    restore = actions.add_parser("restore", help="select a retained verified version")
+    restore.add_argument("--name", required=True)
+    restore.add_argument("--version", required=True)
+    restore.add_argument("--expected-version", required=True)
+    restore.add_argument("--apply", action="store_true")
+    prune = actions.add_parser("prune", help="remove one unselected retained version")
+    prune.add_argument("--name", required=True)
+    prune.add_argument("--version", required=True)
+    prune.add_argument("--apply", action="store_true")
     select = actions.add_parser("select", help="select one profile or explicitly return to environment mode")
     choice = select.add_mutually_exclusive_group(required=True)
     choice.add_argument("--name")
@@ -912,14 +972,22 @@ def main(argv=None):
     if args.command == "provider":
         try:
             report = provider_command(args)
-            code = 0
+            code = (0 if args.provider_action != "check" or report["status"] in
+                    ("configuration-valid", "transport-observed") else
+                    3 if report["status"] == "unavailable" else
+                    4 if report["status"] == "incomplete" else 2)
         except Exception as error:
-            reason = str(error)
-            report = {"format": "sw-pilot-provider-selection/1", "command": "provider " + args.provider_action,
-                      "status": "failed", "executed": False,
-                      "reason": reason if reason in PROFILE_FAILURE_CODES else "provider_input_or_store_failure"}
+            if args.provider_action == "check":
+                report = provider_preflight().report("refused", "local", "check_failed",
+                                                     transport=args.transport)
+            else:
+                reason = str(error)
+                report = {"format": "sw-pilot-provider-selection/1", "command": "provider " + args.provider_action,
+                          "status": "failed", "executed": False,
+                          "reason": reason if reason in PROFILE_FAILURE_CODES else "provider_input_or_store_failure"}
             code = 2
-        print(json.dumps(report, sort_keys=True))
+        print(provider_preflight().human(report) if args.provider_action == "check" and not args.json
+              else json.dumps(report, sort_keys=True))
         return code
     coordinated = args.command != "help" and any((args.prefix / name).exists() or (args.prefix / name).is_symlink()
                                                 for name in ("current.json", "journal.json"))

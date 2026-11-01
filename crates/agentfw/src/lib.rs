@@ -57,6 +57,7 @@ pub mod service;
 pub mod spans;
 pub mod support_bundle;
 pub mod token;
+pub mod tool_preview;
 #[cfg(windows)]
 pub(crate) mod windows_create;
 #[cfg(windows)]

@@ -96,7 +96,7 @@ const fleet = (() => {
   $("fleet-next").addEventListener("click",()=>{if(next)loadList(next);});
   $("fleet-first").addEventListener("click",()=>loadList());
   $("fleet-history-next").addEventListener("click",()=>{if(selected && historyNext!=null)loadAgent(selected,historyNext);});
-  return { select(id) {
+  return { reload() { if (tenant) loadList(); }, select(id) {
     epoch++; tenant=id; listRequest++; listController?.abort(); clearDetail();
     next=null; $("fleet-list").replaceChildren(); $("fleet-next").disabled=true;
     $("fleet-prefix").value="";$("fleet-enrollment").value="all";$("fleet-delivery").value="all";
