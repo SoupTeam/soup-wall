@@ -3173,6 +3173,8 @@ jobs:
           cargo test --locked -p agentfw --lib pilot_component
           # The component is built from this checkout and started only as the
           # installed `agentfw pilot` of this job's SOU-119 build.
+          # Installed launch custody refuses writable hosted-toolcache ancestors.
+          # Use the protected interpreter already selected for the component.
           python3 -B scripts/qualify-installed-front-door.py --run --provider-profiles \
             --output "$RUNNER_TEMP/installed-front-door" --expected-commit "$(git rev-parse HEAD)" \
             --component-python /usr/bin/python3.12 \
@@ -3181,7 +3183,7 @@ jobs:
             --sandbox-tests "$SOU119_SANDBOX_TESTS" \
             --node-archive "$asset/node.tar.xz" \
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python "$(command -v python3)" --allow-download \
+            --python /usr/bin/python3.12 --allow-download \
             2>&1 | tee "$RUNNER_TEMP/installed-front-door.log"
       - name: Qualify installed provider CA custody through owned HTTPS
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.provider_ca_only == 'true' && github.event.inputs.native_preparation_only == 'true'
@@ -3198,7 +3200,7 @@ jobs:
             --sandbox-tests "$SOU119_SANDBOX_TESTS" \
             --node-archive "$asset/node.tar.xz" \
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python "$(command -v python3)" --allow-download \
+            --python /usr/bin/python3.12 --allow-download \
             2>&1 | tee "$RUNNER_TEMP/installed-provider-ca.log"
       - name: Qualify installed linked worktrees through original servers
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'linked-worktrees' && github.event.inputs.native_preparation_only == 'true'
@@ -3215,7 +3217,7 @@ jobs:
             --sandbox-tests "$SOU119_SANDBOX_TESTS" \
             --node-archive "$asset/node.tar.xz" \
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python "$(command -v python3)" --allow-download \
+            --python /usr/bin/python3.12 --allow-download \
             2>&1 | tee "$RUNNER_TEMP/installed-linked-worktrees.log"
       - name: Retain bounded installed linked worktree result including failed attempt
         if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'linked-worktrees'
@@ -3242,7 +3244,7 @@ jobs:
             --sandbox-tests "$SOU119_SANDBOX_TESTS" \
             --node-archive "$asset/node.tar.xz" \
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python "$(command -v python3)" --allow-download \
+            --python /usr/bin/python3.12 --allow-download \
             2>&1 | tee "$RUNNER_TEMP/installed-filesystem-roots.log"
       - name: Retain bounded installed filesystem root result including failed attempt
         if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'filesystem-roots'
@@ -3299,7 +3301,7 @@ jobs:
             --sandbox-tests "$SOU119_SANDBOX_TESTS" \
             --node-archive "$asset/node.tar.xz" \
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python "$(command -v python3)" --allow-download \
+            --python /usr/bin/python3.12 --allow-download \
             2>&1 | tee "$RUNNER_TEMP/installed-project-presets.log"
       - name: Retain bounded installed provider CA result including failed attempt
         if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.provider_ca_only == 'true'

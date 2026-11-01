@@ -49,6 +49,12 @@ journal. Symlinks, hard links, foreign owners, wrong modes, replaced directories
 same-bytes replacement, duplicate JSON fields and partial writes are refused and
 never repaired or recreated by a reader.
 
+Selected executables must satisfy the existing owner, mode and trusted-ancestor
+checks. Use a protected input path rather than a shared writable tool cache; the
+qualified Ubuntu 24.04 fixture selects `/usr/bin/python3.12` explicitly. Reprepare
+after changing the selected interpreter so its actual identity is pinned.
+Maintenance does not make an otherwise untrusted executable eligible.
+
 ## Launch exclusion
 
 A new launch through the installed front door is admitted at two points while
