@@ -1,5 +1,30 @@
 # SOU-157: Draft filesystem separator correction
 
+## Mapped Git preparation for review (2026-11-01)
+
+TL review [5727888870](https://github.com/SoupTeam/soup-wall/pull/280#pullrequestreview-5727888870) settles the launch question without a launcher change: explicitly configure the existing daemon endpoint with a pinned default `sw-mcp/git-readonly/1` profile in a disposable qualification. Do not edit DAEMON_EXECUTION or select file-revision capabilities. The following preparation increment is ready for independent review before TL's one affected native dispatch.
+
+`scripts/prepare-sou157-git.py` prepares exactly g01/g03/g07/g09, both original sides (eight cases). The original SOU-123 repository construction is factored into a reusable no-delete function; the original generation wrapper still uses that same construction. No frozen payload, label or manifest changes. The new helper refuses an existing output directory and a mismatched Git binary. It uses explicit original author/time metadata, an empty Git template and no ambient Git configuration. UTF-8/LF writes keep the original Linux bytes stable on Windows too.
+
+Only `repo_path` is mapped from `/tmp/sou123/repo` to `/workspace`; both argument objects and their distinct canonical hashes remain in the plan. The generated operator test profile changes only the owned host workspace binding/identity; all original tool/runtime/policy contracts remain selected. CLI requires native Linux, clean exact source and an explicitly pinned template-profile digest. That profile retains its original SDK/runtime and Git pins. No daemon, original server, inference, download or execution grant is started by preparation.
+
+The plan marks every native control **not_executed**: original text equality, private call/profile/channel custody, baseline vs useful delivery, paired attacks, copied/stale/foreign proof, signatures/directives/Ask/Deny, source-readonly and cleanup. Byte comparison is an exact equality gate, never a source authenticator; header, newline and Unicode changes produce non-comparability. No captured reply may be injected in place of the original server. Commit mismatch is retained rather than repaired. All ten frozen refusals remain measured and unresolved; six are outside this finite Git preparation.
+
+Local preparation tests reconstruct all eight commit OIDs exactly as the frozen original headers. Four preparation tests and four existing refusal-map controls pass. This proves deterministic construction, not original-server returned-byte equality or native policy delivery. After independent review, the existing native qualifier must consume these owned repositories/test profiles, verify exact original returned text first and run every declared control before asserting mapped-case relief. TL owns dispatch/artifact grading; there is no author rerun of the filesystem matrix.
+
+```
+python3 scripts/prepare-sou157-git.py \
+  --template-profile /private/qualified/default-git-profile.json \
+  --profile-sha256 <verified-template-sha256> \
+  --expected-commit <exact-reviewed-source-sha> \
+  --output /private/new-sou157-git-cases
+python3 -m unittest discover -s scripts/tests -p test_sou157_git_preparation.py -v
+```
+
+Output must be new and have an existing owned parent. The native reviewer must preserve failed/non-comparable outcomes and all original corpus counts. The preparation plan is not an acceptance artifact and grants no production authority.
+
+Broader Windows SOU-123 test discovery ran 36 tests: 31 passed, four skipped and one failed because the existing entry-point test executes a POSIX shell adapter (`WinError 193`). That test does not exercise the changed repository constructor. This platform limitation is retained for Linux validation, not reported as a passing suite.
+
 ## Accepted filesystem slice and remaining ten (2026-11-01)
 
 Independent review [5726848433](https://github.com/SoupTeam/soup-wall/pull/280#pullrequestreview-5726848433) approves the focused code and exact-source Linux correction qualification, not task completion. Run [41281210870](https://github.com/SoupTeam/soup-wall/actions/runs/41281210870), source e65d1ef927e3148c4a0018d2e511ff7bbe56448b, artifact 13072919978, ZIP SHA-256 `eeb6a40bd8feb3bf50655c054f1bc00cea04e39eed6d46c1eb8b19085b95a7a4`: downloaded and checked all four unique members/CRCs. Retained runtime reports are in `evidence/sou157-passed-native-41281210870/`. Re-executing the pure current projector over the downloaded JSON returns `passed-filesystem-correction-only`. On Windows the CLI's Linux-only O_NOFOLLOW reader is unavailable; the local check loaded the already hash-verified JSON and called the same pure projector without altering its checks. This is not a new runtime run. Actual byte-identical benign delivery at 50/200, paired attack refusals, four pre-execution Unknown controls, ambiguity and copied-wire controls passed. Earlier pending statements below describe the historical checkpoint.

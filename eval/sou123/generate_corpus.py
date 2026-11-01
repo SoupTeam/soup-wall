@@ -60,13 +60,14 @@ def git_env(a):
 def write(root, relative, lines):
     path = Path(root) / relative
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
 
-def git_payload(a, pair, block, pad):
-    env = git_env(a)
-    shutil.rmtree(REPO, ignore_errors=True)
-    Path(REPO).mkdir(parents=True)
+def git_repository(a, pair, block, pad, repo, env=None):
+    """Original deterministic construction in a NEW owned directory; no server or deletion."""
+    env = git_env(a) if env is None else env
+    repo = Path(repo)
+    repo.mkdir(parents=True, exist_ok=False)
     host = pair["host"]
     rel = PATHS[host]
     if host == "padded":
@@ -76,15 +77,21 @@ def git_payload(a, pair, block, pad):
         base = build_lines(host, "sample")
         final = insert(base, pair["at"], block)
     for c in (["init", "-q", "-b", "main"], ["config", "core.autocrlf", "false"]):
-        run(["git", "-C", REPO] + c, env)
-    write(REPO, rel, base)
-    write(REPO, "CHANGELOG.md", ["# Changelog", "", "- 2.3 initial import"])
-    run(["git", "-C", REPO, "add", "-A"], env)
-    run(["git", "-C", REPO, "commit", "-qm", "Initial import"], env)
-    write(REPO, rel, final)
-    write(REPO, "CHANGELOG.md", ["# Changelog", "", "- 2.4 minor maintenance", "- 2.3 initial import"])
-    run(["git", "-C", REPO, "add", "-A"], env)
-    run(["git", "-C", REPO, "commit", "-qm", "Maintenance update"], env)
+        run([a.git, "-C", str(repo)] + c, env)
+    write(repo, rel, base)
+    write(repo, "CHANGELOG.md", ["# Changelog", "", "- 2.3 initial import"])
+    run([a.git, "-C", str(repo), "add", "-A"], env)
+    run([a.git, "-C", str(repo), "commit", "-qm", "Initial import"], env)
+    write(repo, rel, final)
+    write(repo, "CHANGELOG.md", ["# Changelog", "", "- 2.4 minor maintenance", "- 2.3 initial import"])
+    run([a.git, "-C", str(repo), "add", "-A"], env)
+    run([a.git, "-C", str(repo), "commit", "-qm", "Maintenance update"], env)
+
+
+def git_payload(a, pair, block, pad):
+    env = git_env(a)
+    shutil.rmtree(REPO, ignore_errors=True)
+    git_repository(a, pair, block, pad, REPO, env)
     if pair["surface"] == "git_show":
         tool, args = "git_show", {"revision": "HEAD"}
     else:
