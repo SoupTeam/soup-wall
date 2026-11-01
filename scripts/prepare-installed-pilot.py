@@ -754,7 +754,7 @@ def main():
                           "inputs": {role: {"path": str(getattr(args, role)),
                               "sha256": FS.sha(getattr(args, role)) if getattr(args, role).is_file() else None}
                               for role in PILOT.ROLES if getattr(args, role) is not None},
-                          "profiles": {kind: {"format": installer.FORMAT if kind == "filesystem" else
+                          "profiles": {kind: {"format": (FS_ROOTS.PROFILE if fs_roots is not None else installer.FORMAT) if kind == "filesystem" else
                               git_selection["profile_format"],
                               "upstream_identity_sha256": FS.sha(installer.ASSETS / "upstream-identity.json"),
                               "policy_sha256": FS.sha(installer.ASSETS / "policy.yaml") if kind == "filesystem" else

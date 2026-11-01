@@ -135,6 +135,29 @@ class Roots(unittest.TestCase):
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
         return module
 
+    def test_actual_inert_plan_reports_selected_profile_and_every_root(self):
+        prep = self.module('prepare-installed-pilot.py')
+        binding = M.inventory(self.pairs)
+        manifest = self.base / 'binding.json'
+        manifest.write_text(json.dumps(binding)); manifest.chmod(0o600)
+        words = ['prepare-installed-pilot.py', '--filesystem-workspace', str(self.a),
+                 '--git-workspace', str(self.c)]
+        before = {str(p): p.read_bytes() for root in (self.a, self.b, self.c) for p in root.iterdir()}
+        for extra, expected in [([], prep.FS.FORMAT),
+                                (['--filesystem-roots-binding', str(manifest)], M.PROFILE)]:
+            output = io.StringIO()
+            with patch.object(os.sys, 'argv', words + extra), \
+                    patch.object(prep.PILOT, 'source', return_value={'commit': 'a' * 40, 'dirty': False}), \
+                    patch.object(prep.subprocess, 'Popen') as spawn, contextlib.redirect_stdout(output):
+                self.assertEqual(0, prep.main())
+                spawn.assert_not_called()
+            value = json.loads(output.getvalue())
+            self.assertEqual('plan', value['status'])
+            self.assertFalse(value['executed'])
+            self.assertEqual(expected, value['profiles']['filesystem']['format'])
+            self.assertEqual(binding if extra else None, value.get('filesystem_roots'))
+        self.assertEqual(before, {str(p): p.read_bytes() for root in (self.a, self.b, self.c) for p in root.iterdir()})
+
     def test_preparation_refuses_cache_in_second_root_before_output_or_selected_process(self):
         prep=self.module('prepare-installed-pilot.py')
         manifest=self.base/'binding.json';manifest.write_text(json.dumps(M.inventory(self.pairs)));manifest.chmod(0o600)
