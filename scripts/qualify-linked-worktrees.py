@@ -4,8 +4,6 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json
 import os
-import hashlib
-import re
 from pathlib import Path
 import subprocess
 import threading
@@ -14,6 +12,18 @@ CASES = ('two-explicit-bindings', 'inert-installed-preview', 'two-prepared-selec
          'stale-head-refusal', 'redirected-gitfile-refusal', 'cross-profile-refusal',
          'concurrent-original-reads', 'correlated-cross-root-refusals', 'source-preservation',
          'owned-process-cleanup', 'default-selection-retained')
+
+
+def namespace_observation(output):
+    # libtest may print the test name and "... " before a nocapture JSON line.
+    for line in output.splitlines():
+        start=line.find('{')
+        if start < 0: continue
+        try: value=json.loads(line[start:])
+        except ValueError: continue
+        if isinstance(value,dict) and value.get('event')=='sou201_original_mcp_namespace_probe':
+            return value
+    return None
 
 
 def qualify(args, door, home, env, report, installed):
@@ -105,12 +115,9 @@ def qualify(args, door, home, env, report, installed):
     # It emits a bounded diagnostic over owned synthetic inputs only.
     probe_output=probe.stdout.decode('utf-8','replace')
     evidence['namespace_probe']={'exit':probe.returncode,'reported':False}
-    for line in probe_output.splitlines():
-        if line.startswith('{'):
-            try: value=json.loads(line)
-            except ValueError: continue
-            if value.get('event')=='sou201_original_mcp_namespace_probe':
-                evidence['namespace_probe'].update(reported=True,observation=value)
+    observation=namespace_observation(probe_output)
+    if observation is not None:
+        evidence['namespace_probe'].update(reported=True,observation=observation)
     if probe.returncode != 0 and not evidence['namespace_probe']['reported']:
         diagnostic=(probe.stdout+probe.stderr)[:4096].decode('utf-8','replace')
         for path in (str(args.agentfw),str(args.sandbox_tests),str(selections[0].parent),
@@ -143,55 +150,6 @@ def qualify(args, door, home, env, report, installed):
     (sentinel/'canary').write_text('SOU201-UNSELECTED-NEVER-READ')
     before_sibling = q.snapshot(sentinel)
     begin('concurrent-original-reads')
-    # Genuine host success can coexist with a failed MCP connection. Retain only
-    # public source-literal matches and tool names from the owned fixture logs;
-    # never export raw debug lines, native credentials or host configuration.
-    known_literals = set()
-    for relative in ('crates/agentfw/src/mcp/server_profile.rs',
-            'crates/agentfw/src/mcp/server_sandbox.rs',
-            'crates/agentfw/src/mcp/admission/real_server.rs',
-            'crates/agentfw/src/mcp/server_profile/git/shallow_view/linux.rs',
-            'crates/agentfw/src/mcp/server_profile/git/linked_worktree.rs'):
-        for literal in re.findall(r'"([^"\\\n]{12,160})"', (installed.ROOT / relative).read_text()):
-            if '{' not in literal and '}' not in literal and (' ' in literal or literal.startswith(('linked_worktree_', 'mcp_'))):
-                known_literals.add(literal)
-    def observations(target, model):
-        names = sorted({tool.get('name','') for raw in model.requests for tool in json.loads(raw).get('tools', [])
-                        if tool.get('name','').startswith('mcp__')})[:64]
-        literals = set(); connections = []
-        # Read only this owned run's bounded logs while its host is alive.
-        total = files = 0
-        for directory in target.args.state_root.glob('soup-wall-run-*'):
-            for path in directory.rglob('*'):
-                if path.is_symlink() or not path.is_file() or path.suffix not in ('.log','.txt'):
-                    continue
-                files += 1
-                if files > 128: break
-                size = path.stat().st_size
-                if size > 2*1024*1024 or total+size > 4*1024*1024: continue
-                total += size
-                raw = path.read_bytes()
-                literals.update(literal for literal in known_literals if literal.encode() in raw)
-                for line in raw.splitlines():
-                    if b'mcp_servers' not in line: continue
-                    try: value=json.loads(line)
-                    except ValueError: continue
-                    for server in value.get('mcp_servers',[]):
-                        if server.get('name') in ('filesystem','git') and server.get('status') in ('connected','failed','pending','disabled'):
-                            connections.append({'name':server['name'],'status':server['status']})
-        return {'tool_names':names,'source_literal_matches':sorted(literals)[:32], 'connections':connections[:8]}
-    class ObservedModel(base.DEMO.ScriptedModel):
-        def __init__(self, target):
-            self.target=target; self.diagnostic={}
-            super().__init__([])
-        def __setattr__(self,name,value):
-            if name=='next':
-                original=value
-                def observed(body):
-                    self.diagnostic=observations(self.target,self)
-                    return original(body)
-                value=observed
-            super().__setattr__(name,value)
     def run(i):
         proposals = [
             ('mcp__git__git_status', {'repo_path': '/workspace'}),
@@ -201,10 +159,7 @@ def qualify(args, door, home, env, report, installed):
             ('mcp__git__git_status', {'repo_path': str(sentinel)}),
             ('mcp__git__git_status', {'repo_path': '/workspace'}),
         ]
-        model=ObservedModel(targets[i])
-        result=q.run_case(roots[i], targets[i], report, 'linked'+str(i), proposals, model=model)
-        evidence.setdefault('connection_diagnostics', {})[str(i)]=model.diagnostic
-        return result
+        return q.run_case(roots[i], targets[i], report, 'linked'+str(i), proposals)
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = [pool.submit(run, i) for i in range(2)]
         runs = [f.result() for f in futures]

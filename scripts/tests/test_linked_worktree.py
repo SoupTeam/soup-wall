@@ -54,6 +54,14 @@ class Selection(unittest.TestCase):
         self.assertEqual(one['commonDir'], two['commonDir'])
         self.assertEqual(before, {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
 
+    def test_actual_namespace_witness_survives_libtest_prefix_but_missing_event_is_not_pass(self):
+        qualification=self.module('qualify-linked-worktrees.py')
+        event={'event':'sou201_original_mcp_namespace_probe','initialized':True,'cleanup':True}
+        for prefix in ('','test owned::original_mcp ... '):
+            self.assertEqual(event,qualification.namespace_observation(prefix+json.dumps(event)+'\nok\n'))
+        self.assertIsNone(qualification.namespace_observation('running 0 tests\n0 passed\n'))
+        self.assertIsNone(qualification.namespace_observation('{"event":"unrelated"}'))
+
     def test_real_selected_commit_message_is_inert_bounded_and_never_followed(self):
         self.git('-C',self.one,'-c','user.name=Owned','-c','user.email=owned@example.invalid',
                  'commit','--allow-empty','-qm','Owned selected-worktree commit')

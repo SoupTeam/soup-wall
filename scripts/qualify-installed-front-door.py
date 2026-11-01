@@ -844,7 +844,7 @@ def qualify(args, report):
 
         if args.linked_worktrees_only:
             load("installed_linked_worktrees", "qualify-linked-worktrees.py").qualify(args, door, agent_home, env, report,
-                installed=__import__('types').SimpleNamespace(QUAL=QUAL, BASE=BASE, ROOT=ROOT, require=require, load=load))
+                installed=__import__('types').SimpleNamespace(QUAL=QUAL, BASE=BASE, require=require, load=load))
             report['source_after'] = BASE.source()
             require(report['source_after'] == before, 'source_changed')
             return
@@ -1097,7 +1097,7 @@ def main():
     summary = {"status": report["status"], "cases": len(report["cases"]), "error": report.get("error")}
     if args.linked_worktrees_only:
         linked = report.get('linked_worktrees', {})
-        summary['linked_worktrees'] = {k: linked.get(k) for k in ('status', 'active_case', 'last_cli', 'last_runs', 'connection_diagnostics', 'namespace_probe')}
+        summary['linked_worktrees'] = {k: linked.get(k) for k in ('status', 'active_case', 'last_cli', 'last_runs', 'namespace_probe')}
     print(json.dumps(summary))
     return 0 if report["status"] == "passed" else 1
 

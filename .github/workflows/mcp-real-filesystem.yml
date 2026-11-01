@@ -701,7 +701,9 @@ jobs:
       - name: Verify native linked worktree snapshot contracts
         if: github.event.inputs.linked_worktrees_only == 'true'
         shell: bash
-        run: cargo test --locked -p agentfw --lib linked_worktree -- --test-threads=1
+        run: |
+          cargo test --locked -p agentfw --lib linked_worktree -- --test-threads=1
+          cargo test --locked -p agentfw --lib native::approval::tests::selected_tests -- --test-threads=1
       - name: Validate focused provider CA dispatch
         if: github.event.inputs.provider_ca_only == 'true'
         shell: bash
