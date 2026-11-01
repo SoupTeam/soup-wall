@@ -111,6 +111,12 @@ def qualify(args, door, home, env, report, installed):
             except ValueError: continue
             if value.get('event')=='sou201_original_mcp_namespace_probe':
                 evidence['namespace_probe'].update(reported=True,observation=value)
+    if probe.returncode != 0 and not evidence['namespace_probe']['reported']:
+        diagnostic=(probe.stdout+probe.stderr)[:4096].decode('utf-8','replace')
+        for path in (str(args.agentfw),str(args.sandbox_tests),str(selections[0].parent),
+                     str(workspaces[0]),str(primary)):
+            diagnostic=diagnostic.replace(path,'<owned-selected-input>')
+        evidence['namespace_probe']['owned_probe_diagnostic']=diagnostic
     require(probe.returncode==0 and evidence['namespace_probe']['reported'], 'linked_worktree_original_namespace_startup_failed')
     passed('two-prepared-selections', source_bound=True, original_namespace_initialized=True)
     def refuse(name, path, mutation):
