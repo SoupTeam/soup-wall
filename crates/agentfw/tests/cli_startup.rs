@@ -31,6 +31,8 @@ fn ordinary_cli_startup_fits_a_standard_stack_before_execution() {
             (&["edit-session", "with-run", "--help"][..], 0, None),
             (&["edit-session", "export-set", "--help"][..], 0, None),
             (&["edit-session", "apply", "--help"][..], 0, None),
+            (&["edit-session", "batch", "--help"][..], 0, None),
+            (&["edit-session", "batch", "preview", "--help"][..], 0, None),
             (&["edit-session", "archive", "--help"][..], 0, None),
         ]);
         probes

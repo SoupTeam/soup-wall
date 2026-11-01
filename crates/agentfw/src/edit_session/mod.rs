@@ -12,6 +12,8 @@ pub(crate) use profile::Profile;
 #[cfg(target_os = "linux")]
 mod application;
 #[cfg(target_os = "linux")]
+mod batch;
+#[cfg(target_os = "linux")]
 mod control;
 #[cfg(target_os = "linux")]
 mod control_io;
@@ -55,6 +57,12 @@ enum Action {
     Apply {
         #[command(subcommand)]
         action: application::Action,
+    },
+    /// Guarded finite batch publication and explicit recovery; never MCP authority.
+    #[cfg(target_os = "linux")]
+    Batch {
+        #[command(subcommand)]
+        action: batch::Action,
     },
     /// Review exact completed-run outputs; private content needs explicit consent.
     #[cfg(target_os = "linux")]

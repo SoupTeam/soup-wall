@@ -955,6 +955,7 @@ def parser():
     remove = actions.add_parser("remove", help="delete one private profile")
     remove.add_argument("--name", required=True)
     remove.add_argument("--apply", action="store_true")
+    commands.add_parser("project", help="inspect, check and explicitly manage named project presets")
     commands.add_parser("help")
     commands.add_parser("update", help="preview, apply, recover or roll back a complete local pilot generation")
     return top
@@ -964,6 +965,18 @@ def main(argv=None):
     supplied = list(sys.argv[1:] if argv is None else argv)
     if supplied and supplied[0] == "update":
         return load("front_door_update", "pilot_update.py").main(supplied[1:])
+    project_words = list(supplied)
+    project_home = Path.home() / '.agentfw'
+    if project_words[:1] == ['--agent-home'] and len(project_words) >= 2:
+        project_home = Path(project_words[1]); project_words = project_words[2:]
+    if project_words and project_words[0].startswith('--agent-home='):
+        project_home = Path(project_words[0].split('=', 1)[1]); project_words = project_words[1:]
+    if project_words[:1] == ['project']:
+        module = load('front_door_project_presets', 'pilot_project_presets.py')
+        # Explicit object avoids relying on importlib registration of this entry.
+        import types
+        front = types.SimpleNamespace(**globals(), PROJECT_HOME=project_home)
+        return module.main(project_words[1:], front)
     top = parser()
     args = top.parse_args(supplied)
     if args.command in (None, "help"):

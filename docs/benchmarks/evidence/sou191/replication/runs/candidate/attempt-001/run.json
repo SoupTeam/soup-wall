@@ -1,0 +1,220 @@
+{
+ "schema": "soup-wall-result-inspection-run/1",
+ "role": "candidate",
+ "attempt": 1,
+ "status": "executed",
+ "predeclaration_sha256": "a1b9e43e571df69e7833d00b666e357b251fbbfcae292cd43c9f71f3f5461565",
+ "recorder": {
+  "recorder_sha256": "d3b37ffda50a84e81d65e8181bdb4f56f1f1c0545ba4d79d80ade787a0f64fdb",
+  "contract_sha256": "58cc1c77f65cc6f93fc256f439907277511085b05cb61ad2587d8d7a1621f29c",
+  "started_utc": "2026-10-31T15:23:51Z",
+  "finished_utc": "2026-10-31T15:27:06Z"
+ },
+ "revision": {
+  "commit": "0931bbcb5ed7cd9cc5e2e3147bbddecda2bb4b6d",
+  "tree": "fc5ee26b0f7085d792c964bf0a917d37b77f3efb",
+  "accepted_ref_commit": "7eb0c2abab4258344760be26f17e70f0829bcb5d",
+  "first_parent": true
+ },
+ "checkout": {
+  "method": "git clone --shared --no-checkout; core.autocrlf=false; checkout --detach",
+  "clean_before": true,
+  "inputs_match_blobs_before": true,
+  "status_before": [],
+  "mismatched_before": [],
+  "inputs": {
+   "rust-toolchain.toml": {
+    "blob": "246cb22c30a5f6e0e105643c35477995aff1da6f",
+    "sha256": "5a7b7b624394e3ece3fb4c9e0391aa400eeebf7a7a1efd18e74c5b68b71cd65e"
+   },
+   "Cargo.lock": {
+    "blob": "033c49f9570dba2b90928736e2c67bcb83f71878",
+    "sha256": "f4bd80d40a0408145a11bae4c91324ff954cdd59ee8172ce1f0a6e22b161f6c2"
+   },
+   "Cargo.toml": {
+    "blob": "104ca7db7dba5b4ff1c37b13a401c942b4cd3ef5",
+    "sha256": "0d81ab460cf6df3546799acae08e4676c039615a5b5ca0eeacd5789f3d10043d"
+   },
+   "crates/agentfw/Cargo.toml": {
+    "blob": "bb1a879849e91239689b7d3534934c4d53896062",
+    "sha256": "fc74e7af08019a9575479c78e216a4ff88569b46c15a32186e5073dac4a972af"
+   },
+   "crates/agentfw/examples/result_inspection_corpus.rs": {
+    "blob": "d581f86d1fd39f699cd6dc0bc8da7387dbf338ee",
+    "sha256": "20963d25efc29496bd54103b13f5677d6c6270e3b545558dc72c89b18b3059ea"
+   },
+   "eval/sou123/run_corpus.py": {
+    "blob": "88449547a882b80ecd3eab4be2b5de1949fe932a",
+    "sha256": "626ddf342ade6291a9e6da714b6e6f22724fcac38893aa53273ead4a37549706"
+   },
+   "eval/sou123/manifest.json": {
+    "blob": "56bbc5a66f856d076b83af9e0c1577e725254b0a",
+    "sha256": "3a7fd3091990d8425df42914321336dd25bdf9ff34f677450935a0c26c674e33"
+   },
+   "profiles/pilot/linux-readonly-v1/policy.yaml": {
+    "blob": "97e70757f5ac57f051c8dc0e33cb22c03761fe86",
+    "sha256": "8a8a8f7e7147a977f9d268091152bfd424fe6e61531a313c66eae1bc1fa46f5a"
+   },
+   "eval/sou123/payloads": {
+    "tree": "a0267c9e502843b532990f986b4a6cd82175a0ab"
+   }
+  },
+  "cargo_config_files": [],
+  "clean_after": true,
+  "inputs_match_blobs_after": true,
+  "status_after": [],
+  "mismatched_after": []
+ },
+ "toolchain": {
+  "requested": "1.99.1",
+  "rustc_vV": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-pc-windows-msvc\nrelease: 1.99.1\nLLVM version: 23.1.1",
+  "cargo_vV": "cargo 1.99.1 (5f94df478 2026-08-27)\nrelease: 1.99.1\ncommit-hash: 5f94df4789f005f9a352888e8355ffc645b7ed0e\ncommit-date: 2026-08-27\nhost: x86_64-pc-windows-msvc\nlibgit2: 1.9.6 (sys:0.21.0 vendored)\nlibcurl: 8.21.0-DEV (sys:0.4.90+curl-8.21.0 vendored ssl:Schannel)\nos: Windows 10.0.22631 (Windows 11 Professional) [64-bit]",
+  "rustc_release": "1.99.1",
+  "rustc_commit_hash": "58cf8f9c35b355199727627d07ae34a4e2846d67",
+  "host": "x86_64-pc-windows-msvc"
+ },
+ "environment": {
+  "refused_variables_present": [],
+  "recorded": {
+   "PROCESSOR_ARCHITECTURE": "AMD64",
+   "OS": "Windows_NT"
+  },
+  "cargo": "<home>\\.cargo\\bin\\cargo.EXE"
+ },
+ "build": {
+  "argv": [
+   "cargo",
+   "+1.99.1",
+   "build",
+   "--jobs",
+   "2",
+   "--locked",
+   "-p",
+   "agentfw",
+   "--example",
+   "result_inspection_corpus",
+   "--message-format=json-render-diagnostics"
+  ],
+  "cwd": "<work>/src",
+  "target_dir": "<work>/target",
+  "target_dir_fresh": true,
+  "exit_code": 0,
+  "returncode_after_kill": null,
+  "timed_out": false,
+  "output_limit_exceeded": null,
+  "killed": null,
+  "cleanup": {
+   "method": "windows_job_object",
+   "job_processes_at_exit": 1,
+   "job_processes_after_cleanup": 0,
+   "reader_threads_alive": 0,
+   "complete": true
+  },
+  "duration_s": 186.875,
+  "capture_policy": {
+   "build_stdout": "terminate (Cargo's JSON messages are needed whole to select the artifact)",
+   "build_stderr": "discard beyond the limit; the build continues"
+  },
+  "messages": {
+   "file": "build-messages.jsonl",
+   "complete": true,
+   "limit_bytes": 2097152,
+   "limit_policy": "terminate",
+   "limit_exceeded": false,
+   "observed_bytes": 198450,
+   "observed_sha256": "21d3943509198d2a957fcce4f1a5e04cb19ec6a4bd7e02073309ad9856cb0fd4",
+   "raw_sha256": "21d3943509198d2a957fcce4f1a5e04cb19ec6a4bd7e02073309ad9856cb0fd4",
+   "raw_bytes": 198450,
+   "retained_sha256": "25a0158fb2538c2cebac63b95388826cc81d1b7c8a618330fa8b1831447b71ec",
+   "retained_bytes": 173389,
+   "truncated": false,
+   "sanitized": true
+  },
+  "stderr": {
+   "file": "build-stderr.txt",
+   "complete": true,
+   "limit_bytes": 2097152,
+   "limit_policy": "discard",
+   "limit_exceeded": false,
+   "observed_bytes": 6278,
+   "observed_sha256": "84f9cc3e2c8b9c3037b525e814f8394212000efc6523e919827782d6a5cfb80c",
+   "raw_sha256": "84f9cc3e2c8b9c3037b525e814f8394212000efc6523e919827782d6a5cfb80c",
+   "raw_bytes": 6278,
+   "retained_sha256": "477da7a07aa13169cd65254f271fbc09adf39f30a114af0b25d90a09d470f745",
+   "retained_bytes": 6110,
+   "truncated": false,
+   "sanitized": true
+  },
+  "artifact": {
+   "relative_path": "debug/examples/result_inspection_corpus.exe",
+   "sha256": "0dbc5cab9b5a0ce8ec35f508d28dcab4ef83f8dc297401042c297f74abcae2da",
+   "bytes": 7996928
+  }
+ },
+ "execution": {
+  "argv": [
+   "<work>\\target\\debug\\examples\\result_inspection_corpus.exe",
+   "--manifest",
+   "<work>\\src\\eval\\sou123\\manifest.json",
+   "--payload-dir",
+   "<work>\\src\\eval\\sou123\\payloads",
+   "--policy",
+   "<work>\\src\\profiles\\pilot\\linux-readonly-v1\\policy.yaml"
+  ],
+  "timeout_s": 120,
+  "exit_code": 0,
+  "returncode_after_kill": null,
+  "timed_out": false,
+  "output_limit_exceeded": null,
+  "killed": null,
+  "cleanup": {
+   "method": "windows_job_object",
+   "job_processes_at_exit": 0,
+   "job_processes_after_cleanup": 0,
+   "reader_threads_alive": 0,
+   "complete": true
+  },
+  "duration_s": 1.157,
+  "artifact_sha256_before": "0dbc5cab9b5a0ce8ec35f508d28dcab4ef83f8dc297401042c297f74abcae2da",
+  "artifact_sha256_after": "0dbc5cab9b5a0ce8ec35f508d28dcab4ef83f8dc297401042c297f74abcae2da",
+  "capture_policy": {
+   "adapter_stdout": "terminate; the attempt is unobserved and its output is never parsed",
+   "adapter_stderr": "discard beyond the limit; the run continues"
+  },
+  "stdout": {
+   "file": "adapter-stdout.json",
+   "complete": true,
+   "limit_bytes": 4194304,
+   "limit_policy": "terminate",
+   "limit_exceeded": false,
+   "observed_bytes": 15556,
+   "observed_sha256": "6c11b8b00a63ea8e2e7cba78375badfdfe92d18abbaf46b23aa212ff2c375501",
+   "raw_sha256": "6c11b8b00a63ea8e2e7cba78375badfdfe92d18abbaf46b23aa212ff2c375501",
+   "raw_bytes": 15556,
+   "retained_sha256": "6c11b8b00a63ea8e2e7cba78375badfdfe92d18abbaf46b23aa212ff2c375501",
+   "retained_bytes": 15556,
+   "truncated": false,
+   "sanitized": false
+  },
+  "stderr": {
+   "file": "adapter-stderr.txt",
+   "complete": true,
+   "limit_bytes": 2097152,
+   "limit_policy": "discard",
+   "limit_exceeded": false,
+   "observed_bytes": 0,
+   "observed_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "raw_bytes": 0,
+   "retained_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "retained_bytes": 0,
+   "truncated": false,
+   "sanitized": false
+  }
+ },
+ "report": {
+  "file": "report.json",
+  "sha256": "bc70b1780ca37a49893b327cb281bd44e64b644e96c2165e80f982a7ad992391"
+ },
+ "problems": []
+}
