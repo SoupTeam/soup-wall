@@ -934,6 +934,13 @@ fn forwarded_cancellation_limit(format: &str) -> usize {
     }
 }
 
+// Collector-held views come from the same prepared sandbox. Keep both guards
+// together when passing them to the relay; neither is derived from MCP input.
+struct SelectedViews<'a> {
+    git: Option<&'a server_profile::git::SelectedView>,
+    filesystem: Option<&'a server_profile::filesystem_roots::Guard>,
+}
+
 async fn relay<R, W, S, T>(
     collector: &Collector<'_>,
     client: &mut R,
@@ -941,8 +948,7 @@ async fn relay<R, W, S, T>(
     server: &mut S,
     child: &mut T,
     profile: &server_profile::ProfileConfig,
-    git_view: Option<&server_profile::git::SelectedView>,
-    filesystem_roots: Option<&server_profile::filesystem_roots::Guard>,
+    views: SelectedViews<'_>,
 ) -> anyhow::Result<()>
 where
     R: AsyncBufRead + Unpin,
@@ -950,6 +956,10 @@ where
     S: AsyncBufRead + Unpin,
     T: AsyncWrite + Unpin,
 {
+    let SelectedViews {
+        git: git_view,
+        filesystem: filesystem_roots,
+    } = views;
     let format = profile.format.as_str();
     let daemon_git = collector
         .config
@@ -2420,8 +2430,10 @@ where
                     &mut server,
                     &mut child,
                     profile,
-                    git_view.as_deref(),
-                    filesystem_roots.as_deref(),
+                    SelectedViews {
+                        git: git_view.as_deref(),
+                        filesystem: filesystem_roots.as_deref(),
+                    },
                 );
                 tokio::pin!(exchange);
                 tokio::select! {
