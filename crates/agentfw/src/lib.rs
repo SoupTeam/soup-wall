@@ -33,6 +33,8 @@ mod pilot_host;
 pub mod pilot_launcher;
 pub mod pilot_observation;
 pub mod pilot_workspaces;
+#[cfg(target_os = "linux")]
+pub mod policy_candidate;
 pub mod policy_transition;
 pub use native::child_authority;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]

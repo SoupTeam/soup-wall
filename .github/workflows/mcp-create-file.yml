@@ -24,6 +24,10 @@ on:
         description: Focus only on the additive SOU-159 qualification
         type: boolean
         default: false
+      operator_policy_only:
+        description: Focus on installed inert operator policy authoring (not merge admission)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,7 +44,7 @@ jobs:
       workflow: mcp-create-file.yml
   linux-create-file:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-create-file') && github.event.inputs.replacement_only != 'true' && github.event.inputs.edit_only != 'true' && github.event.inputs.batch_only != 'true' && github.event.inputs.build_mode != 'shared'
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-create-file') && github.event.inputs.operator_policy_only != 'true' && github.event.inputs.replacement_only != 'true' && github.event.inputs.edit_only != 'true' && github.event.inputs.batch_only != 'true' && github.event.inputs.build_mode != 'shared'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -146,7 +150,7 @@ jobs:
 
   linux-replace-file:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-replace-file') && github.event.inputs.edit_only != 'true' && github.event.inputs.batch_only != 'true' && github.event.inputs.comparison_only != 'true' && github.event.inputs.build_mode != 'shared'
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-replace-file') && github.event.inputs.operator_policy_only != 'true' && github.event.inputs.edit_only != 'true' && github.event.inputs.batch_only != 'true' && github.event.inputs.comparison_only != 'true' && github.event.inputs.build_mode != 'shared'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
@@ -223,6 +227,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
+      SOU199_ONLY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.operator_policy_only == 'true' && 'true' || 'false' }}
       SOU166_MODE: source
       SOU166_EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
       SOU166_PRODUCER_RESULT: ''
@@ -269,17 +274,19 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq bubblewrap
+          sudo apt-get install -y -qq bubblewrap strace
           cargo fetch --locked
           task_scratch="$RUNNER_TEMP/sou161-scratch"
           mkdir -m 700 "$task_scratch"
           mkdir -m 700 "$task_scratch"/{home,cargo-home,tmp,host,low-space}
           sudo install -o 0 -g 0 -m 600 /dev/null "$task_scratch/foreign-record"
           ln -s "$HOME/.cargo/registry" "$task_scratch/cargo-home/registry"
-          cp profiles/mcp/filesystem-readonly-v1/claude-host/package*.json "$task_scratch/host/"
-          npm ci --ignore-scripts --no-audit --no-fund --prefix "$task_scratch/host"
-          printf '%s  %s\n' fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7 \
-            "$task_scratch/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" | sha256sum --check
+          if [[ "$SOU199_ONLY" != true ]]; then
+            cp profiles/mcp/filesystem-readonly-v1/claude-host/package*.json "$task_scratch/host/"
+            npm ci --ignore-scripts --no-audit --no-fund --prefix "$task_scratch/host"
+            printf '%s  %s\n' fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7 \
+              "$task_scratch/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" | sha256sum --check
+          fi
           mkdir -m 700 "$task_scratch/inventory-foreign"
           sudo mkdir -m 700 "$task_scratch/inventory-foreign/edit-90000000-0000-4000-8000-000000000002"
           git rev-parse HEAD > "$task_scratch/source.txt"
@@ -301,6 +308,7 @@ jobs:
             HOME="$task_scratch/home" CARGO_HOME="$task_scratch/cargo-home" \
             CARGO_TARGET_DIR="$task_scratch/target" TMPDIR="$task_scratch/tmp" \
             SOU161_SCRATCH="$task_scratch" SOU161_SOURCE="$GITHUB_WORKSPACE" CARGO_BUILD_JOBS=4 \
+            SOU199_ONLY="$SOU199_ONLY" \
             SOU196_ONLY="${{ github.event_name == 'workflow_dispatch' && inputs.batch_only == true && 'true' || 'false' }}" \
             SOU166_MODE="$SOU166_MODE" SOU166_BUNDLE="$SOU166_BUNDLE" SOU166_CONTEXT="$SOU166_CONTEXT" \
             ImageOS="$ImageOS" ImageVersion="$ImageVersion" \
@@ -320,6 +328,17 @@ jobs:
             cargo fmt --all --check
             sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
             qualify_batch
+            exit 0
+          fi
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou199-policy-test.json" -- test --locked --offline -p agentfw --lib policy_candidate -- --nocapture
+          python3 -B -m unittest discover -s scripts/tests -p 'test_operator_policy.py' -v
+          mkdir -m 700 "$SOU161_SCRATCH/operator-policy"
+          sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/operator-policy/binary.txt"
+          python3 -B scripts/qualify-operator-policy.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$SOU161_SCRATCH/operator-policy/report.json"
+          if [[ "$SOU199_ONLY" == true ]]; then
+            python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou199-policy-clippy.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings
+            cargo fmt --all --check
             exit 0
           fi
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-0.json" -- test --locked --offline -p agentfw --lib edit_session -- --nocapture
@@ -398,6 +417,9 @@ jobs:
           name: sou161-installed-edit-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/sou161-scratch/source.txt
+            ${{ runner.temp }}/sou161-scratch/operator-policy/report.json
+            ${{ runner.temp }}/sou161-scratch/operator-policy/binary.txt
+            ${{ runner.temp }}/sou161-scratch/sou199-policy-*.json
             ${{ runner.temp }}/sou161-scratch/binary.txt
             ${{ runner.temp }}/sou161-scratch/runtime/report.json
             ${{ runner.temp }}/sou161-scratch/archive-runtime/report.json

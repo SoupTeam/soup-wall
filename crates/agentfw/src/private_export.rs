@@ -28,7 +28,7 @@ fn openat(parent: &File, name: &CStr, flags: i32) -> anyhow::Result<File> {
     Ok(unsafe { File::from_raw_fd(fd) })
 }
 /// Reuse the publication primitive's descriptor walk; never resolve a link.
-fn open_dir(path: &Path) -> anyhow::Result<File> {
+pub(crate) fn open_dir(path: &Path) -> anyhow::Result<File> {
     ensure!(
         path.is_absolute() && path.as_os_str().len() <= 4096,
         "export_absolute_bounded_parent_required"
