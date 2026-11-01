@@ -33,6 +33,24 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, allow_nan=False).encode()).hexdigest()
 
 
+def validate_checks(checks):
+    if not isinstance(checks, list) or len(checks) > 256:
+        raise ValueError('invalid check list')
+    seen = set()
+    for check in checks:
+        if not isinstance(check, dict):
+            raise ValueError('invalid check record')
+        name = check.get('id')
+        if not isinstance(name, str) or not re.fullmatch('[a-z0-9_-]{1,80}', name) or name in seen:
+            raise ValueError('invalid or duplicate check identity')
+        seen.add(name)
+        for key in ('source', 'outcome', 'reason_code'):
+            if not isinstance(check.get(key), str) or len(check[key]) > 256:
+                raise ValueError('invalid check field')
+        if check.get('sha256') is not None and (not isinstance(check['sha256'], str) or not re.fullmatch('[0-9a-f]{64}', check['sha256'])):
+            raise ValueError('invalid check digest')
+
+
 def load(directory):
     directory = Path(os.path.abspath(directory))
     def read(name):
@@ -53,8 +71,7 @@ def load(directory):
     if type(report.get('observed_at_ms')) is not int or report['observed_at_ms'] < 0:
         raise ValueError('invalid observation time')
     checks = report.get('checks')
-    if not isinstance(checks, list) or len(checks) > 256:
-        raise ValueError('invalid check count')
+    validate_checks(checks)
     seen = set()
     fields = {'configuration.setup': report.get('setup'), 'runtime.protection': report.get('active_host_call_protection')}
     for check in checks:
@@ -69,8 +86,11 @@ def load(directory):
             fields['checks.' + name + '.' + key] = check.get(key)
     pilot = report.get('pilot')
     if pilot is not None:
-        if not isinstance(pilot, dict) or len(pilot.get('checks', [])) > 256:
+        if not isinstance(pilot, dict):
             raise ValueError('invalid pilot scope')
+        validate_checks(pilot.get('checks'))
+        if pilot.get('incident') is not None and not isinstance(pilot['incident'], dict):
+            raise ValueError('invalid incident scope')
         for key in ('schema', 'setup', 'asset_trust', 'active_host_call_protection', 'checks', 'incident'):
             fields['pilot.' + key] = pilot.get(key)
     return {'artifact_sha256': hashlib.sha256(raw).hexdigest(), 'observed_at_ms': report['observed_at_ms'], 'fields': fields}

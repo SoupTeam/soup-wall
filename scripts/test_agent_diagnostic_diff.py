@@ -14,6 +14,22 @@ spec.loader.exec_module(tool)
 
 
 class Controls(unittest.TestCase):
+    def test_malformed_pilot_checks_refused(self):
+        for checks in (1, None, 'invalid', {}, [1]):
+            with self.subTest(checks=checks), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp) / 'a'
+                self.bundle(root)
+                report = json.loads((root / 'report.json').read_text())
+                report['pilot'] = {'checks': checks}
+                raw = json.dumps(report).encode()
+                (root / 'report.json').write_bytes(raw)
+                manifest = json.loads((root / 'manifest.json').read_text())
+                manifest['files'][0].update(sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw))
+                (root / 'manifest.json').write_text(json.dumps(manifest))
+                with patch.object(tool.audit, '_open_input', lambda p: open(p, 'rb')):
+                    with self.assertRaises(ValueError):
+                        tool.load(root)
+
     def bundle(self, root, setup='unknown'):
         root.mkdir()
         report = {'schema': 'sw-agent-doctor/1', 'scope': tool.SCOPE, 'observed_at_ms': 1,
