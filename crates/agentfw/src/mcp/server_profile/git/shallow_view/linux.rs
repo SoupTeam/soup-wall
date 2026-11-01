@@ -762,11 +762,11 @@ impl View {
             for (name, bytes) in control_bytes {
                 digest.update(name.as_bytes());
                 digest.update([0]);
-                digest.update(hex::encode(Sha256::digest(bytes)).as_bytes());
+                digest.update(format!("{:x}", Sha256::digest(bytes)).as_bytes());
                 digest.update(b"\n");
             }
             ensure!(
-                hex::encode(digest.finalize()) == binding.inputs_sha256,
+                format!("{:x}", digest.finalize()) == binding.inputs_sha256,
                 "linked_worktree_selected_inputs_changed"
             );
             binding.revalidate_roots()?;

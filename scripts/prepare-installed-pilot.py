@@ -376,6 +376,7 @@ def verify_generation(generation, expected_commit, *, probe_native=True):
         binding = linked.verify(selection.get("linked_worktree"), roots["git"])
         installed = PILOT.strict_json(bounded_file(generation / "git-profile/profile.json", MAX_JSON).read_bytes())
         require(installed.get("linkedWorktree") == binding, "linked_worktree_profile_binding_changed")
+        outside_workspaces(paths.values(), {'git_metadata': Path(binding['commonDir']['path'])})
     else:
         require("linked_worktree" not in selection, "linked_worktree_cross_profile_binding")
     versioned = selection["format"] == GIT_PROFILES.SELECTION_V3
@@ -516,6 +517,10 @@ def prepare(args):
                     and not root.is_relative_to(args.output.resolve()), "preparation_overlaps_workspace")
     if linked_binding is not None:
         metadata_root = Path(linked_binding['commonDir']['path'])
+        for name in ('npm_cache', 'wheelhouse', 'node_archive', 'python_archive'):
+            selected_input = getattr(args, name, None)
+            require(selected_input is None or not selected_input.resolve().is_relative_to(metadata_root),
+                    'linked_worktree_inputs_overlap_metadata')
         require(not args.output.resolve().is_relative_to(metadata_root)
                 and not metadata_root.is_relative_to(args.output.resolve()), "linked_worktree_preparation_overlaps_metadata")
     output = private_dir(args.output, create=not args.output.exists())
@@ -580,6 +585,8 @@ def prepare_locked(args, output, requested, linked_binding=None):
         roots = workspace_paths({"prepared_workspaces": requested}, generation)
         outside_workspaces([*paths.values(), *[getattr(args, name) for name in
             ("node_archive", "python_archive", "npm_cache", "wheelhouse") if getattr(args, name)]], roots)
+        if linked_binding is not None:
+            outside_workspaces(paths.values(), {'git_metadata': Path(linked_binding['commonDir']['path'])})
         validate_existing_workspaces(paths, roots, git_profile, linked_binding)
         fs_workspace, git_workspace = roots["filesystem"], roots["git"]
     else:

@@ -446,7 +446,7 @@ mod tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod schema_tests {
     use super::*;
     use serde_json::json;

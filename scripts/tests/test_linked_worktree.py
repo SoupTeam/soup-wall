@@ -3,6 +3,7 @@
 import copy
 import contextlib
 import io
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pilot_linked_worktree as linked
@@ -120,6 +123,42 @@ class Selection(unittest.TestCase):
         path.write_text(json.dumps(binding))
         path.chmod(0o600)
         self.assertEqual(linked.load(path, self.one), binding)
+
+    def module(self, filename):
+        spec = importlib.util.spec_from_file_location('linked_test_' + filename, Path(__file__).resolve().parents[1] / filename)
+        value = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(value)
+        return value
+
+    def test_preparation_refuses_cache_inside_shared_metadata_before_creating_output(self):
+        prep = self.module('prepare-installed-pilot.py')
+        binding = self.binding()
+        manifest = self.root / 'binding.json'
+        manifest.write_text(json.dumps(binding)); manifest.chmod(0o600)
+        output = self.root / 'uncreated-preparation'
+        args = SimpleNamespace(git_profile=linked.ID, wsl_root=None, expected_commit='a'*40,
+            filesystem_workspace=self.one, git_workspace=self.one, git_worktree_binding=manifest,
+            node_archive=None, python_archive=None, wheelhouse=None, npm_cache=self.common/'never-cache', output=output)
+        with patch.object(prep, 'supported_platform'), patch.object(prep.PILOT, 'source', return_value={'commit':'a'*40,'dirty':False}):
+            with self.assertRaisesRegex(ValueError, 'inputs_overlap_metadata'):
+                prep.prepare(args)
+        self.assertFalse(output.exists())
+        self.assertFalse((self.common/'never-cache').exists())
+
+    def test_launch_refuses_run_state_inside_common_metadata_before_spawning(self):
+        runner = self.module('pilot-run.py')
+        binding = self.binding()
+        selected = {'format':profiles.SELECTION_V3,'git_selection':profiles.binding(linked.ID),
+                    'linked_worktree':binding,'prepared_workspaces':{'roots':{}}}
+        args = SimpleNamespace(port=0, selection=self.root/'selection.json', state_root=self.common)
+        with patch.object(runner.PREP, 'supported_platform'), patch.object(runner.PROVIDER, 'selected', return_value={}), \
+                patch.object(runner.PROVIDER, 'require_access'), patch.object(runner, 'selected', return_value=(selected,{},{})), \
+                patch.object(runner.PREP, 'workspace_paths', return_value={'filesystem':self.one,'git':self.one}), \
+                patch.object(runner.subprocess, 'Popen') as spawn:
+            with self.assertRaisesRegex(runner.Failure, 'state_inside_git_metadata'):
+                runner.run(args, {})
+            spawn.assert_not_called()
+        self.assertFalse(any(self.common.glob('soup-wall-run-*')))
 
     def test_binding_creation_is_new_private_and_refuses_redirected_parent(self):
         output = self.root / 'selected.json'
