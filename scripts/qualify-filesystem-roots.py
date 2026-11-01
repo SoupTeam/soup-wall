@@ -127,7 +127,23 @@ def qualify(args, door, home, env, report, installed):
         ('mcp__filesystem__read_text_file',{'path':'/workspace/alpha/../beta/README.md'}),
         ('mcp__filesystem__read_text_file',{'path':'/workspace/beta/README.md'}),
     ]
-    row,results,outcome=q.run_case(selected,target,report,'multi-roots',proposals)
+    trace=args.output/'filesystem-roots-runtime.trace.private'
+    row,results,outcome=q.run_case(selected,target,report,'multi-roots',proposals,
+                                  provider_trace=trace,diagnostic_writes=True)
+    # This trace stays private. Only bounded stderr error chunks over these
+    # synthetic inputs enter the public report; credential-bearing exec/HTTP
+    # writes are never copied. Opaque tokens and owned host paths are redacted.
+    chunks=[]
+    with trace.open(errors='replace') as stream:
+        for line in stream:
+            if not re.search(r'\bwrite(?:v)?\(2,',line): continue
+            if not any(word in line for word in ('Error','error','failure','panicked','selected','filesystem_roots_')): continue
+            for path in (str(selected.prefix),str(args.output),str(args.agentfw)):
+                line=line.replace(path,'<owned-input>')
+            line=re.sub(r'[A-Za-z0-9_+/-]{32,}', '<opaque>',line)
+            chunks.append(line[:512])
+            if sum(map(len,chunks))>=4096: break
+    evidence['collector_error_chunks']=chunks[:16]
     evidence['last_run']={key:row.get(key) for key in ('exit','status','reason','live_status','process_cleanup')}
     evidence['last_run']['stage']=outcome.get('stage')
     labels = ('Soup Wall withheld MCP result', 'Soup Wall withheld MCP invocation',
@@ -140,6 +156,13 @@ def qualify(args, door, home, env, report, installed):
         evidence['result_boundaries'][identifier] = {
             'is_error':result['is_error'], 'fixed_messages':[label for label in labels if label in text],
             'reason_codes':codes[:16], 'content_sha256':hashlib.sha256(text.encode()).hexdigest()}
+    evidence['owned_first_errors'] = {}
+    for identifier in ('toolu_front_multi-roots_0','toolu_front_multi-roots_1'):
+        if identifier in results and results[identifier]['is_error']:
+            text=json.dumps(results[identifier]['content'],ensure_ascii=True)[:1024]
+            for path in (str(selected.prefix),str(args.output)):
+                text=text.replace(path,'<owned-input>')
+            evidence['owned_first_errors'][identifier]=re.sub(r'[A-Za-z0-9_+/-]{32,}','<opaque>',text)
     evidence['post_run_sources_unchanged'] = baseline == [q.snapshot(path) for path in (*roots,third,args.project,args.repository)]
     evidence['processes_stopped'] = row['process_cleanup']['all_stopped']
     require(row['exit']==0 and row['live_status'].get('protection')=='observed-live', 'filesystem_roots_live_host_unverified')

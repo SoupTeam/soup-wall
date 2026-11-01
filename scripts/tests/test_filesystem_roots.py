@@ -158,11 +158,9 @@ class Roots(unittest.TestCase):
         self.assertEqual(installer.FORMAT,'sw-mcp/filesystem-readonly/1')
 
     def test_topology_is_bounded(self):
-        old=M.MAX_DIRECTORIES
-        try:
-            M.MAX_DIRECTORIES=1
-            with self.assertRaisesRegex(ValueError,'tree_bound'): M.inventory(self.pairs)
-        finally: M.MAX_DIRECTORIES=old
+        for bound in ('MAX_DIRECTORIES','MAX_ENTRIES'):
+            with patch.object(M,bound,1):
+                with self.assertRaisesRegex(ValueError,'tree_bound'): M.inventory(self.pairs)
 
 
 if __name__=='__main__': unittest.main()

@@ -53,21 +53,23 @@ def topology(fd, counts, depth=0):
     counts[1] += 1
     require(counts[1] <= MAX_DIRECTORIES, 'tree_bound')
     before = os.fstat(fd)
-    for name in os.listdir(fd):
-        counts[0] += 1
-        require(counts[0] <= MAX_ENTRIES, 'tree_bound')
-        value = os.stat(name, dir_fd=fd, follow_symlinks=False)
-        require(value.st_uid == os.getuid() and not value.st_mode & 0o022
-                and (stat.S_ISDIR(value.st_mode) or stat.S_ISREG(value.st_mode) and value.st_nlink == 1),
-                'unsafe_entry')
-        if stat.S_ISDIR(value.st_mode):
-            child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
-            try:
-                opened = os.fstat(child)
-                require((opened.st_dev, opened.st_ino) == (value.st_dev, value.st_ino), 'tree_changed')
-                topology(child, counts, depth + 1)
-            finally:
-                os.close(child)
+    with os.scandir(fd) as entries:
+        for entry in entries:
+            name = entry.name
+            counts[0] += 1
+            require(counts[0] <= MAX_ENTRIES, 'tree_bound')
+            value = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            require(value.st_uid == os.getuid() and not value.st_mode & 0o022
+                    and (stat.S_ISDIR(value.st_mode) or stat.S_ISREG(value.st_mode) and value.st_nlink == 1),
+                    'unsafe_entry')
+            if stat.S_ISDIR(value.st_mode):
+                child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
+                try:
+                    opened = os.fstat(child)
+                    require((opened.st_dev, opened.st_ino) == (value.st_dev, value.st_ino), 'tree_changed')
+                    topology(child, counts, depth + 1)
+                finally:
+                    os.close(child)
     after = os.fstat(fd)
     require((before.st_dev, before.st_ino, before.st_mtime_ns, before.st_ctime_ns) ==
             (after.st_dev, after.st_ino, after.st_mtime_ns, after.st_ctime_ns), 'tree_changed')
