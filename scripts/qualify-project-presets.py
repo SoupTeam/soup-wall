@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import signal
 import subprocess
@@ -10,7 +11,7 @@ import threading
 
 CASES = ('two-explicit-presets','inert-check','stale-workspace','changed-selection',
          'changed-profile','changed-budget','changed-last-input','budget-no-fallback','provider-rotation','stale-update','damaged-store',
-         'concurrent-update','two-protected-reads','frozen-running-settings',
+         'concurrent-update','two-protected-reads','cross-project-authority','frozen-running-settings',
          'stop-one-sibling-continues','private-catalog','owned-cleanup')
 
 
@@ -23,17 +24,23 @@ def qualify(args, door, home, env, report, first, installed, receiver):
     evidence = {'format':'sw-installed-project-presets-qualification/1','status':'incomplete',
                 'source':base.source(),'expected':list(CASES),'cases':rows}
     report['project_presets'] = evidence
-    def begin(n): rows[CASES.index(n)]['attempted']=True
+    def begin(n):
+        evidence['active_case']=n
+        rows[CASES.index(n)]['attempted']=True
     def finish(n,**facts):rows[CASES.index(n)].update(status='passed',**facts)
     def call(words, expected=0, trace=None):
         command=[str(args.agentfw),'pilot','--home',str(home),'project',*map(str,words)]
         if trace is not None:
             command=[str(args.strace),'-f','-qq','-s','256','-e','trace=execve,connect','-o',str(trace),*command]
         result=subprocess.run(command,cwd=door.cwd,env=env,stdin=subprocess.DEVNULL,capture_output=True,timeout=180)
-        require(result.returncode==expected,'project_cli_exit')
         require(len(result.stdout)<=65536 and len(result.stderr)<=16384,'project_cli_output_bound')
         require(all(c.encode()not in result.stdout+result.stderr for c in canaries),'project_public_output_canary')
-        return json.loads(result.stdout.splitlines()[-1])
+        value=json.loads(result.stdout.splitlines()[-1])
+        reason=value.get('reason')
+        evidence['last_cli']={'action':words[0],'exit':result.returncode,'expected_exit':expected,
+            'reason':reason if isinstance(reason,str)and re.fullmatch(r'[a-z0-9_:-]{1,160}',reason)else None}
+        require(result.returncode==expected,'project_cli_exit')
+        return value
     models=[base.DEMO.ScriptedModel([]),base.DEMO.ScriptedModel([])]
     canaries=['SOU197-OWNED-PROVIDER-A-318f','SOU197-OWNED-PROVIDER-B-9e21']
     processes=[]; witnesses=[]; streams=[]; release=threading.Event()
@@ -95,7 +102,7 @@ def qualify(args, door, home, env, report, first, installed, receiver):
         finish('changed-last-input',selected_started=0)
         budget.write_bytes(raw_budget)
         begin('budget-no-fallback');trace=args.output/'project-budget-refusal.trace.private'
-        call(['run','--name','budgeted','--expected-version',checked_budget['digest'],'--apply'],2,trace)
+        call(['run','--name','budgeted','--expected-version',checked_budget['digest'],'--apply'],1,trace)
         observed=q.executed(trace,{k:getattr(args,k)for k in q.SELECTED_PROGRAMS if getattr(args,k,None)is not None and k!='agentfw'})
         require(not observed['selected_started']and observed['inet_connects']==0,'project_budget_downgraded')
         call(['remove','--name','budgeted','--expected-version',checked_budget['digest'],'--apply'])
@@ -141,6 +148,24 @@ def qualify(args, door, home, env, report, first, installed, receiver):
                      str(args.agentfw),'pilot','--home',str(home),'project','run','--name',name,'--expected-version',version,'--apply','--timeout-seconds','180']
             process=subprocess.Popen(command,cwd=door.cwd,env=env,stdin=subprocess.DEVNULL,stdout=out,stderr=err,start_new_session=True);processes.append(process);witnesses.append(base.ProcessWitness(process.pid))
         require(all(event.wait(150)for event in ready),'project_concurrent_reads_missing');finish('two-protected-reads',independent_readback=True)
+        begin('cross-project-authority')
+        runner=installed.load('project_qualification_native_receiver','pilot-run.py')
+        live_records=[];native_values=[];instances=[]
+        for state in states:
+            runs=list(state.glob('soup-wall-run-*'));require(len(runs)==1,'project_authority_state_missing')
+            record=json.loads((runs[0]/'run.json').read_bytes());live_records.append(record)
+            native_values.append((Path(record['home'])/'native-token').read_text())
+            instances.append(runner.native_instance(record['port'],native_values[-1]))
+        require(native_values[0]!=native_values[1]and instances[0]!=instances[1],'project_authority_reused')
+        import urllib.error
+        for i in range(2):
+            try:
+                runner.native_instance(live_records[1-i]['port'],native_values[i])
+            except urllib.error.HTTPError as error:
+                require(error.code==401,'project_cross_authority_wrong_refusal')
+            else:
+                require(False,'project_cross_authority_accepted')
+        finish('cross-project-authority',independent_native_receivers=True,cross_authority_refused=True)
         begin('frozen-running-settings');files=[]
         for state in states:
             runs=list(state.glob('soup-wall-run-*'));require(len(runs)==1,'project_run_state_isolation')

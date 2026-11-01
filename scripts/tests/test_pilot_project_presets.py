@@ -15,6 +15,7 @@ def load(name, filename):
 P = load('preset_tests', 'pilot_project_presets.py')
 PROFILES = load('preset_profiles_tests', 'pilot_provider_profiles.py')
 
+@unittest.skipUnless(os.name == "posix", "POSIX descriptor-store logic; installed command is Linux-only")
 class StoreBoundaries(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)

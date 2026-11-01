@@ -1097,7 +1097,11 @@ def main():
     finally:
         if args.output.exists():
             BASE.write(args.output / "report.json", report)
-    print(json.dumps({"status": report["status"], "cases": len(report["cases"]), "error": report.get("error")}))
+    summary = {"status": report["status"], "cases": len(report["cases"]), "error": report.get("error")}
+    if args.project_presets_only:
+        project = report.get("project_presets", {})
+        summary["project_presets"] = {key: project.get(key) for key in ("status", "active_case", "last_cli")}
+    print(json.dumps(summary))
     return 0 if report["status"] == "passed" else 1
 
 
