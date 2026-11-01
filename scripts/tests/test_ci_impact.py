@@ -93,7 +93,8 @@ class ImpactTests(unittest.TestCase):
             auxiliary = {"draft-checks", "main-smoke", "components"} if filename == "ci.yml" else set()
             if filename == "mcp-real-filesystem.yml":
                 auxiliary.update({"manual-long-session", "manual-native-result-profile",
-                                  "sou193-provider-preflight", "manual-sou194-cache-exchange"})
+                                  "sou193-provider-preflight", "sou205-proxy-preflight",
+                                  "manual-sou194-cache-exchange"})
             if filename == "mcp-real-git.yml":
                 auxiliary.update({"manual-installed-git-profiles", "sou182-raw-boundary"})
             if filename == "mcp-create-file.yml":
@@ -137,6 +138,17 @@ class ImpactTests(unittest.TestCase):
         self.assertIn("provider_preflight_only != 'true'", impact)
         self.assertNotIn("sou193-provider-preflight", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
         self.assertNotIn("sou193-provider-preflight", (ROOT / ".github/workflows/ci-components.yml").read_text())
+
+    def test_sou205_proxy_preflight_is_manual_and_cannot_replace_required_native_job(self):
+        text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
+        body = text.split("  sou205-proxy-preflight:\n", 1)[1].split("  required-linux-sandbox-and-real-host:\n", 1)[0]
+        self.assertIn("github.event_name == 'workflow_dispatch'", body)
+        self.assertIn("proxy_preflight_only == 'true'", body)
+        self.assertNotIn("needs: impact", body)
+        impact = text.split("  impact:\n", 1)[1].split("  sou193-provider-preflight:\n", 1)[0]
+        self.assertIn("proxy_preflight_only != 'true'", impact)
+        self.assertNotIn("sou205-proxy-preflight", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
+        self.assertNotIn("sou205-proxy-preflight", (ROOT / ".github/workflows/ci-components.yml").read_text())
 
     def test_provider_ca_qualification_requires_explicit_native_dispatch(self):
         source = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()

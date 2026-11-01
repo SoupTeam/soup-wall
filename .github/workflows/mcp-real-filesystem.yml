@@ -7,6 +7,10 @@ on:
         description: Focus installed SOU-193 provider configuration and DNS/TCP/TLS checks
         type: boolean
         default: false
+      proxy_preflight_only:
+        description: Focus installed SOU-205 selected HTTP CONNECT transport observation
+        type: boolean
+        default: false
       coordinated_update_only:
         description: Run focused installed update and rollback on native Ubuntu
         type: boolean
@@ -106,7 +110,7 @@ concurrency:
 
 jobs:
   impact:
-    if: github.event.inputs.provider_preflight_only != 'true' && github.event.inputs.native_result_profile_only != 'true' && github.event.inputs.cache_exchange_only != 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.stability_mode == '' || github.event.inputs.stability_mode == 'off')
+    if: github.event.inputs.provider_preflight_only != 'true' && github.event.inputs.proxy_preflight_only != 'true' && github.event.inputs.native_result_profile_only != 'true' && github.event.inputs.cache_exchange_only != 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.stability_mode == '' || github.event.inputs.stability_mode == 'off')
     uses: ./.github/workflows/ci-impact-plan.yml
     with:
       workflow: mcp-real-filesystem.yml
@@ -148,6 +152,45 @@ jobs:
         with:
           name: sou193-provider-preflight-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/sou193-preflight/report.json
+          if-no-files-found: warn
+  sou205-proxy-preflight:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.proxy_preflight_only == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@1.94.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Build exact-source Agent and installed component
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git status --porcelain --untracked-files=all)" = ''
+          cargo build --locked -p agentfw --bin agentfw
+          install -m 0700 target/debug/agentfw "$RUNNER_TEMP/sou205-agentfw"
+          cmp target/debug/agentfw "$RUNNER_TEMP/sou205-agentfw"
+          python3 -B scripts/build-pilot-front-door.py --out "$RUNNER_TEMP/sou205-component.tar"
+      - name: Qualify selected proxy route outside the checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          python3.12 -B "$GITHUB_WORKSPACE/scripts/qualify-proxy-preflight.py" \
+            --agentfw "$RUNNER_TEMP/sou205-agentfw" \
+            --component "$RUNNER_TEMP/sou205-component.tar" --python /usr/bin/python3.12 \
+            --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou205-preflight"
+      - name: Retain bounded same-source result including failed cases
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou205-proxy-preflight-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sou205-preflight/report.json
           if-no-files-found: warn
   required-linux-sandbox-and-real-host:
     needs: impact
