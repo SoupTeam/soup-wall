@@ -594,7 +594,14 @@ pub fn resolve_server_runtime(
                 let entry = profile
                     .package_root
                     .join(crate::mcp::server_profile::SERVER_ENTRYPOINT);
-                let args = vec![entry.display().to_string(), "/workspace".to_string()];
+                let mut args = vec![entry.display().to_string()];
+                args.extend(
+                    profile
+                        .filesystem_roots
+                        .as_ref()
+                        .map(|b| b.arguments())
+                        .unwrap_or_else(|| vec!["/workspace".to_string()]),
+                );
                 (profile.runtime_path.display().to_string(), args)
             }
             GIT_SERVER_ID => {
@@ -635,7 +642,14 @@ pub fn resolve_server_runtime(
                     let entry = profile
                         .package_root
                         .join(crate::mcp::server_profile::SERVER_ENTRYPOINT);
-                    let args = vec![entry.display().to_string(), "/workspace".to_string()];
+                    let mut args = vec![entry.display().to_string()];
+                    args.extend(
+                        profile
+                            .filesystem_roots
+                            .as_ref()
+                            .map(|b| b.arguments())
+                            .unwrap_or_else(|| vec!["/workspace".to_string()]),
+                    );
                     (profile.runtime_path.display().to_string(), args)
                 }
                 GIT_SERVER_ID => {

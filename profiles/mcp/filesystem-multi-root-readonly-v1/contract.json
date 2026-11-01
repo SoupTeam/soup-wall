@@ -1,0 +1,11 @@
+{
+  "format": "sw-mcp/filesystem-multi-root-readonly/1",
+  "registryId": "filesystem-multi-root-readonly-v1",
+  "rootBinding": "sw-pilot-filesystem-roots/1",
+  "namespace": "/workspace/<explicit-root-id>",
+  "scope": "read-only",
+  "roots": {"minimum": 2, "maximum": 4},
+  "limits": {"entries": 32768, "directories": 128, "depth": 32, "pathsPerCall": 64},
+  "originalContract": "profiles/mcp/filesystem-readonly-v1/upstream-identity.json",
+  "unsupported": ["symlinks", "hardlinked files", "nested mounts", "overlapping roots", "shared-writable entries", "mutable topology", "non-Linux execution"]
+}

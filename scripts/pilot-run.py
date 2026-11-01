@@ -121,7 +121,7 @@ PUBLIC_FAILURE_CODES = frozenset({
     'selection_changed_before_host',
     'selection_changed_before_launch',
     'state_inside_checkout',
-    'state_inside_workspace',
+    'state_inside_workspace', 'state_inside_filesystem_root',
     'unsafe_state_parent',
     'canonical_existing_workspace_required',
     'existing_workspace_missing_or_moved',
@@ -333,6 +333,11 @@ def run(args, report):
     require(args.state_root is None or (args.state_root.is_absolute()
             and args.state_root.resolve(strict=True) == args.state_root), "canonical_state_root_required")
     state_root = args.state_root or Path(tempfile.gettempdir()).resolve()
+    if selection.get('filesystem_roots') is not None:
+        try:
+            PREP.FS_ROOTS.outside([state_root], selection['filesystem_roots'])
+        except ValueError:
+            raise Failure('state_inside_filesystem_root') from None
     info = state_root.stat()
     require(stat.S_ISDIR(info.st_mode) and info.st_uid in (0, os.getuid())
             and (not info.st_mode & 0o022 or info.st_mode & stat.S_ISVTX), "unsafe_state_parent")

@@ -816,7 +816,7 @@ fn validate_registry(
     // them to this relay's callable profiles or advertised discovery result.
     // Arbitrary unadvertised registry entries remain a startup refusal.
     let peer_format = match format {
-        server_profile::FORMAT => collector
+        server_profile::FORMAT | server_profile::filesystem_roots::FORMAT => collector
             .config
             .native
             .registry
@@ -830,7 +830,20 @@ fn validate_registry(
         | server_profile::git::FILE_READS_FORMAT
         | server_profile::git::SHALLOW_FORMAT
         | server_profile::git_local_clone::FORMAT
-        | server_profile::git_tracked_symlinks::FORMAT => server_profile::FORMAT,
+        | server_profile::git_tracked_symlinks::FORMAT => collector
+            .config
+            .native
+            .registry
+            .tools
+            .iter()
+            .filter_map(|tool| tool.mcp_result_profile.as_deref())
+            .find(|format| {
+                matches!(
+                    *format,
+                    server_profile::FORMAT | server_profile::filesystem_roots::FORMAT
+                )
+            })
+            .unwrap_or(server_profile::FORMAT),
         server_profile::filesystem_create::FORMAT => server_profile::git::FORMAT,
         _ => bail!("unsupported selected registry profile"),
     };
@@ -928,6 +941,7 @@ async fn relay<R, W, S, T>(
     child: &mut T,
     profile: &server_profile::ProfileConfig,
     git_view: Option<&server_profile::git::SelectedView>,
+    filesystem_roots: Option<&server_profile::filesystem_roots::Guard>,
 ) -> anyhow::Result<()>
 where
     R: AsyncBufRead + Unpin,
@@ -1275,6 +1289,10 @@ where
                                 continue;
                             }
                         };
+                        if filesystem_roots.is_some_and(|roots| roots.validate_call(name, &args).is_err()) {
+                            write(host, &error(request_id, -32602, "Filesystem resource root unavailable, unsupported, or changed")).await?;
+                            continue;
+                        }
                         if git_view.is_some_and(|view| view.validate_call(name, &args).is_err()) {
                             write(host, &error(request_id, -32602,
                                 "Git local reference or file revision unavailable, unsupported, or its source changed")).await?;
@@ -1378,6 +1396,10 @@ where
                                     grants.insert(id(&grant.call_id)?),
                                     "native receipt call ID was reused"
                                 );
+                                if !call.cancelled && filesystem_roots.is_some_and(|roots| roots.validate_call(&call.tool, &call.args).is_err()) {
+                                    write(host, &error(&call.id, -32602, "Filesystem resource root changed before execution")).await?;
+                                    call.cancelled = true;
+                                }
                                 if !call.cancelled && git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err()) {
                                     write(host, &error(&call.id, -32602, "Git local-reference view changed or target unsupported")).await?;
                                     call.cancelled = true;
@@ -1637,17 +1659,19 @@ where
                         // the original collector-held view into an uncorrelated
                         // transport failure. Keep the same sticky refusal even
                         // when that worker also refused its source snapshot.
-                        let source_withdrawn = git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err());
+                        let source_withdrawn = git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err())
+                            || filesystem_roots.is_some_and(|roots| roots.validate_call(&call.tool, &call.args).is_err());
                         if source_withdrawn && !call.cancelled {
-                            write(host, &error(&call.id, -32602, "Git local-reference view changed during execution")).await?;
+                            write(host, &error(&call.id, -32602, if filesystem_roots.is_some() { "Filesystem resource root changed during execution" } else { "Git local-reference view changed during execution" })).await?;
                         }
                         // Preserve fatal retirement on transport/auth/audit or
                         // cleanup uncertainty, even after the correlated refusal.
                         let result = result?;
                         if !call.cancelled && !source_withdrawn {
                             if let Some(release) = result {
-                                if git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err()) {
-                                    write(host, &error(&call.id, -32602, "Git local-reference view changed during execution")).await?;
+                                if git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err())
+                                    || filesystem_roots.is_some_and(|roots| roots.validate_call(&call.tool, &call.args).is_err()) {
+                                    write(host, &error(&call.id, -32602, if filesystem_roots.is_some() { "Filesystem resource root changed during execution" } else { "Git local-reference view changed during execution" })).await?;
                                 } else {
                                     let delivery_started = Instant::now();
                                     let delivered = write(host, &release.raw).await;
@@ -2292,6 +2316,7 @@ where
         bail!(reason);
     }
     let git_view = prepared.git_view();
+    let filesystem_roots = prepared.filesystem_roots();
     if let Some(context) = &collector.execution {
         context.preparing();
     }
@@ -2395,6 +2420,7 @@ where
                     &mut child,
                     profile,
                     git_view.as_deref(),
+                    filesystem_roots.as_deref(),
                 );
                 tokio::pin!(exchange);
                 tokio::select! {

@@ -37,7 +37,9 @@ pub(crate) const SANDBOX_WORKSPACE: &str = "/workspace";
 pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap/1";
 
 pub(crate) fn profile_name(format: &str) -> &'static str {
-    if format == super::server_profile::git::FILE_READS_FORMAT {
+    if format == super::server_profile::filesystem_roots::FORMAT {
+        "sw-mcp/filesystem-multi-root-readonly/linux-bwrap/1"
+    } else if format == super::server_profile::git::FILE_READS_FORMAT {
         "sw-mcp/git-readonly-file-revisions/linux-bwrap-landlock/1"
     } else if format == super::server_profile::git_tracked_symlinks::FORMAT {
         "sw-mcp/git-tracked-symlinks-readonly/linux-bwrap-landlock/1"
@@ -64,6 +66,7 @@ pub(crate) struct PreparedServerSandbox {
     _pins: Vec<File>,
     workspace: PathBuf,
     git_view: Option<Arc<super::server_profile::git::SelectedView>>,
+    filesystem_roots: Option<Arc<super::server_profile::filesystem_roots::Guard>>,
     #[cfg(target_os = "linux")]
     verified_git_snapshot: Option<Arc<super::server_profile::git::object_witness::Snapshot>>,
     #[cfg(target_os = "linux")]
@@ -77,6 +80,12 @@ pub(crate) struct PreparedServerSandbox {
 }
 
 impl PreparedServerSandbox {
+    pub(crate) fn filesystem_roots(
+        &self,
+    ) -> Option<Arc<super::server_profile::filesystem_roots::Guard>> {
+        self.filesystem_roots.clone()
+    }
+
     pub(crate) fn git_view(&self) -> Option<Arc<super::server_profile::git::SelectedView>> {
         self.git_view.clone()
     }
@@ -789,17 +798,13 @@ fn prepare_linux(
             None,
         );
     }
-    prepare_linux_command(
-        profile,
-        &[
-            format!("/mcp-server/{SERVER_ENTRYPOINT}"),
-            SANDBOX_WORKSPACE.to_owned(),
-        ],
-        selected,
-        false,
-        inherit_environment,
-        None,
-    )
+    let mut args = vec![format!("/mcp-server/{SERVER_ENTRYPOINT}")];
+    if let Some(binding) = &profile.filesystem_roots {
+        args.extend(binding.arguments());
+    } else {
+        args.push(SANDBOX_WORKSPACE.to_owned());
+    }
+    prepare_linux_command(profile, &args, selected, false, inherit_environment, None)
 }
 
 #[cfg(target_os = "linux")]
@@ -881,6 +886,12 @@ fn prepare_linux_command_inner(
     } else {
         super::server_profile::git::SelectedView::capture(&profile.format, &workspace_pin)?
     };
+    let filesystem_roots = profile
+        .filesystem_roots
+        .as_ref()
+        .map(super::server_profile::filesystem_roots::Guard::capture)
+        .transpose()?
+        .map(Arc::new);
     // The trusted namespace PID 1 is this exact running Agent image, never a
     // separately resolved pathname or an executable from the server package.
     #[cfg(not(test))]
@@ -1041,6 +1052,9 @@ fn prepare_linux_command_inner(
     } else if let Some(view) = &git_view {
         view.mount(&mut command, &mut pins)?;
     }
+    if let Some(roots) = &filesystem_roots {
+        roots.mount(&mut command, &mut pins)?;
+    }
     let seccomp = if writable_owned_stage {
         network_filter_mode(git_profile, true)?
     } else {
@@ -1165,6 +1179,7 @@ fn prepare_linux_command_inner(
         _pins: pins,
         workspace,
         git_view,
+        filesystem_roots,
         verified_git_snapshot,
         budget,
         bwrap_fd,

@@ -842,6 +842,13 @@ def qualify(args, report):
         selection = Path(first["selection"])
         report["selection_sha256"] = BASE.sha(selection)
 
+        if args.filesystem_roots_only:
+            load("installed_filesystem_roots", "qualify-filesystem-roots.py").qualify(args, door, agent_home, env, report,
+                installed=__import__('types').SimpleNamespace(QUAL=QUAL, BASE=BASE, require=require, load=load))
+            report['source_after'] = BASE.source()
+            require(report['source_after'] == before, 'source_changed')
+            return
+
         # 4. An existing selection prepared by the accepted checkout front door
         #    at the same commit is consumed unchanged by the installed command.
         checkout = QUAL.FrontDoor(args, build_env, home)
@@ -1045,6 +1052,7 @@ def main():
                         help="absolute CPython recorded for the installed helpers")
     parser.add_argument("--strace", type=Path, default=Path("/usr/bin/strace"))
     parser.add_argument("--allow-download", action="store_true")
+    parser.add_argument("--filesystem-roots-only", action="store_true", help="focused SOU-202 installed linked-worktree qualification")
     parser.add_argument("--provider-profiles", action="store_true",
                         help="opt in to SOU-172 private named provider original-host controls")
     parser.add_argument("--provider-ca-only", action="store_true",
@@ -1086,7 +1094,11 @@ def main():
     finally:
         if args.output.exists():
             BASE.write(args.output / "report.json", report)
-    print(json.dumps({"status": report["status"], "cases": len(report["cases"]), "error": report.get("error")}))
+    summary = {"status": report["status"], "cases": len(report["cases"]), "error": report.get("error")}
+    if args.filesystem_roots_only:
+        roots = report.get('filesystem_roots', {})
+        summary['filesystem_roots'] = {k: roots.get(k) for k in ('status', 'active_case', 'last_cli', 'last_run')}
+    print(json.dumps(summary))
     return 0 if report["status"] == "passed" else 1
 
 
