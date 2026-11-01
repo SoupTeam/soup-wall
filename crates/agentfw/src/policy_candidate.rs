@@ -92,7 +92,7 @@ fn sha(bytes: &[u8]) -> String {
 }
 fn strict<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
     let Strict(value) = serde_json::from_slice(bytes).context("candidate_strict_json")?;
-    Ok(serde_json::from_value(value).context("candidate_unsupported_fields_or_values")?)
+    serde_json::from_value(value).context("candidate_unsupported_fields_or_values")
 }
 fn rank(v: Verdict, fallback: Option<Verdict>) -> u8 {
     match soup_wall_agent::resolution::resolve(v, fallback, false) {

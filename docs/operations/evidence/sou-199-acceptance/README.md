@@ -63,3 +63,20 @@ log `e06e7274480eb661ff6384222f7fce035c0997d1ffc01a5d64ca0c071f778bfa`).
 Both corrected grader controls also passed (same snapshot, log
 `ce758dce47ade14cc82e1735d9951d79df677d90691641c6269dd0b3aa8a42af`).
 These macOS setup checks do not substitute for native Linux qualification.
+
+## Observed installed feature qualification (third attempt)
+
+Run `41311134127`, source `793e153c8ec88a43f3db8af895309dffde1ff465`,
+passed all eight protocol tests, both grader tests and all 22 actual installed
+Linux CLI cases. Measured commands made zero network syscalls and zero child
+execs; active policy, project and sibling witnesses stayed unchanged. The job
+subsequently failed Linux Clippy on one redundant `Ok(...?)` wrapper. That wrapper
+is removed without changing the result/error behavior.
+
+Artifact `13085283547`, seven unique safe members with verified CRCs, ZIP SHA-256
+`233564a84304e22d1a8a11d8385df2f023b1cd3329eedffefd27f03268004fab`.
+The native report is feature evidence; the failed overall job is not a clean
+qualification. Local formatting, two grader and 21 build-custody controls passed
+after the lint correction: snapshot
+`14b91fe690592ad56ebb798a07d3e8ec2bc020c3117e07b329a484c51083d825`, log
+`6662411cb3f8d4f0d3e1a7d63bb51043c5d01e2075a6667b1f8756e1c3fc9df5`.
