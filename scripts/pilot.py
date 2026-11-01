@@ -19,6 +19,7 @@ or Claude configuration, or contact a provider.
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import importlib.util
 import json
@@ -30,6 +31,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import traceback
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -1053,9 +1055,19 @@ def main(argv=None):
                 args, verified_state(args.prefix), PREP, load("maintenance_runner", "pilot-run.py"))
             print(json.dumps(report, sort_keys=True))
             return 0
-        except Exception:
+        except Exception as error:
+            # Finite stable codes are actionable; any other error reports only its class.
+            code = str(error)
+            if re.fullmatch(r"[a-z0-9_]{1,80}", code):
+                detail = code
+            else:
+                frame = traceback.extract_tb(error.__traceback__)[-1] if error.__traceback__ else None
+                detail = type(error).__name__ + (":" + errno.errorcode.get(error.errno, "") if isinstance(error, OSError) and error.errno else "")
+                if frame is not None:
+                    detail += "@" + Path(frame.filename).name + ":" + frame.name + ":" + str(frame.lineno)
             print(json.dumps({"format": "sw-pilot-maintenance/1", "status": "refused",
-                              "reason": "maintenance_unavailable_or_uncertain", "executed": False,
+                              "reason": "maintenance_unavailable_or_uncertain", "detail": detail,
+                              "executed": False,
                               "action": "Inspect the owned installation, selected state and retained maintenance evidence; preview again."}))
             return 2
     if args.command == "run":
