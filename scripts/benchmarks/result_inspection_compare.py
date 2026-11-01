@@ -473,6 +473,10 @@ def _shape(run, role):
         if not isinstance(run[key], dict):
             raise Invalid("invalid_record", f"{role}: {key} must be an object")
     build, execution = run["build"], run["execution"]
+    flags = ("clean_before", "clean_after", "inputs_match_blobs_before", "inputs_match_blobs_after")
+    if any(type(run["checkout"].get(key)) is not bool for key in flags) or \
+            type(build.get("target_dir_fresh")) is not bool or type(build.get("exit_code")) is not int:
+        raise Invalid("invalid_record", f"{role}: checkout/build attestations need booleans and an integer exit code")
     if not isinstance(run["problems"], list) or not isinstance(run["checkout"].get("inputs", {}), dict):
         raise Invalid("invalid_record", f"{role}: problems must be a list and checkout.inputs an object")
     if not isinstance(build.get("artifact"), dict) or not isinstance(build.get("argv"), list):

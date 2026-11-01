@@ -382,6 +382,22 @@ class ComparisonTests(unittest.TestCase):
             run["checkout"]["clean_after"] = False
         self.assertInvalid(self.compare(cand=self.side("candidate", run_edit=dirty)), "source_unclean")
 
+    def test_source_and_build_attestations_require_exact_json_types(self):
+        fields = [("checkout", k) for k in ("clean_before", "clean_after",
+                  "inputs_match_blobs_before", "inputs_match_blobs_after")]
+        fields += [("build", "target_dir_fresh"), ("build", "exit_code")]
+        for i, (section, key) in enumerate(fields):
+            for j, value in enumerate(("false", 1, [], {})):
+                if key == "exit_code" and type(value) is int:
+                    value = False  # bool is not a process exit code, even though False == 0.
+                with self.subTest(section=section, field=key, value=value):
+                    root = self.tmp / f"types-{i}-{j}"
+                    def malformed(run, _, section=section, key=key, value=value):
+                        run[section][key] = value
+                    self.assertInvalid(self.compare(
+                        base=self.side("baseline", root=root),
+                        cand=self.side("candidate", root=root, run_edit=malformed)), "invalid_record")
+
     def test_revision_not_on_accepted_main(self):
         pre = json.loads(PRE.read_bytes())
         # SOU-123's own topic commit: an ancestor of main, but never a first-parent main commit.
@@ -617,7 +633,8 @@ class RecorderTests(unittest.TestCase):
         self.assertIn("<work>", out)
         self.assertIn("<home>", out)
         twice = json.dumps({"m": json.dumps({"p": str(self.tmp / "out.o")})}).encode()
-        self.assertNotIn(str(self.tmp.resolve().drive), clean(twice).decode())
+        nested = json.loads(json.loads(clean(twice))["m"])
+        self.assertEqual(nested["p"].replace("\\", "/"), "<work>/out.o")
         dump = clean(b"  PATH = Some(C:\\Windows;D:\\Tools (x86)\\bin;)\n  CC = None\n").decode()
         self.assertEqual(dump, "  PATH = Some(<redacted: 3 entries>)\n  CC = None\n")
 
