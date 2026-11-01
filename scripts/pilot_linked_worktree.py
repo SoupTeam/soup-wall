@@ -51,6 +51,15 @@ def directory(path):
         raise
 
 
+def names(fd, cap=1024):
+    result = []
+    with os.scandir(fd) as entries:
+        for entry in entries:
+            require(len(result) < cap, 'metadata_count')
+            result.append(entry.name)
+    return sorted(result)
+
+
 def stamp(m):
     return (m.st_dev, m.st_ino, m.st_uid, m.st_mode, m.st_nlink, m.st_size, m.st_mtime_ns, m.st_ctime_ns)
 
@@ -86,6 +95,13 @@ def inventory(workspace, git_dir, common_dir):
         require(git_dir.parent.parent == common_dir and git_dir.parent.name == 'worktrees'
                 and re.fullmatch(r'[A-Za-z0-9_-]{1,64}', git_dir.name), 'ordinary_layout_required')
         require(not workspace.is_relative_to(common_dir) and not common_dir.is_relative_to(workspace), 'overlapping_roots')
+        leaves = names(g, 16)
+        require(set(leaves) <= {'HEAD','index','gitdir','commondir','logs','refs','ORIG_HEAD','COMMIT_EDITMSG'},
+                'admin_metadata_unsupported')
+        if 'COMMIT_EDITMSG' in leaves:
+            m = os.stat('COMMIT_EDITMSG', dir_fd=g, follow_symlinks=False)
+            require(stat.S_ISREG(m.st_mode) and m.st_uid == os.getuid() and not m.st_mode & 0o022
+                    and m.st_nlink == 1 and m.st_size <= 65536, 'inert_commit_message_unsafe')
         try:
             refs = os.open('refs', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=g)
         except FileNotFoundError:
@@ -93,7 +109,7 @@ def inventory(workspace, git_dir, common_dir):
         else:
             try:
                 m = os.fstat(refs)
-                require(m.st_uid == os.getuid() and not m.st_mode & 0o022 and not os.listdir(refs),
+                require(m.st_uid == os.getuid() and not m.st_mode & 0o022 and not names(refs, 1),
                         'private_refs_unsupported')
             finally:
                 os.close(refs)
@@ -118,9 +134,8 @@ def inventory(workspace, git_dir, common_dir):
             child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
             try:
                 before = stamp(os.fstat(child))
-                names = sorted(os.listdir(child))
-                require(len(names) <= 1024, 'metadata_count')
-                for leaf in names:
+                leaves = names(child)
+                for leaf in leaves:
                     require(not leaf.endswith('.lock'), 'metadata_busy')
                     m = os.stat(leaf, dir_fd=child, follow_symlinks=False)
                     require(m.st_uid == os.getuid() and not m.st_mode & 0o022, 'unsafe_file')
@@ -137,7 +152,7 @@ def inventory(workspace, git_dir, common_dir):
         # native parser separately rejects alternates and unsupported envelopes.
         objects = os.open('objects', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=c)
         try:
-            for leaf in sorted(os.listdir(objects)):
+            for leaf in names(objects):
                 require(leaf == 'info' or leaf == 'pack' or re.fullmatch(r'[0-9a-f]{2}', leaf), 'object_directory')
                 if leaf != 'info':
                     tree(objects, leaf, '.git/objects/' + leaf)

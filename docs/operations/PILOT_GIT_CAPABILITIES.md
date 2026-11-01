@@ -155,3 +155,11 @@ It preserves failed/incomplete outcomes and uses two owned real worktrees,
 pinned original servers, a genuine host and an owned scripted provider.
 macOS, Windows, WSL2 and unsupported layouts remain unqualified; local selection
 unit tests are not native protection or final Ready/security/admission evidence.
+
+Ordinary selected-worktree commits may leave `COMMIT_EDITMSG` in the explicit
+admin directory. The linked profile accepts only an owned regular non-shared
+file with one link and at most 64 KiB. It never reads, copies or executes that
+message and never treats it as snapshot authority. Other unselected admin
+names remain a refusal; an empty owned per-worktree `refs` directory is allowed,
+but nonempty private ref namespaces are unsupported. Native regression fixtures
+perform a real commit inside the linked worktree before capturing its view.

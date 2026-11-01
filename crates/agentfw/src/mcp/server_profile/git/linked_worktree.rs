@@ -187,11 +187,25 @@ mod linux {
                         "commondir",
                         "logs",
                         "refs",
-                        "ORIG_HEAD"
+                        "ORIG_HEAD",
+                        "COMMIT_EDITMSG"
                     ]
                     .contains(&v))),
                 "linked_worktree_admin_metadata_unsupported"
             );
+            if admin_names.iter().any(|n| n == "COMMIT_EDITMSG") {
+                // Ordinary commits create this inert per-worktree file. It is
+                // neither copied nor interpreted and cannot add authority.
+                let message = open(&admin_path.join("COMMIT_EDITMSG"), false)?;
+                let m = message.metadata()?;
+                ensure!(
+                    m.uid() == unsafe { libc::geteuid() }
+                        && m.mode() & 0o022 == 0
+                        && m.nlink() == 1
+                        && m.len() <= 65536,
+                    "linked_worktree_inert_commit_message_unsafe"
+                );
+            }
             if admin_names.iter().any(|n| n == "refs") {
                 let refs = open(&admin_path.join("refs"), true)?;
                 let m = refs.metadata()?;
@@ -373,6 +387,20 @@ mod tests {
             "one".as_ref(),
             workspace.as_os_str(),
         ]);
+        // This real worktree commit creates COMMIT_EDITMSG, unlike merely
+        // adding a linked worktree at an existing commit.
+        git(&[
+            "-C".as_ref(),
+            workspace.as_os_str(),
+            "-c".as_ref(),
+            "user.name=Owned".as_ref(),
+            "-c".as_ref(),
+            "user.email=owned@example.invalid".as_ref(),
+            "commit".as_ref(),
+            "--allow-empty".as_ref(),
+            "-qm".as_ref(),
+            "Owned linked history".as_ref(),
+        ]);
         let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../scripts/pilot_linked_worktree.py");
         let output = Command::new("python3")
@@ -410,7 +438,11 @@ mod tests {
         }
         let images = view.object_witness_images().unwrap();
         assert!(images.contains_key(".git/HEAD") && images.contains_key(".git/index"));
-        assert!(!images.contains_key(".git/commondir") && !images.contains_key(".git/gitdir"));
+        assert!(
+            !images.contains_key(".git/commondir")
+                && !images.contains_key(".git/gitdir")
+                && !images.contains_key(".git/COMMIT_EDITMSG")
+        );
         assert!(!images
             .keys()
             .any(|p| p.starts_with(".git/worktrees/") || p.starts_with(".git/hooks/")));

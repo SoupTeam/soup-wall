@@ -54,6 +54,23 @@ class Selection(unittest.TestCase):
         self.assertEqual(one['commonDir'], two['commonDir'])
         self.assertEqual(before, {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
 
+    def test_real_selected_commit_message_is_inert_bounded_and_never_followed(self):
+        self.git('-C',self.one,'-c','user.name=Owned','-c','user.email=owned@example.invalid',
+                 'commit','--allow-empty','-qm','Owned selected-worktree commit')
+        message=self.admin/'COMMIT_EDITMSG'
+        original=message.read_bytes();binding=self.binding()
+        self.assertEqual(original,message.read_bytes())
+        message.write_bytes(b'Edited inert commit message\n')
+        self.assertEqual(binding,self.binding())
+        message.chmod(0o666)
+        with self.assertRaisesRegex(ValueError,'inert_commit_message_unsafe'):self.binding()
+        message.chmod(0o600);message.write_bytes(b'x'*65537)
+        with self.assertRaisesRegex(ValueError,'inert_commit_message_unsafe'):self.binding()
+        message.unlink();sentinel=self.root/'unselected';sentinel.write_text('Never adopted')
+        message.symlink_to(sentinel)
+        with self.assertRaisesRegex(ValueError,'inert_commit_message_unsafe'):self.binding()
+        self.assertEqual('Never adopted',sentinel.read_text())
+
     def test_ordinary_empty_private_refs_are_supported_but_namespaces_do_not_expand(self):
         refs = self.admin / 'refs'
         refs.mkdir(exist_ok=True)
