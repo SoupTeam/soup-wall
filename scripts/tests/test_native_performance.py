@@ -6,6 +6,7 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -890,7 +891,7 @@ class Preparation(SyntheticCase):
 
     def test_built_and_reused_stages_never_merge(self):
         base = NP.normalize('baseline', self.s.write(self.receipt()), None, None, self.s.git)
-        built = self.receipt(stages={'git': {'status': 'built', 'seconds': 300.0},
+        built = self.receipt(stages={'git': {'status': 'built', 'seconds': 300.0, 'checkpoint_sha256': 'c' * 64},
                                      'bwrap': {'status': 'built', 'seconds': 40.0}})
         cand = NP.normalize('candidate', self.s.write(built), None, None, self.s.git)
         git = [s for s in NP.compare(base, cand)['strata'] if s['profile'] == 'git']
@@ -913,12 +914,14 @@ class Preparation(SyntheticCase):
         def check(code, value):
             path = self.s.write(value)
             self.rejected(code, lambda: NP.normalize('baseline', path, None, None, self.s.git))
-        check('receipt_stage_contradiction', self.receipt(stages={'git': {'status': 'failed', 'seconds': 3.0},
+        check('receipt_stage_contradiction', self.receipt(stages={'git': {'status': 'failed', 'seconds': 3.0, 'checkpoint_sha256': 'c' * 64},
                                                                   'bwrap': {'status': 'built', 'seconds': 1.0}}))
-        check('missing_required_trial', self.receipt(stages={'git': {'status': 'built', 'seconds': 3.0}}))
-        check('negative_duration', self.receipt(stages={'git': {'status': 'built', 'seconds': -3.0},
+        check('missing_required_trial', self.receipt(stages={'git': {'status': 'built', 'seconds': 3.0, 'checkpoint_sha256': 'c' * 64}}))
+        check('negative_duration', self.receipt(stages={'git': {'status': 'built', 'seconds': -3.0, 'checkpoint_sha256': 'c' * 64},
                                                         'bwrap': {'status': 'built', 'seconds': 1.0}}))
-        check('nonfinite_or_missing_duration', self.receipt(stages={'git': {'status': 'built'},
+        check('nonfinite_or_missing_duration', self.receipt(stages={'git': {'status': 'built', 'seconds': '3.0', 'checkpoint_sha256': 'c' * 64},
+                                                                    'bwrap': {'status': 'built', 'seconds': 1.0}}))
+        check('report_shape_invalid', self.receipt(stages={'git': {'status': 'built', 'checkpoint_sha256': 'c' * 64},
                                                                     'bwrap': {'status': 'built', 'seconds': 1.0}}))
         check('invalid_digest', self.receipt(binaries={'git': {'sha256': 'x'}, 'bwrap': {'sha256': 'b' * 64}}))
         check('source_identity_malformed', self.receipt(source_commit='abc'))
@@ -928,6 +931,192 @@ class Preparation(SyntheticCase):
         check('report_shape_invalid', self.receipt(extra_claim='cold'))
         check('no_performance_endpoints', {'format': NP.PREPARATION_MARKER, 'generation': 'g1',
                                            'selection_sha256': 'a' * 64, 'status': 'prepared-not-active'})
+
+
+TRACE = NP.LATENCY.trace_request()
+
+
+def _set(value, path, new):
+    parts = path.split('.')
+    node = value
+    for part in parts[:-1]:
+        node = node[int(part)] if isinstance(node, list) else node[part]
+    if isinstance(node, list):
+        node[int(parts[-1])] = new
+    else:
+        node[parts[-1]] = new
+
+
+@unittest.skipUnless(NP.Git(ROOT).tree_of('ce4f76d823f9f1b5a7ea1dec97a8ff260a5f94dc'), 'retained sources not in clone')
+class CliMalformedTypes(unittest.TestCase):
+    """PR #324 / PR #281 regression controls through the real CLI (subprocess). Every mutation targets a private
+    copy of genuine evidence (or a SYNTHETIC preparation receipt); a wrong JSON type never substitutes for the
+    producer's type, and malformed evidence is a structured rejection, never a traceback."""
+
+    PREP = {'format': NP.PREPARATION_FORMAT, 'source_commit': 'ce4f76d823f9f1b5a7ea1dec97a8ff260a5f94dc',
+            'status': 'built-not-qualified',
+            'stages': {'git': {'status': 'reused', 'seconds': 0.75, 'checkpoint_sha256': 'c' * 64},
+                       'bwrap': {'status': 'built', 'seconds': 41.5}},
+            'binaries': {'git': {'sha256': 'a' * 64}, 'bwrap': {'sha256': 'b' * 64}},
+            'archives': {'git': {'url': 'https://example.invalid/g', 'sha256': 'd' * 64},
+                         'bwrap': {'url': 'https://example.invalid/b', 'sha256': 'e' * 64}},
+            'tools': {}, 'execution_inputs': {}, 'flags': {'git': [], 'bwrap': []}, 'generation_tree_sha256': 'f' * 64}
+
+    def cli(self, base, mutations, manifest=None):
+        value = copy.deepcopy(base)
+        for path, new in mutations:
+            _set(value, path, new)
+            if path.startswith('identity.') and 'rows' in value:
+                for row in value['rows']:
+                    row['identity'] = value['identity']
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / 'report.json'
+            report.write_text(json.dumps(value))
+            words = ['--baseline', str(report), '--candidate', str(report)]
+            if manifest:
+                words += ['--baseline-manifest', str(manifest), '--candidate-manifest', str(manifest)]
+            out = Path(tmp) / 'out'
+            proc = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/native_performance.py'), *words,
+                                   '--repository', str(ROOT), '--out-dir', str(out)],
+                                  capture_output=True, text=True, timeout=300)
+            self.assertNotIn('Traceback', proc.stderr)
+            return proc.returncode, json.loads((out / 'comparison.json').read_text())
+
+    def assert_rejected(self, base, cases, manifest=None):
+        for code, mutations in cases:
+            with self.subTest(code=code, mutations=json.dumps(mutations)):
+                exit_code, result = self.cli(base, mutations, manifest)
+                self.assertEqual(exit_code, 2)
+                self.assertEqual(result['status'], 'rejected')
+                self.assertEqual(result['rejection']['code'], code)
+                self.assertIsNone(result['classification'])
+                self.assertNotIn('strata', result)
+
+    def test_ask_qualification(self):
+        base = json.loads((ROOT / 'docs/operations/evidence/sou-124/native-attempt2-baseline.json').read_text())
+        loose = dict(TRACE, fallback_possible=1)
+        self.assert_rejected(base, [
+            *(('trace_mode_unsupported', [('trace_requested', bad)])
+              for bad in ('yes', 'true', 1, [], ['x'], {}, {'mode': 'off'}, loose)),
+            ('report_shape_invalid', [('status', ['pass'])]),
+            ('report_shape_invalid', [('real_host_executed', 'true')]),
+            ('report_shape_invalid', [('workspace_unchanged', 1)]),
+            ('report_shape_invalid', [('paid_api_calls', '0')]),
+            ('report_shape_invalid', [('paid_api_calls', False)]),
+            ('report_shape_invalid', [('error_type', ['Timeout'])]),
+            ('source_identity_malformed', [('source.commit', ['x'])]),
+            ('source_identity_malformed', [('source.tree', {'sha': 'x'})]),
+            ('source_dirty', [('source.dirty', 0)]),
+            ('unexpected_trial_id', [('cases.0.sample_index', '0')]),
+            ('unexpected_trial_id', [('cases.0.profile', ['git'])]),
+        ])
+        # Fail-closed: a wrong-typed source_after can never attest an unchanged source (0 is not false).
+        exit_code, result = self.cli(base, [('source_after.dirty', 0)])
+        self.assertEqual((exit_code, result['status']), (1, 'evaluated'))
+        self.assertFalse(result['observations']['baseline']['runs'][0]['qualified'])
+        self.assertTrue(all(s['baseline']['excluded_unqualified_run_trials'] == s['baseline']['planned']
+                            for s in result['strata']))
+        exit_code, result = self.cli(base, [('trace_requested', TRACE)])  # the accepted value is still accepted
+        self.assertEqual((exit_code, result['status']), (1, 'evaluated'))
+
+    def test_installed_host(self):
+        attempt = json.loads((SOU106 / 'attempt-2.json').read_text())
+        passed = next(i for i, r in enumerate(attempt['rows']) if r['status'] == 'passed')
+        self.assert_rejected(attempt, [
+            ('installed_attestation_invalid', [(f'rows.{passed}.actual_host', 'false')]),
+            ('installed_attestation_invalid', [(f'rows.{passed}.actual_host', 1)]),
+            ('installed_attestation_invalid', [(f'rows.{passed}.cleanup', 0)]),
+            ('installed_attestation_invalid', [(f'rows.{passed}.cleanup', 'true')]),
+            ('report_shape_invalid', [('rows.0.cancelled', 'true')]),
+            ('report_shape_invalid', [('rows.0.cancelled', 0)]),
+            ('report_shape_invalid', [('rows.0.reason', ['timeout'])]),
+            ('report_shape_invalid', [('rows.0.reason', {'r': 'deadline'})]),
+            ('report_shape_invalid', [('source_unchanged', 'true')]),
+            ('report_shape_invalid', [('source_unchanged', 1)]),
+            ('report_shape_invalid', [('cleanup', 1)]),
+            ('report_shape_invalid', [('engineering_budgets.latency_threshold_approved', 'false')]),
+            ('report_shape_invalid', [('engineering_budgets.latency_threshold_approved', 0)]),
+            ('report_shape_invalid', [('conditions.os_cache', ['uncontrolled'])]),
+            ('report_shape_invalid', [('conditions', [])]),
+            ('invalid_digest', [('identity.policy_sha256', {})]),
+            ('invalid_digest', [('identity.driver_sha256', ['x'])]),
+            ('invalid_digest', [('workload_file_sha256', ['x'])]),
+            ('workload_identity_contradiction', [('workload_file_sha256', '0' * 64)]),
+            ('trial_table_malformed', [('rows.0.case', ['x'])]),
+            ('trial_table_malformed', [('failures', [0])]),
+            ('source_dirty', [('identity.source.dirty', 0)]),
+        ])
+        exit_code, result = self.cli(attempt, [('source_after.dirty', 0)])
+        self.assertEqual((exit_code, result['status']), (1, 'evaluated'))
+        self.assertFalse(result['observations']['baseline']['runs'][0]['qualified'])
+
+    def test_ask_series(self):
+        summary = json.loads(FINAL[0].read_text())
+        self.assert_rejected(summary, [
+            ('run_list_invalid', [('runs.0.validated', 'true')]),
+            ('run_list_invalid', [('runs.0.exit_code', False)]),
+            ('run_list_invalid', [('runs.0.failure', ['x'])]),
+            # Exact binding: 0 no longer equals the manifest's false (Python == would let it through).
+            ('manifest_summary_mismatch', [('source.dirty', 0)]),
+            ('report_shape_invalid', [('runs.0.conditions_before.cpu_count', 1.5)]),
+            ('report_shape_invalid', [('runs.0.conditions_before.cpu_count', '4')]),
+            ('report_shape_invalid', [('runs.0.conditions_before.meminfo.MemTotal_kb', True)]),
+            ('trial_table_malformed', [('runs.0.summary.trials.git.continuation_ms_by_trial.0.passed', 'true')]),
+            ('unexpected_trial_id', [('runs.0.summary.trials.git.continuation_ms_by_trial.0.sample_index', [0])]),
+            ('cold_evidence_contradiction', [('runs.0.cache_drop.requested', 'true')]),
+        ], manifest=FINAL[1])
+        self.assert_rejected(summary, [('source_dirty', [('source.dirty', 0)])])  # without a manifest
+        manifest = json.loads(FINAL[1].read_text())
+        for code, path, bad in (('report_shape_invalid', 'kernel', ['x']), ('report_shape_invalid', 'machine', 1),
+                                ('true_cold_claim_unsupported', 'cold_ask_trials_claimed', 'false'),
+                                ('invalid_digest', 'selected_sha256.agentfw', {})):
+            with self.subTest(manifest_field=path, value=json.dumps(bad)):
+                value = copy.deepcopy(manifest)
+                _set(value, path, bad)
+                with tempfile.TemporaryDirectory() as tmp:
+                    mpath = Path(tmp) / 'manifest.json'
+                    mpath.write_text(json.dumps(value))
+                    exit_code, result = self.cli(summary, [], manifest=mpath)
+                self.assertEqual((exit_code, result['rejection']['code']), (2, code))
+
+    def test_preparation(self):
+        self.assert_rejected(self.PREP, [
+            ('invalid_digest', [('stages.git.checkpoint_sha256', ['x'])]),
+            ('invalid_digest', [('generation_tree_sha256', 1)]),
+            ('report_shape_invalid', [('archives', [])]),
+            ('report_shape_invalid', [('archives.git.sha256', {'v': 'x'})]),
+            ('report_shape_invalid', [('flags', {'git': 'x', 'bwrap': []})]),
+            ('report_shape_invalid', [('flags.git', [1])]),
+            ('report_shape_invalid', [('tools', [])]),
+            ('report_shape_invalid', [('stages.bwrap', {'status': 'built', 'seconds': 1.0, 'cold': True})]),
+            ('receipt_stage_contradiction', [('stages.git.status', ['reused'])]),
+            ('receipt_stage_contradiction', [('status', True)]),
+            ('nonfinite_or_missing_duration', [('stages.git.seconds', '0.75')]),
+            ('nonfinite_or_missing_duration', [('stages.git.seconds', True)]),
+            ('source_identity_malformed', [('source_commit', ['x'])]),
+            ('invalid_digest', [('binaries.git.sha256', [])]),
+        ])
+        exit_code, result = self.cli(self.PREP, [])  # SYNTHETIC receipt: well formed, evaluated (not compatible)
+        self.assertEqual((exit_code, result['status'], result['classification']), (1, 'evaluated', 'incomplete'))
+
+    def test_environment_failures_keep_exit_semantics(self):
+        ask = ROOT / 'docs/operations/evidence/sou-124/native-attempt2-baseline.json'
+        with tempfile.TemporaryDirectory() as tmp:
+            blocker = Path(tmp) / 'plain-file'
+            blocker.write_text('x')
+            proc = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/native_performance.py'), '--baseline',
+                                   str(ask), '--candidate', str(ask), '--out-dir', str(blocker / 'out')],
+                                  capture_output=True, text=True, timeout=300)
+            self.assertNotIn('Traceback', proc.stderr)
+            self.assertEqual(proc.returncode, 3)  # destination failure: usage/environment, never an evidence class
+            self.assertEqual(json.loads(proc.stdout)['code'], 'output_destination_unavailable')
+            out = Path(tmp) / 'out'
+            proc = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/native_performance.py'), '--baseline',
+                                   str(Path(tmp) / 'missing.json'), '--candidate', str(ask), '--out-dir', str(out)],
+                                  capture_output=True, text=True, timeout=300)
+            self.assertNotIn('Traceback', proc.stderr)
+            self.assertEqual(proc.returncode, 2)
+            self.assertEqual(json.loads((out / 'comparison.json').read_text())['rejection']['code'], 'unreadable_input')
 
 
 if __name__ == '__main__':

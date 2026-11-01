@@ -47,8 +47,11 @@ and `trials.csv` (every planned trial of both sides). On rejection only `compari
 |---|---|
 | 0 | `compatible` or `stratified-only` |
 | 1 | Valid evidence, `incomplete` or `non-comparable`: no difference is reported |
-| 2 | Rejected evidence (malformed, tampered, contradicted): nothing is compared |
-| 3 | Usage error, for example a non-empty output directory |
+| 2 | Rejected evidence (malformed, tampered, contradicted): nothing is compared. `unreadable_input` marks an input that could not be read (an IO condition), not malformed content. |
+| 3 | Usage or output-destination error, for example a non-empty or uncreatable output directory (`output_destination_unavailable`) |
+
+Malformed evidence never produces a traceback: every rejection writes `comparison.json` with a stable
+`rejection.code` and no strata, distribution or verdict.
 
 Reproduce the committed evidence bundle and the controls:
 
@@ -181,6 +184,17 @@ presented as a percentile of paired improvements. Different source revisions are
 - Inference is `descriptive_only`. A stratum has at most 2 runs (clusters) on one host, which is
   below the 10 effective clusters of DEC-SOU153-20261027. That bootstrap is approved only for
   AgentDojo families, and trials within a run are dependent. No interval is computed.
+
+## Strict types
+
+Producer fields are checked with their exact JSON type. `"true"`, `"false"`, `0`, `1`, `[]`, `{}` or
+`null` never stand in for a required boolean, and arrays or objects never stand in for identifiers or
+digests. Identity and attestation bindings (manifest to summary, receipt to source, `source` to
+`source_after`, row to report identity) compare exact JSON, so `0` never equals `false`. Ask
+`trace_requested` must be absent or exactly the accepted strace request. Installed-host passed arms
+need `actual_host` and `cleanup` to be `true`. Preparation receipts are checked down to their nested
+fields (`archives`, `flags`, stage fields and `checkpoint_sha256`). A wrong-typed `source_after`
+fails closed: the run is unqualified and its trials stay counted.
 
 ## Bounds
 

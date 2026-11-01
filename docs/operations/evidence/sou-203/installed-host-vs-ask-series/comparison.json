@@ -407,7 +407,7 @@
           "unit": "ms"
         }
       },
-      "engineering_criteria": "none approved: engineering_budgets.latency_threshold_approved is False",
+      "engineering_criteria": "none approved: engineering_budgets.latency_threshold_approved is false",
       "environment": {
         "cpu_count": [],
         "host_instance": {
@@ -1179,7 +1179,7 @@
           }
         },
         "engineering_targets": {
-          "primary": "none approved: engineering_budgets.latency_threshold_approved is False"
+          "primary": "none approved: engineering_budgets.latency_threshold_approved is false"
         },
         "excluded_runs": [],
         "excluded_unqualified_run_trials": 0,
@@ -1282,7 +1282,7 @@
           }
         },
         "engineering_targets": {
-          "primary": "none approved: engineering_budgets.latency_threshold_approved is False"
+          "primary": "none approved: engineering_budgets.latency_threshold_approved is false"
         },
         "excluded_runs": [],
         "excluded_unqualified_run_trials": 0,
@@ -2177,7 +2177,7 @@
           }
         },
         "engineering_targets": {
-          "primary": "none approved: engineering_budgets.latency_threshold_approved is False"
+          "primary": "none approved: engineering_budgets.latency_threshold_approved is false"
         },
         "excluded_runs": [],
         "excluded_unqualified_run_trials": 0,
@@ -2280,7 +2280,7 @@
           }
         },
         "engineering_targets": {
-          "primary": "none approved: engineering_budgets.latency_threshold_approved is False"
+          "primary": "none approved: engineering_budgets.latency_threshold_approved is false"
         },
         "excluded_runs": [],
         "excluded_unqualified_run_trials": 0,

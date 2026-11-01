@@ -350,6 +350,15 @@ def _plain(value, kind):
     return type(value) is kind
 
 
+def _same(a, b):
+    """Exact JSON equality: unlike ==, a boolean never equals 0 or 1, at any depth."""
+    return json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+
+
+def _hex(value, size=64):
+    return isinstance(value, str) and re.fullmatch('[0-9a-f]{%d}' % size, value) is not None
+
+
 def _number(value):
     return type(value) in (int, float) and math.isfinite(value)
 
@@ -410,6 +419,9 @@ def _run_conditions(run):
         value = run.get(when)
         if isinstance(value, dict):
             mem = value.get('meminfo') if isinstance(value.get('meminfo'), dict) else {}
+            # cpu_count and MemTotal_kb decide compatibility: integers (or absent), never other JSON types.
+            require(all(v is None or (_plain(v, int) and v > 0) for v in (value.get('cpu_count'), mem.get('MemTotal_kb'))),
+                    'report_shape_invalid', 'run_conditions', f'{when}: cpu_count and MemTotal_kb must be integers')
             pressure = value.get('pressure') if isinstance(value.get('pressure'), dict) else {}
             found[when] = {'cpu_count': value.get('cpu_count'), 'mem_total_kb': mem.get('MemTotal_kb'),
                            'cached_kb': mem.get('Cached_kb'), 'loadavg': value.get('loadavg'),
@@ -493,11 +505,13 @@ def _normalize(role, summary_path, manifest_path, receipt_path, git):
         manifest_data, manifest_held = custody(manifest_raw, git, role + '_manifest')
         manifest = parse_strict(manifest_data, role + '_manifest')
         for key in ('format', 'plan', 'samples_per_profile', 'platform_kind', 'source'):
-            require(manifest.get(key) == summary.get(key), 'manifest_summary_mismatch', role, key)
+            require(_same(manifest.get(key), summary.get(key)), 'manifest_summary_mismatch', role, key)
         require(manifest.get('metric') == LATENCY_METRIC, 'endpoint_substitution', role, 'manifest.metric')
         require(manifest.get('target_ms') == CONTINUATION_TARGET_MS, 'manifest_summary_mismatch', role, 'target_ms')
         require(manifest.get('cold_ask_trials_claimed', False) is False, 'true_cold_claim_unsupported', role,
                 'the producer re-reads inputs before every timed trial; no cold Ask trial can be claimed')
+        require(all(manifest.get(k) is None or isinstance(manifest[k], str) for k in ('kernel', 'machine')),
+                'report_shape_invalid', role, 'manifest kernel and machine must be strings')
         selected = manifest.get('selected_sha256')
         require(isinstance(selected, dict) and set(selected) == set(SERIES.TOOLS)
                 and all(isinstance(v, str) and re.fullmatch('[0-9a-f]{64}', v) for v in selected.values()),
@@ -522,7 +536,7 @@ def _normalize(role, summary_path, manifest_path, receipt_path, git):
         receipt = parse_strict(receipt_raw, role + '_receipt')
         require(receipt.get('format') == RECEIPT_FORMAT, 'unsupported_report_format', role + '_receipt',
                 repr(receipt.get('format'))[:64])
-        require(receipt.get('source') == summary.get('source'), 'build_receipt_binding_mismatch', role, 'source')
+        require(_same(receipt.get('source'), summary.get('source')), 'build_receipt_binding_mismatch', role, 'source')
         for name in ('agentfw', 'git_launcher'):
             entry = receipt.get('binaries', {}).get(name)
             require(isinstance(entry, dict) and entry.get('sha256') == manifest['selected_sha256'][name],
@@ -754,11 +768,23 @@ def _normalize_ask(role, path, report, held, git):
             require(value >= 0, 'negative_duration', role, f'{row["profile"]}/{sample}')
     _check(latency, LATENCY.summarize(cases, samples), role, 'latency')
     status = report.get('status')
+    require(status in ('pass', 'performance_blocker', 'failed', 'incomplete') and isinstance(status, str),
+            'report_shape_invalid', role, 'status')
+    for name in ('real_host_executed', 'workspace_unchanged'):
+        require(report.get(name) is None or _plain(report.get(name), bool), 'report_shape_invalid', role,
+                f'{name} must be a JSON boolean')
+    require(_plain(report.get('paid_api_calls'), int), 'report_shape_invalid', role, 'paid_api_calls must be an integer')
+    require(report.get('error_type') is None or isinstance(report.get('error_type'), str), 'report_shape_invalid',
+            role, 'error_type must be a string')
+    trace = report.get('trace_requested')
+    # The accepted producer writes exactly LATENCY.trace_request(); older reports omit the field.
+    require(trace is None or _same(trace, LATENCY.trace_request()), 'trace_mode_unsupported', role,
+            'trace_requested must be absent or exactly the accepted strace request')
     checks = {'qualification_status': status in ('pass', 'performance_blocker'),
               'real_host_executed': report.get('real_host_executed') is True,
               'no_paid_calls': _plain(report.get('paid_api_calls'), int) and report['paid_api_calls'] == 0,
               'workspace_unchanged': report.get('workspace_unchanged') is True,
-              'source_unchanged': report.get('source') == report.get('source_after')}
+              'source_unchanged': _same(report.get('source'), report.get('source_after'))}
     failed_checks = [name for name, ok in checks.items() if not ok]
     qualified = not failed_checks
     if qualified:
@@ -772,7 +798,7 @@ def _normalize_ask(role, path, report, held, git):
     require(isinstance(selected, dict) and selected
             and all(isinstance(v, str) and re.fullmatch('[0-9a-f]{64}', v) for v in selected.values()),
             'invalid_digest', role, 'selected_sha256')
-    timed_out = 'timeout' in str(report.get('error_type', '')).lower()
+    timed_out = 'timeout' in (report.get('error_type') or '').lower()
     by_key = {(c['profile'], c['sample_index']): c for c in cases}
     trials = []
     for profile in PROFILES:
@@ -800,7 +826,6 @@ def _normalize_ask(role, path, report, held, git):
             trial['endpoints'].update(first_pending_asset_verification_ms=pending, post_observed_total_ms=post)
             trial['stages'] = {**{'asset/' + k: v for k, v in sorted(sample['assets_ms'].items())},
                                **{'approval/' + k: v for k, v in sorted(sample['approval_stage_ms'].items())}}
-    trace = report.get('trace_requested')
     return {
         'contract': OBSERVATION, 'role': role,
         'input': {'name': portable_name(path), 'producer': 'scripts/qualify-pilot-ask.py', 'producer_format': ASK_FORMAT,
@@ -821,8 +846,8 @@ def _normalize_ask(role, path, report, held, git):
         },
         'environment': {'platform_kind': None, 'kernel': None, 'machine': None, 'cpu_count': [], 'mem_total_kb': [],
                         'host_instance': {'status': 'not_retained', 'detail': 'the report records no host'}},
-        'trace': {'requested': trace, 'requested_status': 'producer_declared' if trace else 'not_retained',
-                  'requested_basis': 'self-declared trace_requested in the report' if trace
+        'trace': {'requested': trace, 'requested_status': 'producer_declared' if trace is not None else 'not_retained',
+                  'requested_basis': 'self-declared trace_requested in the report' if trace is not None
                   else 'this report predates the trace_requested field', 'observed': 'not_retained'},
         'endpoints': copy.deepcopy(ENDPOINTS), 'stage_clock': dict(STAGE_CLOCK),
         'not_retained': {
@@ -890,13 +915,31 @@ def _normalize_installed(role, path, report, held, git):
     require(isinstance(identity, dict) and isinstance(identity.get('selected'), dict), 'source_identity_missing',
             role, 'identity')
     for row in rows:
-        require(row.get('identity') == identity, 'paired_identity_drift', role, f'{row.get("case")}/{row.get("arm")}')
+        require(_same(row.get('identity'), identity), 'paired_identity_drift', role, f'{row.get("case")}/{row.get("arm")}')
         require(row.get('arm') in ('control', 'protected') and isinstance(row.get('case'), str)
                 and row.get('status') in ('passed', 'failed', 'incomplete'), 'trial_table_malformed', role,
                 f'{row.get("case")!r}/{row.get("arm")!r}')
     selected = identity['selected']
     require(all(isinstance(v, str) and re.fullmatch('[0-9a-f]{64}', v) for v in selected.values()),
             'invalid_digest', role, 'identity.selected')
+    require(all(_hex(identity.get(k)) for k in ('policy_sha256', 'driver_sha256', 'extension_sha256'))
+            and _hex(report.get('workload_file_sha256')) and _hex(report.get('workload_sha256')),
+            'invalid_digest', role, 'identity and workload digests')
+    for name in ('source_unchanged', 'cleanup'):
+        require(_plain(report.get(name), bool), 'report_shape_invalid', role, f'{name} must be a JSON boolean')
+    budgets = report.get('engineering_budgets')
+    require(isinstance(budgets, dict) and _plain(budgets.get('latency_threshold_approved'), bool),
+            'report_shape_invalid', role, 'engineering_budgets.latency_threshold_approved must be a JSON boolean')
+    for row in rows:
+        where = f'{row["case"]}/{row["arm"]}'
+        require(row.get('reason') is None or isinstance(row['reason'], str), 'report_shape_invalid', role,
+                where + '.reason must be a string')
+        require(row.get('cancelled') is None or _plain(row['cancelled'], bool), 'report_shape_invalid', role,
+                where + '.cancelled must be a JSON boolean')
+        if row['status'] == 'passed':
+            # A passed arm is measured only with the producer's own host and cleanup attestations.
+            require(row.get('actual_host') is True and row.get('cleanup') is True, 'installed_attestation_invalid',
+                    role, where + ': passed without actual_host and cleanup true')
     require(identity.get('policy_sha256') == selected.get('policy'), 'policy_identity_contradiction', role,
             'identity.policy_sha256 differs from identity.selected.policy')
     source = verify_source(identity.get('source'), git, role)
@@ -910,13 +953,21 @@ def _normalize_installed(role, path, report, held, git):
                     role, f'identity.{field} differs from {name} at the source commit')
     workload = workload_name = None
     if available:
+        present = False
         for name in INSTALLED_WORKLOADS:
             data, value = _git_json(git, commit, name)
+            present = present or bool(data)
             if data is not None and hashlib.sha256(data).hexdigest() == report.get('workload_file_sha256'):
                 workload, workload_name = value, name
                 break
-    os_cache = str((report.get('conditions') or {}).get('os_cache', ''))
-    require(os_cache.startswith('uncontrolled'), 'true_cold_claim_unsupported', role, 'conditions.os_cache')
+        # The source commit is in the repository and has a workload file: a non-matching digest contradicts it.
+        require(workload is not None or not present, 'workload_identity_contradiction', role,
+                'workload_file_sha256 matches no workload file at the source commit')
+    conditions = report.get('conditions')
+    require(isinstance(conditions, dict) and isinstance(conditions.get('os_cache'), str), 'report_shape_invalid',
+            role, 'conditions.os_cache must be a string')
+    require(conditions['os_cache'].startswith('uncontrolled'), 'true_cold_claim_unsupported', role,
+            'conditions.os_cache')
     keys = [(r['case'], r['arm']) for r in rows]
     require(len(set(keys)) == len(keys), 'duplicate_trial_id', role, 'rows (case, arm)')
     reproduced, not_reproduced = [], []
@@ -943,9 +994,10 @@ def _normalize_installed(role, path, report, held, git):
         require(report.get('required_arms') in (None, len(rows)), 'missing_required_trial', role, 'required_arms')
         not_reproduced.append('trial plan and gate: the workload at the source commit is unavailable')
     report_failures = report.get('failures')
-    require(isinstance(report_failures, list), 'trial_table_malformed', role, 'failures')
+    require(isinstance(report_failures, list) and all(isinstance(f, str) for f in report_failures),
+            'trial_table_malformed', role, 'failures')
     checks = {'source_unchanged': report.get('source_unchanged') is True
-              and report.get('source_after') == identity.get('source'),
+              and _same(report.get('source_after'), identity.get('source')),
               'cleanup': report.get('cleanup') is True, 'no_run_failures': not report_failures}
     failed_checks = [name for name, ok in checks.items() if not ok]
     qualified = not failed_checks
@@ -958,7 +1010,7 @@ def _normalize_installed(role, path, report, held, git):
         if row['status'] == 'passed':
             state = 'measured'
         elif row['status'] == 'failed':
-            state = 'timed_out' if re.search('timeout|deadline', str(reason)) else 'failed'
+            state = 'timed_out' if reason and re.search('timeout|deadline', reason) else 'failed'
         else:
             state = 'not_run' if reason == 'not_executed' and row.get('cancelled') is not True else 'incomplete'
         endpoints = dict.fromkeys(INSTALLED_ENDPOINTS)
@@ -1053,8 +1105,9 @@ def _normalize_installed(role, path, report, held, git):
         'primary_endpoint': 'host_start_ms',
         'endpoints': copy.deepcopy(INSTALLED_ENDPOINTS), 'stage_clock': dict(INSTALLED_CLOCK),
         'report_endpoints': report_endpoints,
-        'engineering_criteria': 'none approved: engineering_budgets.latency_threshold_approved is '
-                                + str((report.get('engineering_budgets') or {}).get('latency_threshold_approved')),
+        'engineering_criteria': 'none approved: engineering_budgets.latency_threshold_approved is false'
+        if budgets['latency_threshold_approved'] is False
+        else 'the producer declares an approved threshold; SOU-203 does not evaluate it',
         'outcome_semantics': INSTALLED_OUTCOMES,
         'gate': {'status': gate.get('status'), 'failures': gate.get('failures'),
                  'scope': 'producer development gate; not security, effectiveness or readiness'},
@@ -1116,10 +1169,24 @@ def _normalize_preparation(role, path, receipt, held, git):
             and all(isinstance(b, dict) and isinstance(b.get('sha256'), str)
                     and re.fullmatch('[0-9a-f]{64}', b['sha256']) for b in binaries.values()),
             'invalid_digest', role, 'binaries')
+    archives, flags = receipt.get('archives'), receipt.get('flags')
+    require(isinstance(archives, dict) and set(archives) == set(PREPARATION_STAGES)
+            and all(isinstance(a, dict) and isinstance(a.get('url'), str) and _hex(a.get('sha256'))
+                    for a in archives.values()), 'report_shape_invalid', role, 'archives')
+    require(isinstance(flags, dict) and set(flags) == set(PREPARATION_STAGES)
+            and all(isinstance(f, list) and all(isinstance(x, str) for x in f) for f in flags.values()),
+            'report_shape_invalid', role, 'flags')
+    require(isinstance(receipt.get('tools'), dict) and isinstance(receipt.get('execution_inputs'), dict),
+            'report_shape_invalid', role, 'tools and execution_inputs must be objects')
+    require(_hex(receipt.get('generation_tree_sha256')), 'invalid_digest', role, 'generation_tree_sha256')
     trials = []
     for stage in PREPARATION_STAGES:
         entry = stages[stage]
         require(isinstance(entry, dict), 'trial_table_malformed', role, f'stages.{stage}')
+        expected_keys = {'status', 'seconds', 'checkpoint_sha256'} if stage == 'git' else {'status', 'seconds'}
+        require(set(entry) == expected_keys, 'report_shape_invalid', role, f'stages.{stage} fields')
+        require(stage != 'git' or _hex(entry['checkpoint_sha256']), 'invalid_digest', role,
+                'stages.git.checkpoint_sha256')
         allowed = ('built', 'reused') if stage == 'git' else ('built',)
         require(entry.get('status') in allowed, 'receipt_stage_contradiction', role,
                 f'stages.{stage}.status={entry.get("status")!r} in a completed receipt')
@@ -1646,7 +1713,10 @@ def prepare_out_dir(path):
         if not path.is_dir() or any(path.iterdir()):
             raise Rejected('unsafe_output_destination', 'output', 'output directory must be new or empty')
     else:
-        path.mkdir(mode=0o700, parents=True)
+        try:
+            path.mkdir(mode=0o700, parents=True)
+        except OSError as error:  # an environment/destination failure, never an evidence verdict
+            raise Rejected('output_destination_unavailable', 'output', type(error).__name__) from None
     return path
 
 
@@ -1684,7 +1754,10 @@ def write_outputs(out_dir, result, observations):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     for role in ('baseline', 'candidate'):
-        parser.add_argument('--' + role, type=Path, required=True, help='sw-ask-series/1 summary.json')
+        parser.add_argument('--' + role, type=Path, required=True,
+                            help='one report: sw-ask-series/1 summary, sw-pilot-ask-acceptance/1 Ask qualification, '
+                                 'sw-installed-pilot-matched/1 installed host or sw-native-pilot-prerequisites/1 '
+                                 'preparation receipt')
         parser.add_argument(f'--{role}-manifest', type=Path, help='manifest.json declared before the first trial')
         parser.add_argument(f'--{role}-receipt', type=Path, help=RECEIPT_FORMAT + ' build receipt')
     parser.add_argument('--paired', action='store_true', help='require trial-level paired differences')
@@ -1705,6 +1778,10 @@ def main(argv=None):
     except Rejected as error:
         print(json.dumps({'status': 'rejected', 'code': error.code}))
         return 2
+    except OSError as error:
+        print(json.dumps({'status': 'usage_error', 'code': 'output_destination_unavailable',
+                          'detail': type(error).__name__}))
+        return 3
     print(json.dumps({'status': result['status'], 'classification': result.get('classification'),
                       'rejection': result.get('rejection', {}).get('code')}, sort_keys=True))
     return code
