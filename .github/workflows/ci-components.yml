@@ -3205,7 +3205,7 @@ jobs:
             --sandbox-tests "$SOU119_SANDBOX_TESTS" \
             --node-archive "$asset/node.tar.xz" \
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python "$(command -v python3)" --allow-download \
+            --python /usr/bin/python3.12 --allow-download \
             2>&1 | tee "$RUNNER_TEMP/sou200-maintenance.log"
       - name: Retain finite maintenance report including failure
         if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.maintenance_only == 'true'
