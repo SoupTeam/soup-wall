@@ -23,8 +23,21 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
+      - name: Require frozen comparison source history
+        run: |
+          python3 -B - <<'PY'
+          import json, re, subprocess
+          from pathlib import Path
+          pre = json.loads(Path('docs/benchmarks/evidence/sou191/predeclaration.json').read_bytes())
+          commits = [pre['accepted_main_ref']['commit'], *(r['commit'] for r in pre['revisions'].values())]
+          for commit in commits:
+              assert re.fullmatch('[0-9a-f]{40}', commit)
+              subprocess.run(['git', 'cat-file', '-e', commit + '^{commit}'], check=True)
+          PY
       - name: Verify historical import and free runtime adapter contracts
         run: python3 -m unittest discover -s scripts/benchmarks -p 'test_*.py' -v
       - name: Run reproducible agent benchmark

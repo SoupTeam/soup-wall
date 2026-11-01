@@ -228,6 +228,18 @@ class ProcessTree:
             return None
         return int(info[10])
 
+    def posix_group_gone(self):
+        """Observe disappearance without inventing a POSIX process count."""
+        if self.job:
+            return None
+        try:
+            os.killpg(self.proc.pid, 0)
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            return False
+        return False
+
     def close(self):
         if self.job:
             self._k32.CloseHandle(self.job)  # KILL_ON_JOB_CLOSE: nothing in the job survives this
@@ -263,21 +275,29 @@ def capture(argv, timeout: float, limits, cwd=None, env=None):
         if any(s.thread.is_alive() for s in streams.values()):
             reason = "descendant_held_output_open"
     remaining = tree.active()
-    if reason or remaining:
+    if reason or remaining or (not tree.job and not tree.posix_group_gone()):
         tree.kill()  # also any descendant left in the job after a normal exit
     for stream in streams.values():
         stream.thread.join(GRACE_S)
     settle = time.monotonic() + GRACE_S
-    while tree.active() and time.monotonic() < settle:  # job termination is asynchronous
+    while (tree.active() or (not tree.job and not tree.posix_group_gone())) and time.monotonic() < settle:
+        # Group termination and orphan reaping are asynchronous on POSIX too.
         time.sleep(0.05)
     exceeded = sorted(name for name, s in streams.items() if s.limit_exceeded and s.policy == "terminate")
     if exceeded and reason is None:
         reason = "output_limit"  # the limit was passed as the process exited: still not a complete output
     cleanup = {"method": "windows_job_object" if tree.job else "posix_process_group",
                "job_processes_at_exit": remaining, "job_processes_after_cleanup": tree.active(),
+               "posix_group_gone": tree.posix_group_gone(),
                "reader_threads_alive": sum(s.thread.is_alive() for s in streams.values())}
     tree.close()
-    cleanup["complete"] = cleanup["reader_threads_alive"] == 0 and cleanup["job_processes_after_cleanup"] in (0, None)
+    cleanup["complete"] = (cleanup["reader_threads_alive"] == 0
+                           and ((cleanup["method"] == "windows_job_object"
+                                 and cleanup["job_processes_after_cleanup"] == 0)
+                                or (cleanup["method"] == "posix_process_group"
+                                    and cleanup["posix_group_gone"] is True)))
+    if not cleanup["complete"] and reason is None:
+        reason = "cleanup_incomplete"
     return {"exit_code": None if reason else code, "returncode_after_kill": code if reason else None,
             "timed_out": reason == "timeout", "output_limit_exceeded": exceeded[0] if exceeded else None,
             "killed": reason, "cleanup": cleanup, "duration_s": round(time.monotonic() - started, 3)}, streams

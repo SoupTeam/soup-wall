@@ -64,7 +64,13 @@ killed; otherwise they are null.
 A timeout or limit kills the whole tree: on Windows through a Job Object that the child joins before it starts, and
 on POSIX through its process group. This also reaches descendants whose parent has already exited. A descendant that
 keeps the pipes open after the child exits is killed at the deadline (`descendant_held_output_open`). The record's
-`cleanup` field states how many job processes and reader threads were still alive afterwards.
+`cleanup` field records the remaining reader threads and the observed Windows Job Object count. On POSIX,
+process counts stay unknown rather than being invented: the recorder separately observes disappearance of its
+owned process group (`posix_group_gone`) within the existing cleanup grace. A descendant that closes both pipes
+is still terminated. Unknown Job Object counts or an unconfirmed POSIX group disappearance cannot report
+complete cleanup. Unconfirmed cleanup is `cleanup_incomplete`: no successful execution exit or complete raw
+output is claimed, and it cannot supply an observed comparison. Historical records without this observation
+are not retrospectively upgraded.
 
 The recorder keeps the raw adapter output, the exit status and timeout flag, and the bounded build and run logs.
 Local paths in the logs are replaced with `<work>`, `<repo>` and `<home>`, and a `PATH = Some(...)` listing that
