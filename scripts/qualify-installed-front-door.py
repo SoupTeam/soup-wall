@@ -1097,7 +1097,7 @@ def main():
     summary = {"status": report["status"], "cases": len(report["cases"]), "error": report.get("error")}
     if args.linked_worktrees_only:
         linked = report.get('linked_worktrees', {})
-        summary['linked_worktrees'] = {k: linked.get(k) for k in ('status', 'active_case', 'last_cli', 'last_runs', 'connection_diagnostics')}
+        summary['linked_worktrees'] = {k: linked.get(k) for k in ('status', 'active_case', 'last_cli', 'last_runs', 'connection_diagnostics', 'namespace_probe')}
     print(json.dumps(summary))
     return 0 if report["status"] == "passed" else 1
 

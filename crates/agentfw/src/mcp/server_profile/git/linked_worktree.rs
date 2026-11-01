@@ -491,3 +491,104 @@ mod schema_tests {
         assert!(read(&profile).is_err());
     }
 }
+
+/// Actual namespace/original-server compatibility control. This deliberately
+/// proves no daemon admission or protection; installed host qualification below
+/// must still traverse the existing independent call/result boundaries.
+#[cfg(all(test, target_os = "linux"))]
+mod original_mcp_probe {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
+
+    async fn frame(
+        reader: &mut BufReader<tokio::process::ChildStdout>,
+    ) -> anyhow::Result<serde_json::Value> {
+        let mut bytes = Vec::new();
+        for _ in 0..=super::super::super::MAX_FRAME_BYTES {
+            let byte = reader.read_u8().await?;
+            bytes.push(byte);
+            if byte == b'\n' {
+                return Ok(serde_json::from_slice(&bytes)?);
+            }
+        }
+        anyhow::bail!("linked_worktree_probe_frame_bound")
+    }
+
+    #[tokio::test]
+    #[ignore = "requires owned installed profile, exact candidate owner and native bubblewrap"]
+    async fn linked_worktree_original_mcp_initializes_inside_native_namespace() {
+        let path =
+            std::env::var_os("SOU201_TEST_PROFILE").expect("explicit owned profile required");
+        let profile =
+            super::super::super::ProfileConfig::read(&std::fs::read(path).unwrap()).unwrap();
+        assert_eq!(profile.format, FORMAT);
+        let prepared = crate::mcp::server_sandbox::prepare_explicit(&profile, None).unwrap();
+        let _source = prepared.git_view();
+        let (mut child, mut budget, mut owner, _) = prepared.spawn().await.unwrap();
+        let mut input = child.stdin.take().unwrap();
+        let mut output = BufReader::new(child.stdout.take().unwrap());
+        let errors = child.stderr.take().unwrap();
+        let stderr = tokio::spawn(async move {
+            let mut bytes = Vec::new();
+            errors
+                .take(8193)
+                .read_to_end(&mut bytes)
+                .await
+                .map(|_| bytes)
+        });
+        let protocol = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+            input.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"owned-sou201-probe\",\"version\":\"1\"}}}\n").await?;
+            let initialized=frame(&mut output).await?;
+            anyhow::ensure!(initialized["id"]==1 && initialized.get("result").is_some(),"linked_worktree_probe_initialize");
+            input.write_all(b"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}\n").await?;
+            let tools=frame(&mut output).await?;
+            anyhow::ensure!(tools["id"]==2 && tools["result"]["tools"].as_array().is_some_and(|tools|tools.iter().any(|t|t["name"]=="git_status")),"linked_worktree_probe_discovery");
+            Ok::<(), anyhow::Error>(())
+        }).await;
+        drop(input);
+        let quiesced = owner.quiesce().await;
+        let budget_cleanup = if let Some(budget) = budget.as_mut() {
+            budget.finish().await
+        } else {
+            Ok(())
+        };
+        let cleanup = owner.finish().await;
+        let waited = tokio::time::timeout(std::time::Duration::from_secs(10), child.wait()).await;
+        let bytes = tokio::time::timeout(std::time::Duration::from_secs(5), stderr)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        let mut diagnostic = String::from_utf8_lossy(&bytes[..bytes.len().min(4096)]).into_owned();
+        for path in [
+            &profile.workspace,
+            &profile.package_root,
+            &profile.runtime_path,
+            &profile.bwrap_path,
+        ] {
+            if let Some(path) = path.to_str() {
+                diagnostic = diagnostic.replace(path, "<owned-selected-input>");
+            }
+        }
+        if let Some(binding) = &profile.linked_worktree {
+            for path in [&binding.git_dir.path, &binding.common_dir.path] {
+                if let Some(path) = path.to_str() {
+                    diagnostic = diagnostic.replace(path, "<owned-selected-metadata>");
+                }
+            }
+        }
+        println!(
+            "{}",
+            serde_json::json!({"event":"sou201_original_mcp_namespace_probe",
+            "initialized":matches!(&protocol,Ok(Ok(()))),"cleanup":quiesced.is_ok()&&cleanup.is_ok()&&waited.is_ok(),
+            "owned_synthetic_stderr":diagnostic,"stderr_truncated":bytes.len()>4096})
+        );
+        quiesced.unwrap();
+        budget_cleanup.unwrap();
+        cleanup.unwrap();
+        waited.unwrap().unwrap();
+        protocol
+            .expect("owned original MCP startup timed out")
+            .expect("owned original MCP startup failed");
+    }
+}

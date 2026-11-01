@@ -93,7 +93,26 @@ def qualify(args, door, home, env, report, installed):
         checked(target, 'prepare', '--apply', inputs=False)
         selection = json.loads(selections[-1].read_bytes())
         require(selection['linked_worktree'] == bindings[i], 'linked_worktree_selection_binding_changed')
-    passed('two-prepared-selections', source_bound=True)
+    # The ordinary snapshot tests do not exercise the actual mount projection.
+    # Probe that exact installed original MCP server before genuine host startup.
+    probe_env=dict(env,SOU86_TEST_AGENTFW=str(args.agentfw),
+                   SOU201_TEST_PROFILE=str(selections[0].parent/'git-profile/profile.json'))
+    probe=subprocess.run([str(args.sandbox_tests),
+        'mcp::server_profile::git::linked_worktree::original_mcp_probe::linked_worktree_original_mcp_initializes_inside_native_namespace',
+        '--exact','--ignored','--nocapture','--test-threads=1'],cwd=door.cwd,env=probe_env,
+        stdin=subprocess.DEVNULL,capture_output=True,timeout=120)
+    # No credentials or real source data enter this test-only namespace probe.
+    # It emits a bounded diagnostic over owned synthetic inputs only.
+    probe_output=probe.stdout.decode('utf-8','replace')
+    evidence['namespace_probe']={'exit':probe.returncode,'reported':False}
+    for line in probe_output.splitlines():
+        if line.startswith('{'):
+            try: value=json.loads(line)
+            except ValueError: continue
+            if value.get('event')=='sou201_original_mcp_namespace_probe':
+                evidence['namespace_probe'].update(reported=True,observation=value)
+    require(probe.returncode==0 and evidence['namespace_probe']['reported'], 'linked_worktree_original_namespace_startup_failed')
+    passed('two-prepared-selections', source_bound=True, original_namespace_initialized=True)
     def refuse(name, path, mutation):
         begin(name)
         raw = path.read_bytes(); mode = path.stat().st_mode & 0o777
