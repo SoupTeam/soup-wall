@@ -1,4 +1,4 @@
-role,trial_id,run,profile,condition,run_qualified,status,reason,continuation_ms,first_pending_asset_verification_lb_ms,post_observed_total_ms
+role,trial_id,run,stratum,condition,run_qualified,status,reason,continuation_ms,first_pending_asset_verification_ms,post_observed_total_ms
 baseline,r01/filesystem/000,1,filesystem,post_cache_drop_setup_rewarmed,True,measured,,1034.014058,1114.373983,955.022722
 baseline,r01/filesystem/001,1,filesystem,post_cache_drop_setup_rewarmed,True,measured,,972.659172,1069.0501120000001,892.02797
 baseline,r01/filesystem/002,1,filesystem,post_cache_drop_setup_rewarmed,True,measured,,987.941508,1070.6667750000001,902.248167

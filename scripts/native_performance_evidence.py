@@ -18,6 +18,7 @@ NP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(NP)
 SOU141 = 'docs/operations/evidence/sou-141/'
 SOU124 = 'docs/operations/evidence/sou-124/'
+SOU106 = 'docs/operations/evidence/sou106/'
 BUNDLE = ROOT / 'docs/operations/evidence/sou-203'
 FINAL = ['--baseline', SOU141 + 'native-final-ask-series-summary.json',
          '--baseline-manifest', SOU141 + 'native-final-ask-series-manifest.json']
@@ -35,6 +36,13 @@ CASES = {
     'ask-qualification-vs-series': (['--baseline', SOU124 + 'native-attempt2-baseline.json',
                                      '--candidate', SOU141 + 'native-final-ask-series-summary.json',
                                      '--candidate-manifest', SOU141 + 'native-final-ask-series-manifest.json'], 1),
+    'installed-host-identity-control': (['--baseline', SOU106 + 'measured-report.json',
+                                         '--candidate', SOU106 + 'measured-report.json', '--paired'], 1),
+    'installed-host-historical': (['--baseline', SOU106 + 'attempt-2.json',
+                                   '--candidate', SOU106 + 'measured-report.json'], 1),
+    'installed-host-vs-ask-series': (['--baseline', SOU106 + 'measured-report.json',
+                                      '--candidate', SOU141 + 'native-final-ask-series-summary.json',
+                                      '--candidate-manifest', SOU141 + 'native-final-ask-series-manifest.json'], 1),
 }
 
 
@@ -54,7 +62,7 @@ def generate(out_dir):
         cases = dict(CASES)
         cases['broken-copy-control'] = (['--baseline', broken_copy(private), '--candidate', broken_copy(private)], 2)
         for name, (words, expected) in sorted(cases.items()):
-            code = NP.main([*(str(ROOT / w) if w.startswith((SOU141, SOU124)) else w for w in words),
+            code = NP.main([*(str(ROOT / w) if w.startswith((SOU141, SOU124, SOU106)) else w for w in words),
                             '--repository', str(ROOT), '--out-dir', str(out_dir / name)])
             codes[name] = code
             if code != expected:

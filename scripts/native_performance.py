@@ -428,6 +428,13 @@ def _normalize(role, summary_path, manifest_path, receipt_path, git):
                 'an Ask qualification report carries its own binary digests; no manifest or receipt applies')
         return _normalize_ask(role, summary_path, summary, held, git)
     fmt = summary.get('format')
+    if fmt in (INSTALLED_FORMAT, PREPARATION_FORMAT):
+        require(manifest_path is None and receipt_path is None, 'input_not_applicable', role,
+                'this report family carries its own identities; no manifest or receipt applies')
+        adapter = _normalize_installed if fmt == INSTALLED_FORMAT else _normalize_preparation
+        return adapter(role, summary_path, summary, held, git)
+    require(fmt != PREPARATION_MARKER, 'no_performance_endpoints', role,
+            'sw-pilot-preparation/1 is a completion marker without timing fields')
     require(fmt in (SERIES_FORMAT, RETROACTIVE_FORMAT), 'unsupported_report_format', role, repr(fmt)[:64])
     retroactive = fmt == RETROACTIVE_FORMAT
     samples = summary.get('samples_per_profile')
@@ -665,7 +672,9 @@ def _normalize(role, summary_path, manifest_path, receipt_path, git):
                   if trace_basis else 'unverified: no validated run',
                   'observed': 'not_retained'},
         'endpoints': copy.deepcopy(ENDPOINTS), 'stage_clock': dict(STAGE_CLOCK), 'not_retained': dict(NOT_RETAINED),
+        'primary_endpoint': 'continuation_ms',
         'design': {'plan': plan, 'samples_per_profile': samples, 'profiles': list(PROFILES),
+                   'trial_plan': {'samples_per_profile': samples},
                    'pairing_design': None, 'cluster_unit': 'run (one qualifier process per run)',
                    'host_unit': 'one dispatch / runner per report'},
         'status_mapping': dict(STATUS_MAPPING),
@@ -781,7 +790,9 @@ def _normalize_ask(role, path, report, held, git):
                   else 'this report predates the trace_requested field', 'observed': 'not_retained'},
         'endpoints': copy.deepcopy(ENDPOINTS), 'stage_clock': dict(STAGE_CLOCK),
         'not_retained': dict(NOT_RETAINED, raw_stage_events='not part of an Ask qualification report'),
+        'primary_endpoint': 'continuation_ms',
         'design': {'plan': ['undeclared'], 'samples_per_profile': samples, 'profiles': list(PROFILES),
+                   'trial_plan': {'samples_per_profile': samples},
                    'pairing_design': None, 'cluster_unit': 'run (one qualifier process)', 'host_unit': 'one report'},
         'status_mapping': dict(STATUS_MAPPING, measured='case present and the pilot_ask_latency.summarize success '
                                'predicate holds', timed_out='no case, and the report error_type names a timeout',
@@ -792,6 +803,326 @@ def _normalize_ask(role, path, report, held, git):
                   'conditions': {}}],
         'trials': trials,
         'reproduction': {'status': 'reproduced_from_retained_trials', 'checked': ['latency'], 'not_reproduced': []},
+    }
+
+
+# ------------------------------------------------------------------ sw-installed-pilot-matched/1 adapter
+
+INSTALLED_FORMAT = 'sw-installed-pilot-matched/1'
+INSTALLED_HARNESS = {'driver_sha256': 'scripts/qualify-installed-pilot.py',
+                     'extension_sha256': 'scripts/pilot_measurement.py'}
+INSTALLED_GATE = ('scripts/pilot_qualification.py', 'scripts/benchmarks/agentdojo_protocol.py')
+INSTALLED_WORKLOADS = ('scripts/benchmarks/installed-pilot-workload-v2.json',
+                       'scripts/benchmarks/installed-pilot-workload-v1.json')
+INSTALLED_CLOCK = {'clock': 'installed_driver_monotonic', 'unit': 'ms',
+                   'observer': 'scripts/qualify-installed-pilot.py Pilot.host (scripted loopback provider)'}
+INSTALLED_ENDPOINTS = {
+    'host_elapsed_ms': dict(INSTALLED_CLOCK, metric='installed_host_arm_elapsed', start='host process spawn',
+                            end='host process exit', source_field='rows[].host_elapsed_ms',
+                            role='whole fresh-host arm: start, every call and shutdown'),
+    'host_start_ms': dict(INSTALLED_CLOCK, metric='installed_host_start', start='host process spawn',
+                          end='first scripted tool proposal served', source_field='rows[].host_start_ms',
+                          role='host start only; never a call latency'),
+}
+INSTALLED_STATUS_MAPPING = {
+    'measured': 'row status passed (the gate requires actual host, cleanup and finite call timings)',
+    'failed': 'row status failed for a non-timeout reason',
+    'timed_out': 'row status failed with a reason naming a timeout or deadline',
+    'incomplete': 'row status incomplete after execution started or was cancelled',
+    'not_run': 'row status incomplete with reason not_executed (the arm never started)',
+}
+INSTALLED_OUTCOMES = ('Row status and the gate are the producer\'s development workflow outcomes. A protected refusal '
+                      'is witnessed by the producer\'s own repository witness (effect_observed, original_opens) and is '
+                      'not re-observed here. No status is security or protection effectiveness evidence.')
+
+
+def _git_json(git, commit, name):
+    data = git.run('cat-file', 'blob', f'{commit}:{name}')
+    return data, (json.loads(data) if data is not None else None)
+
+
+def _normalize_installed(role, path, report, held, git):
+    rows, identity = report.get('rows'), report.get('identity')
+    require(isinstance(rows, list) and 1 <= len(rows) <= LIMITS['trials'] and all(isinstance(r, dict) for r in rows),
+            'trial_table_malformed', role, 'rows')
+    require(isinstance(identity, dict) and isinstance(identity.get('selected'), dict), 'source_identity_missing',
+            role, 'identity')
+    for row in rows:
+        require(row.get('identity') == identity, 'paired_identity_drift', role, f'{row.get("case")}/{row.get("arm")}')
+        require(row.get('arm') in ('control', 'protected') and isinstance(row.get('case'), str)
+                and row.get('status') in ('passed', 'failed', 'incomplete'), 'trial_table_malformed', role,
+                f'{row.get("case")!r}/{row.get("arm")!r}')
+    selected = identity['selected']
+    require(all(isinstance(v, str) and re.fullmatch('[0-9a-f]{64}', v) for v in selected.values()),
+            'invalid_digest', role, 'identity.selected')
+    require(identity.get('policy_sha256') == selected.get('policy'), 'policy_identity_contradiction', role,
+            'identity.policy_sha256 differs from identity.selected.policy')
+    source = verify_source(identity.get('source'), git, role)
+    commit = source['commit']
+    available = source['status'] != 'unverified_commit_not_in_repository'
+    harness = {}
+    if available:
+        for field, name in INSTALLED_HARNESS.items():
+            harness[name] = git.file_sha256(commit, name)
+            require(harness[name] is None or harness[name] == identity.get(field), 'harness_identity_contradiction',
+                    role, f'identity.{field} differs from {name} at the source commit')
+    workload = workload_name = None
+    if available:
+        for name in INSTALLED_WORKLOADS:
+            data, value = _git_json(git, commit, name)
+            if data is not None and hashlib.sha256(data).hexdigest() == report.get('workload_file_sha256'):
+                workload, workload_name = value, name
+                break
+    os_cache = str((report.get('conditions') or {}).get('os_cache', ''))
+    require(os_cache.startswith('uncontrolled'), 'true_cold_claim_unsupported', role, 'conditions.os_cache')
+    keys = [(r['case'], r['arm']) for r in rows]
+    require(len(set(keys)) == len(keys), 'duplicate_trial_id', role, 'rows (case, arm)')
+    reproduced, not_reproduced = [], []
+    if workload is not None:
+        gate = _load('installed_gate', 'scripts/pilot_qualification.py')
+        require(gate.digest(workload) == report.get('workload_sha256') == identity.get('model_script_sha256'),
+                'workload_identity_contradiction', role, 'workload_sha256')
+        expected = [(c['id'], arm) for c in workload['cases'] for arm in ('control', 'protected')]
+        require(not set(keys) - set(expected), 'unexpected_trial_id', role, str(sorted(set(keys) - set(expected))[:3]))
+        require(set(keys) == set(expected), 'missing_required_trial', role, str(sorted(set(expected) - set(keys))[:3]))
+        require(keys == expected, 'trial_order_invalid', role, 'rows')
+        cases = {c['id']: c for c in workload['cases']}
+        for row in rows:
+            require(row.get('operation_sha256') == gate.digest(cases[row['case']]['batches']),
+                    'workload_identity_contradiction', role, f'{row["case"]}/{row["arm"]}.operation_sha256')
+        _check(report.get('conditions'), workload['conditions'], role, 'conditions')
+        # Older producer revisions did not write required_arms; it is checked only where it was published.
+        require(report.get('required_arms') in (None, len(expected)), 'published_distribution_not_reproduced', role,
+                'required_arms')
+        reproduced += ['rows (case, arm) plan', 'rows[].operation_sha256', 'conditions']
+        if report.get('required_arms') is not None:
+            reproduced.append('required_arms')
+    else:
+        require(report.get('required_arms') in (None, len(rows)), 'missing_required_trial', role, 'required_arms')
+        not_reproduced.append('trial plan and gate: the workload at the source commit is unavailable')
+    report_failures = report.get('failures')
+    require(isinstance(report_failures, list), 'trial_table_malformed', role, 'failures')
+    checks = {'source_unchanged': report.get('source_unchanged') is True
+              and report.get('source_after') == identity.get('source'),
+              'cleanup': report.get('cleanup') is True, 'no_run_failures': not report_failures}
+    failed_checks = [name for name, ok in checks.items() if not ok]
+    qualified = not failed_checks
+    condition = 'fresh_host_per_arm_os_cache_uncontrolled'
+    kinds = {c['id']: c['kind'] for c in workload['cases']} if workload else {}
+    batches = {c['id']: c['batches'] for c in workload['cases']} if workload else {}
+    trials = []
+    for row in rows:
+        reason = row.get('reason')
+        if row['status'] == 'passed':
+            state = 'measured'
+        elif row['status'] == 'failed':
+            state = 'timed_out' if re.search('timeout|deadline', str(reason)) else 'failed'
+        else:
+            state = 'not_run' if reason == 'not_executed' and row.get('cancelled') is not True else 'incomplete'
+        endpoints = dict.fromkeys(INSTALLED_ENDPOINTS)
+        stages = {}
+        if state == 'measured':
+            for name in INSTALLED_ENDPOINTS:
+                value = row.get(name)
+                if value is None and name == 'host_elapsed_ms':
+                    continue  # not written by older producer revisions; host_start_ms is required by every gate
+                require(_number(value), 'nonfinite_or_missing_duration', role, f'{row["case"]}/{row["arm"]}.{name}')
+                require(value >= 0, 'negative_duration', role, f'{row["case"]}/{row["arm"]}.{name}')
+                endpoints[name] = value
+            calls = row.get('latencies_ms')
+            require(isinstance(calls, dict) and all(_number(v) and v >= 0 for v in calls.values()),
+                    'nonfinite_or_missing_duration', role, f'{row["case"]}/{row["arm"]}.latencies_ms')
+            if row['case'] in batches:
+                total, first = sum(map(len, batches[row['case']])), len(batches[row['case']][0])
+                require(set(calls) == {f'toolu_pilot_{i}' for i in range(total)}, 'call_denominator_mismatch', role,
+                        f'{row["case"]}/{row["arm"]}')
+                stages = {'call/first_batch_ms': [calls[f'toolu_pilot_{i}'] for i in range(first)],
+                          'call/steady_state_ms': [calls[f'toolu_pilot_{i}'] for i in range(first, total)]}
+            else:
+                stages = {'call/unsplit_ms': [calls[k] for k in sorted(calls)]}
+        label = f"{row['arm']}/{kinds.get(row['case'], 'unknown_kind')}"
+        trials.append({'id': f"r01/{row['case']}/{row['arm']}", 'run': 1, 'profile': label, 'sample_index': None,
+                       'case': row['case'], 'arm': row['arm'], 'condition': condition, 'run_qualified': qualified,
+                       'status': state, 'reason': None if state == 'measured' else (reason or row['status']),
+                       'endpoints': endpoints, 'stages': stages})
+    if workload is not None:
+        # The gate is reproduced (after every trial value is validated) only with the exact gate code that produced it.
+        same_gate = all(git.run('cat-file', 'blob', f'{commit}:{name}') ==
+                        (ROOT / name).read_bytes().replace(b'\r\n', b'\n') for name in INSTALLED_GATE)
+        if same_gate:
+            body = {k: v for k, v in report.items() if k not in ('gate', 'negative_gate_control')}
+            sys.path.insert(0, str(ROOT / 'scripts'))
+            try:
+                recomputed = gate.matched_gate(workload, body)
+            except (ValueError, KeyError, TypeError) as error:
+                recomputed = {'status': 'failed', 'failures': [getattr(error, 'code', 'invalid_gate_evidence')]}
+            finally:
+                sys.path.remove(str(ROOT / 'scripts'))
+            if report.get('failures') and 'metrics' in recomputed:
+                recomputed = dict(recomputed, status='failed', failures=recomputed['failures'] + report['failures'])
+            _check(report.get('gate'), recomputed, role, 'gate')
+            reproduced.append('gate (pilot_qualification.matched_gate, identical gate code at the source commit)')
+        else:
+            not_reproduced.append('gate: the gate code at the source commit differs from the accepted primitive')
+    report_endpoints = {}
+    for name, boundary in (('preparation_ms', 'run start through selection verification, asset install and daemon '
+                                              'preparation'),
+                           ('source_and_selection_verification_ms', 'run start to verified source and selection'),
+                           ('asset_install_and_daemon_prepare_ms', 'asset install and daemon preparation only')):
+        value = report.get(name)
+        require(value is None or (_number(value) and value >= 0), 'negative_duration', role, name)
+        report_endpoints[name] = dict(INSTALLED_CLOCK, value=value, boundary=boundary,
+                                      observer='scripts/pilot_measurement.py run_matched')
+    report_endpoints['external_build_time'] = {'value': report.get('external_build_time'), 'unit': 'none',
+                                               'boundary': 'not measured by this producer', 'clock': None}
+    report_endpoints['observable_ask_latency'] = {'value': 'not_applicable', 'unit': 'none', 'clock': None,
+                                                  'boundary': 'the workload has no operator Ask decision'}
+    gate = report.get('gate') if isinstance(report.get('gate'), dict) else {}
+    profiles = sorted({t['profile'] for t in trials})
+    return {
+        'contract': OBSERVATION, 'role': role,
+        'input': {'name': portable_name(path), 'producer': 'scripts/pilot_measurement.py (qualify-installed-pilot.py)',
+                  'producer_format': INSTALLED_FORMAT, 'custody': held, 'manifest': None,
+                  'evidence_sha256': hashlib.sha256(json.dumps([held['original_sha256'], None, None]).encode()).hexdigest()},
+        'provenance': {
+            'source': source,
+            'binaries': {'status': 'declared_only', 'sha256': selected,
+                         'detail': 'identity.selected self-declaration; the binaries are not retained'},
+            'build': {'status': 'not_retained', 'profile': None, 'receipt_sha256': None,
+                      'detail': 'prebuilt selected binaries; ' + str(report.get('external_build_time'))},
+            'workload': {'definition': workload_name or 'unavailable at the source commit',
+                         'harness_sha256_at_source': dict(harness, workload_file=report.get('workload_file_sha256')),
+                         'status': 'verified_git_objects' if workload is not None and harness
+                         and all(harness.values()) else 'unverified'},
+            'profiles_and_policy': {'status': 'declared_only',
+                                    'detail': 'identity.profiles, policy_sha256 and registry_sha256 are self-declared '
+                                              '(policy_sha256 agrees with identity.selected.policy)'},
+        },
+        'environment': {'platform_kind': None, 'kernel': None, 'machine': None, 'cpu_count': [], 'mem_total_kb': [],
+                        'host_instance': {'status': 'not_retained', 'detail': 'one fresh host process per arm on '
+                                          'an unrecorded runner'}},
+        'trace': {'requested': None, 'requested_status': 'not_recorded', 'observed': 'not_retained',
+                  'requested_basis': 'the installed-host report records no observer or trace mode'},
+        'primary_endpoint': 'host_start_ms',
+        'endpoints': copy.deepcopy(INSTALLED_ENDPOINTS), 'stage_clock': dict(INSTALLED_CLOCK),
+        'report_endpoints': report_endpoints,
+        'engineering_criteria': 'none approved: engineering_budgets.latency_threshold_approved is '
+                                + str((report.get('engineering_budgets') or {}).get('latency_threshold_approved')),
+        'outcome_semantics': INSTALLED_OUTCOMES,
+        'gate': {'status': gate.get('status'), 'failures': gate.get('failures'),
+                 'scope': 'producer development gate; not security, effectiveness or readiness'},
+        'within_report_pairing': {
+            'basis': 'control and protected arm of the same case with the same input_sha256, fresh host each, '
+                     'control first (order bias retained)',
+            'published_call_overhead_ms': (gate.get('metrics') or {}).get('call_overhead_ms'),
+            'reproduced': any(item.startswith('gate') for item in reproduced),
+            'use': 'reported only; never used to pair two reports'},
+        'not_retained': {'trace_observed': NOT_RETAINED['trace_observed'],
+                         'host_instance': 'the runner is not recorded',
+                         'failed_arm_timings': 'kept in the original report; failed arms carry no measured value here',
+                         **({} if all(t['endpoints']['host_elapsed_ms'] is not None for t in trials
+                                      if t['status'] == 'measured')
+                            else {'host_elapsed_ms': 'not written by this producer revision'})},
+        'design': {'plan': ['single_run'], 'samples_per_profile': None, 'profiles': profiles,
+                   'trial_plan': {'workload_sha256': report.get('workload_sha256'), 'arms': ['control', 'protected'],
+                                  'cases': len({k[0] for k in keys})},
+                   'pairing_design': None, 'cluster_unit': 'report (one dispatch)', 'host_unit': 'fresh host per arm'},
+        'status_mapping': dict(INSTALLED_STATUS_MAPPING),
+        'runs': [{'index': 1, 'declared_kind': 'single_run', 'condition': condition, 'qualified': qualified,
+                  'disqualification': None if qualified else 'failed_checks:' + ','.join(failed_checks),
+                  'exit_code': None, 'failure': report_failures or None, 'wall_seconds': None, 'cache_drop': None,
+                  'conditions': {}}],
+        'trials': trials,
+        'reproduction': {'status': 'reproduced_from_retained_trials' if not not_reproduced else 'partial',
+                         'checked': reproduced, 'not_reproduced': not_reproduced},
+    }
+
+
+# ------------------------------------------------------------------ sw-native-pilot-prerequisites/1 adapter
+
+PREPARATION_FORMAT = 'sw-native-pilot-prerequisites/1'
+PREPARATION_MARKER = 'sw-pilot-preparation/1'
+PREPARATION_STAGES = ('git', 'bwrap')
+PREPARATION_ENDPOINTS = {'stage_seconds': {
+    'metric': 'native_prerequisite_stage_elapsed', 'clock': 'preparation_monotonic', 'unit': 's',
+    'observer': 'scripts/prepare-native-pilot-prerequisites.py', 'source_field': 'stages.<stage>.seconds',
+    'start': 'stage start after archive extraction',
+    'end': 'git: build, verify and checkpoint publish (or verified reuse); bwrap: meson setup and compile',
+    'role': 'preparation cost only; never an Ask or host latency'}}
+
+
+def _normalize_preparation(role, path, receipt, held, git):
+    """One successful prerequisite receipt: one trial per stage. A failed preparation writes no receipt."""
+    commit, stages = receipt.get('source_commit'), receipt.get('stages')
+    require(isinstance(commit, str) and re.fullmatch('[0-9a-f]{40}', commit), 'source_identity_malformed', role,
+            'source_commit')
+    require(receipt.get('status') == 'built-not-qualified', 'receipt_stage_contradiction', role, 'status')
+    require(isinstance(stages, dict) and set(stages) == set(PREPARATION_STAGES), 'missing_required_trial', role,
+            'stages')
+    binaries = receipt.get('binaries')
+    require(isinstance(binaries, dict) and set(binaries) == set(PREPARATION_STAGES)
+            and all(isinstance(b, dict) and isinstance(b.get('sha256'), str)
+                    and re.fullmatch('[0-9a-f]{64}', b['sha256']) for b in binaries.values()),
+            'invalid_digest', role, 'binaries')
+    trials = []
+    for stage in PREPARATION_STAGES:
+        entry = stages[stage]
+        require(isinstance(entry, dict), 'trial_table_malformed', role, f'stages.{stage}')
+        allowed = ('built', 'reused') if stage == 'git' else ('built',)
+        require(entry.get('status') in allowed, 'receipt_stage_contradiction', role,
+                f'stages.{stage}.status={entry.get("status")!r} in a completed receipt')
+        value = entry.get('seconds')
+        require(_number(value), 'nonfinite_or_missing_duration', role, f'stages.{stage}.seconds')
+        require(value >= 0, 'negative_duration', role, f'stages.{stage}.seconds')
+        trials.append({'id': f'r01/{stage}', 'run': 1, 'profile': stage, 'sample_index': 0,
+                       'condition': 'reused_verified_checkpoint' if entry['status'] == 'reused' else 'built_from_source',
+                       'run_qualified': True, 'status': 'measured', 'reason': None,
+                       'endpoints': {'stage_seconds': value}, 'stages': {}})
+    tree = git.tree_of(commit)
+    source = {'status': 'commit_verified_tree_not_declared' if tree else 'unverified_commit_not_in_repository',
+              'commit': commit, 'tree': None, 'files_sha256': None,
+              'method': 'git rev-parse <commit>^{tree}' if tree else None}
+    harness = {'scripts/prepare-native-pilot-prerequisites.py':
+               git.file_sha256(commit, 'scripts/prepare-native-pilot-prerequisites.py')} if tree else None
+    return {
+        'contract': OBSERVATION, 'role': role,
+        'input': {'name': portable_name(path), 'producer': 'scripts/prepare-native-pilot-prerequisites.py',
+                  'producer_format': PREPARATION_FORMAT, 'custody': held, 'manifest': None,
+                  'evidence_sha256': hashlib.sha256(json.dumps([held['original_sha256'], None, None]).encode()).hexdigest()},
+        'provenance': {
+            'source': source,
+            'binaries': {'status': 'declared_only', 'sha256': {k: v['sha256'] for k, v in binaries.items()},
+                         'detail': 'receipt self-declaration of the built git and bubblewrap binaries'},
+            'build': {'status': 'declared_flags', 'profile': None, 'receipt_sha256': held['original_sha256'],
+                      'detail': 'make/meson flags are declared in the receipt; no cargo profile applies'},
+            'workload': {'definition': 'git and bubblewrap prerequisite build stages', 'harness_sha256_at_source': harness,
+                         'status': 'verified_git_objects' if harness and all(harness.values()) else 'unverified'},
+            'profiles_and_policy': {'status': 'not_applicable', 'detail': 'preparation builds prerequisites only'},
+        },
+        'environment': {'platform_kind': None, 'kernel': None, 'machine': None, 'cpu_count': [], 'mem_total_kb': [],
+                        'host_instance': {'status': 'not_retained', 'detail': 'the receipt records no host'}},
+        'trace': {'requested': None, 'requested_status': 'not_applicable', 'observed': 'not_applicable',
+                  'requested_basis': 'preparation runs no Ask observer'},
+        'primary_endpoint': 'stage_seconds',
+        'endpoints': copy.deepcopy(PREPARATION_ENDPOINTS),
+        'stage_clock': {'clock': 'preparation_monotonic', 'unit': 's', 'observer': PREPARATION_ENDPOINTS[
+            'stage_seconds']['observer']},
+        'engineering_criteria': 'none approved for preparation stage time',
+        'not_retained': {'failed_preparation': 'a failed preparation writes no receipt; its stages exist only in '
+                                               'the command output', 'host_instance': 'not recorded'},
+        'design': {'plan': ['single_run'], 'samples_per_profile': 1, 'profiles': list(PREPARATION_STAGES),
+                   'trial_plan': {'stages': list(PREPARATION_STAGES)}, 'pairing_design': None,
+                   'cluster_unit': 'receipt (one preparation)', 'host_unit': 'one receipt'},
+        'status_mapping': {'measured': 'completed stage with finite non-negative seconds',
+                           'failed': 'not representable: a completed receipt with a failed stage is rejected',
+                           'timed_out': 'not representable in a receipt', 'incomplete': 'not representable',
+                           'not_run': 'not representable'},
+        'runs': [{'index': 1, 'declared_kind': 'single_run', 'condition': 'mixed', 'qualified': True,
+                  'disqualification': None, 'exit_code': None, 'failure': None, 'wall_seconds': None,
+                  'cache_drop': None, 'conditions': {}}],
+        'trials': trials,
+        'reproduction': {'status': 'no_published_aggregates', 'checked': [],
+                         'not_reproduced': ['the receipt publishes no aggregate to reproduce']},
     }
 
 
@@ -806,27 +1137,35 @@ def describe(values):
 
 def stratum_side(observation, key):
     profile, condition = key
+    primary = observation['primary_endpoint']
     rows = [t for t in observation['trials'] if t['profile'] == profile and t['condition'] == condition]
     included = [t for t in rows if t['run_qualified']]
     counts = {s: sum(t['status'] == s for t in included) for s in STATUSES}
     measured = [t for t in included if t['status'] == 'measured']
     runs = sorted({t['run'] for t in included})
-    continuation = [t['endpoints']['continuation_ms'] for t in measured]
-    highest = sorted(measured, key=lambda t: (-t['endpoints']['continuation_ms'], t['id']))[:3]
+    values = [t['endpoints'][primary] for t in measured]
+    highest = sorted(measured, key=lambda t: (-t['endpoints'][primary], t['id']))[:3]
     stages = {}
     for t in measured:
         for name, value in t['stages'].items():
-            stages.setdefault(name, []).append(value)
-    pending = [t['endpoints']['first_pending_asset_verification_ms'] for t in measured
-               if t['endpoints']['first_pending_asset_verification_ms'] is not None]
-    post = [t['endpoints']['post_observed_total_ms'] for t in measured
-            if t['endpoints']['post_observed_total_ms'] is not None]
+            stages.setdefault(name, []).extend(value if isinstance(value, list) else [value])
+    endpoints = {name: describe([t['endpoints'][name] for t in measured if t['endpoints'].get(name) is not None])
+                 for name in sorted(observation['endpoints'])}
     complete = bool(included) and counts['measured'] == len(included)
-    dist = describe(continuation)
-    if not complete or dist['p95'] is None:
-        target = 'not_evaluable_incomplete_denominator' if included else 'not_evaluable_no_qualified_run'
+    dist = describe(values)
+    if primary != 'continuation_ms':
+        targets = {'primary': observation.get('engineering_criteria', 'no approved criterion for ' + primary)}
     else:
-        target = 'met' if dist['p95'] <= CONTINUATION_TARGET_MS else 'not_met'
+        if not complete or dist['p95'] is None:
+            target = 'not_evaluable_incomplete_denominator' if included else 'not_evaluable_no_qualified_run'
+        else:
+            target = 'met' if dist['p95'] <= CONTINUATION_TARGET_MS else 'not_met'
+        pending = [t['endpoints'].get('first_pending_asset_verification_ms') for t in measured]
+        pending = [v for v in pending if v is not None]
+        targets = {'continuation_p95_le_3000_ms': target,
+                   'first_pending_le_5000_ms': 'not_evaluated_by_this_evidence (SOU-105 acceptance owns it); '
+                                               'collector lower-bound max '
+                                               + (f'{max(pending):.3f} ms' if pending else 'n/a')}
     return {
         'planned': len(rows), 'qualified_run_trials': len(included),
         'attempted': sum(t['status'] != 'not_run' for t in rows),
@@ -835,20 +1174,16 @@ def stratum_side(observation, key):
         'excluded_runs': sorted({t['run'] for t in rows if not t['run_qualified']}),
         'status_counts': counts, 'complete_denominator': complete,
         'runs': runs, 'independent_clusters': len(runs),
-        'continuation_ms': dist,
-        'continuation_highest': [{'trial': t['id'], 'ms': t['endpoints']['continuation_ms']} for t in highest],
-        'continuation_by_run': {str(r): describe([t['endpoints']['continuation_ms'] for t in measured
-                                                  if t['run'] == r]) for r in runs},
-        'first_trial_per_run_ms': [{'trial': t['id'], 'ms': t['endpoints']['continuation_ms']}
-                                   for t in measured if t['sample_index'] == 0],
-        'first_pending_asset_verification_ms': describe(pending),
-        'post_observed_total_ms': describe(post),
-        'stages_ms': {name: describe(values) for name, values in sorted(stages.items())},
-        'engineering_targets': {
-            'continuation_p95_le_3000_ms': target,
-            'first_pending_le_5000_ms': 'not_evaluated_by_this_evidence (SOU-105 acceptance owns it); '
-                                        'collector lower-bound max ' + (f'{max(pending):.3f} ms' if pending else 'n/a'),
-        },
+        'primary_endpoint': primary, 'unit': observation['endpoints'][primary]['unit'],
+        'primary': dist,
+        'primary_highest': [{'trial': t['id'], 'value': t['endpoints'][primary]} for t in highest],
+        'primary_by_run': {str(r): describe([t['endpoints'][primary] for t in measured if t['run'] == r])
+                           for r in runs},
+        'first_trial_per_run': [{'trial': t['id'], 'value': t['endpoints'][primary]}
+                                for t in measured if t['sample_index'] == 0],
+        'endpoints': endpoints,
+        'stages': {name: describe(found) for name, found in sorted(stages.items())},
+        'engineering_targets': targets,
     }
 
 
@@ -922,7 +1257,10 @@ def dimensions(base, cand):
     else:
         add('host_instance', 'unverified', ['environment.host_instance'], 'host_instance_unverified',
             'neither report retains its host instance; same-host conditions cannot be established')
-    for name in ENDPOINTS:
+    if base['primary_endpoint'] != cand['primary_endpoint']:
+        add('primary_endpoint', 'contradiction', ['primary_endpoint'], 'endpoint_mismatch', 'different primary endpoint',
+            (base['primary_endpoint'], cand['primary_endpoint']))
+    for name in sorted(set(base['endpoints']) | set(cand['endpoints'])):
         a, b = base['endpoints'].get(name), cand['endpoints'].get(name)
         if a != b:
             code = 'unit_mismatch' if a and b and a.get('unit') != b.get('unit') else 'endpoint_mismatch'
@@ -936,7 +1274,7 @@ def dimensions(base, cand):
         if trace['requested'] is not None and trace['observed'] not in ('not_retained', trace['requested']):
             raise Rejected('trace_state_contradiction', side['role'], 'observed trace differs from requested')
     equal('trace_requested', 'trace.requested', 'trace_state_mismatch')
-    equal('design', 'design.samples_per_profile', 'trial_design_mismatch')
+    equal('design', 'design.trial_plan', 'trial_design_mismatch')
     if base['design']['profiles'] != cand['design']['profiles']:
         add('profiles', 'contradiction', ['design.profiles'], 'trial_design_mismatch', 'differs',
             (base['design']['profiles'], cand['design']['profiles']))
@@ -997,16 +1335,17 @@ def pairing(base, cand, identity, requested):
 
 
 def paired_differences(base, cand, key):
-    profile, condition = key
+    primary = base['primary_endpoint']
     index = {t['id']: t for t in cand['trials']}
     diffs = []
     for t in base['trials']:
         other = index.get(t['id'])
         if (t['profile'], t['condition']) == key and t['run_qualified'] and t['status'] == 'measured' \
                 and other and other['run_qualified'] and other['status'] == 'measured':
-            diffs.append(other['endpoints']['continuation_ms'] - t['endpoints']['continuation_ms'])
+            diffs.append(other['endpoints'][primary] - t['endpoints'][primary])
     result = describe(diffs)
-    result.update(kind='distribution_of_paired_differences', direction='candidate_minus_baseline', unit='ms',
+    result.update(kind='distribution_of_paired_differences', direction='candidate_minus_baseline',
+                  endpoint=primary, unit=base['endpoints'][primary]['unit'],
                   all_zero=bool(diffs) and all(d == 0 for d in diffs))
     return result
 
@@ -1015,12 +1354,12 @@ def marginal_differences(a, b):
     def diff(x, y):
         return None if x is None or y is None else y - x
     out = {'kind': 'difference_of_marginal_percentiles_not_percentile_of_paired_differences',
-           'direction': 'candidate_minus_baseline', 'unit': 'ms',
-           'continuation_ms': {q: diff(a['continuation_ms'][q], b['continuation_ms'][q]) for q in ('p50', 'p95', 'max')},
-           'stages_ms': {}}
-    for name in sorted(set(a['stages_ms']) & set(b['stages_ms'])):
-        out['stages_ms'][name] = {q: diff(a['stages_ms'][name][q], b['stages_ms'][name][q]) for q in ('p50', 'p95')}
-    out['stages_one_side_only'] = sorted(set(a['stages_ms']) ^ set(b['stages_ms']))
+           'direction': 'candidate_minus_baseline', 'endpoint': a['primary_endpoint'], 'unit': a['unit'],
+           'primary': {q: diff(a['primary'][q], b['primary'][q]) for q in ('p50', 'p95', 'max')},
+           'stages': {}}
+    for name in sorted(set(a['stages']) & set(b['stages'])):
+        out['stages'][name] = {q: diff(a['stages'][name][q], b['stages'][name][q]) for q in ('p50', 'p95')}
+    out['stages_one_side_only'] = sorted(set(a['stages']) ^ set(b['stages']))
     return out
 
 
@@ -1128,15 +1467,14 @@ def render_csv(rows, header):
 
 
 def trials_csv(observations):
+    names = sorted({name for _, observation in observations for name in observation['endpoints']})
     rows = []
     for role, observation in observations:
         for t in observation['trials']:
-            e = t['endpoints']
             rows.append([role, t['id'], t['run'], t['profile'], t['condition'], t['run_qualified'], t['status'],
-                         t['reason'] or '', _fmt(e['continuation_ms']), _fmt(e['first_pending_asset_verification_ms']),
-                         _fmt(e['post_observed_total_ms'])])
-    return render_csv(rows, ['role', 'trial_id', 'run', 'profile', 'condition', 'run_qualified', 'status', 'reason',
-                             'continuation_ms', 'first_pending_asset_verification_lb_ms', 'post_observed_total_ms'])
+                         t['reason'] or '', *(_fmt(t['endpoints'].get(name)) for name in names)])
+    return render_csv(rows, ['role', 'trial_id', 'run', 'stratum', 'condition', 'run_qualified', 'status', 'reason',
+                             *names])
 
 
 def strata_csv(result):
@@ -1145,17 +1483,18 @@ def strata_csv(result):
         for role in ('baseline', 'candidate'):
             side = s[role]
             if side is None:
-                rows.append([s['profile'], s['condition'], role, 'absent'] + [''] * 18)
+                rows.append([s['profile'], s['condition'], role, 'absent'] + [''] * 20)
                 continue
-            c, a, d = side['status_counts'], side['status_counts_all_runs'], side['continuation_ms']
+            c, a, d = side['status_counts'], side['status_counts_all_runs'], side['primary']
             rows.append([s['profile'], s['condition'], role, 'comparable' if s['comparable'] else 'not_comparable',
                          side['planned'], side['attempted'], side['excluded_unqualified_run_trials'],
                          *(a[k] for k in STATUSES), side['qualified_run_trials'], *(c[k] for k in STATUSES),
-                         side['independent_clusters'], _fmt(d['p50']), _fmt(d['p95']), _fmt(d['max'])])
-    return render_csv(rows, ['profile', 'condition', 'role', 'stratum', 'planned', 'attempted',
+                         side['independent_clusters'], side['primary_endpoint'], side['unit'],
+                         _fmt(d['p50']), _fmt(d['p95']), _fmt(d['max'])])
+    return render_csv(rows, ['stratum', 'condition', 'role', 'comparability', 'planned', 'attempted',
                              'excluded_unqualified_run_trials', *('all_runs_' + k for k in STATUSES),
                              'qualified_run_trials', *('qualified_' + k for k in STATUSES), 'runs',
-                             'continuation_p50_ms', 'continuation_p95_ms', 'continuation_max_ms'])
+                             'primary_endpoint', 'unit', 'primary_p50', 'primary_p95', 'primary_max'])
 
 
 def _fmt(value):
@@ -1183,11 +1522,12 @@ def render_markdown(result):
                      f"{p['build']['status']} |")
     lines += ['', '## Reasons', '']
     lines += [f"- `{r['code']}` ({r['dimension']}): {r['detail']}" for r in result['reasons']] or ['- none']
-    lines += ['', '## Strata (continuation, ms)', '',
+    units = sorted({f"{x['primary_endpoint']} ({x['endpoints'][x['primary_endpoint']]['unit']})" for x in o.values()})
+    lines += ['', '## Strata (primary endpoint: ' + ', '.join(units) + ')', '',
               'Counts are measured / failed / timed out / incomplete / not run. Distributions use qualified runs '
               'only; trials of unqualified runs stay counted under all runs.', '',
-              '| Profile | Condition | Role | Planned | All runs | Excluded (unqualified runs) | Qualified runs | Runs | '
-              'p50 | p95 | max | 3000 ms p95 |',
+              '| Stratum | Condition | Role | Planned | All runs | Excluded (unqualified runs) | Qualified runs | Runs | '
+              'p50 | p95 | max | Engineering criterion |',
               '|---|---|---|---:|---|---:|---|---:|---:|---:|---:|---|']
     for s in result['strata']:
         for role in ('baseline', 'candidate'):
@@ -1195,23 +1535,29 @@ def render_markdown(result):
             if side is None:
                 lines.append(f"| {s['profile']} | {s['condition']} | {role} | – | absent | – | – | – | – | – | – | – |")
                 continue
-            c, d, a = side['status_counts'], side['continuation_ms'], side['status_counts_all_runs']
+            c, d, a = side['status_counts'], side['primary'], side['status_counts_all_runs']
             lines.append(f"| {s['profile']} | {s['condition']} | {role} | {side['planned']} | "
                          f"{' / '.join(str(a[k]) for k in STATUSES)} | "
                          f"{side['excluded_unqualified_run_trials']} | {c['measured']} / {c['failed']} / {c['timed_out']} / {c['incomplete']} / {c['not_run']} | "
                          f"{side['independent_clusters']} | {_ms(d['p50'])} | {_ms(d['p95'])} | {_ms(d['max'])} | "
-                         f"{side['engineering_targets']['continuation_p95_le_3000_ms']} |")
+                         f"{side['engineering_targets'].get('continuation_p95_le_3000_ms', 'none approved')} |")
     control = result.get('identity_control')
     if control:
         lines += ['', '## Identity control', '', f"Identical evidence on both sides: {control['paired_trials']} trial "
                   f"pairs, all paired differences zero: **{control['all_zero']}**. {control['meaning']}"]
-    lines += ['', '## Differences (candidate minus baseline, ms)', '']
+    for role in ('baseline', 'candidate'):
+        report_level = o[role].get('report_endpoints')
+        if report_level:
+            lines += ['', f'## Report-level endpoints ({role}, single values, never compared)', '']
+            lines += [f"- `{name}`: {_ms(e['value']) if isinstance(e['value'], (int, float)) else e['value']} "
+                      f"{e['unit']} ({e['boundary']})" for name, e in sorted(report_level.items())]
+    lines += ['', '## Differences (candidate minus baseline, primary endpoint)', '']
     shown = False
     for s in result['strata']:
         if not s['comparable']:
             continue
         shown = True
-        m = s['marginal_differences']['continuation_ms']
+        m = s['marginal_differences']['primary']
         text = (f"- {s['profile']} / {s['condition']}: marginal percentile differences p50 {_ms(m['p50'])}, "
                 f"p95 {_ms(m['p95'])}, max {_ms(m['max'])}")
         p = s['paired_differences']
@@ -1223,7 +1569,9 @@ def render_markdown(result):
         lines.append('- none: no comparable stratum. No speed-up, merged p95 or verdict is reported.')
     lines += ['', '## Limits', '', f"- Percentiles: {result['percentile_definition']}",
               '- Inference: descriptive only. ' + ' '.join(result['inference']['reasons']),
-              '- Not retained: ' + ', '.join(sorted(NOT_RETAINED)) + '.']
+              '- Not retained: ' + ', '.join(sorted({k for x in o.values() for k in x['not_retained']})) + '.']
+    lines += ['- Outcomes: ' + text for text in sorted({x['outcome_semantics'] for x in o.values()
+                                                        if x.get('outcome_semantics')})]
     lines += [f'- {line}' for line in result['scope']]
     return '\n'.join(lines) + '\n'
 

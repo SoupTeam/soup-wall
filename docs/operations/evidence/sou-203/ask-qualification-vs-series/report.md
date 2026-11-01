@@ -22,11 +22,11 @@ Classification: **non-comparable** (two_reports).
 - `trace_requested_unverified` (trace_requested): not retained on one side
 - `workload_or_harness_changed` (workload): measurement harness differs between sources
 
-## Strata (continuation, ms)
+## Strata (primary endpoint: continuation_ms (ms))
 
 Counts are measured / failed / timed out / incomplete / not run. Distributions use qualified runs only; trials of unqualified runs stay counted under all runs.
 
-| Profile | Condition | Role | Planned | All runs | Excluded (unqualified runs) | Qualified runs | Runs | p50 | p95 | max | 3000 ms p95 |
+| Stratum | Condition | Role | Planned | All runs | Excluded (unqualified runs) | Qualified runs | Runs | p50 | p95 | max | Engineering criterion |
 |---|---|---|---:|---|---:|---|---:|---:|---:|---:|---|
 | filesystem | post_cache_drop_setup_rewarmed | baseline | – | absent | – | – | – | – | – | – | – |
 | filesystem | post_cache_drop_setup_rewarmed | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1199.0 | 1265.4 | 1298.2 | met |
@@ -41,7 +41,7 @@ Counts are measured / failed / timed out / incomplete / not run. Distributions u
 | git | warm | baseline | – | absent | – | – | – | – | – | – | – |
 | git | warm | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1594.0 | 1634.9 | 1665.0 | met |
 
-## Differences (candidate minus baseline, ms)
+## Differences (candidate minus baseline, primary endpoint)
 
 - none: no comparable stratum. No speed-up, merged p95 or verdict is reported.
 

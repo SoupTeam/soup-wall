@@ -1,0 +1,17 @@
+stratum,condition,role,comparability,planned,attempted,excluded_unqualified_run_trials,all_runs_measured,all_runs_failed,all_runs_timed_out,all_runs_incomplete,all_runs_not_run,qualified_run_trials,qualified_measured,qualified_failed,qualified_timed_out,qualified_incomplete,qualified_not_run,runs,primary_endpoint,unit,primary_p50,primary_p95,primary_max
+control/benign,fresh_host_per_arm_os_cache_uncontrolled,baseline,not_comparable,12,12,0,12,0,0,0,0,12,12,0,0,0,0,1,host_start_ms,ms,1209.017,1267.792,1267.792
+control/benign,fresh_host_per_arm_os_cache_uncontrolled,candidate,absent,,,,,,,,,,,,,,,,,,,,
+control/refusal,fresh_host_per_arm_os_cache_uncontrolled,baseline,not_comparable,8,8,0,8,0,0,0,0,8,8,0,0,0,0,1,host_start_ms,ms,1202.553,1370.944,1370.944
+control/refusal,fresh_host_per_arm_os_cache_uncontrolled,candidate,absent,,,,,,,,,,,,,,,,,,,,
+filesystem,post_cache_drop_setup_rewarmed,baseline,absent,,,,,,,,,,,,,,,,,,,,
+filesystem,post_cache_drop_setup_rewarmed,candidate,not_comparable,40,40,0,40,0,0,0,0,40,40,0,0,0,0,2,continuation_ms,ms,1198.990163,1265.400298,1298.161406
+filesystem,warm,baseline,absent,,,,,,,,,,,,,,,,,,,,
+filesystem,warm,candidate,not_comparable,40,40,0,40,0,0,0,0,40,40,0,0,0,0,2,continuation_ms,ms,1205.856493,1256.82629,1270.179619
+git,post_cache_drop_setup_rewarmed,baseline,absent,,,,,,,,,,,,,,,,,,,,
+git,post_cache_drop_setup_rewarmed,candidate,not_comparable,40,40,0,40,0,0,0,0,40,40,0,0,0,0,2,continuation_ms,ms,1579.629562,1678.917396,1692.213688
+git,warm,baseline,absent,,,,,,,,,,,,,,,,,,,,
+git,warm,candidate,not_comparable,40,40,0,40,0,0,0,0,40,40,0,0,0,0,2,continuation_ms,ms,1593.970563,1634.924643,1665.005933
+protected/benign,fresh_host_per_arm_os_cache_uncontrolled,baseline,not_comparable,12,12,0,10,2,0,0,0,12,10,2,0,0,0,1,host_start_ms,ms,6830.351,7749.532,7749.532
+protected/benign,fresh_host_per_arm_os_cache_uncontrolled,candidate,absent,,,,,,,,,,,,,,,,,,,,
+protected/refusal,fresh_host_per_arm_os_cache_uncontrolled,baseline,not_comparable,8,8,0,8,0,0,0,0,8,8,0,0,0,0,1,host_start_ms,ms,6789.517,6871.673,6871.673
+protected/refusal,fresh_host_per_arm_os_cache_uncontrolled,candidate,absent,,,,,,,,,,,,,,,,,,,,

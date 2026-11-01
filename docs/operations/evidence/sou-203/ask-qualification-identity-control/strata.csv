@@ -1,5 +1,5 @@
-profile,condition,role,stratum,planned,attempted,excluded_unqualified_run_trials,all_runs_measured,all_runs_failed,all_runs_timed_out,all_runs_incomplete,all_runs_not_run,qualified_run_trials,qualified_measured,qualified_failed,qualified_timed_out,qualified_incomplete,qualified_not_run,runs,continuation_p50_ms,continuation_p95_ms,continuation_max_ms
-filesystem,undeclared,baseline,not_comparable,20,20,0,20,0,0,0,0,20,20,0,0,0,0,1,8742.440677,8840.958933,8850.198494
-filesystem,undeclared,candidate,not_comparable,20,20,0,20,0,0,0,0,20,20,0,0,0,0,1,8742.440677,8840.958933,8850.198494
-git,undeclared,baseline,not_comparable,20,20,0,20,0,0,0,0,20,20,0,0,0,0,1,11216.222081,11310.103784,11385.928462
-git,undeclared,candidate,not_comparable,20,20,0,20,0,0,0,0,20,20,0,0,0,0,1,11216.222081,11310.103784,11385.928462
+stratum,condition,role,comparability,planned,attempted,excluded_unqualified_run_trials,all_runs_measured,all_runs_failed,all_runs_timed_out,all_runs_incomplete,all_runs_not_run,qualified_run_trials,qualified_measured,qualified_failed,qualified_timed_out,qualified_incomplete,qualified_not_run,runs,primary_endpoint,unit,primary_p50,primary_p95,primary_max
+filesystem,undeclared,baseline,not_comparable,20,20,0,20,0,0,0,0,20,20,0,0,0,0,1,continuation_ms,ms,8742.440677,8840.958933,8850.198494
+filesystem,undeclared,candidate,not_comparable,20,20,0,20,0,0,0,0,20,20,0,0,0,0,1,continuation_ms,ms,8742.440677,8840.958933,8850.198494
+git,undeclared,baseline,not_comparable,20,20,0,20,0,0,0,0,20,20,0,0,0,0,1,continuation_ms,ms,11216.222081,11310.103784,11385.928462
+git,undeclared,candidate,not_comparable,20,20,0,20,0,0,0,0,20,20,0,0,0,0,1,continuation_ms,ms,11216.222081,11310.103784,11385.928462

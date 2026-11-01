@@ -13,6 +13,11 @@ privately and compares it byte for byte. See the
 | `native-ask-series-summary.json` + manifest | committed blob | `12f3f2b`: tree and `files_sha256` recomputed from git objects |
 | `wsl2-ask-series.json` (retroactive, unvalidated) | committed blob | none recorded |
 | `../sou-124/native-attempt2-baseline.json` (Ask qualification, `performance_blocker`) | committed blob | `d37383e`: commit tree verified; no `files_sha256` declared |
+| `../sou106/measured-report.json` (installed host) | committed blob | `ce4f76d`: tree, `files_sha256`, workload, driver and extension verified from git; gate reproduced |
+| `../sou106/attempt-2.json` (installed host) | committed blob | `41e3f10`: as above; gate not reproduced (older gate code) |
+
+No genuine preparation receipt (`sw-native-pilot-prerequisites/1`) is retained. The preparation
+adapter is exercised by synthetic controls only, and no genuine demonstration exists.
 
 For both native series, every published per-run latency, diagnostic sample, diagnostic
 distribution, pooled value, status and blocker list (plus the attempt ledger of the final
@@ -28,6 +33,9 @@ manifest declarations only. No build receipt and no host instance is retained.
 | `native-vs-wsl2/` | `non-comparable`, exit 1 | `native_linux` against `wsl2`, different producer format, and the WSL2 runs are unvalidated |
 | `ask-qualification-identity-control/` | `incomplete`, exit 1 | SOU-124 Ask report against itself: 40 zero paired differences. Its published latency is reproduced. Its git p95 11310 ms stays `not_met` against the 3000 ms criterion, as originally reported. |
 | `ask-qualification-vs-series/` | `non-comparable`, exit 1 | Ask qualification report against the SOU-141 final series: different producer format, condition strata and a verified change of the measurement harness between `d37383e` and `4b99b6e` |
+| `installed-host-identity-control/` | `incomplete`, exit 1 | SOU-106 measured report against itself: 38 measured arms, all paired differences 0. Its 2 failed protected benign arms stay counted. Binaries and build are unverified, and platform and trace are not recorded. |
+| `installed-host-historical/` | `non-comparable`, exit 1 | SOU-106 attempt 2 (`41e3f10`) against the measured report (`ce4f76d`): the measurement extension changed between the sources (`workload_or_harness_changed`) |
+| `installed-host-vs-ask-series/` | `non-comparable`, exit 1 | Installed host against the SOU-141 Ask series: different endpoints, producer format and trial design |
 | `broken-copy-control/` | rejected, exit 2 | A private copy of the final series with one git trial lowered by 100 ms: `published_distribution_not_reproduced` at `runs[2].summary.latency.git.p50_ms` |
 
 The per-side distributions in `identity-control/strata.csv` reproduce the published SOU-141

@@ -1,6 +1,7 @@
 # Source-bound native performance comparison (SOU-203)
 
-`scripts/native_performance.py` compares two retained native Ask latency reports offline. It
+`scripts/native_performance.py` compares two retained native performance reports offline (Ask,
+installed host or preparation). It
 explains whether a difference can be read at all before it shows one. It reads JSON and local
 git objects only. It runs no measurement, changes no producer, timeout, budget or policy, and
 makes no network call.
@@ -19,19 +20,24 @@ python scripts/native_performance.py `
 
 | Input | Contract | Role |
 |---|---|---|
-| `--*` | `sw-ask-series/1` `summary.json`, `sw-ask-series/1-retroactive`, or a `sw-pilot-ask-acceptance/1` qualification report (`qualify-pilot-ask.py --approval-samples N`) | Retained series or single Ask run with every per-trial value |
+| `--*` | one report of a supported family (below) | Retained report with every per-trial value |
 | `--*-manifest` | the series `manifest.json` (series only) | Plan declared before the first trial; binary digests, kernel, machine |
 | `--*-receipt` | `sw-native-pilot-agent-source-build/1` (series only) | Binds the agentfw/git_launcher digests and the cargo build profile |
+| `--repository` | local git checkout (default: this one) | Witness for source identity and report custody |
 
 ### Supported report families
 
-| Family | Status |
-|---|---|
-| Ask series, `sw-ask-series/1` (SOU-141) | supported, genuine evidence reproduced |
-| Ask qualification, `sw-pilot-ask-acceptance/1` (SOU-124) | supported, genuine evidence reproduced (counts, p50, p95) |
-| Installed host, `sw-installed-pilot-matched/1` (SOU-106) | **not supported**. Its control/protected arm design, per-batch tool latencies, host-start time and gate-derived outcomes need their own endpoints and a reproduction through `pilot_qualification.matched_gate`. Rejected as `unsupported_report_format`. |
-| Preparation, `sw-pilot-preparation/1` | **not supported**, and no genuine report is retained in the repository. Report-level preparation timings in installed-host reports are not read either. |
-| `--repository` | local git checkout (default: this one) | Witness for source identity and report custody |
+| Family | Producer | Primary endpoint | Status |
+|---|---|---|---|
+| Ask series, `sw-ask-series/1` (SOU-141) | `qualify-ask-series.py` | `continuation_ms` | supported; genuine evidence reproduced |
+| Ask qualification, `sw-pilot-ask-acceptance/1` (SOU-124) | `qualify-pilot-ask.py` | `continuation_ms` | supported; genuine evidence reproduced (counts, p50, p95) |
+| Installed host, `sw-installed-pilot-matched/1` (SOU-106) | `pilot_measurement.py` via `qualify-installed-pilot.py` | `host_start_ms` | supported; genuine evidence and gate reproduced |
+| Native preparation, `sw-native-pilot-prerequisites/1` | `prepare-native-pilot-prerequisites.py` | `stage_seconds` (s) | supported; **synthetic controls only**: no genuine receipt is retained in the repository |
+| Preparation marker, `sw-pilot-preparation/1` | `prepare-installed-pilot.py` | none | rejected as `no_performance_endpoints`: a completion marker without timing fields |
+
+Families never compare with each other: different endpoints, units and producer formats are
+`non-comparable`. The SOU-122 `preparation-summary.json` is a genuine but unversioned CI summary
+(no `format`, single values). It is not an accepted producer contract and is not read.
 
 Output files: `comparison.json` (`sw-native-performance-comparison/1`), `report.md`, `strata.csv`
 and `trials.csv` (every planned trial of both sides). On rejection only `comparison.json` and
@@ -81,6 +87,45 @@ python -m unittest discover -s scripts/tests -p test_native_performance.py -v
   the producer's own predicate, and a true-cold claim is rejected. Retroactive runs stay
   `declared_<kind>_unverified`.
 - **Strata** are `(profile, condition)`. Profiles and conditions are never pooled.
+
+### Installed host (`sw-installed-pilot-matched/1`)
+
+- **Trials**: one per `(case, arm)`, id `r01/<case>/<arm>`, stratum `<arm>/<kind>` (control or
+  protected; benign or refusal). The plan, order and `operation_sha256` of every row are checked
+  against the workload file read from git at the source commit, by its `workload_file_sha256`.
+  Status: `passed` is `measured`; `failed` is `failed`, or `timed_out` when the reason names a
+  timeout or deadline; `incomplete` with `not_executed` is `not_run`, otherwise `incomplete`.
+- **Endpoints** (driver monotonic clock, ms, separate boundaries, never subtracted):
+  - `host_start_ms`: host spawn to the first scripted proposal. This is the primary endpoint,
+    required by every gate revision.
+  - `host_elapsed_ms`: spawn to exit. Not written by the oldest producer revision.
+  - Per-call latency: `call/first_batch_ms` and `call/steady_state_ms`, measured from a proposal
+    to its observed result. Calls in one batch share completion observation.
+  - Report-level, single values never compared: `preparation_ms`,
+    `source_and_selection_verification_ms` and `asset_install_and_daemon_prepare_ms`.
+  - Observable Ask latency is `not_applicable`: the workload has no Ask decision.
+- **Provenance**:
+  - verified from git: source tree and `files_sha256`, the workload file, and the
+    `driver_sha256` and `extension_sha256` blobs;
+  - self-declared: binaries, profiles, policy and registry (`policy_sha256` must equal
+    `selected.policy`).
+- **Gate**: reproduced with the accepted `pilot_qualification.matched_gate` only when the gate code
+  at the source commit is byte-identical to it (SOU-106 `ce4f76d`). Otherwise it is listed as not
+  reproduced (`41e3f10`, `bd1c17c`).
+- **Outcomes**: row status and the gate are the producer's development workflow outcomes. A
+  protected refusal is the producer's own witness, never security effectiveness. The
+  within-report control/protected pairing is reported, never used to pair two reports.
+- **Condition**: `fresh_host_per_arm_os_cache_uncontrolled`. Any other `os_cache` claim is
+  rejected (`true_cold_claim_unsupported`).
+
+### Native preparation (`sw-native-pilot-prerequisites/1`)
+
+- **Trials**: one trial per stage (`r01/git`, `r01/bwrap`), endpoint `stage_seconds` in seconds.
+- **Conditions**: `built_from_source` and `reused_verified_checkpoint` are separate strata.
+- **Status**: a completed receipt holds only completed stages. A failed preparation writes no
+  receipt, so failed and incomplete stages are not representable, and a receipt claiming one is
+  rejected (`receipt_stage_contradiction`).
+- **Source**: the receipt names only a commit (`commit_verified_tree_not_declared`).
 
 ## Classification
 
@@ -136,4 +181,8 @@ output file is limited to 8 MiB. The output directory must be new or empty.
   uncommitted copy is always `incomplete`.
 - The retained SOU-124 report declares no `files_sha256`, no `trace_requested`, no platform and no
   condition. Its source is verified to commit and tree only (`source_contents_unverified`).
-- Installed-host and preparation reports are not supported (see above).
+- Installed host: binaries, profiles and policy are self-declared, and no build receipt is
+  retained. The report records no platform, host or trace mode. The gate of the two older
+  SOU-106 reports cannot be reproduced with the accepted gate code.
+- Preparation: no genuine `sw-native-pilot-prerequisites/1` receipt is retained, so this adapter
+  is demonstrated on synthetic receipts only. A failed preparation leaves no receipt to read.

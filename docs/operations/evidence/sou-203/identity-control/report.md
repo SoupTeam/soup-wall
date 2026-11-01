@@ -12,11 +12,11 @@ Classification: **incomplete** (identity_control).
 - `binary_identity_unverified` (binaries): binary digests are not independently bound
 - `build_profile_unverified` (build): build profile is not bound to the measured binaries
 
-## Strata (continuation, ms)
+## Strata (primary endpoint: continuation_ms (ms))
 
 Counts are measured / failed / timed out / incomplete / not run. Distributions use qualified runs only; trials of unqualified runs stay counted under all runs.
 
-| Profile | Condition | Role | Planned | All runs | Excluded (unqualified runs) | Qualified runs | Runs | p50 | p95 | max | 3000 ms p95 |
+| Stratum | Condition | Role | Planned | All runs | Excluded (unqualified runs) | Qualified runs | Runs | p50 | p95 | max | Engineering criterion |
 |---|---|---|---:|---|---:|---|---:|---:|---:|---:|---|
 | filesystem | post_cache_drop_setup_rewarmed | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1199.0 | 1265.4 | 1298.2 | met |
 | filesystem | post_cache_drop_setup_rewarmed | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1199.0 | 1265.4 | 1298.2 | met |
@@ -31,7 +31,7 @@ Counts are measured / failed / timed out / incomplete / not run. Distributions u
 
 Identical evidence on both sides: 160 trial pairs, all paired differences zero: **True**. comparator control only: identical evidence must give zero paired differences. It establishes no provenance, no compatibility and no performance change.
 
-## Differences (candidate minus baseline, ms)
+## Differences (candidate minus baseline, primary endpoint)
 
 - none: no comparable stratum. No speed-up, merged p95 or verdict is reported.
 

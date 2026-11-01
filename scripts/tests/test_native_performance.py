@@ -178,12 +178,12 @@ class Positive(SyntheticCase):
         o = self.s.observe()
         side = NP.stratum_side(o, ('filesystem', 'warm'))
         values = sorted(1000.0 + i * 1.5 + 2 * 0.25 for i in range(20))
-        self.assertEqual(side['continuation_ms'], {'n': 20, 'p50': values[9], 'p95': values[18],
+        self.assertEqual(side['primary'], {'n': 20, 'p50': values[9], 'p95': values[18],
                                                    'min': values[0], 'max': values[19]})
-        self.assertEqual(side['stages_ms']['asset/package_tree/pass_1']['p95'], 500.0 + 18)
-        self.assertEqual(side['stages_ms']['approval/classifier']['p50'], 7.0)
-        self.assertEqual(side['first_pending_asset_verification_ms']['p50'], 60.0 + 9 + 500.0 + 9 + 0.5)
-        self.assertEqual(side['continuation_highest'][0], {'trial': 'r02/filesystem/019', 'ms': values[19]})
+        self.assertEqual(side['stages']['asset/package_tree/pass_1']['p95'], 500.0 + 18)
+        self.assertEqual(side['stages']['approval/classifier']['p50'], 7.0)
+        self.assertEqual(side['endpoints']['first_pending_asset_verification_ms']['p50'], 60.0 + 9 + 500.0 + 9 + 0.5)
+        self.assertEqual(side['primary_highest'][0], {'trial': 'r02/filesystem/019', 'value': values[19]})
         self.assertEqual(side['engineering_targets']['continuation_p95_le_3000_ms'], 'met')
 
     def test_compatible_two_reports_with_verified_controls(self):
@@ -192,7 +192,7 @@ class Positive(SyntheticCase):
         result = NP.compare(base, cand)
         self.assertEqual(result['classification'], 'compatible', result['reasons'])
         stratum = next(s for s in result['strata'] if s['profile'] == 'git' and s['condition'] == 'warm')
-        self.assertEqual(stratum['marginal_differences']['continuation_ms']['p50'], 50.0)
+        self.assertEqual(stratum['marginal_differences']['primary']['p50'], 50.0)
         self.assertEqual(stratum['marginal_differences']['kind'],
                          'difference_of_marginal_percentiles_not_percentile_of_paired_differences')
         self.assertIsNone(stratum['paired_differences'])  # no paired design across reports
@@ -297,10 +297,10 @@ class Positive(SyntheticCase):
         cand['trials'][0].update(status='failed', reason='producer_trial_failed')
         result = NP.compare(base, cand)
         rows = list(NP.csv.DictReader(NP.io.StringIO(NP.strata_csv(result))))
-        row = next(r for r in rows if r['role'] == 'candidate' and r['condition'] == 'warm' and r['profile'] == 'filesystem')
+        row = next(r for r in rows if r['role'] == 'candidate' and r['condition'] == 'warm' and r['stratum'] == 'filesystem')
         self.assertEqual((row['planned'], row['attempted'], row['excluded_unqualified_run_trials'],
                           row['all_runs_measured'], row['qualified_run_trials']), ('20', '20', '20', '20', '0'))
-        row = next(r for r in rows if r['role'] == 'candidate' and r['condition'] != 'warm' and r['profile'] == 'filesystem')
+        row = next(r for r in rows if r['role'] == 'candidate' and r['condition'] != 'warm' and r['stratum'] == 'filesystem')
         self.assertEqual((row['all_runs_failed'], row['qualified_failed'], row['qualified_measured']), ('1', '1', '19'))
         self.assertIn('| 19 / 1 / 0 / 0 / 0 |', NP.render_markdown(result))
 
@@ -632,9 +632,9 @@ class Genuine(unittest.TestCase):
             for profile in NP.PROFILES:
                 side = NP.stratum_side(o, (profile, condition))
                 expected = published[kind][profile]['continuation_ms']
-                self.assertEqual(side['continuation_ms']['n'], expected['n'])
-                self.assertEqual(round(side['continuation_ms']['p95'], 3), expected['p95'])
-                self.assertEqual(round(side['continuation_ms']['max'], 3), expected['worst'])
+                self.assertEqual(side['primary']['n'], expected['n'])
+                self.assertEqual(round(side['primary']['p95'], 3), expected['p95'])
+                self.assertEqual(round(side['primary']['max'], 3), expected['worst'])
                 self.assertEqual(side['status_counts']['measured'], 40)
 
     def test_same_report_identity_control(self):
@@ -686,7 +686,7 @@ class Genuine(unittest.TestCase):
         published = json.loads(ASK_REPORT.read_text())['latency']
         for profile in NP.PROFILES:
             side = NP.stratum_side(o, (profile, 'undeclared'))
-            self.assertEqual(side['continuation_ms']['p95'], published[profile]['p95_ms'])
+            self.assertEqual(side['primary']['p95'], published[profile]['p95_ms'])
             self.assertEqual(side['engineering_targets']['continuation_p95_le_3000_ms'], 'not_met')
         result = NP.compare(o, self.final)
         self.assertEqual(result['classification'], 'non-comparable')
@@ -702,6 +702,192 @@ class Genuine(unittest.TestCase):
         bundle = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(bundle)
         self.assertEqual(bundle.check(), 0)
+
+
+SOU106 = ROOT / 'docs/operations/evidence/sou106'
+
+
+@unittest.skipUnless(NP.Git(ROOT).tree_of('ce4f76d823f9f1b5a7ea1dec97a8ff260a5f94dc'),
+                     'SOU-106 source commit not in this clone')
+class InstalledHost(unittest.TestCase):
+    """Genuine retained SOU-106 installed-host reports; negatives mutate a private copy."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.measured = NP.normalize('baseline', SOU106 / 'measured-report.json')
+        cls.raw = json.loads((SOU106 / 'measured-report.json').read_text())
+
+    def mutated(self, change):
+        value = copy.deepcopy(self.raw)
+        change(value)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'measured-report-copy.json'
+            path.write_text(json.dumps(value))
+            return NP.normalize('baseline', path)
+
+    def rejected(self, code, change):
+        with self.assertRaises(NP.Rejected) as caught:
+            self.mutated(change)
+        self.assertEqual(caught.exception.code, code, caught.exception.detail)
+        return caught.exception
+
+    def test_genuine_measured_report(self):
+        o = self.measured
+        self.assertEqual(o['input']['producer_format'], NP.INSTALLED_FORMAT)
+        self.assertEqual(o['input']['custody']['status'], 'committed_blob')
+        self.assertEqual(o['provenance']['source']['status'], 'verified_git_objects')
+        self.assertEqual(o['provenance']['workload']['status'], 'verified_git_objects')
+        self.assertEqual(o['provenance']['binaries']['status'], 'declared_only')
+        self.assertTrue(any(c.startswith('gate (') for c in o['reproduction']['checked']))
+        self.assertEqual(NP.summary_of(o)['status_counts'],
+                         {'measured': 38, 'failed': 2, 'timed_out': 0, 'incomplete': 0, 'not_run': 0})
+        self.assertEqual(sorted({t['id'] for t in o['trials']}), sorted(t['id'] for t in o['trials']))
+        self.assertEqual(o['primary_endpoint'], 'host_start_ms')
+        self.assertEqual(o['report_endpoints']['preparation_ms']['value'], 11845.533)
+        self.assertEqual(o['report_endpoints']['observable_ask_latency']['value'], 'not_applicable')
+        self.assertIn('No status is security or protection effectiveness evidence', o['outcome_semantics'])
+        self.assertEqual(o['within_report_pairing']['use'], 'reported only; never used to pair two reports')
+        side = NP.stratum_side(o, ('protected/benign', 'fresh_host_per_arm_os_cache_uncontrolled'))
+        self.assertEqual((side['planned'], side['status_counts']['failed'], side['complete_denominator']), (12, 2, False))
+        published = self.raw['gate']['metrics']['host_start_ms']['control']
+        control = [t['endpoints']['host_start_ms'] for t in o['trials'] if t['arm'] == 'control']
+        self.assertEqual((len(control), max(control), min(control)), (published['n'], published['max'], published['min']))
+        self.assertEqual(side['stages']['call/first_batch_ms']['n'], 12)
+
+    def test_identity_control_and_historical_comparisons(self):
+        result = NP.compare(self.measured, NP.normalize('candidate', SOU106 / 'measured-report.json'))
+        self.assertEqual(result['classification'], 'incomplete')
+        self.assertEqual(result['identity_control']['paired_trials'], 38)
+        self.assertTrue(result['identity_control']['all_zero'])
+        earlier = NP.normalize('baseline', SOU106 / 'attempt-2.json')
+        self.assertIn('gate: the gate code at the source commit differs from the accepted primitive',
+                      earlier['reproduction']['not_reproduced'])
+        result = NP.compare(earlier, self.measured)
+        self.assertEqual(result['classification'], 'non-comparable')
+        self.assertIn('workload_or_harness_changed', [r['code'] for r in result['reasons']])
+        first = NP.normalize('baseline', SOU106 / 'attempt-1.json')
+        self.assertEqual(NP.summary_of(first)['status_counts'],
+                         {'measured': 10, 'failed': 15, 'timed_out': 0, 'incomplete': 0, 'not_run': 15})
+        self.assertFalse(first['runs'][0]['qualified'])
+        self.assertIn('host_elapsed_ms', first['not_retained'])
+        codes = [r['code'] for r in NP.compare(first, self.measured)['reasons']]
+        self.assertIn('trial_design_mismatch', codes)
+
+    def test_installed_host_never_compares_with_ask(self):
+        ask = NP.normalize('candidate', *FINAL)
+        result = NP.compare(self.measured, ask)
+        self.assertEqual(result['classification'], 'non-comparable')
+        codes = {r['code'] for r in result['reasons']}
+        self.assertTrue({'endpoint_mismatch', 'producer_format_mismatch'} <= codes)
+
+    def first_passed(self, value, arm='control'):
+        return next(r for r in value['rows'] if r['status'] == 'passed' and r['arm'] == arm)
+
+    def test_negative_controls(self):
+        self.rejected('published_distribution_not_reproduced',
+                      lambda v: self.first_passed(v).update(host_start_ms=self.first_passed(v)['host_start_ms'] + 1))
+        self.rejected('duplicate_trial_id', lambda v: v['rows'].__setitem__(1, copy.deepcopy(v['rows'][0])))
+        self.rejected('missing_required_trial', lambda v: v['rows'].pop())
+        self.rejected('unexpected_trial_id', lambda v: v['rows'][-1].update(case='synthetic-unplanned-case'))
+        self.rejected('trial_order_invalid', lambda v: v['rows'].insert(0, v['rows'].pop(1)))
+        self.rejected('workload_identity_contradiction', lambda v: v['rows'][0].update(operation_sha256='0' * 64))
+        self.rejected('negative_duration', lambda v: self.first_passed(v).update(host_start_ms=-1.0))
+        self.rejected('call_denominator_mismatch', lambda v: self.first_passed(v)['latencies_ms'].pop('toolu_pilot_0'))
+        self.rejected('true_cold_claim_unsupported', lambda v: v['conditions'].update(os_cache='dropped, cold'))
+
+        def identity(v, **change):
+            v['identity'].update(change)
+            for row in v['rows']:
+                row['identity'] = v['identity']
+        self.rejected('harness_identity_contradiction', lambda v: identity(v, driver_sha256='0' * 64))
+        self.rejected('policy_identity_contradiction', lambda v: identity(v, policy_sha256='0' * 64))
+        self.rejected('paired_identity_drift', lambda v: v['rows'][3].update(identity={}))
+        with self.assertRaises(NP.Rejected) as caught:
+            NP.normalize('baseline', SOU106 / 'measured-report.json', SOU106 / 'measured-report.json')
+        self.assertEqual(caught.exception.code, 'input_not_applicable')
+
+    def test_failed_arm_status_mapping(self):
+        def timeout(v):
+            self.first_passed(v, 'protected').update(status='failed', reason='host_deadline_exceeded')
+        # On the measured report the published gate no longer reproduces after the change.
+        self.assertTrue(self.rejected('published_distribution_not_reproduced', timeout).detail.startswith('gate'))
+        # attempt-2's gate is not reproducible (older gate code), so the status mapping itself is visible.
+        value = json.loads((SOU106 / 'attempt-2.json').read_text())
+        timeout(value)
+        value['rows'][-1].update(status='incomplete', reason='not_executed')
+        value['rows'][-3].update(status='incomplete', reason='not_executed', cancelled=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'attempt-2-copy.json'
+            path.write_text(json.dumps(value))
+            o = NP.normalize('baseline', path)
+        states = {t['id']: t['status'] for t in o['trials']}
+        self.assertEqual(sum(s == 'timed_out' for s in states.values()), 1)
+        self.assertEqual(states['r01/' + value['rows'][-1]['case'] + '/protected'], 'not_run')
+        self.assertEqual(states['r01/' + value['rows'][-3]['case'] + '/' + value['rows'][-3]['arm']], 'incomplete')
+        self.assertEqual(len(o['trials']), 40)
+        self.assertEqual(o['input']['custody']['status'], 'unverified_not_in_repository_history')
+
+
+class Preparation(SyntheticCase):
+    """SYNTHETIC sw-native-pilot-prerequisites/1 receipts: no genuine receipt is retained in the repository."""
+
+    def receipt(self, **change):
+        value = {'format': NP.PREPARATION_FORMAT, 'source_commit': self.s.source['commit'],
+                 'status': 'built-not-qualified',
+                 'stages': {'git': {'status': 'reused', 'seconds': 0.75, 'checkpoint_sha256': 'c' * 64},
+                            'bwrap': {'status': 'built', 'seconds': 41.5}},
+                 'binaries': {'git': {'sha256': 'a' * 64}, 'bwrap': {'sha256': 'b' * 64}}}
+        value.update(change)
+        return value
+
+    def test_valid_receipt(self):
+        o = NP.normalize('baseline', self.s.write(self.receipt()), None, None, self.s.git)
+        self.assertEqual(o['primary_endpoint'], 'stage_seconds')
+        self.assertEqual(o['endpoints']['stage_seconds']['unit'], 's')
+        self.assertEqual(o['provenance']['source']['status'], 'commit_verified_tree_not_declared')
+        self.assertEqual([(t['id'], t['condition'], t['endpoints']['stage_seconds']) for t in o['trials']],
+                         [('r01/git', 'reused_verified_checkpoint', 0.75), ('r01/bwrap', 'built_from_source', 41.5)])
+        result = NP.compare(o, copy.deepcopy(o))
+        self.assertEqual(result['classification'], 'incomplete')
+        self.assertIn('source_unverified', [r['code'] for r in result['reasons']])
+        self.assertTrue(result['identity_control']['all_zero'])
+
+    def test_built_and_reused_stages_never_merge(self):
+        base = NP.normalize('baseline', self.s.write(self.receipt()), None, None, self.s.git)
+        built = self.receipt(stages={'git': {'status': 'built', 'seconds': 300.0},
+                                     'bwrap': {'status': 'built', 'seconds': 40.0}})
+        cand = NP.normalize('candidate', self.s.write(built), None, None, self.s.git)
+        git = [s for s in NP.compare(base, cand)['strata'] if s['profile'] == 'git']
+        self.assertEqual(sorted(s['condition'] for s in git), ['built_from_source', 'reused_verified_checkpoint'])
+        self.assertTrue(all(s['reasons'] == ['stratum_unmatched'] for s in git))
+
+    def test_preparation_never_compares_with_ask(self):
+        prep = NP.normalize('baseline', self.s.write(self.receipt()), None, None, self.s.git)
+        result = NP.compare(prep, self.s.observe('candidate'))
+        self.assertEqual(result['classification'], 'non-comparable')
+        codes = {r['code'] for r in result['reasons']}
+        self.assertTrue({'unit_mismatch', 'endpoint_mismatch', 'producer_format_mismatch'} <= codes)
+        installed = NP.normalize('candidate', SOU106 / 'measured-report.json')  # genuine, read from this clone
+        result = NP.compare(prep, installed)
+        self.assertEqual(result['classification'], 'non-comparable')
+        codes = {r['code'] for r in result['reasons']}
+        self.assertTrue({'unit_mismatch', 'endpoint_mismatch', 'producer_format_mismatch'} <= codes)
+
+    def test_negative_controls(self):
+        def check(code, value):
+            path = self.s.write(value)
+            self.rejected(code, lambda: NP.normalize('baseline', path, None, None, self.s.git))
+        check('receipt_stage_contradiction', self.receipt(stages={'git': {'status': 'failed', 'seconds': 3.0},
+                                                                  'bwrap': {'status': 'built', 'seconds': 1.0}}))
+        check('missing_required_trial', self.receipt(stages={'git': {'status': 'built', 'seconds': 3.0}}))
+        check('negative_duration', self.receipt(stages={'git': {'status': 'built', 'seconds': -3.0},
+                                                        'bwrap': {'status': 'built', 'seconds': 1.0}}))
+        check('nonfinite_or_missing_duration', self.receipt(stages={'git': {'status': 'built'},
+                                                                    'bwrap': {'status': 'built', 'seconds': 1.0}}))
+        check('invalid_digest', self.receipt(binaries={'git': {'sha256': 'x'}, 'bwrap': {'sha256': 'b' * 64}}))
+        check('source_identity_malformed', self.receipt(source_commit='abc'))
+        check('no_performance_endpoints', {'format': NP.PREPARATION_MARKER, 'generation': 'g1',
+                                           'selection_sha256': 'a' * 64, 'status': 'prepared-not-active'})
 
 
 if __name__ == '__main__':

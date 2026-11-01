@@ -19,11 +19,11 @@ Classification: **incomplete** (identity_control).
 - `source_contents_unverified` (source): commit and tree verified; tracked file contents are not bound by a declared files_sha256
 - `trace_requested_unverified` (trace_requested): not retained on one side
 
-## Strata (continuation, ms)
+## Strata (primary endpoint: continuation_ms (ms))
 
 Counts are measured / failed / timed out / incomplete / not run. Distributions use qualified runs only; trials of unqualified runs stay counted under all runs.
 
-| Profile | Condition | Role | Planned | All runs | Excluded (unqualified runs) | Qualified runs | Runs | p50 | p95 | max | 3000 ms p95 |
+| Stratum | Condition | Role | Planned | All runs | Excluded (unqualified runs) | Qualified runs | Runs | p50 | p95 | max | Engineering criterion |
 |---|---|---|---:|---|---:|---|---:|---:|---:|---:|---|
 | filesystem | undeclared | baseline | 20 | 20 / 0 / 0 / 0 / 0 | 0 | 20 / 0 / 0 / 0 / 0 | 1 | 8742.4 | 8841.0 | 8850.2 | not_met |
 | filesystem | undeclared | candidate | 20 | 20 / 0 / 0 / 0 / 0 | 0 | 20 / 0 / 0 / 0 / 0 | 1 | 8742.4 | 8841.0 | 8850.2 | not_met |
@@ -34,7 +34,7 @@ Counts are measured / failed / timed out / incomplete / not run. Distributions u
 
 Identical evidence on both sides: 40 trial pairs, all paired differences zero: **True**. comparator control only: identical evidence must give zero paired differences. It establishes no provenance, no compatibility and no performance change.
 
-## Differences (candidate minus baseline, ms)
+## Differences (candidate minus baseline, primary endpoint)
 
 - none: no comparable stratum. No speed-up, merged p95 or verdict is reported.
 

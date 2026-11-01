@@ -1,0 +1,1595 @@
+{
+  "basis": "identity_control",
+  "classification": "incomplete",
+  "contract": "sw-native-performance-comparison/1",
+  "dimensions": [
+    {
+      "baseline": "14393a4e408ce0b4ddaa332b3009cc2976ea40759581ff32561d033b8e6475a1",
+      "candidate": "14393a4e408ce0b4ddaa332b3009cc2976ea40759581ff32561d033b8e6475a1",
+      "code": null,
+      "detail": null,
+      "dimension": "evidence_identity",
+      "fields": [
+        "input.evidence_sha256"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": "platform_unverified",
+      "detail": "not retained on one side",
+      "dimension": "platform",
+      "fields": [
+        "environment.platform_kind"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": "kernel_unverified",
+      "detail": "not retained on one side",
+      "dimension": "kernel",
+      "fields": [
+        "environment.kernel"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": "machine_unverified",
+      "detail": "not retained on one side",
+      "dimension": "machine",
+      "fields": [
+        "environment.machine"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": [],
+      "candidate": [],
+      "code": "cpu_count_unverified",
+      "detail": "not retained on one side",
+      "dimension": "cpu_count",
+      "fields": [
+        "environment.cpu_count"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": [],
+      "candidate": [],
+      "code": "memory_unverified",
+      "detail": "not retained on one side",
+      "dimension": "memory",
+      "fields": [
+        "environment.mem_total_kb"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": null,
+      "detail": "same original evidence",
+      "dimension": "host_instance",
+      "fields": [
+        "environment.host_instance"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": "trace_requested_unverified",
+      "detail": "not retained on one side",
+      "dimension": "trace_requested",
+      "fields": [
+        "trace.requested"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": {
+        "arms": [
+          "control",
+          "protected"
+        ],
+        "cases": 20,
+        "workload_sha256": "f7838d3798e3498e6d56ae963a544152f2feaf53a77ab059b6a815c87d0caa4f"
+      },
+      "candidate": {
+        "arms": [
+          "control",
+          "protected"
+        ],
+        "cases": 20,
+        "workload_sha256": "f7838d3798e3498e6d56ae963a544152f2feaf53a77ab059b6a815c87d0caa4f"
+      },
+      "code": null,
+      "detail": null,
+      "dimension": "design",
+      "fields": [
+        "design.trial_plan"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": null,
+      "detail": null,
+      "dimension": "workload",
+      "fields": [
+        "provenance.workload.harness_sha256_at_source"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": "ce4f76d823f9f1b5a7ea1dec97a8ff260a5f94dc",
+      "candidate": "ce4f76d823f9f1b5a7ea1dec97a8ff260a5f94dc",
+      "code": null,
+      "detail": null,
+      "dimension": "source",
+      "fields": [
+        "provenance.source.commit"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": "not_retained",
+      "candidate": "not_retained",
+      "code": "build_profile_unverified",
+      "detail": "build profile is not bound to the measured binaries",
+      "dimension": "build",
+      "fields": [
+        "provenance.build.status"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": "declared_only",
+      "candidate": "declared_only",
+      "code": "binary_identity_unverified",
+      "detail": "binary digests are not independently bound",
+      "dimension": "binaries",
+      "fields": [
+        "provenance.binaries.status"
+      ],
+      "status": "unverified"
+    }
+  ],
+  "engineering_targets": {
+    "continuation_p95_ms": 3000,
+    "first_pending_ms": 5000,
+    "note": "existing criteria, evaluated per side and stratum only; not a comparison verdict, not protection, effectiveness or readiness"
+  },
+  "global_pooled_comparison": null,
+  "global_pooled_comparison_reason": "never computed: profiles and conditions are separate strata",
+  "identity_control": {
+    "all_zero": true,
+    "evidence_identical": true,
+    "meaning": "comparator control only: identical evidence must give zero paired differences. It establishes no provenance, no compatibility and no performance change.",
+    "paired_trials": 38,
+    "strata": [
+      {
+        "condition": "fresh_host_per_arm_os_cache_uncontrolled",
+        "paired_differences": {
+          "all_zero": true,
+          "direction": "candidate_minus_baseline",
+          "endpoint": "host_start_ms",
+          "kind": "distribution_of_paired_differences",
+          "max": 0.0,
+          "min": 0.0,
+          "n": 12,
+          "p50": 0.0,
+          "p95": 0.0,
+          "unit": "ms"
+        },
+        "profile": "control/benign"
+      },
+      {
+        "condition": "fresh_host_per_arm_os_cache_uncontrolled",
+        "paired_differences": {
+          "all_zero": true,
+          "direction": "candidate_minus_baseline",
+          "endpoint": "host_start_ms",
+          "kind": "distribution_of_paired_differences",
+          "max": 0.0,
+          "min": 0.0,
+          "n": 8,
+          "p50": 0.0,
+          "p95": 0.0,
+          "unit": "ms"
+        },
+        "profile": "control/refusal"
+      },
+      {
+        "condition": "fresh_host_per_arm_os_cache_uncontrolled",
+        "paired_differences": {
+          "all_zero": true,
+          "direction": "candidate_minus_baseline",
+          "endpoint": "host_start_ms",
+          "kind": "distribution_of_paired_differences",
+          "max": 0.0,
+          "min": 0.0,
+          "n": 10,
+          "p50": 0.0,
+          "p95": 0.0,
+          "unit": "ms"
+        },
+        "profile": "protected/benign"
+      },
+      {
+        "condition": "fresh_host_per_arm_os_cache_uncontrolled",
+        "paired_differences": {
+          "all_zero": true,
+          "direction": "candidate_minus_baseline",
+          "endpoint": "host_start_ms",
+          "kind": "distribution_of_paired_differences",
+          "max": 0.0,
+          "min": 0.0,
+          "n": 8,
+          "p50": 0.0,
+          "p95": 0.0,
+          "unit": "ms"
+        },
+        "profile": "protected/refusal"
+      }
+    ]
+  },
+  "inference": {
+    "hosts": 1,
+    "independent_clusters_per_stratum": [
+      1
+    ],
+    "intervals": null,
+    "reasons": [
+      "independent_clusters_below_minimum: at most 1 runs per stratum, minimum 10 effective clusters (DEC-SOU153-20261027)",
+      "no_accepted_performance_cluster_method: the SOU-153 bootstrap is approved only for AgentDojo semantic families",
+      "repeated_trials_within_a_run_are_dependent: one qualifier process and host per run"
+    ],
+    "status": "descriptive_only"
+  },
+  "observations": {
+    "baseline": {
+      "contract": "sw-native-performance-observation/1",
+      "design": {
+        "cluster_unit": "report (one dispatch)",
+        "host_unit": "fresh host per arm",
+        "pairing_design": null,
+        "plan": [
+          "single_run"
+        ],
+        "profiles": [
+          "control/benign",
+          "control/refusal",
+          "protected/benign",
+          "protected/refusal"
+        ],
+        "samples_per_profile": null,
+        "trial_plan": {
+          "arms": [
+            "control",
+            "protected"
+          ],
+          "cases": 20,
+          "workload_sha256": "f7838d3798e3498e6d56ae963a544152f2feaf53a77ab059b6a815c87d0caa4f"
+        }
+      },
+      "endpoints": {
+        "host_elapsed_ms": {
+          "clock": "installed_driver_monotonic",
+          "end": "host process exit",
+          "metric": "installed_host_arm_elapsed",
+          "observer": "scripts/qualify-installed-pilot.py Pilot.host (scripted loopback provider)",
+          "role": "whole fresh-host arm: start, every call and shutdown",
+          "source_field": "rows[].host_elapsed_ms",
+          "start": "host process spawn",
+          "unit": "ms"
+        },
+        "host_start_ms": {
+          "clock": "installed_driver_monotonic",
+          "end": "first scripted tool proposal served",
+          "metric": "installed_host_start",
+          "observer": "scripts/qualify-installed-pilot.py Pilot.host (scripted loopback provider)",
+          "role": "host start only; never a call latency",
+          "source_field": "rows[].host_start_ms",
+          "start": "host process spawn",
+          "unit": "ms"
+        }
+      },
+      "engineering_criteria": "none approved: engineering_budgets.latency_threshold_approved is False",
+      "environment": {
+        "cpu_count": [],
+        "host_instance": {
+          "detail": "one fresh host process per arm on an unrecorded runner",
+          "status": "not_retained"
+        },
+        "kernel": null,
+        "machine": null,
+        "mem_total_kb": [],
+        "platform_kind": null
+      },
+      "gate": {
+        "failures": [
+          "search-read-status:protected",
+          "search-read-status:benign_incomplete",
+          "search-exclusion:protected",
+          "search-exclusion:benign_incomplete"
+        ],
+        "scope": "producer development gate; not security, effectiveness or readiness",
+        "status": "failed"
+      },
+      "input": {
+        "custody": {
+          "bytes": 149804,
+          "git_blob": "bd905dd01fa51eef851d7437e7c1afa1afd59245",
+          "introduced_by": "2e78481d0ef528743234d9cd87fa9b0ec886a411",
+          "method": "local git object store: blob id of the bytes read",
+          "normalization": "none",
+          "original_sha256": "6f3173364ded8d34bd2583fd6d520d5e6712c7ee3e5f1106b75fd317e1478dca",
+          "status": "committed_blob"
+        },
+        "evidence_sha256": "14393a4e408ce0b4ddaa332b3009cc2976ea40759581ff32561d033b8e6475a1",
+        "manifest": null,
+        "name": "docs/operations/evidence/sou106/measured-report.json",
+        "producer": "scripts/pilot_measurement.py (qualify-installed-pilot.py)",
+        "producer_format": "sw-installed-pilot-matched/1"
+      },
+      "not_retained": {
+        "failed_arm_timings": "kept in the original report; failed arms carry no measured value here",
+        "host_instance": "the runner is not recorded",
+        "trace_observed": "the qualification report (and its actual strace mode) is not retained in the summary"
+      },
+      "outcome_semantics": "Row status and the gate are the producer's development workflow outcomes. A protected refusal is witnessed by the producer's own repository witness (effect_observed, original_opens) and is not re-observed here. No status is security or protection effectiveness evidence.",
+      "primary_endpoint": "host_start_ms",
+      "provenance": {
+        "binaries": {
+          "detail": "identity.selected self-declaration; the binaries are not retained",
+          "sha256": {
+            "agentfw": "e4afd91c134584fb783c446d49c52c9a8af11ecb36573bfb294dc61c3fd07b6c",
+            "bwrap": "a50e462cdfa865a7d222de00246549e5d73d858228ad14e3a4336ebac8b6ac68",
+            "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+            "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "git": "6a7514a539ff8a35d37ec6fef9b86967cb007c401e2be5923804b2e0eed173b4",
+            "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+            "git_launcher": "cc9cf0b7ffe0f1f864d328283750bfa72fe0131deff5de2a27185fd0b0c11eca",
+            "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+            "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+            "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+            "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+            "sandbox_tests": "6875e0b6f9228175b56c5cf5f720f46a675fb5219c2f909c9d8cfeda673ca67f"
+          },
+          "status": "declared_only"
+        },
+        "build": {
+          "detail": "prebuilt selected binaries; not_measured_prebuilt_selected_binaries",
+          "profile": null,
+          "receipt_sha256": null,
+          "status": "not_retained"
+        },
+        "profiles_and_policy": {
+          "detail": "identity.profiles, policy_sha256 and registry_sha256 are self-declared (policy_sha256 agrees with identity.selected.policy)",
+          "status": "declared_only"
+        },
+        "source": {
+          "commit": "ce4f76d823f9f1b5a7ea1dec97a8ff260a5f94dc",
+          "files_sha256": "3ad1ca68a3f2dfb0e88eb5589df437236f664cd6e9b8b16c631728c910bb8380",
+          "method": "git commit tree equality and files_sha256 recomputed from every committed blob",
+          "status": "verified_git_objects",
+          "tree": "c4f5d6f269d23e45cda574dfe27f5300a9629a9e"
+        },
+        "workload": {
+          "definition": "scripts/benchmarks/installed-pilot-workload-v2.json",
+          "harness_sha256_at_source": {
+            "scripts/pilot_measurement.py": "ec3144647413c1943393146e0b11d89fc36043b85e6f4bff4faa10b961c7b015",
+            "scripts/qualify-installed-pilot.py": "3be04dd7b66078f72a65606adc307415198ed3338628164b238df3c7ae9f59c5",
+            "workload_file": "245110bb6c6b312a70d0bdc69771e44e3bec0da7c79c057019740befffdecd95"
+          },
+          "status": "verified_git_objects"
+        }
+      },
+      "report_endpoints": {
+        "asset_install_and_daemon_prepare_ms": {
+          "boundary": "asset install and daemon preparation only",
+          "clock": "installed_driver_monotonic",
+          "observer": "scripts/pilot_measurement.py run_matched",
+          "unit": "ms",
+          "value": 10816.648
+        },
+        "external_build_time": {
+          "boundary": "not measured by this producer",
+          "clock": null,
+          "unit": "none",
+          "value": "not_measured_prebuilt_selected_binaries"
+        },
+        "observable_ask_latency": {
+          "boundary": "the workload has no operator Ask decision",
+          "clock": null,
+          "unit": "none",
+          "value": "not_applicable"
+        },
+        "preparation_ms": {
+          "boundary": "run start through selection verification, asset install and daemon preparation",
+          "clock": "installed_driver_monotonic",
+          "observer": "scripts/pilot_measurement.py run_matched",
+          "unit": "ms",
+          "value": 11845.533
+        },
+        "source_and_selection_verification_ms": {
+          "boundary": "run start to verified source and selection",
+          "clock": "installed_driver_monotonic",
+          "observer": "scripts/pilot_measurement.py run_matched",
+          "unit": "ms",
+          "value": 1028.865
+        }
+      },
+      "reproduction": {
+        "checked": [
+          "rows (case, arm) plan",
+          "rows[].operation_sha256",
+          "conditions",
+          "required_arms",
+          "gate (pilot_qualification.matched_gate, identical gate code at the source commit)"
+        ],
+        "not_reproduced": [],
+        "status": "reproduced_from_retained_trials"
+      },
+      "role": "baseline",
+      "runs": [
+        {
+          "cache_drop": null,
+          "condition": "fresh_host_per_arm_os_cache_uncontrolled",
+          "conditions": {},
+          "declared_kind": "single_run",
+          "disqualification": null,
+          "exit_code": null,
+          "failure": null,
+          "index": 1,
+          "qualified": true,
+          "wall_seconds": null
+        }
+      ],
+      "stage_clock": {
+        "clock": "installed_driver_monotonic",
+        "observer": "scripts/qualify-installed-pilot.py Pilot.host (scripted loopback provider)",
+        "unit": "ms"
+      },
+      "status_counts": {
+        "failed": 2,
+        "incomplete": 0,
+        "measured": 38,
+        "not_run": 0,
+        "timed_out": 0
+      },
+      "status_mapping": {
+        "failed": "row status failed for a non-timeout reason",
+        "incomplete": "row status incomplete after execution started or was cancelled",
+        "measured": "row status passed (the gate requires actual host, cleanup and finite call timings)",
+        "not_run": "row status incomplete with reason not_executed (the arm never started)",
+        "timed_out": "row status failed with a reason naming a timeout or deadline"
+      },
+      "trace": {
+        "observed": "not_retained",
+        "requested": null,
+        "requested_basis": "the installed-host report records no observer or trace mode",
+        "requested_status": "not_recorded"
+      },
+      "trial_count": 40,
+      "within_report_pairing": {
+        "basis": "control and protected arm of the same case with the same input_sha256, fresh host each, control first (order bias retained)",
+        "published_call_overhead_ms": {
+          "max": 107.344,
+          "median": 50.015,
+          "min": -1.186,
+          "n": 69,
+          "p95": 64.63199999999999
+        },
+        "reproduced": true,
+        "use": "reported only; never used to pair two reports"
+      }
+    },
+    "candidate": {
+      "contract": "sw-native-performance-observation/1",
+      "design": {
+        "cluster_unit": "report (one dispatch)",
+        "host_unit": "fresh host per arm",
+        "pairing_design": null,
+        "plan": [
+          "single_run"
+        ],
+        "profiles": [
+          "control/benign",
+          "control/refusal",
+          "protected/benign",
+          "protected/refusal"
+        ],
+        "samples_per_profile": null,
+        "trial_plan": {
+          "arms": [
+            "control",
+            "protected"
+          ],
+          "cases": 20,
+          "workload_sha256": "f7838d3798e3498e6d56ae963a544152f2feaf53a77ab059b6a815c87d0caa4f"
+        }
+      },
+      "endpoints": {
+        "host_elapsed_ms": {
+          "clock": "installed_driver_monotonic",
+          "end": "host process exit",
+          "metric": "installed_host_arm_elapsed",
+          "observer": "scripts/qualify-installed-pilot.py Pilot.host (scripted loopback provider)",
+          "role": "whole fresh-host arm: start, every call and shutdown",
+          "source_field": "rows[].host_elapsed_ms",
+          "start": "host process spawn",
+          "unit": "ms"
+        },
+        "host_start_ms": {
+          "clock": "installed_driver_monotonic",
+          "end": "first scripted tool proposal served",
+          "metric": "installed_host_start",
+          "observer": "scripts/qualify-installed-pilot.py Pilot.host (scripted loopback provider)",
+          "role": "host start only; never a call latency",
+          "source_field": "rows[].host_start_ms",
+          "start": "host process spawn",
+          "unit": "ms"
+        }
+      },
+      "engineering_criteria": "none approved: engineering_budgets.latency_threshold_approved is False",
+      "environment": {
+        "cpu_count": [],
+        "host_instance": {
+          "detail": "one fresh host process per arm on an unrecorded runner",
+          "status": "not_retained"
+        },
+        "kernel": null,
+        "machine": null,
+        "mem_total_kb": [],
+        "platform_kind": null
+      },
+      "gate": {
+        "failures": [
+          "search-read-status:protected",
+          "search-read-status:benign_incomplete",
+          "search-exclusion:protected",
+          "search-exclusion:benign_incomplete"
+        ],
+        "scope": "producer development gate; not security, effectiveness or readiness",
+        "status": "failed"
+      },
+      "input": {
+        "custody": {
+          "bytes": 149804,
+          "git_blob": "bd905dd01fa51eef851d7437e7c1afa1afd59245",
+          "introduced_by": "2e78481d0ef528743234d9cd87fa9b0ec886a411",
+          "method": "local git object store: blob id of the bytes read",
+          "normalization": "none",
+          "original_sha256": "6f3173364ded8d34bd2583fd6d520d5e6712c7ee3e5f1106b75fd317e1478dca",
+          "status": "committed_blob"
+        },
+        "evidence_sha256": "14393a4e408ce0b4ddaa332b3009cc2976ea40759581ff32561d033b8e6475a1",
+        "manifest": null,
+        "name": "docs/operations/evidence/sou106/measured-report.json",
+        "producer": "scripts/pilot_measurement.py (qualify-installed-pilot.py)",
+        "producer_format": "sw-installed-pilot-matched/1"
+      },
+      "not_retained": {
+        "failed_arm_timings": "kept in the original report; failed arms carry no measured value here",
+        "host_instance": "the runner is not recorded",
+        "trace_observed": "the qualification report (and its actual strace mode) is not retained in the summary"
+      },
+      "outcome_semantics": "Row status and the gate are the producer's development workflow outcomes. A protected refusal is witnessed by the producer's own repository witness (effect_observed, original_opens) and is not re-observed here. No status is security or protection effectiveness evidence.",
+      "primary_endpoint": "host_start_ms",
+      "provenance": {
+        "binaries": {
+          "detail": "identity.selected self-declaration; the binaries are not retained",
+          "sha256": {
+            "agentfw": "e4afd91c134584fb783c446d49c52c9a8af11ecb36573bfb294dc61c3fd07b6c",
+            "bwrap": "a50e462cdfa865a7d222de00246549e5d73d858228ad14e3a4336ebac8b6ac68",
+            "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+            "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "git": "6a7514a539ff8a35d37ec6fef9b86967cb007c401e2be5923804b2e0eed173b4",
+            "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+            "git_launcher": "cc9cf0b7ffe0f1f864d328283750bfa72fe0131deff5de2a27185fd0b0c11eca",
+            "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+            "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+            "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+            "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+            "sandbox_tests": "6875e0b6f9228175b56c5cf5f720f46a675fb5219c2f909c9d8cfeda673ca67f"
+          },
+          "status": "declared_only"
+        },
+        "build": {
+          "detail": "prebuilt selected binaries; not_measured_prebuilt_selected_binaries",
+          "profile": null,
+          "receipt_sha256": null,
+          "status": "not_retained"
+        },
+        "profiles_and_policy": {
+          "detail": "identity.profiles, policy_sha256 and registry_sha256 are self-declared (policy_sha256 agrees with identity.selected.policy)",
+          "status": "declared_only"
+        },
+        "source": {
+          "commit": "ce4f76d823f9f1b5a7ea1dec97a8ff260a5f94dc",
+          "files_sha256": "3ad1ca68a3f2dfb0e88eb5589df437236f664cd6e9b8b16c631728c910bb8380",
+          "method": "git commit tree equality and files_sha256 recomputed from every committed blob",
+          "status": "verified_git_objects",
+          "tree": "c4f5d6f269d23e45cda574dfe27f5300a9629a9e"
+        },
+        "workload": {
+          "definition": "scripts/benchmarks/installed-pilot-workload-v2.json",
+          "harness_sha256_at_source": {
+            "scripts/pilot_measurement.py": "ec3144647413c1943393146e0b11d89fc36043b85e6f4bff4faa10b961c7b015",
+            "scripts/qualify-installed-pilot.py": "3be04dd7b66078f72a65606adc307415198ed3338628164b238df3c7ae9f59c5",
+            "workload_file": "245110bb6c6b312a70d0bdc69771e44e3bec0da7c79c057019740befffdecd95"
+          },
+          "status": "verified_git_objects"
+        }
+      },
+      "report_endpoints": {
+        "asset_install_and_daemon_prepare_ms": {
+          "boundary": "asset install and daemon preparation only",
+          "clock": "installed_driver_monotonic",
+          "observer": "scripts/pilot_measurement.py run_matched",
+          "unit": "ms",
+          "value": 10816.648
+        },
+        "external_build_time": {
+          "boundary": "not measured by this producer",
+          "clock": null,
+          "unit": "none",
+          "value": "not_measured_prebuilt_selected_binaries"
+        },
+        "observable_ask_latency": {
+          "boundary": "the workload has no operator Ask decision",
+          "clock": null,
+          "unit": "none",
+          "value": "not_applicable"
+        },
+        "preparation_ms": {
+          "boundary": "run start through selection verification, asset install and daemon preparation",
+          "clock": "installed_driver_monotonic",
+          "observer": "scripts/pilot_measurement.py run_matched",
+          "unit": "ms",
+          "value": 11845.533
+        },
+        "source_and_selection_verification_ms": {
+          "boundary": "run start to verified source and selection",
+          "clock": "installed_driver_monotonic",
+          "observer": "scripts/pilot_measurement.py run_matched",
+          "unit": "ms",
+          "value": 1028.865
+        }
+      },
+      "reproduction": {
+        "checked": [
+          "rows (case, arm) plan",
+          "rows[].operation_sha256",
+          "conditions",
+          "required_arms",
+          "gate (pilot_qualification.matched_gate, identical gate code at the source commit)"
+        ],
+        "not_reproduced": [],
+        "status": "reproduced_from_retained_trials"
+      },
+      "role": "candidate",
+      "runs": [
+        {
+          "cache_drop": null,
+          "condition": "fresh_host_per_arm_os_cache_uncontrolled",
+          "conditions": {},
+          "declared_kind": "single_run",
+          "disqualification": null,
+          "exit_code": null,
+          "failure": null,
+          "index": 1,
+          "qualified": true,
+          "wall_seconds": null
+        }
+      ],
+      "stage_clock": {
+        "clock": "installed_driver_monotonic",
+        "observer": "scripts/qualify-installed-pilot.py Pilot.host (scripted loopback provider)",
+        "unit": "ms"
+      },
+      "status_counts": {
+        "failed": 2,
+        "incomplete": 0,
+        "measured": 38,
+        "not_run": 0,
+        "timed_out": 0
+      },
+      "status_mapping": {
+        "failed": "row status failed for a non-timeout reason",
+        "incomplete": "row status incomplete after execution started or was cancelled",
+        "measured": "row status passed (the gate requires actual host, cleanup and finite call timings)",
+        "not_run": "row status incomplete with reason not_executed (the arm never started)",
+        "timed_out": "row status failed with a reason naming a timeout or deadline"
+      },
+      "trace": {
+        "observed": "not_retained",
+        "requested": null,
+        "requested_basis": "the installed-host report records no observer or trace mode",
+        "requested_status": "not_recorded"
+      },
+      "trial_count": 40,
+      "within_report_pairing": {
+        "basis": "control and protected arm of the same case with the same input_sha256, fresh host each, control first (order bias retained)",
+        "published_call_overhead_ms": {
+          "max": 107.344,
+          "median": 50.015,
+          "min": -1.186,
+          "n": 69,
+          "p95": 64.63199999999999
+        },
+        "reproduced": true,
+        "use": "reported only; never used to pair two reports"
+      }
+    }
+  },
+  "pairing": {
+    "basis": "identical_original_evidence",
+    "reason": null,
+    "valid": true
+  },
+  "percentile_definition": "nearest rank: the value at rank ceil(q * n) of the ascending sample, unrounded (pilot_ask_latency.summarize). Published sw-ask-series/1 distributions round to 0.001 ms first; reproduction uses that producer convention.",
+  "reasons": [
+    {
+      "code": "binary_identity_unverified",
+      "detail": "binary digests are not independently bound",
+      "dimension": "binaries",
+      "fields": [
+        "provenance.binaries.status"
+      ]
+    },
+    {
+      "code": "build_profile_unverified",
+      "detail": "build profile is not bound to the measured binaries",
+      "dimension": "build",
+      "fields": [
+        "provenance.build.status"
+      ]
+    },
+    {
+      "code": "cpu_count_unverified",
+      "detail": "not retained on one side",
+      "dimension": "cpu_count",
+      "fields": [
+        "environment.cpu_count"
+      ]
+    },
+    {
+      "code": "kernel_unverified",
+      "detail": "not retained on one side",
+      "dimension": "kernel",
+      "fields": [
+        "environment.kernel"
+      ]
+    },
+    {
+      "code": "machine_unverified",
+      "detail": "not retained on one side",
+      "dimension": "machine",
+      "fields": [
+        "environment.machine"
+      ]
+    },
+    {
+      "code": "memory_unverified",
+      "detail": "not retained on one side",
+      "dimension": "memory",
+      "fields": [
+        "environment.mem_total_kb"
+      ]
+    },
+    {
+      "code": "platform_unverified",
+      "detail": "not retained on one side",
+      "dimension": "platform",
+      "fields": [
+        "environment.platform_kind"
+      ]
+    },
+    {
+      "code": "trace_requested_unverified",
+      "detail": "not retained on one side",
+      "dimension": "trace_requested",
+      "fields": [
+        "trace.requested"
+      ]
+    }
+  ],
+  "scope": [
+    "Engineering latency diagnostics for recorded native Ask series only.",
+    "Not a security or protection qualification, not task effectiveness, not product or pilot readiness.",
+    "Trace-on is the only observer mode of this producer; no trace-off result exists here, and none would qualify protection.",
+    "The 3000 ms continuation p95 criterion and the 5000 ms first-pending bound are existing engineering criteria, reported separately; no new budget is approved.",
+    "A same-report identity control proves the comparator, not a performance change between revisions."
+  ],
+  "status": "evaluated",
+  "strata": [
+    {
+      "baseline": {
+        "attempted": 12,
+        "complete_denominator": true,
+        "endpoints": {
+          "host_elapsed_ms": {
+            "max": 1471.614,
+            "min": 1418.251,
+            "n": 12,
+            "p50": 1419.958,
+            "p95": 1471.614
+          },
+          "host_start_ms": {
+            "max": 1267.792,
+            "min": 1201.039,
+            "n": 12,
+            "p50": 1209.017,
+            "p95": 1267.792
+          }
+        },
+        "engineering_targets": {
+          "primary": "none approved: engineering_budgets.latency_threshold_approved is False"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_trial_per_run": [],
+        "independent_clusters": 1,
+        "planned": 12,
+        "primary": {
+          "max": 1267.792,
+          "min": 1201.039,
+          "n": 12,
+          "p50": 1209.017,
+          "p95": 1267.792
+        },
+        "primary_by_run": {
+          "1": {
+            "max": 1267.792,
+            "min": 1201.039,
+            "n": 12,
+            "p50": 1209.017,
+            "p95": 1267.792
+          }
+        },
+        "primary_endpoint": "host_start_ms",
+        "primary_highest": [
+          {
+            "trial": "r01/list-read-history/control",
+            "value": 1267.792
+          },
+          {
+            "trial": "r01/parallel-reads/control",
+            "value": 1234.635
+          },
+          {
+            "trial": "r01/batch-read-log/control",
+            "value": 1221.848
+          }
+        ],
+        "qualified_run_trials": 12,
+        "runs": [
+          1
+        ],
+        "stages": {
+          "call/first_batch_ms": {
+            "max": 26.956,
+            "min": 18.375,
+            "n": 14,
+            "p50": 20.208,
+            "p95": 26.956
+          },
+          "call/steady_state_ms": {
+            "max": 19.721,
+            "min": 12.885,
+            "n": 21,
+            "p50": 16.469,
+            "p95": 18.147
+          }
+        },
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 12,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 12,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "unit": "ms"
+      },
+      "candidate": {
+        "attempted": 12,
+        "complete_denominator": true,
+        "endpoints": {
+          "host_elapsed_ms": {
+            "max": 1471.614,
+            "min": 1418.251,
+            "n": 12,
+            "p50": 1419.958,
+            "p95": 1471.614
+          },
+          "host_start_ms": {
+            "max": 1267.792,
+            "min": 1201.039,
+            "n": 12,
+            "p50": 1209.017,
+            "p95": 1267.792
+          }
+        },
+        "engineering_targets": {
+          "primary": "none approved: engineering_budgets.latency_threshold_approved is False"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_trial_per_run": [],
+        "independent_clusters": 1,
+        "planned": 12,
+        "primary": {
+          "max": 1267.792,
+          "min": 1201.039,
+          "n": 12,
+          "p50": 1209.017,
+          "p95": 1267.792
+        },
+        "primary_by_run": {
+          "1": {
+            "max": 1267.792,
+            "min": 1201.039,
+            "n": 12,
+            "p50": 1209.017,
+            "p95": 1267.792
+          }
+        },
+        "primary_endpoint": "host_start_ms",
+        "primary_highest": [
+          {
+            "trial": "r01/list-read-history/control",
+            "value": 1267.792
+          },
+          {
+            "trial": "r01/parallel-reads/control",
+            "value": 1234.635
+          },
+          {
+            "trial": "r01/batch-read-log/control",
+            "value": 1221.848
+          }
+        ],
+        "qualified_run_trials": 12,
+        "runs": [
+          1
+        ],
+        "stages": {
+          "call/first_batch_ms": {
+            "max": 26.956,
+            "min": 18.375,
+            "n": 14,
+            "p50": 20.208,
+            "p95": 26.956
+          },
+          "call/steady_state_ms": {
+            "max": 19.721,
+            "min": 12.885,
+            "n": 21,
+            "p50": 16.469,
+            "p95": 18.147
+          }
+        },
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 12,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 12,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "unit": "ms"
+      },
+      "comparable": false,
+      "condition": "fresh_host_per_arm_os_cache_uncontrolled",
+      "profile": "control/benign",
+      "reasons": []
+    },
+    {
+      "baseline": {
+        "attempted": 8,
+        "complete_denominator": true,
+        "endpoints": {
+          "host_elapsed_ms": {
+            "max": 1618.735,
+            "min": 1417.987,
+            "n": 8,
+            "p50": 1419.173,
+            "p95": 1618.735
+          },
+          "host_start_ms": {
+            "max": 1370.944,
+            "min": 1193.68,
+            "n": 8,
+            "p50": 1202.553,
+            "p95": 1370.944
+          }
+        },
+        "engineering_targets": {
+          "primary": "none approved: engineering_budgets.latency_threshold_approved is False"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_trial_per_run": [],
+        "independent_clusters": 1,
+        "planned": 8,
+        "primary": {
+          "max": 1370.944,
+          "min": 1193.68,
+          "n": 8,
+          "p50": 1202.553,
+          "p95": 1370.944
+        },
+        "primary_by_run": {
+          "1": {
+            "max": 1370.944,
+            "min": 1193.68,
+            "n": 8,
+            "p50": 1202.553,
+            "p95": 1370.944
+          }
+        },
+        "primary_endpoint": "host_start_ms",
+        "primary_highest": [
+          {
+            "trial": "r01/write-new/control",
+            "value": 1370.944
+          },
+          {
+            "trial": "r01/edit-nested/control",
+            "value": 1211.268
+          },
+          {
+            "trial": "r01/reset-after-status/control",
+            "value": 1205.086
+          }
+        ],
+        "qualified_run_trials": 8,
+        "runs": [
+          1
+        ],
+        "stages": {
+          "call/first_batch_ms": {
+            "max": 44.74,
+            "min": 21.695,
+            "n": 15,
+            "p50": 22.639,
+            "p95": 44.74
+          },
+          "call/steady_state_ms": {
+            "max": 19.62,
+            "min": 9.522,
+            "n": 25,
+            "p50": 17.529,
+            "p95": 19.618
+          }
+        },
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 8,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 8,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "unit": "ms"
+      },
+      "candidate": {
+        "attempted": 8,
+        "complete_denominator": true,
+        "endpoints": {
+          "host_elapsed_ms": {
+            "max": 1618.735,
+            "min": 1417.987,
+            "n": 8,
+            "p50": 1419.173,
+            "p95": 1618.735
+          },
+          "host_start_ms": {
+            "max": 1370.944,
+            "min": 1193.68,
+            "n": 8,
+            "p50": 1202.553,
+            "p95": 1370.944
+          }
+        },
+        "engineering_targets": {
+          "primary": "none approved: engineering_budgets.latency_threshold_approved is False"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_trial_per_run": [],
+        "independent_clusters": 1,
+        "planned": 8,
+        "primary": {
+          "max": 1370.944,
+          "min": 1193.68,
+          "n": 8,
+          "p50": 1202.553,
+          "p95": 1370.944
+        },
+        "primary_by_run": {
+          "1": {
+            "max": 1370.944,
+            "min": 1193.68,
+            "n": 8,
+            "p50": 1202.553,
+            "p95": 1370.944
+          }
+        },
+        "primary_endpoint": "host_start_ms",
+        "primary_highest": [
+          {
+            "trial": "r01/write-new/control",
+            "value": 1370.944
+          },
+          {
+            "trial": "r01/edit-nested/control",
+            "value": 1211.268
+          },
+          {
+            "trial": "r01/reset-after-status/control",
+            "value": 1205.086
+          }
+        ],
+        "qualified_run_trials": 8,
+        "runs": [
+          1
+        ],
+        "stages": {
+          "call/first_batch_ms": {
+            "max": 44.74,
+            "min": 21.695,
+            "n": 15,
+            "p50": 22.639,
+            "p95": 44.74
+          },
+          "call/steady_state_ms": {
+            "max": 19.62,
+            "min": 9.522,
+            "n": 25,
+            "p50": 17.529,
+            "p95": 19.618
+          }
+        },
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 8,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 8,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "unit": "ms"
+      },
+      "comparable": false,
+      "condition": "fresh_host_per_arm_os_cache_uncontrolled",
+      "profile": "control/refusal",
+      "reasons": []
+    },
+    {
+      "baseline": {
+        "attempted": 12,
+        "complete_denominator": false,
+        "endpoints": {
+          "host_elapsed_ms": {
+            "max": 8029.576,
+            "min": 7078.947,
+            "n": 10,
+            "p50": 7130.46,
+            "p95": 8029.576
+          },
+          "host_start_ms": {
+            "max": 7749.532,
+            "min": 6763.313,
+            "n": 10,
+            "p50": 6830.351,
+            "p95": 7749.532
+          }
+        },
+        "engineering_targets": {
+          "primary": "none approved: engineering_budgets.latency_threshold_approved is False"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_trial_per_run": [],
+        "independent_clusters": 1,
+        "planned": 12,
+        "primary": {
+          "max": 7749.532,
+          "min": 6763.313,
+          "n": 10,
+          "p50": 6830.351,
+          "p95": 7749.532
+        },
+        "primary_by_run": {
+          "1": {
+            "max": 7749.532,
+            "min": 6763.313,
+            "n": 10,
+            "p50": 6830.351,
+            "p95": 7749.532
+          }
+        },
+        "primary_endpoint": "host_start_ms",
+        "primary_highest": [
+          {
+            "trial": "r01/sizes-and-status/protected",
+            "value": 7749.532
+          },
+          {
+            "trial": "r01/head-and-diff/protected",
+            "value": 6915.641
+          },
+          {
+            "trial": "r01/tail-and-show/protected",
+            "value": 6874.886
+          }
+        ],
+        "qualified_run_trials": 12,
+        "runs": [
+          1
+        ],
+        "stages": {
+          "call/first_batch_ms": {
+            "max": 125.719,
+            "min": 66.509,
+            "n": 12,
+            "p50": 69.877,
+            "p95": 125.719
+          },
+          "call/steady_state_ms": {
+            "max": 78.163,
+            "min": 58.384,
+            "n": 17,
+            "p50": 66.488,
+            "p95": 78.163
+          }
+        },
+        "status_counts": {
+          "failed": 2,
+          "incomplete": 0,
+          "measured": 10,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 2,
+          "incomplete": 0,
+          "measured": 10,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "unit": "ms"
+      },
+      "candidate": {
+        "attempted": 12,
+        "complete_denominator": false,
+        "endpoints": {
+          "host_elapsed_ms": {
+            "max": 8029.576,
+            "min": 7078.947,
+            "n": 10,
+            "p50": 7130.46,
+            "p95": 8029.576
+          },
+          "host_start_ms": {
+            "max": 7749.532,
+            "min": 6763.313,
+            "n": 10,
+            "p50": 6830.351,
+            "p95": 7749.532
+          }
+        },
+        "engineering_targets": {
+          "primary": "none approved: engineering_budgets.latency_threshold_approved is False"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_trial_per_run": [],
+        "independent_clusters": 1,
+        "planned": 12,
+        "primary": {
+          "max": 7749.532,
+          "min": 6763.313,
+          "n": 10,
+          "p50": 6830.351,
+          "p95": 7749.532
+        },
+        "primary_by_run": {
+          "1": {
+            "max": 7749.532,
+            "min": 6763.313,
+            "n": 10,
+            "p50": 6830.351,
+            "p95": 7749.532
+          }
+        },
+        "primary_endpoint": "host_start_ms",
+        "primary_highest": [
+          {
+            "trial": "r01/sizes-and-status/protected",
+            "value": 7749.532
+          },
+          {
+            "trial": "r01/head-and-diff/protected",
+            "value": 6915.641
+          },
+          {
+            "trial": "r01/tail-and-show/protected",
+            "value": 6874.886
+          }
+        ],
+        "qualified_run_trials": 12,
+        "runs": [
+          1
+        ],
+        "stages": {
+          "call/first_batch_ms": {
+            "max": 125.719,
+            "min": 66.509,
+            "n": 12,
+            "p50": 69.877,
+            "p95": 125.719
+          },
+          "call/steady_state_ms": {
+            "max": 78.163,
+            "min": 58.384,
+            "n": 17,
+            "p50": 66.488,
+            "p95": 78.163
+          }
+        },
+        "status_counts": {
+          "failed": 2,
+          "incomplete": 0,
+          "measured": 10,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 2,
+          "incomplete": 0,
+          "measured": 10,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "unit": "ms"
+      },
+      "comparable": false,
+      "condition": "fresh_host_per_arm_os_cache_uncontrolled",
+      "profile": "protected/benign",
+      "reasons": [
+        "baseline_incomplete_denominator",
+        "candidate_incomplete_denominator"
+      ]
+    },
+    {
+      "baseline": {
+        "attempted": 8,
+        "complete_denominator": true,
+        "endpoints": {
+          "host_elapsed_ms": {
+            "max": 7180.134,
+            "min": 7077.31,
+            "n": 8,
+            "p50": 7081.229,
+            "p95": 7180.134
+          },
+          "host_start_ms": {
+            "max": 6871.673,
+            "min": 6750.992,
+            "n": 8,
+            "p50": 6789.517,
+            "p95": 6871.673
+          }
+        },
+        "engineering_targets": {
+          "primary": "none approved: engineering_budgets.latency_threshold_approved is False"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_trial_per_run": [],
+        "independent_clusters": 1,
+        "planned": 8,
+        "primary": {
+          "max": 6871.673,
+          "min": 6750.992,
+          "n": 8,
+          "p50": 6789.517,
+          "p95": 6871.673
+        },
+        "primary_by_run": {
+          "1": {
+            "max": 6871.673,
+            "min": 6750.992,
+            "n": 8,
+            "p50": 6789.517,
+            "p95": 6871.673
+          }
+        },
+        "primary_endpoint": "host_start_ms",
+        "primary_highest": [
+          {
+            "trial": "r01/write-new/protected",
+            "value": 6871.673
+          },
+          {
+            "trial": "r01/reset-after-status/protected",
+            "value": 6839.997
+          },
+          {
+            "trial": "r01/parallel-write/protected",
+            "value": 6812.523
+          }
+        ],
+        "qualified_run_trials": 8,
+        "runs": [
+          1
+        ],
+        "stages": {
+          "call/first_batch_ms": {
+            "max": 73.636,
+            "min": 67.923,
+            "n": 15,
+            "p50": 72.67,
+            "p95": 73.636
+          },
+          "call/steady_state_ms": {
+            "max": 71.336,
+            "min": 12.086,
+            "n": 25,
+            "p50": 64.208,
+            "p95": 71.333
+          }
+        },
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 8,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 8,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "unit": "ms"
+      },
+      "candidate": {
+        "attempted": 8,
+        "complete_denominator": true,
+        "endpoints": {
+          "host_elapsed_ms": {
+            "max": 7180.134,
+            "min": 7077.31,
+            "n": 8,
+            "p50": 7081.229,
+            "p95": 7180.134
+          },
+          "host_start_ms": {
+            "max": 6871.673,
+            "min": 6750.992,
+            "n": 8,
+            "p50": 6789.517,
+            "p95": 6871.673
+          }
+        },
+        "engineering_targets": {
+          "primary": "none approved: engineering_budgets.latency_threshold_approved is False"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_trial_per_run": [],
+        "independent_clusters": 1,
+        "planned": 8,
+        "primary": {
+          "max": 6871.673,
+          "min": 6750.992,
+          "n": 8,
+          "p50": 6789.517,
+          "p95": 6871.673
+        },
+        "primary_by_run": {
+          "1": {
+            "max": 6871.673,
+            "min": 6750.992,
+            "n": 8,
+            "p50": 6789.517,
+            "p95": 6871.673
+          }
+        },
+        "primary_endpoint": "host_start_ms",
+        "primary_highest": [
+          {
+            "trial": "r01/write-new/protected",
+            "value": 6871.673
+          },
+          {
+            "trial": "r01/reset-after-status/protected",
+            "value": 6839.997
+          },
+          {
+            "trial": "r01/parallel-write/protected",
+            "value": 6812.523
+          }
+        ],
+        "qualified_run_trials": 8,
+        "runs": [
+          1
+        ],
+        "stages": {
+          "call/first_batch_ms": {
+            "max": 73.636,
+            "min": 67.923,
+            "n": 15,
+            "p50": 72.67,
+            "p95": 73.636
+          },
+          "call/steady_state_ms": {
+            "max": 71.336,
+            "min": 12.086,
+            "n": 25,
+            "p50": 64.208,
+            "p95": 71.333
+          }
+        },
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 8,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 8,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "unit": "ms"
+      },
+      "comparable": false,
+      "condition": "fresh_host_per_arm_os_cache_uncontrolled",
+      "profile": "protected/refusal",
+      "reasons": []
+    }
+  ]
+}

@@ -14,11 +14,11 @@ Classification: **incomplete** (two_reports).
 - `host_instance_unverified` (host_instance): neither report retains its host instance; same-host conditions cannot be established
 - `mem_total_differs_materiality_unassessed` (memory): reported MemTotal_kb differs; same-boot/same-host conditions are not established and no tolerance is approved
 
-## Strata (continuation, ms)
+## Strata (primary endpoint: continuation_ms (ms))
 
 Counts are measured / failed / timed out / incomplete / not run. Distributions use qualified runs only; trials of unqualified runs stay counted under all runs.
 
-| Profile | Condition | Role | Planned | All runs | Excluded (unqualified runs) | Qualified runs | Runs | p50 | p95 | max | 3000 ms p95 |
+| Stratum | Condition | Role | Planned | All runs | Excluded (unqualified runs) | Qualified runs | Runs | p50 | p95 | max | Engineering criterion |
 |---|---|---|---:|---|---:|---|---:|---:|---:|---:|---|
 | filesystem | post_cache_drop_setup_rewarmed | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 991.6 | 1058.5 | 1107.6 | met |
 | filesystem | post_cache_drop_setup_rewarmed | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1199.0 | 1265.4 | 1298.2 | met |
@@ -29,7 +29,7 @@ Counts are measured / failed / timed out / incomplete / not run. Distributions u
 | git | warm | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1335.4 | 1409.8 | 1425.5 | met |
 | git | warm | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1594.0 | 1634.9 | 1665.0 | met |
 
-## Differences (candidate minus baseline, ms)
+## Differences (candidate minus baseline, primary endpoint)
 
 - none: no comparable stratum. No speed-up, merged p95 or verdict is reported.
 

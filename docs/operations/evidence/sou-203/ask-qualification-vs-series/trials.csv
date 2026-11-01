@@ -1,4 +1,4 @@
-role,trial_id,run,profile,condition,run_qualified,status,reason,continuation_ms,first_pending_asset_verification_lb_ms,post_observed_total_ms
+role,trial_id,run,stratum,condition,run_qualified,status,reason,continuation_ms,first_pending_asset_verification_ms,post_observed_total_ms
 baseline,r01/filesystem/000,1,filesystem,undeclared,True,measured,,8699.571728,,
 baseline,r01/filesystem/001,1,filesystem,undeclared,True,measured,,8756.669831,,
 baseline,r01/filesystem/002,1,filesystem,undeclared,True,measured,,8819.488919,,

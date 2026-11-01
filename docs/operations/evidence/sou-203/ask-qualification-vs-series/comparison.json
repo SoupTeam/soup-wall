@@ -111,13 +111,17 @@
       "status": "unverified"
     },
     {
-      "baseline": 20,
-      "candidate": 20,
+      "baseline": {
+        "samples_per_profile": 20
+      },
+      "candidate": {
+        "samples_per_profile": 20
+      },
       "code": null,
       "detail": null,
       "dimension": "design",
       "fields": [
-        "design.samples_per_profile"
+        "design.trial_plan"
       ],
       "status": "match"
     },
@@ -208,7 +212,10 @@
           "filesystem",
           "git"
         ],
-        "samples_per_profile": 20
+        "samples_per_profile": 20,
+        "trial_plan": {
+          "samples_per_profile": 20
+        }
       },
       "endpoints": {
         "continuation_ms": {
@@ -278,6 +285,7 @@
         "raw_stage_events": "not part of an Ask qualification report",
         "trace_observed": "the qualification report (and its actual strace mode) is not retained in the summary"
       },
+      "primary_endpoint": "continuation_ms",
       "provenance": {
         "binaries": {
           "detail": "qualification report self-declaration; the binaries are not retained",
@@ -384,7 +392,10 @@
           "filesystem",
           "git"
         ],
-        "samples_per_profile": 20
+        "samples_per_profile": 20,
+        "trial_plan": {
+          "samples_per_profile": 20
+        }
       },
       "endpoints": {
         "continuation_ms": {
@@ -469,6 +480,7 @@
         "raw_stage_events": "stage-events.jsonl is not retained; `stages` aggregates are reported, not reproduced",
         "trace_observed": "the qualification report (and its actual strace mode) is not retained in the summary"
       },
+      "primary_endpoint": "continuation_ms",
       "provenance": {
         "binaries": {
           "detail": "manifest self-declaration; the binaries are not retained",
@@ -854,7 +866,55 @@
       "candidate": {
         "attempted": 40,
         "complete_denominator": true,
-        "continuation_by_run": {
+        "endpoints": {
+          "continuation_ms": {
+            "max": 1298.161406,
+            "min": 1098.183618,
+            "n": 40,
+            "p50": 1198.990163,
+            "p95": 1265.400298
+          },
+          "first_pending_asset_verification_ms": {
+            "max": 1329.517708,
+            "min": 1145.1383720000001,
+            "n": 40,
+            "p50": 1233.075503,
+            "p95": 1318.743438
+          },
+          "post_observed_total_ms": {
+            "max": 1171.926741,
+            "min": 1063.1954910000002,
+            "n": 40,
+            "p50": 1125.407853,
+            "p95": 1157.149968
+          }
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1329.518 ms"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_trial_per_run": [
+          {
+            "trial": "r01/filesystem/000",
+            "value": 1234.892207
+          },
+          {
+            "trial": "r03/filesystem/000",
+            "value": 1265.400298
+          }
+        ],
+        "independent_clusters": 2,
+        "planned": 40,
+        "primary": {
+          "max": 1298.161406,
+          "min": 1098.183618,
+          "n": 40,
+          "p50": 1198.990163,
+          "p95": 1265.400298
+        },
+        "primary_by_run": {
           "1": {
             "max": 1298.161406,
             "min": 1098.183618,
@@ -870,65 +930,27 @@
             "p95": 1265.400298
           }
         },
-        "continuation_highest": [
+        "primary_endpoint": "continuation_ms",
+        "primary_highest": [
           {
-            "ms": 1298.161406,
-            "trial": "r01/filesystem/019"
+            "trial": "r01/filesystem/019",
+            "value": 1298.161406
           },
           {
-            "ms": 1267.42957,
-            "trial": "r03/filesystem/013"
+            "trial": "r03/filesystem/013",
+            "value": 1267.42957
           },
           {
-            "ms": 1265.400298,
-            "trial": "r03/filesystem/000"
+            "trial": "r03/filesystem/000",
+            "value": 1265.400298
           }
         ],
-        "continuation_ms": {
-          "max": 1298.161406,
-          "min": 1098.183618,
-          "n": 40,
-          "p50": 1198.990163,
-          "p95": 1265.400298
-        },
-        "engineering_targets": {
-          "continuation_p95_le_3000_ms": "met",
-          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1329.518 ms"
-        },
-        "excluded_runs": [],
-        "excluded_unqualified_run_trials": 0,
-        "first_pending_asset_verification_ms": {
-          "max": 1329.517708,
-          "min": 1145.1383720000001,
-          "n": 40,
-          "p50": 1233.075503,
-          "p95": 1318.743438
-        },
-        "first_trial_per_run_ms": [
-          {
-            "ms": 1234.892207,
-            "trial": "r01/filesystem/000"
-          },
-          {
-            "ms": 1265.400298,
-            "trial": "r03/filesystem/000"
-          }
-        ],
-        "independent_clusters": 2,
-        "planned": 40,
-        "post_observed_total_ms": {
-          "max": 1171.926741,
-          "min": 1063.1954910000002,
-          "n": 40,
-          "p50": 1125.407853,
-          "p95": 1157.149968
-        },
         "qualified_run_trials": 40,
         "runs": [
           1,
           3
         ],
-        "stages_ms": {
+        "stages": {
           "approval/classifier": {
             "max": 94.00803,
             "min": 67.37137,
@@ -1027,7 +1049,8 @@
           "measured": 40,
           "not_run": 0,
           "timed_out": 0
-        }
+        },
+        "unit": "ms"
       },
       "comparable": false,
       "condition": "post_cache_drop_setup_rewarmed",
@@ -1040,7 +1063,51 @@
       "baseline": {
         "attempted": 20,
         "complete_denominator": true,
-        "continuation_by_run": {
+        "endpoints": {
+          "continuation_ms": {
+            "max": 8850.198494,
+            "min": 8665.215226,
+            "n": 20,
+            "p50": 8742.440677,
+            "p95": 8840.958933
+          },
+          "first_pending_asset_verification_ms": {
+            "max": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "post_observed_total_ms": {
+            "max": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "not_met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max n/a"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_trial_per_run": [
+          {
+            "trial": "r01/filesystem/000",
+            "value": 8699.571728
+          }
+        ],
+        "independent_clusters": 1,
+        "planned": 20,
+        "primary": {
+          "max": 8850.198494,
+          "min": 8665.215226,
+          "n": 20,
+          "p50": 8742.440677,
+          "p95": 8840.958933
+        },
+        "primary_by_run": {
           "1": {
             "max": 8850.198494,
             "min": 8665.215226,
@@ -1049,60 +1116,26 @@
             "p95": 8840.958933
           }
         },
-        "continuation_highest": [
+        "primary_endpoint": "continuation_ms",
+        "primary_highest": [
           {
-            "ms": 8850.198494,
-            "trial": "r01/filesystem/009"
+            "trial": "r01/filesystem/009",
+            "value": 8850.198494
           },
           {
-            "ms": 8840.958933,
-            "trial": "r01/filesystem/014"
+            "trial": "r01/filesystem/014",
+            "value": 8840.958933
           },
           {
-            "ms": 8835.541496,
-            "trial": "r01/filesystem/019"
+            "trial": "r01/filesystem/019",
+            "value": 8835.541496
           }
         ],
-        "continuation_ms": {
-          "max": 8850.198494,
-          "min": 8665.215226,
-          "n": 20,
-          "p50": 8742.440677,
-          "p95": 8840.958933
-        },
-        "engineering_targets": {
-          "continuation_p95_le_3000_ms": "not_met",
-          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max n/a"
-        },
-        "excluded_runs": [],
-        "excluded_unqualified_run_trials": 0,
-        "first_pending_asset_verification_ms": {
-          "max": null,
-          "min": null,
-          "n": 0,
-          "p50": null,
-          "p95": null
-        },
-        "first_trial_per_run_ms": [
-          {
-            "ms": 8699.571728,
-            "trial": "r01/filesystem/000"
-          }
-        ],
-        "independent_clusters": 1,
-        "planned": 20,
-        "post_observed_total_ms": {
-          "max": null,
-          "min": null,
-          "n": 0,
-          "p50": null,
-          "p95": null
-        },
         "qualified_run_trials": 20,
         "runs": [
           1
         ],
-        "stages_ms": {},
+        "stages": {},
         "status_counts": {
           "failed": 0,
           "incomplete": 0,
@@ -1116,7 +1149,8 @@
           "measured": 20,
           "not_run": 0,
           "timed_out": 0
-        }
+        },
+        "unit": "ms"
       },
       "candidate": null,
       "comparable": false,
@@ -1131,7 +1165,55 @@
       "candidate": {
         "attempted": 40,
         "complete_denominator": true,
-        "continuation_by_run": {
+        "endpoints": {
+          "continuation_ms": {
+            "max": 1270.179619,
+            "min": 1150.095031,
+            "n": 40,
+            "p50": 1205.856493,
+            "p95": 1256.82629
+          },
+          "first_pending_asset_verification_ms": {
+            "max": 1314.9738630000002,
+            "min": 1107.48385,
+            "n": 40,
+            "p50": 1246.428154,
+            "p95": 1305.5330410000001
+          },
+          "post_observed_total_ms": {
+            "max": 1152.431943,
+            "min": 1050.417179,
+            "n": 40,
+            "p50": 1125.626913,
+            "p95": 1145.9161410000002
+          }
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1314.974 ms"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_trial_per_run": [
+          {
+            "trial": "r02/filesystem/000",
+            "value": 1186.260891
+          },
+          {
+            "trial": "r04/filesystem/000",
+            "value": 1201.120638
+          }
+        ],
+        "independent_clusters": 2,
+        "planned": 40,
+        "primary": {
+          "max": 1270.179619,
+          "min": 1150.095031,
+          "n": 40,
+          "p50": 1205.856493,
+          "p95": 1256.82629
+        },
+        "primary_by_run": {
           "2": {
             "max": 1270.179619,
             "min": 1150.095031,
@@ -1147,65 +1229,27 @@
             "p95": 1245.458277
           }
         },
-        "continuation_highest": [
+        "primary_endpoint": "continuation_ms",
+        "primary_highest": [
           {
-            "ms": 1270.179619,
-            "trial": "r02/filesystem/015"
+            "trial": "r02/filesystem/015",
+            "value": 1270.179619
           },
           {
-            "ms": 1267.778263,
-            "trial": "r04/filesystem/015"
+            "trial": "r04/filesystem/015",
+            "value": 1267.778263
           },
           {
-            "ms": 1256.82629,
-            "trial": "r02/filesystem/016"
+            "trial": "r02/filesystem/016",
+            "value": 1256.82629
           }
         ],
-        "continuation_ms": {
-          "max": 1270.179619,
-          "min": 1150.095031,
-          "n": 40,
-          "p50": 1205.856493,
-          "p95": 1256.82629
-        },
-        "engineering_targets": {
-          "continuation_p95_le_3000_ms": "met",
-          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1314.974 ms"
-        },
-        "excluded_runs": [],
-        "excluded_unqualified_run_trials": 0,
-        "first_pending_asset_verification_ms": {
-          "max": 1314.9738630000002,
-          "min": 1107.48385,
-          "n": 40,
-          "p50": 1246.428154,
-          "p95": 1305.5330410000001
-        },
-        "first_trial_per_run_ms": [
-          {
-            "ms": 1186.260891,
-            "trial": "r02/filesystem/000"
-          },
-          {
-            "ms": 1201.120638,
-            "trial": "r04/filesystem/000"
-          }
-        ],
-        "independent_clusters": 2,
-        "planned": 40,
-        "post_observed_total_ms": {
-          "max": 1152.431943,
-          "min": 1050.417179,
-          "n": 40,
-          "p50": 1125.626913,
-          "p95": 1145.9161410000002
-        },
         "qualified_run_trials": 40,
         "runs": [
           2,
           4
         ],
-        "stages_ms": {
+        "stages": {
           "approval/classifier": {
             "max": 96.215007,
             "min": 69.05082,
@@ -1304,7 +1348,8 @@
           "measured": 40,
           "not_run": 0,
           "timed_out": 0
-        }
+        },
+        "unit": "ms"
       },
       "comparable": false,
       "condition": "warm",
@@ -1318,7 +1363,55 @@
       "candidate": {
         "attempted": 40,
         "complete_denominator": true,
-        "continuation_by_run": {
+        "endpoints": {
+          "continuation_ms": {
+            "max": 1692.213688,
+            "min": 1517.411383,
+            "n": 40,
+            "p50": 1579.629562,
+            "p95": 1678.917396
+          },
+          "first_pending_asset_verification_ms": {
+            "max": 1611.2319770000001,
+            "min": 1427.608756,
+            "n": 40,
+            "p50": 1503.06502,
+            "p95": 1560.8920649999998
+          },
+          "post_observed_total_ms": {
+            "max": 1623.7750330000001,
+            "min": 1464.6816469999999,
+            "n": 40,
+            "p50": 1507.675185,
+            "p95": 1574.670464
+          }
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1611.232 ms"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_trial_per_run": [
+          {
+            "trial": "r01/git/000",
+            "value": 1545.537348
+          },
+          {
+            "trial": "r03/git/000",
+            "value": 1670.129514
+          }
+        ],
+        "independent_clusters": 2,
+        "planned": 40,
+        "primary": {
+          "max": 1692.213688,
+          "min": 1517.411383,
+          "n": 40,
+          "p50": 1579.629562,
+          "p95": 1678.917396
+        },
+        "primary_by_run": {
           "1": {
             "max": 1692.213688,
             "min": 1517.411383,
@@ -1334,65 +1427,27 @@
             "p95": 1670.129514
           }
         },
-        "continuation_highest": [
+        "primary_endpoint": "continuation_ms",
+        "primary_highest": [
           {
-            "ms": 1692.213688,
-            "trial": "r01/git/017"
+            "trial": "r01/git/017",
+            "value": 1692.213688
           },
           {
-            "ms": 1682.455202,
-            "trial": "r03/git/010"
+            "trial": "r03/git/010",
+            "value": 1682.455202
           },
           {
-            "ms": 1678.917396,
-            "trial": "r01/git/001"
+            "trial": "r01/git/001",
+            "value": 1678.917396
           }
         ],
-        "continuation_ms": {
-          "max": 1692.213688,
-          "min": 1517.411383,
-          "n": 40,
-          "p50": 1579.629562,
-          "p95": 1678.917396
-        },
-        "engineering_targets": {
-          "continuation_p95_le_3000_ms": "met",
-          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1611.232 ms"
-        },
-        "excluded_runs": [],
-        "excluded_unqualified_run_trials": 0,
-        "first_pending_asset_verification_ms": {
-          "max": 1611.2319770000001,
-          "min": 1427.608756,
-          "n": 40,
-          "p50": 1503.06502,
-          "p95": 1560.8920649999998
-        },
-        "first_trial_per_run_ms": [
-          {
-            "ms": 1545.537348,
-            "trial": "r01/git/000"
-          },
-          {
-            "ms": 1670.129514,
-            "trial": "r03/git/000"
-          }
-        ],
-        "independent_clusters": 2,
-        "planned": 40,
-        "post_observed_total_ms": {
-          "max": 1623.7750330000001,
-          "min": 1464.6816469999999,
-          "n": 40,
-          "p50": 1507.675185,
-          "p95": 1574.670464
-        },
         "qualified_run_trials": 40,
         "runs": [
           1,
           3
         ],
-        "stages_ms": {
+        "stages": {
           "approval/classifier": {
             "max": 87.570569,
             "min": 62.989846,
@@ -1491,7 +1546,8 @@
           "measured": 40,
           "not_run": 0,
           "timed_out": 0
-        }
+        },
+        "unit": "ms"
       },
       "comparable": false,
       "condition": "post_cache_drop_setup_rewarmed",
@@ -1504,7 +1560,51 @@
       "baseline": {
         "attempted": 20,
         "complete_denominator": true,
-        "continuation_by_run": {
+        "endpoints": {
+          "continuation_ms": {
+            "max": 11385.928462,
+            "min": 11122.747242,
+            "n": 20,
+            "p50": 11216.222081,
+            "p95": 11310.103784
+          },
+          "first_pending_asset_verification_ms": {
+            "max": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "post_observed_total_ms": {
+            "max": null,
+            "min": null,
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "not_met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max n/a"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_trial_per_run": [
+          {
+            "trial": "r01/git/000",
+            "value": 11271.272164
+          }
+        ],
+        "independent_clusters": 1,
+        "planned": 20,
+        "primary": {
+          "max": 11385.928462,
+          "min": 11122.747242,
+          "n": 20,
+          "p50": 11216.222081,
+          "p95": 11310.103784
+        },
+        "primary_by_run": {
           "1": {
             "max": 11385.928462,
             "min": 11122.747242,
@@ -1513,60 +1613,26 @@
             "p95": 11310.103784
           }
         },
-        "continuation_highest": [
+        "primary_endpoint": "continuation_ms",
+        "primary_highest": [
           {
-            "ms": 11385.928462,
-            "trial": "r01/git/011"
+            "trial": "r01/git/011",
+            "value": 11385.928462
           },
           {
-            "ms": 11310.103784,
-            "trial": "r01/git/003"
+            "trial": "r01/git/003",
+            "value": 11310.103784
           },
           {
-            "ms": 11282.600684,
-            "trial": "r01/git/017"
+            "trial": "r01/git/017",
+            "value": 11282.600684
           }
         ],
-        "continuation_ms": {
-          "max": 11385.928462,
-          "min": 11122.747242,
-          "n": 20,
-          "p50": 11216.222081,
-          "p95": 11310.103784
-        },
-        "engineering_targets": {
-          "continuation_p95_le_3000_ms": "not_met",
-          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max n/a"
-        },
-        "excluded_runs": [],
-        "excluded_unqualified_run_trials": 0,
-        "first_pending_asset_verification_ms": {
-          "max": null,
-          "min": null,
-          "n": 0,
-          "p50": null,
-          "p95": null
-        },
-        "first_trial_per_run_ms": [
-          {
-            "ms": 11271.272164,
-            "trial": "r01/git/000"
-          }
-        ],
-        "independent_clusters": 1,
-        "planned": 20,
-        "post_observed_total_ms": {
-          "max": null,
-          "min": null,
-          "n": 0,
-          "p50": null,
-          "p95": null
-        },
         "qualified_run_trials": 20,
         "runs": [
           1
         ],
-        "stages_ms": {},
+        "stages": {},
         "status_counts": {
           "failed": 0,
           "incomplete": 0,
@@ -1580,7 +1646,8 @@
           "measured": 20,
           "not_run": 0,
           "timed_out": 0
-        }
+        },
+        "unit": "ms"
       },
       "candidate": null,
       "comparable": false,
@@ -1595,7 +1662,55 @@
       "candidate": {
         "attempted": 40,
         "complete_denominator": true,
-        "continuation_by_run": {
+        "endpoints": {
+          "continuation_ms": {
+            "max": 1665.005933,
+            "min": 1527.605878,
+            "n": 40,
+            "p50": 1593.970563,
+            "p95": 1634.924643
+          },
+          "first_pending_asset_verification_ms": {
+            "max": 1552.939286,
+            "min": 1434.584006,
+            "n": 40,
+            "p50": 1501.222959,
+            "p95": 1542.6912779999998
+          },
+          "post_observed_total_ms": {
+            "max": 1592.700368,
+            "min": 1474.7690010000001,
+            "n": 40,
+            "p50": 1517.733499,
+            "p95": 1572.4506959999999
+          }
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1552.939 ms"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_trial_per_run": [
+          {
+            "trial": "r02/git/000",
+            "value": 1591.36837
+          },
+          {
+            "trial": "r04/git/000",
+            "value": 1541.651504
+          }
+        ],
+        "independent_clusters": 2,
+        "planned": 40,
+        "primary": {
+          "max": 1665.005933,
+          "min": 1527.605878,
+          "n": 40,
+          "p50": 1593.970563,
+          "p95": 1634.924643
+        },
+        "primary_by_run": {
           "2": {
             "max": 1634.924643,
             "min": 1527.605878,
@@ -1611,65 +1726,27 @@
             "p95": 1639.882843
           }
         },
-        "continuation_highest": [
+        "primary_endpoint": "continuation_ms",
+        "primary_highest": [
           {
-            "ms": 1665.005933,
-            "trial": "r04/git/019"
+            "trial": "r04/git/019",
+            "value": 1665.005933
           },
           {
-            "ms": 1639.882843,
-            "trial": "r04/git/006"
+            "trial": "r04/git/006",
+            "value": 1639.882843
           },
           {
-            "ms": 1634.924643,
-            "trial": "r02/git/018"
+            "trial": "r02/git/018",
+            "value": 1634.924643
           }
         ],
-        "continuation_ms": {
-          "max": 1665.005933,
-          "min": 1527.605878,
-          "n": 40,
-          "p50": 1593.970563,
-          "p95": 1634.924643
-        },
-        "engineering_targets": {
-          "continuation_p95_le_3000_ms": "met",
-          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max 1552.939 ms"
-        },
-        "excluded_runs": [],
-        "excluded_unqualified_run_trials": 0,
-        "first_pending_asset_verification_ms": {
-          "max": 1552.939286,
-          "min": 1434.584006,
-          "n": 40,
-          "p50": 1501.222959,
-          "p95": 1542.6912779999998
-        },
-        "first_trial_per_run_ms": [
-          {
-            "ms": 1591.36837,
-            "trial": "r02/git/000"
-          },
-          {
-            "ms": 1541.651504,
-            "trial": "r04/git/000"
-          }
-        ],
-        "independent_clusters": 2,
-        "planned": 40,
-        "post_observed_total_ms": {
-          "max": 1592.700368,
-          "min": 1474.7690010000001,
-          "n": 40,
-          "p50": 1517.733499,
-          "p95": 1572.4506959999999
-        },
         "qualified_run_trials": 40,
         "runs": [
           2,
           4
         ],
-        "stages_ms": {
+        "stages": {
           "approval/classifier": {
             "max": 88.272501,
             "min": 66.808504,
@@ -1768,7 +1845,8 @@
           "measured": 40,
           "not_run": 0,
           "timed_out": 0
-        }
+        },
+        "unit": "ms"
       },
       "comparable": false,
       "condition": "warm",
