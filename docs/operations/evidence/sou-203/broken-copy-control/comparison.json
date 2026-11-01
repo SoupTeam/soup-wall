@@ -7,10 +7,9 @@
     "role": "baseline"
   },
   "scope": [
-    "Engineering latency diagnostics for recorded native Ask series only.",
+    "Engineering performance diagnostics for the recorded reports only.",
     "Not a security or protection qualification, not task effectiveness, not product or pilot readiness.",
-    "Trace-on is the only observer mode of this producer; no trace-off result exists here, and none would qualify protection.",
-    "The 3000 ms continuation p95 criterion and the 5000 ms first-pending bound are existing engineering criteria, reported separately; no new budget is approved.",
+    "No new budget or threshold is approved.",
     "A same-report identity control proves the comparator, not a performance change between revisions."
   ],
   "status": "rejected"

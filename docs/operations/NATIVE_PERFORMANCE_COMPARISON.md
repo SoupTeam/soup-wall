@@ -117,6 +117,13 @@ python -m unittest discover -s scripts/tests -p test_native_performance.py -v
   within-report control/protected pairing is reported, never used to pair two reports.
 - **Condition**: `fresh_host_per_arm_os_cache_uncontrolled`. Any other `os_cache` claim is
   rejected (`true_cold_claim_unsupported`).
+- **No substitution**: in a measured arm, `host_start_ms` must be below `host_elapsed_ms` and
+  every call at most `host_elapsed_ms`. These are nested boundaries on the same clock, so no
+  subtraction is involved. A violation is rejected as `endpoint_substitution`.
+- **Denominators**: distributions use measured arms only, so failed arms are counted, never
+  imputed. A stratum with a failed arm (for example 10 of 12 protected benign arms) is
+  `incomplete_denominator` and is never compared. Per-call distributions count calls, which are
+  dependent within an arm. Every report is one cluster on one runner, so no interval is computed.
 
 ### Native preparation (`sw-native-pilot-prerequisites/1`)
 
@@ -126,6 +133,21 @@ python -m unittest discover -s scripts/tests -p test_native_performance.py -v
   receipt, so failed and incomplete stages are not representable, and a receipt claiming one is
   rejected (`receipt_stage_contradiction`).
 - **Source**: the receipt names only a commit (`commit_verified_tree_not_declared`).
+- **Shape**: the receipt must carry exactly the fields the producer writes; anything else is
+  `report_shape_invalid`.
+
+### Per-family text
+
+`scope`, `percentile_definition`, the dependence reason in `inference`, `engineering_targets`
+and `observer_semantics` are composed from the families present in a comparison. Ask criteria
+(3000 ms continuation p95, 5000 ms first-pending bound) and the strace trace statement appear only
+for Ask families. The observer and trace semantics per family:
+
+| Family | Timing observer | Trace |
+|---|---|---|
+| Ask series and qualification | `qualify-pilot-ask.py` harness monotonic clock; collector clock for stages | strace seccomp-bpf requested; the observed mode is not retained |
+| Installed host | `qualify-installed-pilot.py` driver monotonic clock, fresh host per arm, scripted loopback provider | none recorded |
+| Native preparation | `prepare-native-pilot-prerequisites.py` stage timers (seconds) | not applicable |
 
 ## Classification
 

@@ -86,18 +86,54 @@ NOT_RETAINED = {
     'raw_stage_events': 'stage-events.jsonl is not retained; `stages` aggregates are reported, not reproduced',
     'trace_observed': 'the qualification report (and its actual strace mode) is not retained in the summary',
 }
-PERCENTILE = ('nearest rank: the value at rank ceil(q * n) of the ascending sample, unrounded '
-              '(pilot_ask_latency.summarize). Published sw-ask-series/1 distributions round to 0.001 ms first; '
-              'reproduction uses that producer convention.')
+PERCENTILE = ('nearest rank: the value at rank ceil(q * n) of the ascending sample of measured trials, '
+              'unrounded (pilot_ask_latency.summarize); failed, timed-out, incomplete and not-run trials are '
+              'counted, never imputed.')
 SCOPE = [
-    'Engineering latency diagnostics for recorded native Ask series only.',
+    'Engineering performance diagnostics for the recorded reports only.',
     'Not a security or protection qualification, not task effectiveness, not product or pilot readiness.',
-    'Trace-on is the only observer mode of this producer; no trace-off result exists here, and none would '
-    'qualify protection.',
-    'The 3000 ms continuation p95 criterion and the 5000 ms first-pending bound are existing engineering '
-    'criteria, reported separately; no new budget is approved.',
+    'No new budget or threshold is approved.',
     'A same-report identity control proves the comparator, not a performance change between revisions.',
 ]
+_ASK = {
+    'scope': ['Ask: trace-on (strace seccomp-bpf) is the only observer mode of this producer; no trace-off '
+              'result exists here, and none would qualify protection.'],
+    'observer': {'timing': 'qualify-pilot-ask.py harness monotonic clock; collector monotonic clock for stages',
+                 'trace': 'strace seccomp-bpf requested (fallback possible); the observed mode is not retained'},
+    'dependence': 'Ask: trials within a run share one qualifier process and one host',
+    'criteria': {'continuation_p95_ms': CONTINUATION_TARGET_MS, 'first_pending_ms': PENDING_BOUND_MS,
+                 'note': 'existing Ask criteria, evaluated per side and stratum; the first-pending bound is owned '
+                         'by SOU-105 and only a collector lower bound is shown'},
+}
+FAMILIES = {
+    'sw-ask-series/1': dict(_ASK, percentile='Ask series: published distributions round to 0.001 ms first; '
+                                              'reproduction uses that producer convention.'),
+    'sw-ask-series/1-retroactive': dict(_ASK, percentile='Ask series: published distributions round to 0.001 ms '
+                                                          'first; reproduction uses that producer convention.'),
+    'sw-pilot-ask-acceptance/1': dict(_ASK, percentile='Ask qualification: published p50/p95 are nearest rank on '
+                                                        'unrounded values.'),
+    'sw-installed-pilot-matched/1': {
+        'scope': ['Installed host: row status and the gate are producer development outcomes; protected refusals '
+                  'are producer-witnessed, never independently observed protection.'],
+        'observer': {'timing': 'qualify-installed-pilot.py driver monotonic clock around a fresh Claude Code host per '
+                               'arm and a scripted loopback provider',
+                     'trace': 'no trace or observer mode is recorded by this producer'},
+        'percentile': 'Installed host: the published gate uses agentdojo_protocol.distribution (median = mean of the '
+                      'two middle values for even n); SOU-203 reports nearest-rank p50, so it can differ from a '
+                      'published median. Per-call distributions count calls, not arms.',
+        'dependence': 'Installed host: calls within an arm share one host process; all arms of a report share one '
+                      'runner and dispatch; the control arm always runs first',
+        'criteria': {'note': 'none approved: the producer records latency_threshold_approved false'},
+    },
+    'sw-native-pilot-prerequisites/1': {
+        'scope': ['Preparation: stage time is preparation cost only, never an Ask or host latency.'],
+        'observer': {'timing': 'prepare-native-pilot-prerequisites.py monotonic stage timers (seconds)',
+                     'trace': 'not applicable: preparation runs no Ask or MCP observer'},
+        'percentile': 'Preparation: one value per stage and receipt; percentiles of n=1 are that value.',
+        'dependence': 'Preparation: both stages of a receipt share one preparation on one host',
+        'criteria': {'note': 'none approved for preparation stage time'},
+    },
+}
 
 
 def _load(name, relative):
@@ -789,7 +825,13 @@ def _normalize_ask(role, path, report, held, git):
                   'requested_basis': 'self-declared trace_requested in the report' if trace
                   else 'this report predates the trace_requested field', 'observed': 'not_retained'},
         'endpoints': copy.deepcopy(ENDPOINTS), 'stage_clock': dict(STAGE_CLOCK),
-        'not_retained': dict(NOT_RETAINED, raw_stage_events='not part of an Ask qualification report'),
+        'not_retained': {
+            'preparation_elapsed': 'not recorded by the qualification report',
+            'first_observable_pending': 'cases carry wall-clock pending and decision timestamps; no accepted '
+                                        'first-pending endpoint is derived from them (SOU-105 owns that bound)',
+            'cleanup': 'per-case cleanup evidence is retained without a duration',
+            'raw_stage_events': 'not part of an Ask qualification report',
+            'trace_observed': 'the report records at most the requested trace mode'},
         'primary_endpoint': 'continuation_ms',
         'design': {'plan': ['undeclared'], 'samples_per_profile': samples, 'profiles': list(PROFILES),
                    'trial_plan': {'samples_per_profile': samples},
@@ -932,6 +974,11 @@ def _normalize_installed(role, path, report, held, git):
             calls = row.get('latencies_ms')
             require(isinstance(calls, dict) and all(_number(v) and v >= 0 for v in calls.values()),
                     'nonfinite_or_missing_duration', role, f'{row["case"]}/{row["arm"]}.latencies_ms')
+            elapsed = endpoints['host_elapsed_ms']
+            # Same driver clock, nested boundaries: start and each call lie inside the host lifetime.
+            require(elapsed is None or (endpoints['host_start_ms'] < elapsed
+                                        and all(v <= elapsed for v in calls.values())),
+                    'endpoint_substitution', role, f'{row["case"]}/{row["arm"]}: endpoint outside the host lifetime')
             if row['case'] in batches:
                 total, first = sum(map(len, batches[row['case']])), len(batches[row['case']][0])
                 require(set(calls) == {f'toolu_pilot_{i}' for i in range(total)}, 'call_denominator_mismatch', role,
@@ -1017,7 +1064,7 @@ def _normalize_installed(role, path, report, held, git):
             'published_call_overhead_ms': (gate.get('metrics') or {}).get('call_overhead_ms'),
             'reproduced': any(item.startswith('gate') for item in reproduced),
             'use': 'reported only; never used to pair two reports'},
-        'not_retained': {'trace_observed': NOT_RETAINED['trace_observed'],
+        'not_retained': {'trace_observed': 'this producer records no trace or observer mode',
                          'host_instance': 'the runner is not recorded',
                          'failed_arm_timings': 'kept in the original report; failed arms carry no measured value here',
                          **({} if all(t['endpoints']['host_elapsed_ms'] is not None for t in trials
@@ -1043,6 +1090,9 @@ def _normalize_installed(role, path, report, held, git):
 PREPARATION_FORMAT = 'sw-native-pilot-prerequisites/1'
 PREPARATION_MARKER = 'sw-pilot-preparation/1'
 PREPARATION_STAGES = ('git', 'bwrap')
+# Exactly the receipt fields written by prepare-native-pilot-prerequisites.py (accepted producer contract).
+PREPARATION_KEYS = {'format', 'source_commit', 'archives', 'tools', 'execution_inputs', 'flags', 'binaries',
+                    'generation_tree_sha256', 'stages', 'status'}
 PREPARATION_ENDPOINTS = {'stage_seconds': {
     'metric': 'native_prerequisite_stage_elapsed', 'clock': 'preparation_monotonic', 'unit': 's',
     'observer': 'scripts/prepare-native-pilot-prerequisites.py', 'source_field': 'stages.<stage>.seconds',
@@ -1053,6 +1103,8 @@ PREPARATION_ENDPOINTS = {'stage_seconds': {
 
 def _normalize_preparation(role, path, receipt, held, git):
     """One successful prerequisite receipt: one trial per stage. A failed preparation writes no receipt."""
+    require(set(receipt) == PREPARATION_KEYS, 'report_shape_invalid', role,
+            'fields differ from the accepted receipt: ' + ','.join(sorted(set(receipt) ^ PREPARATION_KEYS)))
     commit, stages = receipt.get('source_commit'), receipt.get('stages')
     require(isinstance(commit, str) and re.fullmatch('[0-9a-f]{40}', commit), 'source_identity_malformed', role,
             'source_commit')
@@ -1420,6 +1472,7 @@ def compare(base, cand, requested_pairing=False):
         classification = 'incomplete'
         reasons.append(_reason('no_comparable_stratum', 'strata', ['trials[].status'], 'no complete matched stratum'))
     clusters = sorted({len(s[r]['runs']) for s in strata for r in ('baseline', 'candidate') if s[r]})
+    families = sorted({base['input']['producer_format'], cand['input']['producer_format']})
     return {
         'contract': COMPARISON, 'status': 'evaluated', 'classification': classification,
         'basis': 'identity_control' if identity else 'two_reports',
@@ -1435,12 +1488,13 @@ def compare(base, cand, requested_pairing=False):
                         'clusters (DEC-SOU153-20261027)' % (max(clusters) if clusters else 0, MIN_EFFECTIVE_CLUSTERS),
                         'no_accepted_performance_cluster_method: the SOU-153 bootstrap is approved only for '
                         'AgentDojo semantic families',
-                        'repeated_trials_within_a_run_are_dependent: one qualifier process and host per run'],
+                        *('repeated_trials_are_dependent: ' + FAMILIES[f]['dependence'] for f in families)],
             'intervals': None},
-        'engineering_targets': {'continuation_p95_ms': CONTINUATION_TARGET_MS, 'first_pending_ms': PENDING_BOUND_MS,
-                                'note': 'existing criteria, evaluated per side and stratum only; not a comparison '
-                                        'verdict, not protection, effectiveness or readiness'},
-        'percentile_definition': PERCENTILE, 'scope': SCOPE,
+        'engineering_targets': {f: FAMILIES[f]['criteria'] for f in families},
+        'observer_semantics': {role: FAMILIES[o['input']['producer_format']]['observer']
+                               for role, o in (('baseline', base), ('candidate', cand))},
+        'percentile_definition': ' '.join([PERCENTILE] + [FAMILIES[f]['percentile'] for f in families]),
+        'scope': SCOPE + [line for f in families for line in FAMILIES[f]['scope']],
         'observations': {'baseline': summary_of(base), 'candidate': summary_of(cand)},
     }
 
@@ -1567,6 +1621,9 @@ def render_markdown(result):
         lines.append(text)
     if not shown:
         lines.append('- none: no comparable stratum. No speed-up, merged p95 or verdict is reported.')
+    lines += ['', '## Observer and trace semantics', '']
+    lines += [f"- {role}: timing {s['timing']}; trace {s['trace']}"
+              for role, s in sorted(result['observer_semantics'].items())]
     lines += ['', '## Limits', '', f"- Percentiles: {result['percentile_definition']}",
               '- Inference: descriptive only. ' + ' '.join(result['inference']['reasons']),
               '- Not retained: ' + ', '.join(sorted({k for x in o.values() for k in x['not_retained']})) + '.']

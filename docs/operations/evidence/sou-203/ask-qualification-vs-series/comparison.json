@@ -177,9 +177,16 @@
     }
   ],
   "engineering_targets": {
-    "continuation_p95_ms": 3000,
-    "first_pending_ms": 5000,
-    "note": "existing criteria, evaluated per side and stratum only; not a comparison verdict, not protection, effectiveness or readiness"
+    "sw-ask-series/1": {
+      "continuation_p95_ms": 3000,
+      "first_pending_ms": 5000,
+      "note": "existing Ask criteria, evaluated per side and stratum; the first-pending bound is owned by SOU-105 and only a collector lower bound is shown"
+    },
+    "sw-pilot-ask-acceptance/1": {
+      "continuation_p95_ms": 3000,
+      "first_pending_ms": 5000,
+      "note": "existing Ask criteria, evaluated per side and stratum; the first-pending bound is owned by SOU-105 and only a collector lower bound is shown"
+    }
   },
   "global_pooled_comparison": null,
   "global_pooled_comparison_reason": "never computed: profiles and conditions are separate strata",
@@ -194,7 +201,8 @@
     "reasons": [
       "independent_clusters_below_minimum: at most 2 runs per stratum, minimum 10 effective clusters (DEC-SOU153-20261027)",
       "no_accepted_performance_cluster_method: the SOU-153 bootstrap is approved only for AgentDojo semantic families",
-      "repeated_trials_within_a_run_are_dependent: one qualifier process and host per run"
+      "repeated_trials_are_dependent: Ask: trials within a run share one qualifier process and one host",
+      "repeated_trials_are_dependent: Ask: trials within a run share one qualifier process and one host"
     ],
     "status": "descriptive_only"
   },
@@ -278,12 +286,11 @@
         "workflow_run": 39989703005
       },
       "not_retained": {
-        "cleanup": "cleanup is inside run wall_seconds only",
-        "external_build_time": "not part of the series",
-        "first_observable_pending": "host-visible pending time is measured by SOU-105 acceptance, not by this series",
-        "preparation_elapsed": "qualifier setup is inside run wall_seconds only; no per-trial setup clock is retained",
+        "cleanup": "per-case cleanup evidence is retained without a duration",
+        "first_observable_pending": "cases carry wall-clock pending and decision timestamps; no accepted first-pending endpoint is derived from them (SOU-105 owns that bound)",
+        "preparation_elapsed": "not recorded by the qualification report",
         "raw_stage_events": "not part of an Ask qualification report",
-        "trace_observed": "the qualification report (and its actual strace mode) is not retained in the summary"
+        "trace_observed": "the report records at most the requested trace mode"
       },
       "primary_endpoint": "continuation_ms",
       "provenance": {
@@ -748,12 +755,22 @@
       "trial_count": 160
     }
   },
+  "observer_semantics": {
+    "baseline": {
+      "timing": "qualify-pilot-ask.py harness monotonic clock; collector monotonic clock for stages",
+      "trace": "strace seccomp-bpf requested (fallback possible); the observed mode is not retained"
+    },
+    "candidate": {
+      "timing": "qualify-pilot-ask.py harness monotonic clock; collector monotonic clock for stages",
+      "trace": "strace seccomp-bpf requested (fallback possible); the observed mode is not retained"
+    }
+  },
   "pairing": {
     "basis": null,
     "reason": "not_requested_no_paired_design",
     "valid": false
   },
-  "percentile_definition": "nearest rank: the value at rank ceil(q * n) of the ascending sample, unrounded (pilot_ask_latency.summarize). Published sw-ask-series/1 distributions round to 0.001 ms first; reproduction uses that producer convention.",
+  "percentile_definition": "nearest rank: the value at rank ceil(q * n) of the ascending sample of measured trials, unrounded (pilot_ask_latency.summarize); failed, timed-out, incomplete and not-run trials are counted, never imputed. Ask series: published distributions round to 0.001 ms first; reproduction uses that producer convention. Ask qualification: published p50/p95 are nearest rank on unrounded values.",
   "reasons": [
     {
       "code": "binary_identity_unverified",
@@ -853,11 +870,12 @@
     }
   ],
   "scope": [
-    "Engineering latency diagnostics for recorded native Ask series only.",
+    "Engineering performance diagnostics for the recorded reports only.",
     "Not a security or protection qualification, not task effectiveness, not product or pilot readiness.",
-    "Trace-on is the only observer mode of this producer; no trace-off result exists here, and none would qualify protection.",
-    "The 3000 ms continuation p95 criterion and the 5000 ms first-pending bound are existing engineering criteria, reported separately; no new budget is approved.",
-    "A same-report identity control proves the comparator, not a performance change between revisions."
+    "No new budget or threshold is approved.",
+    "A same-report identity control proves the comparator, not a performance change between revisions.",
+    "Ask: trace-on (strace seccomp-bpf) is the only observer mode of this producer; no trace-off result exists here, and none would qualify protection.",
+    "Ask: trace-on (strace seccomp-bpf) is the only observer mode of this producer; no trace-off result exists here, and none would qualify protection."
   ],
   "status": "evaluated",
   "strata": [

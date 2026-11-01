@@ -773,6 +773,21 @@ class InstalledHost(unittest.TestCase):
         codes = [r['code'] for r in NP.compare(first, self.measured)['reasons']]
         self.assertIn('trial_design_mismatch', codes)
 
+    def test_shared_text_is_family_specific(self):
+        result = NP.compare(self.measured, NP.normalize('candidate', SOU106 / 'measured-report.json'))
+        shared = json.dumps({k: v for k, v in result.items() if k not in ('observations', 'strata', 'dimensions')})
+        shared += json.dumps(self.measured['not_retained']) + NP.render_markdown(result)
+        # Ask-specific assertions never appear; "observable Ask latency: not_applicable" is this family's own statement.
+        for term in ('Ask series', 'Ask qualification', 'Trace-on', 'qualifier', 'continuation', '3000', '5000', 'strace', 'first-pending', 'sw-ask-series'):
+            self.assertNotIn(term, shared)
+        self.assertEqual(result['observer_semantics']['baseline']['trace'],
+                         'no trace or observer mode is recorded by this producer')
+        self.assertIn('never independently observed protection', ' '.join(result['scope']))
+        self.assertIn('repeated_trials_are_dependent: Installed host', ' '.join(result['inference']['reasons']))
+        ask = NP.compare(NP.normalize('baseline', *FINAL), NP.normalize('candidate', *FINAL))
+        self.assertIn('strace seccomp-bpf', ask['observer_semantics']['baseline']['trace'])
+        self.assertEqual(ask['engineering_targets']['sw-ask-series/1']['continuation_p95_ms'], 3000)
+
     def test_installed_host_never_compares_with_ask(self):
         ask = NP.normalize('candidate', *FINAL)
         result = NP.compare(self.measured, ask)
@@ -793,6 +808,11 @@ class InstalledHost(unittest.TestCase):
         self.rejected('workload_identity_contradiction', lambda v: v['rows'][0].update(operation_sha256='0' * 64))
         self.rejected('negative_duration', lambda v: self.first_passed(v).update(host_start_ms=-1.0))
         self.rejected('call_denominator_mismatch', lambda v: self.first_passed(v)['latencies_ms'].pop('toolu_pilot_0'))
+        # Endpoints are never substituted: host start and every call lie inside the host lifetime (same clock).
+        self.rejected('endpoint_substitution', lambda v: self.first_passed(v).update(
+            host_start_ms=self.first_passed(v)['host_elapsed_ms']))
+        self.rejected('endpoint_substitution', lambda v: self.first_passed(v)['latencies_ms'].update(
+            toolu_pilot_0=self.first_passed(v)['host_elapsed_ms'] + 1))
         self.rejected('true_cold_claim_unsupported', lambda v: v['conditions'].update(os_cache='dropped, cold'))
 
         def identity(v, **change):
@@ -836,7 +856,12 @@ class Preparation(SyntheticCase):
                  'status': 'built-not-qualified',
                  'stages': {'git': {'status': 'reused', 'seconds': 0.75, 'checkpoint_sha256': 'c' * 64},
                             'bwrap': {'status': 'built', 'seconds': 41.5}},
-                 'binaries': {'git': {'sha256': 'a' * 64}, 'bwrap': {'sha256': 'b' * 64}}}
+                 'binaries': {'git': {'sha256': 'a' * 64}, 'bwrap': {'sha256': 'b' * 64}},
+                 # SYNTHETIC values for the remaining accepted receipt fields.
+                 'archives': {'git': {'url': 'https://example.invalid/git.tar.xz', 'sha256': 'd' * 64},
+                              'bwrap': {'url': 'https://example.invalid/bwrap.tar.xz', 'sha256': 'e' * 64}},
+                 'tools': {}, 'execution_inputs': {}, 'flags': {'git': [], 'bwrap': []},
+                 'generation_tree_sha256': 'f' * 64}
         value.update(change)
         return value
 
@@ -851,6 +876,17 @@ class Preparation(SyntheticCase):
         self.assertEqual(result['classification'], 'incomplete')
         self.assertIn('source_unverified', [r['code'] for r in result['reasons']])
         self.assertTrue(result['identity_control']['all_zero'])
+
+    def test_shared_text_is_family_specific(self):
+        prep = NP.normalize('baseline', self.s.write(self.receipt()), None, None, self.s.git)
+        result = NP.compare(prep, copy.deepcopy(prep))
+        shared = json.dumps({k: v for k, v in result.items() if k not in ('observations', 'strata', 'dimensions')})
+        shared += json.dumps(prep['not_retained']) + NP.render_markdown(result)
+        for term in ('Ask series', 'Ask qualification', 'Trace-on', 'qualifier', 'continuation', '3000', '5000', 'strace', 'first-pending', 'sw-ask-series'):
+            self.assertNotIn(term, shared)
+        self.assertEqual(result['observer_semantics']['baseline']['trace'],
+                         'not applicable: preparation runs no Ask or MCP observer')
+        self.assertEqual(result['strata'][0]['baseline']['unit'], 's')
 
     def test_built_and_reused_stages_never_merge(self):
         base = NP.normalize('baseline', self.s.write(self.receipt()), None, None, self.s.git)
@@ -886,6 +922,10 @@ class Preparation(SyntheticCase):
                                                                     'bwrap': {'status': 'built', 'seconds': 1.0}}))
         check('invalid_digest', self.receipt(binaries={'git': {'sha256': 'x'}, 'bwrap': {'sha256': 'b' * 64}}))
         check('source_identity_malformed', self.receipt(source_commit='abc'))
+        truncated = self.receipt()
+        del truncated['generation_tree_sha256']
+        check('report_shape_invalid', truncated)
+        check('report_shape_invalid', self.receipt(extra_claim='cold'))
         check('no_performance_endpoints', {'format': NP.PREPARATION_MARKER, 'generation': 'g1',
                                            'selection_sha256': 'a' * 64, 'status': 'prepared-not-active'})
 
