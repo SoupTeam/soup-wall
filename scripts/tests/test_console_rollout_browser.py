@@ -36,7 +36,8 @@ def page_html():
     return ((SRC / "admin_dashboard.html").read_text(encoding="utf-8")
             .replace("/* FLEET_PANEL */", (SRC / "fleet_panel.js").read_text(encoding="utf-8"))
             .replace("/* ROLLOUT_PANEL */", (SRC / "rollout_panel.js").read_text(encoding="utf-8"))
-            .replace("/* ENROLLMENT_PANEL */", (SRC / "enrollment_panel.js").read_text(encoding="utf-8")))
+            .replace("/* ENROLLMENT_PANEL */", (SRC / "enrollment_panel.js").read_text(encoding="utf-8"))
+            .replace("/* AGENT_HISTORY */", (SRC / "agent_history.js").read_text(encoding="utf-8")))
 
 
 @unittest.skipUnless(AVAILABLE, "optional Playwright browser fixture dependency unavailable")

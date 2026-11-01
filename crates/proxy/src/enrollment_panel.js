@@ -186,7 +186,7 @@ const enrollment = (() => {
         say(`${agent} enrolled. Store the credential now; it is shown only once.`, "ok");
         await refresh(false); fleet.reload();
       } catch (e) {
-        if (stale(id, generation) || e.name === "AbortError" || failure(e, `Enroll ${agent}`)) return;
+        if (stale(id, generation) || failure(e, `Enroll ${agent}`)) return;
         if (ambiguous(e) || e.status === 0) { pending = { kind: "enroll", tenant: id, agent }; await reconcile(); return; }
         await refresh(false);
         say(agents.some(a => a.agent_id === agent)
@@ -229,7 +229,9 @@ const enrollment = (() => {
       say(`Credential of ${op.agent} rotated to generation ${receipt.generation}${receipt.already_applied ? " (this exact request was already committed)" : ""}. The old credential is refused from now on.`, "ok");
       await refresh(false);
     } catch (e) {
-      if (stale(op.tenant, generation) || e.name === "AbortError" || failure(e, `Rotate ${op.agent}`)) return;
+      // A body abort in this context can follow a committed mutation. Only a
+      // stale context is cancellation; preserve the exact operation to reconcile.
+      if (stale(op.tenant, generation) || failure(e, `Rotate ${op.agent}`)) return;
       if (ambiguous(e) || e.status === 0) { pending = op; await reconcile(); return; }
       pending = null;
       await refresh(false);
@@ -247,7 +249,7 @@ const enrollment = (() => {
         say(row?.revoked_at_unix != null ? `${agent} revoked. Its credential is refused; it keeps its last verified policy.` : `Revocation of ${agent} was accepted but the record does not show it yet. Refresh before acting again.`, row?.revoked_at_unix != null ? "ok" : "error");
         fleet.reload();
       } catch (e) {
-        if (stale(id, generation) || e.name === "AbortError" || failure(e, `Revoke ${agent}`)) return;
+        if (stale(id, generation) || failure(e, `Revoke ${agent}`)) return;
         if (ambiguous(e)) { pending = { kind: "revoke", tenant: id, agent }; await reconcile(); return; }
         await refresh(false);
         say(`Revocation of ${agent} was refused: ${e.message}.`, "error");
@@ -288,7 +290,7 @@ const enrollment = (() => {
         button("Discard", "secondary", () => { if (pending !== op) return; pending = null; box.replaceChildren(); say("Pending rotation discarded; its credential was never shown and must not be installed.", "note"); lock(); });
       }
     } catch (e) {
-      if (stale(op.tenant, generation) || e.name === "AbortError") return;
+      if (stale(op.tenant, generation)) return;
       if (failure(e, "Reconciling the uncertain request")) return;
       say("The outcome is unknown and the server state could not be read. Changes stay disabled until Check again succeeds.", "error");
       button("Check again", "secondary", reconcile);
