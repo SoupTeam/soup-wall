@@ -50,7 +50,7 @@ MAX_OUTPUT = 4 * 1024 * 1024
 OWNER_PID = os.getpid()
 PUBLIC_FAILURE_CODES = frozenset({
     'maintenance_entered', 'maintenance_transition_busy', 'maintenance_runs_uncertain',
-    'maintenance_selection_stale', 'maintenance_source_changed', 'maintenance_root_changed',
+    'maintenance_scope_changed', 'maintenance_source_changed', 'maintenance_root_changed',
     'maintenance_state_uncertain', 'maintenance_transition_incomplete',
     'maintenance_record_missing', 'maintenance_record_replaced', 'maintenance_enrollment_incomplete',
     'maintenance_inventory_replaced', 'maintenance_run_inventory_incomplete',

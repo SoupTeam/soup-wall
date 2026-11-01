@@ -284,10 +284,19 @@ def command(args, state, prep, runner):
         observed = inventory(store, bound)
         snapshot = store.snapshot()
         if args.maintenance_action == 'status':
+            _, marker, _ = store.marker(allow_uncertain=True)
+            owned = marker is not None and M.digest(M.scope(marker['binding'])) == M.digest(M.scope(bound))
+            # The marker governs the installation. A newer selection, preset or
+            # update is reported, never silently adopted: only a freshly
+            # confirmed enter/leave records it.
             return {'format': M.FORMAT, **snapshot, 'inventory': observed,
                     'drain': 'uncertain' if observed['uncertain'] else
                              'draining' if observed['active'] else 'enrolled-runs-drained',
-                    'new_launches': 'refused' if snapshot['mode'] != 'open' or observed['uncertain'] else 'eligible',
+                    'installation': 'matches' if owned else 'mismatch',
+                    'selection_binding': 'unknown' if marker is None else
+                                         'current' if snapshot['binding_sha256'] == M.digest(bound) else 'changed',
+                    'new_launches': 'refused' if snapshot['mode'] != 'open' or observed['uncertain'] or not owned
+                                    else 'eligible',
                     'executed': False, 'authority_changed': False}
         plan = store.plan(bound, operation, observed)
         if args.maintenance_action == 'preview':

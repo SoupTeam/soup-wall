@@ -53,6 +53,19 @@ def digest(value):
     return sha(encoded(value))
 
 
+def scope(binding):
+    """The installation a marker governs: the Agent home and component home only.
+
+    A selection, project preset or update changes the launch binding but never
+    which installation is paused, so only this scope gates admission."""
+    try:
+        home, component = binding['home'], binding['component_home']
+        return {'home': home, 'component_home': component,
+                'roots': [r for r in binding['roots'] if r['path'] in (home, component)]}
+    except (KeyError, TypeError):
+        raise Refusal('maintenance_marker_invalid') from None
+
+
 def strict(raw):
     require(len(raw) <= CAP, 'maintenance_record_cap')
     def pairs(items):
@@ -332,12 +345,15 @@ class Store:
                 'pending_sha256': sha(pending) if pending is not None else None,
                 'mode': 'uncertain' if value is None or pending is not None else
                         'entered' if value['maintenance'] else 'open',
-                'revision': value['revision'] if value else None}
+                'revision': value['revision'] if value else None,
+                'binding_sha256': value['binding_sha256'] if value else None}
 
     def plan(self, binding, operation, inventory):
         require(operation in ('enter', 'leave'), 'maintenance_operation_invalid')
-        result = {'format': FORMAT, 'operation': operation, 'snapshot': self.snapshot(),
-                  'binding_sha256': digest(binding), 'inventory_sha256': digest(inventory)}
+        snapshot = self.snapshot()
+        result = {'format': FORMAT, 'operation': operation, 'snapshot': snapshot,
+                  'binding_sha256': digest(binding), 'inventory_sha256': digest(inventory),
+                  'selection_binding': 'current' if snapshot['binding_sha256'] == digest(binding) else 'changed'}
         return {**result, 'confirmation_sha256': digest(result)}
 
     def transition(self, binding, operation, inventory, confirmation):
@@ -358,7 +374,9 @@ class Store:
             self.authenticated('transition', evidence)
             require(evidence.get('format') == FORMAT and evidence.get('owner') == self.anchor['owner']
                     and type(evidence.get('before')) is dict
-                    and evidence['before'].get('binding_sha256') == digest(binding), 'maintenance_recovery_identity_unproven')
+                    and type(evidence['before'].get('binding')) is dict
+                    and digest(scope(evidence['before']['binding'])) == digest(scope(binding)),
+                    'maintenance_recovery_identity_unproven')
             current = evidence['before']
             self.valid_state(current)
             require(evidence.get('before_sha256') == digest(current), 'maintenance_recovery_identity_unproven')
@@ -381,13 +399,16 @@ class Store:
                               'original_pending': evidence, 'observed_marker_sha256': sha(raw)}))
             # Keep the authenticated old intent until the complete newly signed
             # conservative-enter plan is ready. Leave never takes this path.
-        require(current['binding_sha256'] == digest(binding), 'maintenance_selection_stale')
+        # A confirmed transition may adopt the current selection binding: the
+        # confirmation digest covers the old and new binding, the event keeps the
+        # signed old state, and only another installation is refused.
+        require(digest(scope(current['binding'])) == digest(scope(binding)), 'maintenance_scope_changed')
         require(current['revision'] < EVENTS, 'maintenance_history_capacity')
         event_id = uuid.uuid4().hex
         after_revision = recovery_revision or current['revision'] + 1
         require(after_revision <= EVENTS, 'maintenance_history_capacity')
         after = {**current, 'maintenance': operation == 'enter', 'revision': after_revision,
-                 'last_event': event_id}
+                 'binding': binding, 'binding_sha256': digest(binding), 'last_event': event_id}
         after = self.signed(self.key, 'state', after)
         event = {'format': FORMAT, 'owner': self.anchor['owner'], 'operation': operation,
                  'before': current, 'before_sha256': digest(current), 'observed_marker_sha256': sha(raw),
@@ -421,11 +442,12 @@ class Store:
         os.fsync(self.root.fd)
         return {'format': FORMAT, 'status': 'entered' if after['maintenance'] else 'left',
                 'revision': after['revision'], 'binding_sha256': after['binding_sha256'],
+                'selection_binding_changed': current['binding_sha256'] != after['binding_sha256'],
                 'existing_runs_unchanged': True, 'authority_changed': False}
 
     def admit(self, binding):
         require(self._lock_mode is not None, 'maintenance_gate_required')
         _, value, _ = self.marker()
-        require(value['binding_sha256'] == digest(binding), 'maintenance_selection_stale')
+        require(digest(scope(value['binding'])) == digest(scope(binding)), 'maintenance_scope_changed')
         require(not value['maintenance'], 'maintenance_entered')
         return value

@@ -875,7 +875,7 @@ def qualify(args, report):
                 install_component(args, sibling_home, archive, digest, built["component"], env, report)
                 return InstalledDoor(args, env, args.work, sibling_home)
             maintenance.qualify(args, door, agent_home, env, report, guided=QUAL,
-                install_sibling=sibling, receiver=receiver, baseline=baseline)
+                install_sibling=sibling, receiver=receiver, baseline=baseline, selection=selection, load=load)
             report["source_after"] = BASE.source()
             require(report["source_after"] == before, "source_changed")
             return

@@ -17,8 +17,13 @@ class Marker(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.home = Path(self.temp.name).resolve()
         self.home.chmod(0o700)
-        self.binding = {'format': 'test-binding', 'selection': 'a'*64}
+        self.binding = self.bound('a')
         self.inventory = {'uncertain': False, 'runs': []}
+
+    def bound(self, selection, home=None):
+        home = str(home or self.home)
+        return {'format': 'test-binding', 'selection': selection * 64, 'home': home, 'component_home': home,
+                'roots': [{'path': home, 'object': {'device': 1, 'inode': 2}}]}
 
     def create(self, active=False):
         return M.Store.create(self.home, self.binding, maintenance=active)
@@ -28,6 +33,11 @@ class Marker(unittest.TestCase):
         with store.locked(exclusive=True):
             plan = store.plan(self.binding, operation, inventory)
             return store.transition(self.binding, operation, inventory, plan['confirmation_sha256'])
+
+    def transition_for(self, store, binding, operation):
+        with store.locked(exclusive=True):
+            plan = store.plan(binding, operation, self.inventory)
+            return store.transition(binding, operation, self.inventory, plan['confirmation_sha256'])
 
     def test_enter_leave_reopen_and_sibling_are_independent(self):
         with self.create() as store:
@@ -50,11 +60,46 @@ class Marker(unittest.TestCase):
             with store.locked(exclusive=True):
                 with self.assertRaises(M.Refusal):
                     store.transition(self.binding, 'leave', self.inventory, plan['confirmation_sha256'])
-                other = {'format': 'test-binding', 'selection': 'b'*64}
+                other = self.bound('b', self.home / 'elsewhere')
                 new = store.plan(other, 'leave', self.inventory)
                 with self.assertRaises(M.Refusal):
                     store.transition(other, 'leave', self.inventory, new['confirmation_sha256'])
             with store.locked(exclusive=False): self.assertEqual(store.snapshot()['mode'], 'entered')
+
+    def test_changed_selection_keeps_the_installation_gate_and_needs_confirmed_adoption(self):
+        changed = self.bound('b')
+        with self.create() as store:
+            # A supported selection/project/update change must not strand an open home.
+            with store.locked(exclusive=False):
+                self.assertFalse(store.admit(changed)['maintenance'])
+                self.assertEqual(store.plan(changed, 'enter', self.inventory)['selection_binding'], 'changed')
+                self.assertEqual(store.plan(self.binding, 'enter', self.inventory)['selection_binding'], 'current')
+            with store.locked(exclusive=True):
+                stale = store.plan(self.binding, 'enter', self.inventory)
+                with self.assertRaises(M.Refusal):
+                    store.transition(changed, 'enter', self.inventory, stale['confirmation_sha256'])
+                fresh = store.plan(changed, 'enter', self.inventory)
+                entered = store.transition(changed, 'enter', self.inventory, fresh['confirmation_sha256'])
+            self.assertTrue(entered['selection_binding_changed'])
+            with store.locked(exclusive=False):
+                with self.assertRaises(M.Refusal): store.admit(changed)
+                with self.assertRaises(M.Refusal): store.admit(self.binding)
+                self.assertEqual(store.snapshot()['binding_sha256'], M.digest(changed))
+            self.assertEqual(self.transition_for(store, changed, 'leave')['status'], 'left')
+            with store.locked(exclusive=False): self.assertFalse(store.admit(changed)['maintenance'])
+        # The signed old state stays in history; nothing was reset or bypassed.
+        self.assertEqual(len(list((self.home / M.DIRECTORY / 'events').iterdir())), 2)
+
+    def test_another_installation_scope_is_never_admitted_or_adopted(self):
+        foreign = self.bound('a', self.home / 'foreign')
+        with self.create() as store:
+            with store.locked(exclusive=False):
+                with self.assertRaises(M.Refusal) as caught: store.admit(foreign)
+                self.assertEqual(str(caught.exception), 'maintenance_scope_changed')
+            with store.locked(exclusive=True):
+                plan = store.plan(foreign, 'enter', self.inventory)
+                with self.assertRaises(M.Refusal):
+                    store.transition(foreign, 'enter', self.inventory, plan['confirmation_sha256'])
 
     def test_replaced_same_bytes_marker_and_missing_record_refuse(self):
         with self.create() as store:
@@ -146,7 +191,8 @@ class Admission(unittest.TestCase):
         self.home = self.base / 'agent-home'; self.home.mkdir(mode=0o700)
         self.root = self.base / 'run-state'; self.root.mkdir(mode=0o700)
         self.bound = {'state_root': str(self.root), 'launch': {'agent_bin': '/owned/agentfw'},
-                      'component_home': str(self.home)}
+                      'component_home': str(self.home), 'home': str(self.home),
+                      'roots': [{'path': str(self.home), 'object': {'device': 1, 'inode': 2}}]}
         self.proc = {'pid': os.getpid(), 'uid': os.geteuid(), 'boot': 'test-boot', 'start': 35}
         patch = mock.patch.object(L, 'process', return_value=self.proc); patch.start(); self.addCleanup(patch.stop)
         patch = mock.patch.object(L, 'revalidate'); self.validate = patch.start(); self.addCleanup(patch.stop)

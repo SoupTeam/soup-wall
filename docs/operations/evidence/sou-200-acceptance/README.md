@@ -62,6 +62,18 @@ Later commits changing only this ledger and documentation are not re-qualified.
   interpreter below the world-writable hosted toolcache. The qualifier now uses the
   root-owned `/usr/bin/python3.12`. The strict binding refusal itself was correct.
 
+## Review follow-up (not part of the recorded run)
+
+The run above (source `a7e1592f`) predates review of `584aa323`, which found two gaps:
+named project presets (`project run`) launched without the maintenance context, and a
+marker bound to its first selection reported `eligible` while admission refused after
+an ordinary selection change. They are fixed in later commits: presets carry the same
+installation context, and the marker now gates the installation scope while a changed
+selection is reported and adopted only by a freshly confirmed `enter`/`leave`. The new
+`named-project-refused` case and the Python controls for both fixes are source-bound
+to those later commits; the 12 recorded cases remain evidence for `a7e1592f` only until
+a new focused native run records the 13-case matrix for the final head.
+
 ## Not claimed
 
 Only the owned scripted-provider flows above were observed. Live model

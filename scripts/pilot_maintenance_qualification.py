@@ -10,7 +10,7 @@ import subprocess
 CASES = ('readonly-preview', 'useful-before-enter', 'existing-run-draining',
          'entered-new-run-refused', 'sibling-independent', 'stale-leave-refused',
          'fresh-leave', 'existing-useful-after-enter', 'new-useful-after-leave',
-         'same-bytes-marker-replaced', 'partial-transition-refused', 'dead-owner-uncertain')
+         'named-project-refused', 'same-bytes-marker-replaced', 'partial-transition-refused', 'dead-owner-uncertain')
 
 
 def passed(value):
@@ -25,7 +25,7 @@ def passed(value):
             and value.get('receiver_requests') == 0 and type(value.get('receiver_requests')) is int)
 
 
-def qualify(args, door, home, env, report, *, guided, install_sibling, receiver, baseline):
+def qualify(args, door, home, env, report, *, guided, install_sibling, receiver, baseline, selection, load):
     require = guided.require
     result = {'format': 'sw-pilot-maintenance-qualification/1', 'executed': True,
               'platform': 'native-linux', 'source': args.expected_commit,
@@ -61,10 +61,10 @@ def qualify(args, door, home, env, report, *, guided, install_sibling, receiver,
                     and agent_count == 1, 'maintenance_refusal_executed_protected_process')
         return value
 
-    def refused(label):
+    def refused(label, words=None, run_env=None):
         before = receiver.count
-        words = door.words('run', '--state-root', args.state_root, '--timeout-seconds', '120', inputs=False)
-        value = invoke(words, success=False, trace=True)
+        words = words or door.words('run', '--state-root', args.state_root, '--timeout-seconds', '120', inputs=False)
+        value = invoke(words, success=False, trace=True, run_env=run_env)
         require(value.get('executed') is False and value.get('host_started') is not True
                 and receiver.count == before, 'maintenance_refusal_effect')
         record(label, protected_process_starts=0, provider_connects=0)
@@ -115,6 +115,32 @@ def qualify(args, door, home, env, report, *, guided, install_sibling, receiver,
     require(row['exit'] == 0 and row['process_cleanup']['all_stopped'] and len(results) == 2
             and all(not r['is_error'] for r in results.values()), 'maintenance_leave_did_not_restore_useful_run')
     record('new-useful-after-leave', useful_results=2, all_stopped=True)
+
+    # A named project preset is an installed launch path too. It must be paused by
+    # the same installation marker, with no host, provider or server started.
+    profiles = load('maintenance_project_providers', 'pilot_provider_profiles.py')
+    project_env = {k: v for k, v in env.items() if k not in profiles.PROVIDER.KEYS}
+    project_state = args.output / 'maintenance-project-state'; project_state.mkdir(mode=0o700)
+    with profiles.Store(home, create=True) as provider:
+        provider.create('maintenance', {'model': 'owned-maintenance', 'ANTHROPIC_BASE_URL': 'http://127.0.0.1:9'},
+                        {'ANTHROPIC_API_KEY': 'SOU200-OWNED-PROVIDER-4c1e'})
+        index = provider.index()
+        current = 'legacy' if index is None else index['profiles']['maintenance']['current']
+        provider.update('maintenance', {'model': 'claude-sonnet-4-20250514'}, None, current)
+        provider_version = provider.index()['profiles']['maintenance']['current']
+    def project(*extra, success=True):
+        words = [str(args.agentfw), 'pilot', '--home', str(home), 'project', *map(str, extra)]
+        return invoke(words, success=success, run_env=project_env)
+    project('create', '--name', 'maintenance', '--selection', selection, '--provider-name', 'maintenance',
+            '--provider-version', provider_version, '--state-root', project_state, '--apply')
+    preset = project('check', '--name', 'maintenance')['digest']
+    project_run = [str(args.agentfw), 'pilot', '--home', str(home), 'project', 'run', '--name', 'maintenance',
+                   '--expected-version', preset, '--apply', '--timeout-seconds', '120']
+    enter = call('preview', '--operation', 'enter')
+    require(call('enter', '--confirm', enter['confirmation_sha256'])['status'] == 'entered', 'maintenance_enter_failed')
+    refused('named-project-refused', project_run, project_env)
+    leave = call('preview', '--operation', 'leave')
+    require(call('leave', '--confirm', leave['confirmation_sha256'])['status'] == 'left', 'maintenance_leave_failed')
 
     marker = home / 'pilot-maintenance/marker.json'
     held = marker.with_name('marker.held.private'); marker.rename(held)

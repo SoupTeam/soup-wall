@@ -29,11 +29,20 @@ agentfw pilot --home "$AGENT_HOME" maintenance leave   --prefix "$PREFIX" --stat
 
 ## What is bound
 
-The marker is bound to the Agent home, the installed component home, the selection,
-the state root, the pinned selected programs/profiles/policy and the directory
-identities of those roots. Changing any of them makes the marker stale for that
-launch. A marker is never inherited from another home: a sibling installation is
-unaffected and keeps launching.
+The marker governs one installation: the Agent home, the installed component home
+and the directory identities of those two roots. A marker is never inherited from
+another home: a sibling installation is unaffected and keeps launching, and a launch
+or transition for a different installation scope is refused
+(`maintenance_scope_changed`).
+
+The marker also records the launch binding it last saw (selection, state root, pinned
+selected programs/profiles/policy and their root identities). That record is
+informational for admission: ordinary selection changes, `update` and named project
+presets bind different selections and must not strand an enrolled home. `status` and
+`preview` report `selection_binding` as `current` or `changed`. Only a freshly
+confirmed `enter` or `leave` adopts a changed binding; the confirmation digest covers
+the old marker state and the new binding, and the signed old state stays in the
+transition history. A stale confirmation, or one for another scope, is never accepted.
 
 The marker has a permanent inode, a keyed authenticator and a synced transition
 journal. Symlinks, hard links, foreign owners, wrong modes, replaced directories,
@@ -42,7 +51,9 @@ never repaired or recreated by a reader.
 
 ## Launch exclusion
 
-A new launch is admitted at two points while holding a short shared gate:
+A new launch through the installed front door is admitted at two points while
+holding a short shared gate. This covers `run` and named project presets
+(`project run`); both carry the same installation context into the run supervisor:
 
 1. before the private run state is created, and
 2. immediately before the Claude host process is spawned. The Rust launcher holds
@@ -57,7 +68,7 @@ maintenance never waits for running sessions.
 A launch is refused, with no host, provider or server started, when the marker is
 entered, missing, corrupt, stale, unauthenticated or half-written, or when the run
 inventory is uncertain. Refusal reasons are finite, for example
-`maintenance_entered`, `maintenance_state_uncertain`, `maintenance_selection_stale`,
+`maintenance_entered`, `maintenance_state_uncertain`, `maintenance_scope_changed`,
 `maintenance_runs_uncertain` and `maintenance_transition_busy`.
 
 ## Status and drain
@@ -73,7 +84,8 @@ inventory is uncertain. Refusal reasons are finite, for example
 A terminal record is written only after the accepted process-group stop and receipt
 cleanup succeed. A missing PID, an empty process list or a vanished run directory
 is never treated as drained. `empty_process_list_proves_drain` is always `false`.
-`new_launches` is `refused` unless the marker is open and the inventory is certain.
+`new_launches` is `refused` unless the marker is open, governs this installation
+(`installation` is `matches`) and the inventory is certain.
 
 Existing hosts keep their sessions, risk and authority state. To stop a run, use
 the existing exact-run stop separately; maintenance mode adds no killing mechanism.
@@ -103,6 +115,6 @@ enrolled home. Direct preparation scripts remain outside it.
 binary on owned synthetic inputs with syscall tracing and an independent receiver.
 Required cases: read-only preview, useful run before enter, existing run draining,
 new run refused after enter, sibling unaffected, stale leave refused, fresh leave,
-existing run completing after enter, useful run after leave, same-bytes marker
-replacement, partial transition and a crashed owner left uncertain. A configured,
+existing run completing after enter, useful run after leave, named project run
+refused while entered, same-bytes marker replacement, partial transition and a crashed owner left uncertain. A configured,
 simulated or skipped case is not reported as observed protection.
