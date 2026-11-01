@@ -45,3 +45,21 @@ Linux: passed. Source snapshot
 `5bc1c7dd62baf75d454f94c15181046bc635c57c16d5c13f98335b24ae7d9ef5`,
 log SHA-256 `0681b714fe9976943408b6a51fff8f1b788bf1b5aea809fb7e7ea52fa891d678`.
 That is evaluator-fixture validation, not Linux feature qualification.
+
+## Retained second Linux attempt and setup correction
+
+Run `41308203949`, source `6b8da1c22c32428e4dd93cdde284bfc8748dc8c5`,
+built successfully; all eight protocol and both grader tests passed. The installed
+qualifier stopped before its first case because its fixture assumed an
+`AGENTFW_HOME` override that lifecycle installation does not support. The driver
+now uses the actual `$HOME/.agentfw` installation path. No product code changed.
+All 22 cases in that failed attempt remain unattempted; Clippy was not reached.
+Artifact `13083654534`, six unique safe members with verified CRCs, ZIP SHA-256
+`3e306e124eb275af665c591b3c206242a9399fe3fea17d08196293e5f712bfb2`.
+
+The corrected actual installed path and source-validation setup passed locally
+on macOS (snapshot `f52ffd1699988f49de26ed5f25d92f86cc89e62b87131700e2a52b212d556fc1`,
+log `e06e7274480eb661ff6384222f7fce035c0997d1ffc01a5d64ca0c071f778bfa`).
+Both corrected grader controls also passed (same snapshot, log
+`ce758dce47ade14cc82e1735d9951d79df677d90691641c6269dd0b3aa8a42af`).
+These macOS setup checks do not substitute for native Linux qualification.

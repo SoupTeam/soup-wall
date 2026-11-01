@@ -77,9 +77,11 @@ def run(args, report):
                   scope='installed_offline_simulation_not_runtime_protection')
     with contextlib.nullcontext(tempfile.mkdtemp(prefix='operator-policy-private-', dir=args.output.parent)) as raw:
         root = Path(raw).resolve()
-        home = root / 'agent-home'; home.mkdir(mode=0o700)
+        # The accepted lifecycle resolves HOME/.agentfw; AGENTFW_HOME is not
+        # a lifecycle override. Verify the actual installed path below.
+        home = root / '.agentfw'; home.mkdir(mode=0o700)
         cwd = root / 'outside-checkout'; cwd.mkdir(mode=0o700)
-        env = {'PATH': os.environ['PATH'], 'HOME': str(root), 'AGENTFW_HOME': str(home),
+        env = {'PATH': os.environ['PATH'], 'HOME': str(root),
                'RUST_BACKTRACE': '0', 'LANG': 'C.UTF-8'}
         installed = subprocess.run([str(binary), 'lifecycle', 'install', 'sou199-demo', str(binary),
                                     '--sha256', digest], env=env, cwd=cwd, capture_output=True, timeout=30)
@@ -269,6 +271,13 @@ def main():
         report['status'] = 'passed' if passed(report) else 'incomplete'
     except Exception as error:
         report['failure_class'] = type(error).__name__
+        if type(error) is ValueError and str(error) in {
+                'nonroot_linux_required', 'strace_required', 'exact_source_required', 'clean_source_required',
+                'installation_failed', 'installed_binary_mismatch', 'unexpected_execution_or_network',
+                'unexpected_exit', 'private_content_leak', 'refusal_stdout', 'witness_changed', 'pins',
+                'preview_created_output', 'read', 'write', 'floors', 'unknown', 'stale_published',
+                'private_report', 'destination_diff', 'private_export', 'installation'}:
+            report['failure_reason'] = str(error)
         # Fixed finite reason; private subprocess/input text is never retained.
         report['status'] = 'failed'
     private(args.output, (json.dumps(report, indent=2) + '\n').encode())
