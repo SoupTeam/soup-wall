@@ -54,6 +54,8 @@ SCRIPTS = (
     "scripts/pilot-run-archive.py",
     "scripts/pilot-selection-lock.py",
     "scripts/pilot.py",
+    "scripts/pilot_maintenance.py",
+    "scripts/pilot_maintenance_launch.py",
     "scripts/pilot_configuration_backup.py",
     "scripts/private_edit_self_test.py",
     "scripts/pilot_git_profiles.py",

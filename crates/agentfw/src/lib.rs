@@ -42,6 +42,8 @@ pub(crate) mod macos_create;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub(crate) mod macos_read;
 pub mod offline_replay;
+#[cfg(target_os = "linux")]
+mod pilot_maintenance;
 pub mod preflight;
 #[cfg(target_os = "linux")]
 mod private_export;

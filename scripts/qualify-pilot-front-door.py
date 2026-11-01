@@ -140,13 +140,15 @@ PROVIDER_TRACE_STRING_BYTES = 131072  # Linux MAX_ARG_STRLEN, including NUL.
 
 
 def run_case(args, door, report, label, proposals, hold=False, cancel=None,
-             provider_setup=None, provider_trace=None, model=None, close_model=True, diagnostic_writes=False):
+             provider_setup=None, provider_trace=None, model=None, close_model=True, after_useful=None, diagnostic_writes=False):
     """One protected run through `pilot.py run` with the owned scripted provider."""
     model = model if model is not None else BASE.DEMO.ScriptedModel([])
     offered, live = set(), {}
+    callback_done = False
     ready = threading.Event()
 
     def next_step(body):
+        nonlocal callback_done
         names = {tool.get("name") for tool in body.get("tools", [])}
         if not {"mcp__filesystem__read_text_file", "mcp__git__git_show"}.issubset(names):
             return [{"type": "text", "text": "Owned auxiliary request."}]
@@ -165,6 +167,9 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
                                        prefix=args.other_prefix)
             live.update(other_prefix_protection=other.get("protection"),
                         other_prefix_unrelated_runs=other.get("unrelated_owned_runs"))
+        if after_useful is not None and model.results and not callback_done:
+            callback_done = True
+            after_useful(model)
         ready.set()
         if hold:
             time.sleep(30)

@@ -1229,6 +1229,7 @@ pub fn exec_pilot(home: &Path, args: &[std::ffi::OsString]) -> i32 {
                     | "prepare"
                     | "run"
                     | "status"
+                    | "maintenance"
                     | "provider"
                     | "configuration"
                     | "project"

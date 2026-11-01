@@ -883,6 +883,17 @@ def qualify(args, report):
         require(code == 0 and value.get("protection") == "configured-not-running", "status_before_run")
         report["cases"].append({"case": "status-configured", "passed": True, "protection": value["protection"]})
 
+        if args.maintenance_only:
+            maintenance = load("maintenance_qualification", "pilot_maintenance_qualification.py")
+            def sibling(sibling_home):
+                install_component(args, sibling_home, archive, digest, built["component"], env, report)
+                return InstalledDoor(args, env, args.work, sibling_home)
+            maintenance.qualify(args, door, agent_home, env, report, guided=QUAL,
+                install_sibling=sibling, receiver=receiver, baseline=baseline, selection=selection, load=load)
+            report["source_after"] = BASE.source()
+            require(report["source_after"] == before, "source_changed")
+            return
+
         if args.provider_ca_only:
             PROVIDER_CA_QUALIFICATION.qualify(
                 args, door, agent_home, env, report, provider_call=provider_call,
@@ -1071,6 +1082,7 @@ def main():
     parser.add_argument("--allow-download", action="store_true")
     parser.add_argument("--provider-profiles", action="store_true",
                         help="opt in to SOU-172 private named provider original-host controls")
+    parser.add_argument("--maintenance-only", action="store_true", help="focused SOU-200 installed launch-exclusion witnesses")
     parser.add_argument("--linked-worktrees-only", action="store_true", help="focused SOU-201 installed linked-worktree qualification")
     parser.add_argument("--filesystem-roots-only", action="store_true", help="focused SOU-202 installed filesystem-root qualification")
     parser.add_argument("--project-presets-only", action="store_true", help="focused installed named-project qualification")
@@ -1107,9 +1119,9 @@ def main():
         report["status"] = "passed"
     except Exception as error:
         detail = str(error)
-        report["error"] = (detail if not args.provider_ca_only or
+        report["error"] = (detail if not (args.provider_ca_only or args.maintenance_only) or
                            re.fullmatch(r"[a-z0-9_:-]{1,160}", detail)
-                           else "provider_ca_qualification_failed")[:500]
+                           else "focused_qualification_failed")[:500]
     finally:
         if args.output.exists():
             BASE.write(args.output / "report.json", report)
