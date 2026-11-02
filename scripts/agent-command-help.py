@@ -17,9 +17,15 @@ ALLOWED_READER = None
 
 
 def effects(parts):
-    if parts in (['preview'], ['status'], ['help'], ['provider', 'preview'], ['doctor'],
+    if parts in (['preview'], ['status'], ['help'], ['provider', 'preview'],
                  ['lifecycle', 'status'], ['update', 'preview'], ['update', 'inspect']):
         return 'read_only'
+    if parts == ['doctor']:
+        return 'read_only_unless_support_bundle_export_is_selected'
+    if parts == ['update', 'inventory']:
+        return 'inventory_export_requires_explicit_output'
+    if parts in (['update', 'rollback'], ['update', 'recover'], ['update', 'cleanup']):
+        return 'preview_unless_confirm_then_lifecycle_mutation'
     if parts == ['provider', 'check']:
         return 'read_only_unless_transport_is_selected'
     if parts == ['run']:

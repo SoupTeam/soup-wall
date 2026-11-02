@@ -14,6 +14,40 @@ TOOL = Path(__file__).with_name('agent-command-help.py')
 
 
 class Controls(unittest.TestCase):
+    def test_installed_delegated_catalog_and_refusals(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            scripts = root / 'scripts'
+            shutil.copytree(TOOL.parent, scripts, ignore=shutil.ignore_patterns('__pycache__'))
+            entry = scripts / 'pilot.py'
+            helper = scripts / TOOL.name
+            base = [sys.executable, '-B', str(helper), '--pilot', str(entry),
+                    '--sha256', hashlib.sha256(entry.read_bytes()).hexdigest(),
+                    '--update-sha256', hashlib.sha256((scripts / 'pilot_update.py').read_bytes()).hexdigest()]
+            sibling = root / 'sibling'
+            sibling.write_text('PRIVATE_CANARY')
+            result = subprocess.run(base + ['list'], cwd=root, capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn('PRIVATE_CANARY', result.stdout)
+            rows = {tuple(row['command']): row for row in json.loads(result.stdout)['commands']}
+            for operation in ('inventory', 'preview', 'apply', 'rollback', 'recover', 'inspect', 'cleanup'):
+                row = rows[('update', operation)]
+                self.assertIn('--prefix', [flag['name'] for flag in row['flags']])
+            self.assertEqual(rows[('update', 'rollback')]['effects'],
+                             'preview_unless_confirm_then_lifecycle_mutation')
+            self.assertIn('--expected-version', rows[('provider', 'update')]['confirmation_flags'])
+            self.assertIn('--apply', rows[('provider', 'update')]['confirmation_flags'])
+            prefix = root / 'absent'
+            for command in ([str(entry), 'provider', 'update', '--apply'],
+                            [str(entry), 'run'],
+                            [str(scripts / 'pilot_update.py'), 'apply', '--prefix', str(prefix)],
+                            [str(scripts / 'pilot_update.py'), 'invalid', '--prefix', str(prefix)]):
+                result = subprocess.run([sys.executable, '-B', *command], cwd=root,
+                                        capture_output=True, text=True, timeout=20)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(prefix.exists())
+            self.assertEqual(sibling.read_text(), 'PRIVATE_CANARY')
+
     @unittest.skipUnless(os.environ.get('AGENTFW_TEST_BINARY') and sys.platform == 'linux', 'installed Rust binary required')
     def test_installed_rust_command_tree(self):
         with tempfile.TemporaryDirectory() as temp:
