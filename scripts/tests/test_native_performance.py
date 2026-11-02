@@ -1220,7 +1220,7 @@ class CsvFormulaInjection(unittest.TestCase):
     """P2-2: attacker-influenced text never reaches a CSV cell as an executable spreadsheet formula."""
 
     PAYLOADS = ['=1+1', '+SUM(A1:A2)', '-2+3', '@SUM(1,1)', '\t=1+1', ' =1+1', '\r=1+1', '＝1+1', "'=1+1",
-                'cmd|calc']
+                'cmd|calc', ' \t=1+1', ' \r=1+1', ' \n=1+1', '\u00a0=1+1']
 
     def test_csv_text_rules(self):
         self.assertEqual(NP.csv_text('=1+1'), "'=1+1")
@@ -1268,13 +1268,13 @@ class CsvFormulaInjection(unittest.TestCase):
                 for row, payload in zip(failed, payloads):
                     cell = rows[('baseline', f"r01/{row['case']}/{row['arm']}")]['reason']
                     self.assertEqual(cell, NP.csv_text(payload))
-                    self.assertFalse(cell.lstrip(' ').startswith(NP.FORMULA_PREFIXES) or ord(cell[0]) < 32)
+                    self.assertFalse(cell.lstrip().startswith(NP.FORMULA_PREFIXES) or ord(cell[0]) < 32)
                     self.assertEqual(cell[1:] if cell != payload else cell, payload)  # exact, reversible
                 # Every textual cell is inert; numeric measurements stay numbers.
                 for r in trials:
                     for key, cell in r.items():
                         if cell:
-                            self.assertFalse(cell.lstrip(' ').startswith(NP.FORMULA_PREFIXES), (key, cell))
+                            self.assertFalse(cell.lstrip().startswith(NP.FORMULA_PREFIXES), (key, cell))
                     trial = expected[r['trial_id']]
                     self.assertEqual(r['status'], trial['status'])
                     for name in ('host_start_ms', 'host_elapsed_ms'):

@@ -1602,7 +1602,7 @@ def csv_text(value):
     one leading apostrophe if present). Numbers, booleans and empty cells are not text and stay unchanged."""
     if not isinstance(value, str) or not value:
         return value
-    if value[0] == "'" or ord(value[0]) < 32 or value[0] == '\x7f' or value.lstrip(' ').startswith(FORMULA_PREFIXES):
+    if value[0] == "'" or ord(value[0]) < 32 or value[0] == '\x7f' or value.lstrip().startswith(FORMULA_PREFIXES):
         return "'" + value
     return value
 
