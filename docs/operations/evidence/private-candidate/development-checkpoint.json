@@ -1,27 +1,26 @@
 {
   "format": "sw-private-candidate-development-checkpoint/1",
   "status": "incomplete-not-release-qualification",
-  "date": "2026-11-02",
-  "implementation_source": "078a4c4f7ca9de6a2c191add3c95ba36c084b1a8",
+  "date": "2026-11-03",
+  "implementation_source": "a3d53bd34b71529cac12663688922fe273e4b7f1",
   "targeted_controls": {
-    "windows": {
-      "candidate_archive_evidence_validator_inventory": 64,
-      "python_notice_controls": 6,
-      "status": "passed"
-    },
     "linux": {
-      "initial_implementation_source": "77ba8046",
-      "initial_python_tests_passed": 163,
-      "final_affected_source": "078a4c4f7ca9de6a2c191add3c95ba36c084b1a8",
-      "final_python_tests_passed": 71
+      "source": "edb2a7cc",
+      "affected_controls_passed": 146,
+      "final_wheelhouse_source": "a3d53bd34b71529cac12663688922fe273e4b7f1",
+      "final_wheelhouse_controls_passed": 18
     },
-    "documentation_links": "377 files, 1317 links, 0 errors",
-    "bash_syntax": "passed"
+    "windows": {
+      "candidate_inventory_notice_wheelhouse_controls": 80,
+      "scope": "79 combined controls followed by the added redirect-body regression and final affected checks",
+      "posix_fifo_skipped": true
+    },
+    "documentation_links": "377 files, 1317 links, 0 errors"
   },
   "installed_offline_kit": {
     "platform": "WSL2 Ubuntu 24.04 x86_64, unprivileged operator",
-    "source": "078a4c4f7ca9de6a2c191add3c95ba36c084b1a8",
-    "archive_sha256": "819096ee951b27b0e192a11c64118576328e231a3b0e073ea3b683e380e5d7f5",
+    "source": "a3d53bd34b71529cac12663688922fe273e4b7f1",
+    "archive_sha256": "7d3b0ccc37f74e3a91d88a9ad56816e3f3db451d746d6493db34bc9615afbf30",
     "compiler": "rustc 1.94.1 (e408947bf 2026-03-25)",
     "build_profile": "debug",
     "status": "passed-at-recorded-source",
@@ -40,7 +39,7 @@
     ]
   },
   "python_dependency_update": {
-    "source": "078a4c4f7ca9de6a2c191add3c95ba36c084b1a8",
+    "source": "a3d53bd34b71529cac12663688922fe273e4b7f1",
     "pins": {
       "certifi": "2026.10.19",
       "mcp": "1.30.0",
@@ -56,7 +55,7 @@
       "overlap_rounds": 16,
       "repository_unchanged": true,
       "no_denied_dispatch": true,
-      "python_notice_bindings_verified": 21
+      "python_notice_bindings_verified": 26
     },
     "independent_review": {
       "source_range": "ca52c824..77ba8046",
@@ -87,7 +86,7 @@
   },
   "installed_inventory": {
     "status": "incomplete-findings-and-policy-review-blocking",
-    "real_scanner_observation_source": "078a4c4f7ca9de6a2c191add3c95ba36c084b1a8",
+    "real_scanner_observation_source": "a3d53bd34b71529cac12663688922fe273e4b7f1",
     "exact_identity_coverage": "passed",
     "osv_version": "2.7.0",
     "cargo_audit_version": "0.22.2",
@@ -124,35 +123,16 @@
       "runtime_license_review_required:minipass",
       "runtime_license_review_required:path-scurry",
       "runtime_license_review_required:certifi",
-      "runtime_license_review_required:gitdb",
       "runtime_license_review_required:autocommand",
-      "runtime_license_notice_incomplete:backports.tarfile",
-      "runtime_license_notice_incomplete:jaraco.text",
       "runtime_license_review_required:typing_extensions",
-      "runtime_license_notice_incomplete:cachecontrol",
-      "runtime_license_notice_incomplete:certifi",
-      "runtime_license_notice_incomplete:distlib",
-      "runtime_license_notice_incomplete:distro",
-      "runtime_license_notice_incomplete:idna",
-      "runtime_license_notice_incomplete:msgpack",
-      "runtime_license_notice_incomplete:packaging",
-      "runtime_license_notice_incomplete:platformdirs",
-      "runtime_license_notice_incomplete:pygments",
-      "runtime_license_notice_incomplete:pyproject-hooks",
-      "runtime_license_notice_incomplete:requests",
-      "runtime_license_notice_incomplete:resolvelib",
-      "runtime_license_notice_incomplete:rich",
-      "runtime_license_notice_incomplete:setuptools",
-      "runtime_license_notice_incomplete:tomli",
-      "runtime_license_notice_incomplete:tomli-w",
-      "runtime_license_notice_incomplete:truststore",
-      "runtime_license_notice_incomplete:urllib3",
+      "runtime_license_review_required:certifi",
+      "runtime_license_review_required:distlib",
       "native_reviews:native_reviews_required",
       "cargo_audit:cargo_audit_incomplete_or_findings",
       "osv_failed_or_incomplete",
       "osv:unresolved_osv_findings"
     ],
-    "qualification_limit": "All three exact graphs were scanned and every finding retained. Incomplete is caused by unresolved findings/license dispositions and missing clean native review assertions, not scanner graph mismatch or a WSL blocker. Version matching alone does not establish runtime exploitability."
+    "qualification_limit": "Exact coverage and factual attribution passed. Remaining incomplete status is from policy dispositions, retained advisory/maintenance observations and clean native assertions, never a waived finding."
   },
   "retained_failed_attempts": [
     {
@@ -169,6 +149,11 @@
       "source": "77ba8046",
       "status": "closure-count-regression-test-failed",
       "reason": "The patched exact npm graph has 4082 files/2442 runtime files instead of 4079/2439. The two pinned counters were updated; the 9000-argument bubblewrap limit was preserved. All three closure tests then passed at bea3d196."
+    },
+    {
+      "source": "edb2a7cc",
+      "status": "native-overlap-admission-unavailable",
+      "reason": "Useful reads passed, then one overlap attempt closed on admission_unavailable. Kept as failed evidence; later complete 16-round runs at a9a794f3 and a3d53bd3 passed without changing timeouts, witnesses or runtime policy."
     }
   ],
   "historical_kit_runs": [
@@ -222,13 +207,33 @@
       "source": "bea3d196fecf7a97d54159aa774d362e4c4c9a5d",
       "archive_sha256": "795ee90d64b3cf4c31e67782119d17071d729ffc3f4ea0da1fbbc015ce00af5e",
       "status": "passed-before-final-Python-notice-binding"
+    },
+    {
+      "platform": "WSL2 Ubuntu 24.04 x86_64, unprivileged operator",
+      "source": "078a4c4f7ca9de6a2c191add3c95ba36c084b1a8",
+      "archive_sha256": "819096ee951b27b0e192a11c64118576328e231a3b0e073ea3b683e380e5d7f5",
+      "compiler": "rustc 1.94.1 (e408947bf 2026-03-25)",
+      "build_profile": "debug",
+      "status": "passed-at-recorded-source",
+      "checks": [
+        "complete pre-extraction inventory and pinned archive validation",
+        "extracted executable modes",
+        "original filesystem profile install with networking unavailable, 104 npm packages",
+        "unrelated setup-error and malformed-envelope negatives",
+        "fabricated collector marker rejected without fresh daemon records",
+        "useful original-server read",
+        "protected unsupported write with independent absent-file witness",
+        "result injection refusal correlated with fresh native_call/native_result audit records",
+        "broken-path control",
+        "daemon-loss refusal",
+        "direct original-server write calibration followed by protected same-path zero effect"
+      ]
     }
   ],
   "remaining": [
-    "Assess retained package advisory matches, including pip-vendored subsets, without replacing original server major dependencies speculatively.",
-    "Obtain explicit runtime license/notice policy dispositions, including Python vendored declarations and bundled Berkeley DB; do not broaden global Cargo policy.",
-    "Resolve or explicitly review remaining native advisory/provenance dispositions; no clean native assertion is fabricated.",
-    "Maintainer review of new hashed setup inputs, followed by TL-owned Ready qualification, admission and merge."
+    "Obtain explicit dispositions for license terms outside the current allowlist and the original server's transition notice; do not invent release/legal approval.",
+    "Retain unresolved upstream advisory/maintenance records. The selected pip HTTP bootstrap path is mitigated without replacing or hiding its vendored libraries; no newer stable pip exists in the checked upstream release set.",
+    "Complete maintainer setup-input review and TL-owned Ready qualification, independent admission and merge."
   ],
   "environment_blocker": {
     "status": "resolved",
@@ -251,7 +256,7 @@
     "python": {
       "version": "3.11.18",
       "archive_sha256": "17c4978a36c496dc53c08899ef8dad1ad2734f6325f08d6033a1e66419e0af26",
-      "notice_files": 20,
+      "notice_files": 25,
       "notice_provenance_files": 1
     },
     "npm": {
@@ -285,10 +290,61 @@
       "mapped_components": 17,
       "source_release_commit": "fa506e0858ac9f2cc5b289c137b888a2aa24d1ee",
       "map_sha256": "3088081f8c9ba6940fdcd077440a56c40a5b88976387ee8f62d08bf1c2965aaf",
-      "remaining": "Berkeley DB Sleepycat policy, libatomic toolchain provenance and nested Tcl resource identities remain unresolved."
+      "remaining": "Declared libatomic provider source and nested Tcl source identities are now recorded with verbatim notices; source-to-linked-binary attestation remains explicitly unproven."
     },
     "notice_material": "103 captured native/common-license documents plus matching full Python metadata and 20 dependency license texts; installed notice bindings verified.",
     "clean_native_review": "not asserted",
-    "source_to_binary_reproducibility": "not attested"
+    "source_to_binary_reproducibility": "not attested",
+    "additional_source_identities": {
+      "libatomic": {
+        "provider": "GCC 15.2.0 via pinned LLVM build recipe",
+        "source_sha256": "438fd996826b0c82485a29da03a72d71d6e3541a83ec702df4271f6fe025d24e",
+        "license": "GPL-3.0-or-later WITH GCC-exception-3.1"
+      },
+      "itcl": {
+        "version": "4.3.8",
+        "embedded_revision": "b3e5201f83ce3035196879cd6fa2af40f0b0a4ed4ac5951789b92a97aed4ebb5"
+      },
+      "thread": {
+        "version": "3.0.6",
+        "embedded_revision": "8c0237b059853bfe1e31923fbde37892bce9d89d177eb3a4e5acd3ee2903fd34"
+      },
+      "tcl_source_sha256": "d0aed49230bc02a65c1e0229e65f34590a4b037ec40d546f32573b467f7551ea"
+    }
+  },
+  "bootstrap_transport": {
+    "source": "a3d53bd34b71529cac12663688922fe273e4b7f1",
+    "manifest": "profiles/mcp/git-readonly-v1/wheels.lock.json",
+    "wheels": 33,
+    "bytes": 9901744,
+    "pip": "always --no-index with a verified private local wheelhouse",
+    "explicit_downloads": "Exact reviewed HTTPS files through a standard-library helper, no package index, no environment proxies, no redirects or encoded/chunked responses.",
+    "availability_budget": "A child-process deadline covers network status/headers as well as bodies; download preparation and pip share the original 300-second installation budget.",
+    "strict_hashes": "unchanged",
+    "protected_runtime": "no installer/network activity added",
+    "ci_source_admission": "Accepted helper and data snapshots only; ACCEPTED pointer unchanged."
+  },
+  "runtime_license_attribution": {
+    "source": "a3d53bd34b71529cac12663688922fe273e4b7f1",
+    "mapped_components": 23,
+    "attribution_rejections": 0,
+    "existing_policy_matches": 158,
+    "policy_pending_rows": 11,
+    "missing_or_opaque_notice_warnings": 0,
+    "supplemental_notices": [
+      "gitdb AUTHORS",
+      "Pygments AUTHORS",
+      "Requests NOTICE"
+    ],
+    "source_binding": "upstream-notices/runtime-licenses/provenance.json",
+    "provenance_sha256": "f37d72be8818d17b46fa9d82ec1edf84161bc9c0010e3b6f56bbf50ee86f1c9a",
+    "policy_change": "none; raw declarations and package graphs retained"
+  },
+  "independent_remediation_review": {
+    "range": "6f73f7ff..edb2a7cc",
+    "confirmed_issue": "Inherited redirect handling drained bodies before bounds. Redirects now close without reading, covered for all five redirect status codes.",
+    "additional_parent_control": "Network staging and pip share a hard 300-second subprocess budget.",
+    "other_findings": "no additional actionable bypass/regression reported",
+    "review_cycles": 1
   }
 }
