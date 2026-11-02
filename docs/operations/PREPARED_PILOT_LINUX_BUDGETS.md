@@ -28,6 +28,9 @@ select the cgroup containing your shell, unrelated jobs, or a running pilot.
 Unavailable environments refuse the requested budget; they do not retry without it.
 The example describes a selection, not a portable delegation setup command.
 
+Installed pilots can keep these budgets as named, versioned presets instead of hand-edited files:
+see [PILOT_BUDGET_PRESETS.md](PILOT_BUDGET_PRESETS.md). The launch contract below is unchanged.
+
 ## Runtime contract
 
 Before daemon startup the prepared entry freezes input bytes in its private run
