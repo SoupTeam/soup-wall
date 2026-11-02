@@ -7,6 +7,7 @@
     pilot.py run --prefix DIR [--prompt TEXT]
     pilot.py status --prefix DIR
     pilot.py provider preview|check|create|update|restore|prune|select|remove [options]
+    pilot.py configuration inventory|backup|inspect|restore-preview|restore|recover [options]
     pilot.py help
 
 This is a front door over the accepted scripts, not a second installer:
@@ -19,6 +20,7 @@ or Claude configuration, or contact a provider.
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import importlib.util
 import json
@@ -30,6 +32,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import traceback
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,7 +45,7 @@ PLAN_SECONDS = 180
 CLAUDE_VERSION = "2.1.251 (Claude Code)"
 CLAUDE_RELATIVE = "node_modules/@anthropic-ai/claude-code-linux-x64/claude"
 EXECUTABLE_INPUTS = ("agentfw", "git_launcher", "sandbox_tests", "git", "bwrap", "node", "npm", "claude", "python")
-FILE_INPUTS = ("node_archive", "python_archive", "git_archive", "bwrap_archive")
+FILE_INPUTS = ("node_archive", "python_archive", "git_archive", "bwrap_archive", "git_worktree_binding", "filesystem_roots_binding")
 DIR_INPUTS = ("npm_cache", "wheelhouse", "filesystem_workspace", "git_workspace", "native_output", "agent_output",
               "pkg_config_libdir", "pkg_config_sysroot", "meson_pythonpath")
 NEVER = ["start a daemon, Claude host or MCP server", "edit a project, Git repository or Claude configuration",
@@ -273,7 +276,7 @@ def prepare_words(args, inputs, paths, commit, produced):
             selected[name] = inputs[name]
     for name, value in selected.items():
         words += ["--" + name.replace("_", "-"), value]
-    for name in ("node_archive", "python_archive", "npm_cache", "wheelhouse", "filesystem_workspace", "git_workspace"):
+    for name in ("node_archive", "python_archive", "npm_cache", "wheelhouse", "filesystem_workspace", "git_workspace", "git_worktree_binding", "filesystem_roots_binding"):
         if name in inputs:
             words += ["--" + name.replace("_", "-"), inputs[name]]
     words += ["--filesystem-classifier", ROOT / "rule_baseline/rule_baseline.py",
@@ -310,6 +313,11 @@ def plan(args):
     args.git_profile = getattr(args, "git_profile", None) or (state or {}).get(
         "git_profile", PREP.GIT_PROFILES.DEFAULT)
     report["git_selection"] = PREP.GIT_PROFILES.binding(args.git_profile)
+    if 'filesystem_roots_binding' in inputs:
+        binding = PREP.FS_ROOTS.load(inputs['filesystem_roots_binding'], inputs.get('filesystem_workspace'))
+        PREP.FS_ROOTS.outside([prefix, *[path for role,path in inputs.items()
+            if role not in ('filesystem_workspace','git_workspace')]], binding)
+        report['filesystem_roots'] = binding
     paths = layout(prefix, inputs)
     native, agent = stage_words(args, inputs, paths, current["commit"])
     stages = []
@@ -538,6 +546,11 @@ def run(args):
              "--ask-wait-seconds", str(args.ask_wait_seconds), "--port", str(args.port)]
     if getattr(args, "agent_home", None) is not None:
         words += ["--provider-home", str(args.agent_home)]
+    if getattr(args, "agent_home", None) is not None:
+        words += ["--maintenance-home", str(getattr(args, "maintenance_home", None) or args.agent_home),
+                  "--maintenance-component-home", str(args.agent_home)]
+        if getattr(args, "maintenance_coordinator_root", None) is not None:
+            words += ["--maintenance-coordinator-root", str(args.maintenance_coordinator_root)]
     if args.state_root is not None:
         words += ["--state-root", str(args.state_root)]
     if args.prompt is not None:
@@ -788,7 +801,8 @@ def provider_command(args):
         raise profiles.Refusal("provider_consent_required")
     if args.provider_action == "check":
         return provider_preflight().check(args.agent_home or Path.home() / ".agentfw", profiles,
-                                          transport=args.transport, seconds=args.timeout_seconds)
+                                          transport=args.transport, proxy_connect=args.proxy_connect,
+                                          seconds=args.timeout_seconds)
     with profiles.Store(args.agent_home or Path.home() / ".agentfw",
                         create=args.provider_action == "create") as store:
         if args.provider_action == "preview":
@@ -884,6 +898,8 @@ def parser():
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
     top.add_argument("--agent-home", type=Path,
                      help=argparse.SUPPRESS)
+    top.add_argument("--maintenance-home", type=Path, help=argparse.SUPPRESS)
+    top.add_argument("--maintenance-coordinator-root", type=Path, help=argparse.SUPPRESS)
     commands = top.add_subparsers(dest="command")
     shared = argparse.ArgumentParser(add_help=False)
     shared.add_argument("--prefix", type=Path, required=True, help="absolute private directory for all pilot state")
@@ -908,12 +924,23 @@ def parser():
     command.add_argument("--port", type=int, default=0)
     command = commands.add_parser("status", parents=[shared])
     command.add_argument("--state-root", type=Path)
+    maintenance = commands.add_parser("maintenance", help="pause new owned installed launches; keep existing hosts")
+    modes = maintenance.add_subparsers(dest="maintenance_action", required=True)
+    for action in ("status", "preview", "enter", "leave"):
+        mode = modes.add_parser(action, parents=[shared])
+        mode.add_argument("--state-root", type=Path)
+        if action == "preview":
+            mode.add_argument("--operation", choices=("enter", "leave"), required=True)
+        if action in ("enter", "leave"):
+            mode.add_argument("--confirm", required=True, help="fresh preview confirmation_sha256")
     provider = commands.add_parser("provider", help="manage private named provider profiles")
     actions = provider.add_subparsers(dest="provider_action", required=True)
     preview = actions.add_parser("preview", help="read-only redacted inventory")
     preview.add_argument("--name")
     check = actions.add_parser("check", help="validate selected profile; opt in to bounded DNS/TCP/TLS observation")
     check.add_argument("--transport", action="store_true", help="observe the selected endpoint without an API request")
+    check.add_argument("--proxy-connect", action="store_true",
+                       help="with --transport, observe an explicit unauthenticated HTTP CONNECT route")
     check.add_argument("--timeout-seconds", type=int, default=5, help="total transport deadline, 1 to 15 seconds")
     check.add_argument("--json", action="store_true", help="print finite JSON instead of text")
     create = actions.add_parser("create", help="save one private profile with explicit consent")
@@ -955,15 +982,62 @@ def parser():
     remove = actions.add_parser("remove", help="delete one private profile")
     remove.add_argument("--name", required=True)
     remove.add_argument("--apply", action="store_true")
+    commands.add_parser("worktree-selection", help="explicitly bind the roots of a linked Git worktree")
+    commands.add_parser("filesystem-roots", help="explicitly bind separately selected read-only root IDs")
+    commands.add_parser("project", help="inspect, check and explicitly manage named project presets")
     commands.add_parser("help")
     commands.add_parser("update", help="preview, apply, recover or roll back a complete local pilot generation")
+    commands.add_parser("configuration", help="privately back up and restore supported declarative configuration")
     return top
 
 
 def main(argv=None):
     supplied = list(sys.argv[1:] if argv is None else argv)
+    # The installed native front door prepends its verified component home.
+    # Dispatch before the ordinary prefix/run parser, preserving that home.
+    at = 2 if len(supplied) >= 2 and supplied[0] == "--agent-home" else 0
+    if len(supplied) > at and supplied[at] == "configuration":
+        return load("front_door_configuration_backup", "pilot_configuration_backup.py").main(
+            supplied[:at] + supplied[at + 1:])
+    linked_words = list(supplied)
+    if linked_words[:1] == ['--agent-home'] and len(linked_words) >= 2:
+        linked_words = linked_words[2:]
+    if linked_words and linked_words[0].startswith('--agent-home='):
+        linked_words = linked_words[1:]
+    if linked_words[:1] == ['worktree-selection']:
+        try:
+            return load('front_door_linked_worktree', 'pilot_linked_worktree.py').main(linked_words[1:])
+        except Exception as error:
+            reason = str(error)
+            print(json.dumps({'status': 'refused', 'executed': False, 'protection': 'not-observed',
+                              'reason': reason if re.fullmatch(r'linked_worktree_[a-z_]{1,90}', reason) else 'linked_worktree_input_unavailable'}))
+            return 2
+    root_words = list(supplied)
+    if root_words[:1] == ['--agent-home']:
+        root_words = root_words[2:]
+    elif root_words and root_words[0].startswith('--agent-home='):
+        root_words = root_words[1:]
+    if root_words[:1] == ['filesystem-roots']:
+        try:
+            return PREP.FS_ROOTS.main(root_words[1:])
+        except (OSError, ValueError, TypeError, KeyError):
+            print(json.dumps({'status':'failed','reason':'filesystem_roots_selection_refused','executed':False}))
+            return 2
     if supplied and supplied[0] == "update":
         return load("front_door_update", "pilot_update.py").main(supplied[1:])
+    project_words = list(supplied)
+    project_home = Path.home() / '.agentfw'
+    installed_home = None
+    if project_words[:1] == ['--agent-home'] and len(project_words) >= 2:
+        project_home = installed_home = Path(project_words[1]); project_words = project_words[2:]
+    if project_words and project_words[0].startswith('--agent-home='):
+        project_home = installed_home = Path(project_words[0].split('=', 1)[1]); project_words = project_words[1:]
+    if project_words[:1] == ['project']:
+        module = load('front_door_project_presets', 'pilot_project_presets.py')
+        # Explicit object avoids relying on importlib registration of this entry.
+        import types
+        front = types.SimpleNamespace(**globals(), PROJECT_HOME=project_home, INSTALLED_HOME=installed_home)
+        return module.main(project_words[1:], front)
     top = parser()
     args = top.parse_args(supplied)
     if args.command in (None, "help"):
@@ -995,23 +1069,49 @@ def main(argv=None):
         print(json.dumps({"format": FORMAT, "command": args.command, "status": "failed", "executed": False,
                           "reason": "use_coordinated_update", "action": "use `pilot update preview` with a complete local inventory"}))
         return 2
-    if args.command in ("run", "status") and coordinated:
+    if args.command in ("run", "status", "maintenance") and coordinated:
         try:
             update = load("front_door_update", "pilot_update.py")
             words = [args.command]
+            if args.command == "maintenance":
+                words.append(args.maintenance_action)
+                for field in ("operation", "confirm"):
+                    value = getattr(args, field, None)
+                    if value is not None: words += ["--" + field, value]
             for name in ("prompt", "timeout_seconds", "ask_wait_seconds", "state_root", "port"):
                 value = getattr(args, name, None)
                 if value is not None:
                     words += ["--" + name.replace("_", "-"), str(value)]
             if args.json:
                 words.append("--json")
-            return update.selected_command(args.prefix, words)
+            return update.selected_command(args.prefix, words, owner_home=args.maintenance_home or args.agent_home, coordinator=args.maintenance_coordinator_root or args.prefix)
         except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
             dispatched = getattr(error, "dispatch_started", False)
             print(json.dumps({"format": FORMAT, "command": args.command, "status": "failed",
                               "executed": None if dispatched else False, "dispatch_started": dispatched,
                               "reason": "coordinated_outcome_unknown" if dispatched else "coordinated_update_unavailable",
                               "action": "inspect the update journal and recover before retrying"}, sort_keys=True))
+            return 2
+    if args.command == "maintenance":
+        try:
+            report = load("maintenance_launch", "pilot_maintenance_launch.py").command(
+                args, verified_state(args.prefix), PREP, load("maintenance_runner", "pilot-run.py"))
+            print(json.dumps(report, sort_keys=True))
+            return 0
+        except Exception as error:
+            # Finite stable codes are actionable; any other error reports only its class.
+            code = str(error)
+            if re.fullmatch(r"[a-z0-9_]{1,80}", code):
+                detail = code
+            else:
+                frame = traceback.extract_tb(error.__traceback__)[-1] if error.__traceback__ else None
+                detail = type(error).__name__ + (":" + errno.errorcode.get(error.errno, "") if isinstance(error, OSError) and error.errno else "")
+                if frame is not None:
+                    detail += "@" + Path(frame.filename).name + ":" + frame.name + ":" + str(frame.lineno)
+            print(json.dumps({"format": "sw-pilot-maintenance/1", "status": "refused",
+                              "reason": "maintenance_unavailable_or_uncertain", "detail": detail,
+                              "executed": False,
+                              "action": "Inspect the owned installation, selected state and retained maintenance evidence; preview again."}))
             return 2
     if args.command == "run":
         try:

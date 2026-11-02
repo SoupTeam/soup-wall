@@ -29,7 +29,7 @@ assert len(SYNTHETIC) == 52
 def page_html():
     html = (SRC / "admin_dashboard.html").read_text(encoding="utf-8")
     for marker, name in (("FLEET_PANEL", "fleet_panel.js"), ("ROLLOUT_PANEL", "rollout_panel.js"),
-                         ("ENROLLMENT_PANEL", "enrollment_panel.js")):
+                         ("ENROLLMENT_PANEL", "enrollment_panel.js"), ("AGENT_HISTORY", "agent_history.js")):
         html = html.replace(f"/* {marker} */", (SRC / name).read_text(encoding="utf-8"))
     return html
 
@@ -276,6 +276,92 @@ class EnrollmentPanelBrowserTests(unittest.TestCase):
         first, second = self.rotations()
         self.assertEqual(first, second)
         self.assertEqual(self.page.locator("#enroll-secret-value").inner_text(), first["replacement_token"])
+
+    def abort_committed_body_once(self, suffix, reconcile_abort=False, error="AbortError"):
+        # The server response exists, but its body never reaches the application.
+        # A same-context AbortError is not a tenant-switch cancellation.
+        config = json.dumps({"suffix": suffix, "reconcile": reconcile_abort, "error": error})
+        self.page.add_init_script("""(() => {
+          const config = CONFIG, original = window.fetch;
+          let committed = false, readAborted = false;
+          window.fetch = async (...args) => {
+            const response = await original(...args), url = String(args[0]);
+            if (!committed && args[1]?.method === 'POST' && url.endsWith(config.suffix)) {
+              committed = true; await response.text();
+              if (config.error === 'AbortError') throw new DOMException('Owned response loss', 'AbortError');
+              throw new TypeError('Owned response loss');
+            }
+            if (config.reconcile && committed && !readAborted && !args[1]?.method && url.endsWith('/agents')) {
+              readAborted = true; await response.text();
+              throw new DOMException('Owned inventory response loss', 'AbortError');
+            }
+            return response;
+          };
+        })();""".replace("CONFIG", config))
+
+    def test_body_abort_after_enrollment_reconciles_without_resending(self):
+        self.overrides[("POST", f"/admin/v1/tenants/{TENANT}/agents")] = self.enroll_ok()
+        self.abort_committed_body_once("/agents")
+        self.open()
+        self.page.locator("#enroll-agent-id").fill("edge-2")
+        self.page.locator("#enroll-form button").click()
+        self.wait_status("its one-time credential did not reach this browser")
+        self.assertEqual(len(self.posts), 1)
+        self.assertFalse(self.page.locator("#enroll-secret").is_visible())
+        self.assertIn("edge-2", self.page.locator("#enroll-list").inner_text())
+
+    def committed_rotation(self, route):
+        body = json.loads(route.request.post_data)
+        applied = self.agents[TENANT][0]["credential_generation"] == 2
+        self.agents[TENANT][0]["credential_generation"] = 2
+        self.json(route, {"tenant_id": TENANT, "agent_id": "edge-1", "generation": 2,
+                          "operation_id": body["operation_id"], "already_applied": applied})
+
+    def test_body_abort_after_rotation_keeps_exact_pending_request(self):
+        path = f"/admin/v1/tenants/{TENANT}/agents/edge-1/credential-rotations"
+        self.overrides[("POST", path)] = self.committed_rotation
+        self.abort_committed_body_once("/credential-rotations")
+        self.open()
+        self.page.get_by_role("button", name="Rotate credential for edge-1").click()
+        self.confirm("edge-1")
+        self.wait_status("Confirm with the same request")
+        self.assertEqual(self.agents[TENANT][0]["credential_generation"], 2)
+        self.assertEqual(len(self.rotations()), 1)
+        self.assertEqual(self.enabled_mutations(), 0)
+        self.assertFalse(self.page.locator("#enroll-secret").is_visible())
+        self.page.get_by_role("button", name="Confirm with the same request").click()
+        self.wait_status("this exact request was already committed")
+        first, second = self.rotations()
+        self.assertEqual(first, second)
+        self.assertEqual(self.agents[TENANT][0]["credential_generation"], 2)
+
+    def test_body_abort_after_revoke_reconciles_without_resending(self):
+        def committed(route):
+            self.agents[TENANT][0]["revoked_at_unix"] = 1800000100
+            route.fulfill(status=204, body="")
+        self.overrides[("POST", f"/admin/v1/tenants/{TENANT}/agents/edge-1/revoke")] = committed
+        self.abort_committed_body_once("/revoke")
+        self.open()
+        self.page.get_by_role("button", name="Revoke edge-1").click()
+        self.confirm("edge-1")
+        self.wait_status("Server state confirms edge-1 is revoked")
+        self.assertEqual(len(self.posts), 1)
+        self.assertEqual(self.page.locator("#enroll-list button").count(), 0)
+
+    def test_body_abort_during_reconcile_keeps_pending_and_allows_read_retry(self):
+        path = f"/admin/v1/tenants/{TENANT}/agents/edge-1/credential-rotations"
+        self.overrides[("POST", path)] = self.committed_rotation
+        self.abort_committed_body_once("/credential-rotations", reconcile_abort=True, error="TypeError")
+        self.open()
+        self.page.get_by_role("button", name="Rotate credential for edge-1").click()
+        self.confirm("edge-1")
+        self.wait_status("The outcome is unknown and the server state could not be read")
+        self.assertEqual(len(self.rotations()), 1)
+        self.assertEqual(self.enabled_mutations(), 0)
+        self.page.get_by_role("button", name="Check again").click()
+        self.wait_status("Confirm with the same request")
+        self.assertEqual(len(self.rotations()), 1)
+        self.assertFalse(self.page.locator("#enroll-secret").is_visible())
 
     def test_refused_or_uncommitted_rotation_discards_its_credential(self):
         path = f"/admin/v1/tenants/{TENANT}/agents/edge-1/credential-rotations"

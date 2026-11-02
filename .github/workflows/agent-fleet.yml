@@ -58,6 +58,19 @@ jobs:
           done
           cp -r "$RUNNER_TEMP/enrollment" target/fleet-evidence/enrollment
           exit $status
+      - name: Agent history and incident snapshot browser regressions
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_agent_history_browser.py -v'
+      - name: Browser Agent history and incident snapshot with a real Agent
+        shell: bash
+        run: |
+          set +e
+          status=0
+          for backend in sqlite postgres; do
+            "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-agent-history-acceptance.py --no-build \
+              --backend "$backend" --output "$RUNNER_TEMP/history" || status=1
+          done
+          cp -r "$RUNNER_TEMP/history" target/fleet-evidence/history
+          exit $status
       - name: Browser rollout to one pilot and two real Agents over HTTPS
         shell: bash
         run: |

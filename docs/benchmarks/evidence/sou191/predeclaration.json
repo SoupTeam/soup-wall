@@ -1,0 +1,136 @@
+{
+ "schema": "soup-wall-result-inspection-predeclaration/1",
+ "issue": "SOU-191",
+ "declared_at_utc": "2026-10-31T12:08:58Z",
+ "status": "Declared before any build or run of either revision under this contract. Committed to Git before measurement; the commit time is the recorder's own clock, not a third-party timestamp.",
+ "accepted_main_ref": {
+  "name": "origin/main",
+  "commit": "7eb0c2abab4258344760be26f17e70f0829bcb5d",
+  "check": "both revisions must be on its first-parent history (merge commits of accepted pull requests)"
+ },
+ "revisions": {
+  "baseline": {
+   "commit": "68d8a5973ce3aa6926006f92eda641e98ca01c7e",
+   "accepted_as": "Merge pull request #240 (SOU-123 corpus), 2026-10-24",
+   "adapter_source_blob": "e7a33584c901f2af8c02e04064ef71fac026100e",
+   "cargo_lock_blob": "a10c3390d45d332c6f5e3648a7627ad209db29b5"
+  },
+  "candidate": {
+   "commit": "0931bbcb5ed7cd9cc5e2e3147bbddecda2bb4b6d",
+   "accepted_as": "Merge pull request #312, the SOU-191 starting commit",
+   "adapter_source_blob": "d581f86d1fd39f699cd6dc0bc8da7387dbf338ee",
+   "cargo_lock_blob": "033c49f9570dba2b90928736e2c67bcb83f71878"
+  }
+ },
+ "selection_rule": "Baseline: the first first-parent accepted-main commit that contains the real result_inspection_corpus adapter. Candidate: the accepted-main commit named by the issue as the starting point. Chosen from history only, before any run; equal outcomes are acceptable. main@4828cf35 and main@adefce2a predate the adapter and are not runs.",
+ "corpus": {
+  "manifest_path": "eval/sou123/manifest.json",
+  "manifest_sha256": "3a7fd3091990d8425df42914321336dd25bdf9ff34f677450935a0c26c674e33",
+  "manifest_blob": "56bbc5a66f856d076b83af9e0c1577e725254b0a",
+  "payload_tree": "a0267c9e502843b532990f986b4a6cd82175a0ab",
+  "cases": 51,
+  "policy_path": "profiles/pilot/linux-readonly-v1/policy.yaml",
+  "policy_sha256": "8a8a8f7e7147a977f9d268091152bfd424fe6e61531a313c66eae1bc1fa46f5a",
+  "policy_blob": "97e70757f5ac57f051c8dc0e33cb22c03761fe86",
+  "runner_blob": "88449547a882b80ecd3eab4be2b5de1949fe932a",
+  "corpus_generator_blob": "408e7b08156b24c01c7afbb3f27f4006418f5448",
+  "identical_at_both_revisions": "manifest, payload tree, policy, run_corpus.py, corpus.py and rust-toolchain.toml have the same Git objects at both commits"
+ },
+ "build": {
+  "toolchain": "1.99.1",
+  "toolchain_file_blob": "246cb22c30a5f6e0e105643c35477995aff1da6f",
+  "target": "x86_64-pc-windows-msvc",
+  "profile": "dev",
+  "argv": [
+   "cargo",
+   "+1.99.1",
+   "build",
+   "--locked",
+   "-p",
+   "agentfw",
+   "--example",
+   "result_inspection_corpus",
+   "--message-format=json-render-diagnostics"
+  ],
+  "basis": "The documented adapter build (docs/operations/RESULT_INSPECTION_CORPUS.md) with the pinned compiler, Cargo's JSON artifact messages, and a new empty CARGO_TARGET_DIR per attempt. Native platform per docs/DEVELOPMENT.md: Windows x86_64 MSVC (Visual Studio C++ Build Tools and Windows SDK).",
+  "refused": "Cargo configuration files in the checkout ancestry or CARGO_HOME; RUSTFLAGS, RUSTC*, RUSTUP_TOOLCHAIN, CARGO_TARGET_*, CARGO_BUILD_*, CARGO_PROFILE_*, CARGO_INCREMENTAL"
+ },
+ "execution": {
+  "timeout_s": 120,
+  "argv": "<artifact> --manifest <checkout>/eval/sou123/manifest.json --payload-dir <checkout>/eval/sou123/payloads --policy <checkout>/profiles/pilot/linux-readonly-v1/policy.yaml",
+  "basis": "the shipped run_corpus.py invocation and TIMEOUT; the corpus and policy are the revision's own checked-out blobs, identical at both commits"
+ },
+ "outcome_contract": "soup-wall-result-inspection-outcomes/1",
+ "grouping": {
+  "basis": "SOU-153 rule: dependency clusters merged with semantic families. Dependencies fixed by eval/sou123/generate_corpus.py and corpus.py: the two cases of a pair; a shared host-file template (manifest host); the companion files every read_multiple_files payload shares (generate_corpus.FS_OTHERS); identical directive text. Families: frozen manifest category.",
+  "derived_without_outcomes": true,
+  "resampling_unit_count": 2,
+  "unit_sizes": {
+   "g001": 46,
+   "g002": 2
+  },
+  "resampling_units": {
+   "g01-a": "g001",
+   "g01-b": "g001",
+   "g02-a": "g001",
+   "g02-b": "g001",
+   "g03-a": "g001",
+   "g03-b": "g001",
+   "g04-a": "g001",
+   "g04-b": "g001",
+   "g05-a": "g001",
+   "g05-b": "g001",
+   "g06-b": "g001",
+   "g06-a": "g001",
+   "g07-b": "g001",
+   "g07-a": "g001",
+   "g08-b": "g001",
+   "g08-a": "g001",
+   "g09-b": "g001",
+   "g09-a": "g001",
+   "g10-a": "g001",
+   "g10-b": "g001",
+   "g12-a": "g001",
+   "g12-b": "g001",
+   "f01-a": "g001",
+   "f01-b": "g001",
+   "f02-b": "g001",
+   "f02-a": "g001",
+   "f03-b": "g001",
+   "f03-a": "g001",
+   "f04-a": "g001",
+   "f04-b": "g001",
+   "f05-a": "g001",
+   "f05-b": "g001",
+   "f06-a": "g001",
+   "f06-b": "g001",
+   "f07-a": "g001",
+   "f07-b": "g001",
+   "f08-a": "g001",
+   "f08-b": "g001",
+   "f09-b": "g001",
+   "f09-a": "g001",
+   "f10-a": "g001",
+   "f10-b": "g001",
+   "f11-b": "g001",
+   "f11-a": "g001",
+   "f12-a": "g001",
+   "f12-b": "g001",
+   "g11-a": "g002",
+   "g11-b": "g002"
+  }
+ },
+ "uncertainty": {
+  "method": "paired_regression.family_uncertainty (seed 153, 2000 replicates, minimum 10 effective clusters), applied to the units above for both metrics without exception",
+  "expected_status": "insufficient_clusters before any run: the units above give far fewer than 10 effective clusters, so no interval is reported; descriptive paired transitions are the result",
+  "alternatives": "none; no other grouping will be computed after measurement"
+ },
+ "attempts": "Every recorder invocation is a new attempt-NNN and is retained. The first attempt that executes the adapter is the measurement for its role; build or setup failures before it are retained and listed; a failed execution is never replaced by a rerun.",
+ "exclusions": "none; all 51 frozen cases are reported, technical cases separately",
+ "prior_knowledge": {
+  "note": "Two historical reports were public before this declaration; they used rustc 1.97.0 debug builds of main revisions without the adapter and are not used as runs.",
+  "eval/sou123/baseline-main-4828cf35.json": "47eec27fb420e28f412836bad25e369efd7f7e476aad7f4ff890580651ce5e05",
+  "eval/sou123/baseline-main-adefce2a.json": "82026804c925c1d302d5ba2fdcfa1ad2b328d5a50b27c8febbff6c49d2db877b"
+ },
+ "limitations": "Development comparison only; detector verdicts are not evidence of prevention, zero execution, task utility, readiness or live-model efficacy."
+}

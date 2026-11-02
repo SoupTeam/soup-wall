@@ -49,6 +49,11 @@ PROVIDER_CA = load("pilot_run_provider_ca", "pilot_provider_ca.py") if sys.platf
 MAX_OUTPUT = 4 * 1024 * 1024
 OWNER_PID = os.getpid()
 PUBLIC_FAILURE_CODES = frozenset({
+    'maintenance_entered', 'maintenance_transition_busy', 'maintenance_runs_uncertain',
+    'maintenance_scope_changed', 'maintenance_source_changed', 'maintenance_root_changed',
+    'maintenance_state_uncertain', 'maintenance_transition_incomplete',
+    'maintenance_record_missing', 'maintenance_record_replaced', 'maintenance_enrollment_incomplete',
+    'maintenance_inventory_replaced', 'maintenance_run_inventory_incomplete',
     'provider_unavailable',
     'provider_input_invalid',
     'provider_input_unsupported',
@@ -121,7 +126,7 @@ PUBLIC_FAILURE_CODES = frozenset({
     'selection_changed_before_host',
     'selection_changed_before_launch',
     'state_inside_checkout',
-    'state_inside_workspace',
+    'state_inside_workspace', 'state_inside_git_metadata', 'state_inside_filesystem_root',
     'unsafe_state_parent',
     'canonical_existing_workspace_required',
     'existing_workspace_missing_or_moved',
@@ -133,6 +138,8 @@ PUBLIC_FAILURE_CODES = frozenset({
     'private_assets_inside_workspace',
     'profile_workspace_identity_mismatch',
     'unsupported_existing_git_layout_use_supported_standalone_repository',
+    'project_provider_binding_required', 'project_selection_changed', 'project_provider_changed',
+    'project_state_changed', 'project_budget_changed', 'project_provider_version_changed',
 }) | PREP.GIT_PROFILES.FAILURES
 
 
@@ -167,6 +174,8 @@ def selected(args):
     PREP.private_dir(generation.parent)
     PREP.private_dir(generation.parent.parent)
     selection_path, profiles = PREP.verify_generation(generation, args.expected_commit, probe_native=False)
+    expected_sha = getattr(args, 'expected_selection_sha256', None)
+    require(expected_sha is None or PREP.FS.sha(selection_path) == expected_sha, 'project_selection_changed')
     selection = PREP.PILOT.strict_json(selection_path.read_bytes())
     # A completed generation, not an interrupted or caller-assembled one.
     require(re.fullmatch(r"[0-9a-f]{32}", generation.name), "prepared_generation_required")
@@ -307,10 +316,53 @@ def confirmed_stop(home, launcher_pid, binary, env, cwd):
                          "running_effects_rolled_back": False}, "owned_stop_unconfirmed")
 
 
+def preset_provider(args):
+    """Resolve an explicit current version without changing global selection."""
+    fields = [getattr(args, n, None) for n in ('provider_name', 'provider_version', 'provider_sha256')]
+    require(all(v is None for v in fields) or all(v is not None for v in fields), 'project_provider_binding_required')
+    if fields[0] is None:
+        return None
+    require(args.provider_home is not None and not PROVIDER.selected(os.environ), 'provider_source_conflict')
+    presets = load('pilot_run_project_presets', 'pilot_project_presets.py')
+    profile, binding = presets.provider_reference(args.provider_home, *fields, PROFILES)
+    values = dict(profile['public']); model = values.pop('model'); values.update(profile['secrets'])
+    return values, model, binding['name'], binding['version'] + ':' + binding['sha256']
+
+
+def preset_state(args):
+    expected = getattr(args, 'expected_state_identity', None)
+    if expected is not None:
+        presets = load('pilot_run_project_state', 'pilot_project_presets.py')
+        require(':'.join(map(str, presets.directory_identity(args.state_root, PROFILES))) == expected,
+                'project_state_changed')
+
+
 def run(args, report):
+    maintenance_home = getattr(args, "maintenance_home", None)
+    if maintenance_home is None:
+        # Direct preparation scripts remain outside the installed front door.
+        return run_owned(args, report)
+    maintenance = load("run_maintenance", "pilot_maintenance_launch.py")
+    selection, paths, profiles = selected(args)
+    bound = maintenance.binding(maintenance_home, args.maintenance_component_home, args.selection,
+        paths, profiles, args.state_root or Path(tempfile.gettempdir()).resolve(), PREP,
+        args.maintenance_coordinator_root)
+    if maintenance.M.Store.absent(maintenance_home):
+        with maintenance.M.Store.create(maintenance_home, bound, maintenance=False): pass
+    with maintenance.M.Store(maintenance_home) as store:
+        with store.locked(exclusive=False):
+            store.admit(bound)
+            require(not maintenance.inventory(store, bound)["uncertain"], "maintenance_runs_uncertain")
+        return run_owned(args, report, (maintenance, store, bound))
+
+
+def run_owned(args, report, maintenance=None):
     PREP.supported_platform()
     provider_home = getattr(args, "provider_home", None)
-    if provider_home is not None:
+    explicit_provider = preset_provider(args)
+    if explicit_provider is not None:
+        provider, model, provider_name, provider_identity = explicit_provider
+    elif provider_home is not None:
         provider, model, provider_name, provider_identity = PROFILES.chosen(provider_home, os.environ)
     else:
         provider, model, provider_name, provider_identity = PROVIDER.selected(os.environ), None, None, None
@@ -329,10 +381,21 @@ def run(args, report):
     selection, paths, profiles = selected(args)
     if "prepared_workspaces" in selection:
         PREP.validate_existing_workspaces(paths, PREP.workspace_paths(selection, args.selection.parent),
-                                          PREP.GIT_PROFILES.from_selection(selection))
+                                          PREP.GIT_PROFILES.from_selection(selection),
+                                          **({"linked_binding": selection.get("linked_worktree")}
+                                             if PREP.GIT_PROFILES.from_selection(selection) == "git-linked-worktree-readonly-v1" else {}))
     require(args.state_root is None or (args.state_root.is_absolute()
             and args.state_root.resolve(strict=True) == args.state_root), "canonical_state_root_required")
+    preset_state(args)
     state_root = args.state_root or Path(tempfile.gettempdir()).resolve()
+    if PREP.GIT_PROFILES.from_selection(selection) == 'git-linked-worktree-readonly-v1':
+        require(not state_root.is_relative_to(Path(selection['linked_worktree']['commonDir']['path'])),
+                'state_inside_git_metadata')
+    if selection.get('filesystem_roots') is not None:
+        try:
+            PREP.FS_ROOTS.outside([state_root], selection['filesystem_roots'])
+        except ValueError:
+            raise Failure('state_inside_filesystem_root') from None
     info = state_root.stat()
     require(stat.S_ISDIR(info.st_mode) and info.st_uid in (0, os.getuid())
             and (not info.st_mode & 0o022 or info.st_mode & stat.S_ISVTX), "unsafe_state_parent")
@@ -348,6 +411,7 @@ def run(args, report):
             raise Failure("occupied_port_refused") from None
         port = reservation.getsockname()[1]
     private = None
+    maintenance_context = None
     audit_selected = False
     daemon = launcher = ca_snapshot = None
     streams = []
@@ -367,6 +431,11 @@ def run(args, report):
         report.update(run_directory=str(private), port=port, executed=False)
         home = private / ".agentfw"
         home.mkdir(mode=0o700)
+        if maintenance is not None:
+            module, store, bound = maintenance
+            with store.locked(exclusive=True):
+                maintenance_context = module.claim(store, bound, private)
+
         env = environment(paths, private)
         if "SSL_CERT_FILE" in provider:
             require(PROVIDER_CA is not None, "provider_ca_snapshot_unavailable")
@@ -375,6 +444,8 @@ def run(args, report):
         budget_snapshot = None
         if getattr(args, "linux_budget", None) is not None:
             raw = budget_input(args.linux_budget)
+            require(getattr(args, 'expected_budget_sha256', None) is None or
+                    hashlib.sha256(raw).hexdigest() == args.expected_budget_sha256, 'project_budget_changed')
             budget_snapshot = private / "selected-linux-budget.json"
             with budget_snapshot.open("xb") as stream:
                 os.fchmod(stream.fileno(), 0o600)
@@ -425,9 +496,23 @@ def run(args, report):
         streams.append(daemon_log)
         report["stage"] = "daemon_start"
         redactors[daemon_log] = PROVIDER.Redactor(provider)
-        daemon = subprocess.Popen([str(paths["agentfw"]), "serve"], cwd=private, env=env,
+        if maintenance is not None:
+            module, store, bound = maintenance
+            startup_gate = store.locked(exclusive=False)
+            startup_gate.__enter__()
+            try:
+                store.admit(bound); module.revalidate(bound)
+            except BaseException:
+                startup_gate.__exit__(None, None, None)
+                raise
+        else:
+            startup_gate = None
+        try:
+            daemon = subprocess.Popen([str(paths["agentfw"]), "serve"], cwd=private, env=env,
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            start_new_session=True, preexec_fn=parent_death)
+                start_new_session=True, preexec_fn=parent_death)
+        finally:
+            if startup_gate is not None: startup_gate.__exit__(None, None, None)
         report["executed"] = True
         with selectors.DefaultSelector() as selector:
             selector.register(daemon.stdout, selectors.EVENT_READ, (daemon_log, False))
@@ -436,7 +521,14 @@ def run(args, report):
             require(not cancelled and not GROUPS.leader_finished(daemon), "pilot_cancelled_before_host")
             require(selected(args)[0] == selection, "selection_changed_before_host")
             if provider_name is not None:
-                PROFILES.unchanged(provider_home, provider_name, provider_identity)
+                if explicit_provider is None:
+                    PROFILES.unchanged(provider_home, provider_name, provider_identity)
+                else:
+                    require(preset_provider(args) == explicit_provider, 'project_provider_changed')
+            preset_state(args)
+            if getattr(args, 'expected_budget_sha256', None) is not None:
+                require(hashlib.sha256(budget_input(args.linux_budget)).hexdigest() == args.expected_budget_sha256,
+                        'project_budget_changed')
             if ca_snapshot is not None:
                 ca_snapshot.verify_source()
             roots = PREP.workspace_paths(selection, args.selection.parent)
@@ -447,6 +539,10 @@ def run(args, report):
                 "--git-profile", profiles["git"]["profile"]["path"], "--policy", str(paths["policy"]),
                 "--classifier", str(paths["git_classifier"]), "--timeout-seconds", str(args.timeout_seconds),
                 "--ask-wait-seconds", str(args.ask_wait_seconds), "--prompt", args.prompt, "--json"]
+            if maintenance_context is not None:
+                command.extend(["--maintenance-home", str(args.maintenance_home),
+                    "--maintenance-component-home", str(args.maintenance_component_home),
+                    "--maintenance-run", maintenance_context["run_id"]])
             if model is not None:
                 command.extend(["--model", model])
             if budget_snapshot is not None:
@@ -570,7 +666,7 @@ def run(args, report):
                     # Keep only selected bounded evidence. Tokens, raw host and
                     # daemon logs, provider state and runtime settings are removed.
                     for child in private.iterdir():
-                        if child.name not in ("audit", "audit-run.json"):
+                        if child.name not in ("audit", "audit-run.json", "maintenance-owner.json"):
                             if child.is_dir() and not child.is_symlink():
                                 shutil.rmtree(child)
                             else:
@@ -590,6 +686,12 @@ def run(args, report):
                              if audit_selected else "owned_state_removed")
         if errors:
             report["cleanup_failures"] = errors
+        if not errors and maintenance_context is not None:
+            try:
+                maintenance[0].finish(maintenance[1], maintenance_context)
+            except (OSError, ValueError):
+                errors.append("maintenance_terminal_unconfirmed")
+                report["cleanup"] = "failed"
         require(not errors, "owned_process_cleanup_failed")
 
 
@@ -599,6 +701,9 @@ def main():
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--state-root", type=Path)
+    parser.add_argument("--maintenance-home", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--maintenance-component-home", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--maintenance-coordinator-root", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--provider-home", type=Path,
                         help="private installed Agent home; absent preserves explicit environment mode")
     parser.add_argument("--linux-budget", type=Path,
@@ -607,6 +712,9 @@ def main():
     parser.add_argument("--timeout-seconds", type=int, default=180)
     parser.add_argument("--ask-wait-seconds", type=int, default=0)
     parser.add_argument("--prompt", default="Read useful notes with filesystem and inspect Git status using the selected MCP tools.")
+    for field in ('provider-name', 'provider-version', 'provider-sha256', 'expected-selection-sha256',
+                  'expected-budget-sha256', 'expected-state-identity'):
+        parser.add_argument('--' + field, help=argparse.SUPPRESS)
     args = parser.parse_args()
     report = {"format": "sw-prepared-pilot-run/1", "status": "plan", "executed": False}
     try:
@@ -642,6 +750,9 @@ def main():
             report["resource_budget"]["status"] = "unsupported"
         report.update(status="failed", reason=code if code in PUBLIC_FAILURE_CODES
                       else "pilot_input_or_runtime_failure")
+        if args.maintenance_home is not None and (not report.get("executed") or code.startswith("maintenance_")):
+            report["maintenance"] = {"status": "refused-or-uncertain",
+                "action": "Use installed pilot maintenance status and a fresh preview for this exact home, prefix and state root; preserve uncertain evidence."}
         failure = storage_failure(error) or report.get("storage_failure") or report.get("cleanup_storage_failure")
         if failure:
             report.update(storage_failure=failure,

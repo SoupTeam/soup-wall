@@ -22,6 +22,7 @@ agentfw pilot provider select --name local-test --apply
 agentfw pilot provider preview --name local-test
 agentfw pilot provider check
 agentfw pilot provider check --transport --timeout-seconds 5 --json
+agentfw pilot provider check --transport --proxy-connect --timeout-seconds 5 --json
 agentfw pilot status --prefix "$HOME/soup-wall-pilot"
 agentfw pilot run --prefix "$HOME/soup-wall-pilot"
 agentfw pilot provider update --name local-test \
@@ -60,12 +61,13 @@ prompt, model name or tool call. HTTP is accepted only for literal loopback,
 following the existing profile rule. No redirect is followed. The total
 deadline is 1–15 seconds (default 5); cancellation stops and reaps the owned
 helper. The selection and CA are rechecked before any result is returned.
-An implicit endpoint or configured `HTTP_PROXY`/`HTTPS_PROXY` reports an
-unsupported route instead of probing a different direct route. `NO_PROXY`
+With `--transport` alone, an implicit endpoint or configured
+`HTTP_PROXY`/`HTTPS_PROXY` reports an unsupported route instead of probing a
+different direct route. `NO_PROXY`
 without a proxy does not change the direct route. This command does not prove
 that Claude's own proxy or default trust implementation behaves like the
-observer. Correct an unsupported route explicitly or use an independent
-proxy diagnostic; do not interpret a direct probe as proxy success.
+observer. Correct an unsupported route explicitly; do not interpret a direct
+probe as proxy success.
 
 The default text output and optional `--json` use finite outcomes:
 
@@ -83,6 +85,42 @@ validity, model availability and protected task execution are not verified**
 by either success status. A successful check grants no permission or runtime
 readiness. The focused native installed qualification uses owned loopback and
 private-CA fixtures; it makes no paid or live-provider calls.
+
+### Observe an explicitly selected HTTP CONNECT route (SOU-205)
+
+`agentfw pilot provider check --transport --proxy-connect` observes **only** an
+explicitly selected `HTTPS_PROXY=http://127.0.0.1:PORT` or
+`http://[::1]:PORT` route to an explicit HTTPS `ANTHROPIC_BASE_URL`.
+This retains the accepted profile rule that plain HTTP proxy origins are
+loopback-only. Both flags are required; `--proxy-connect` alone is refused
+locally. The default check remains local-only, and `--transport` without
+`--proxy-connect` still reports a configured proxy as unsupported rather than
+testing a direct connection.
+
+| Selected settings | Observation |
+| --- | --- |
+| Explicit HTTPS endpoint and unauthenticated loopback HTTP `HTTPS_PROXY`, no `HTTP_PROXY` or `NO_PROXY` | CONNECT to the selected proxy origin, then provider TLS and hostname verification through that tunnel |
+| Explicit endpoint without proxy, `--transport` alone | Existing direct DNS/TCP/TLS behavior |
+| HTTP endpoint, implicit endpoint, HTTPS proxy scheme, `HTTP_PROXY`, or proxy with `NO_PROXY` | Unsupported route; no network attempt |
+| Proxy URL with userinfo, malformed authority or unsafe URL | Refused by the existing profile validator before network |
+
+The helper resolves and connects **only the selected proxy origin**. It sends
+one bounded `CONNECT provider-host:port` request with a matching `Host` header
+and no other request headers. It never sends `Proxy-Authorization`, an API key,
+prompt, model name or provider HTTP request. A 407, redirect, other non-200
+status, malformed/oversized response header or indicated response body is
+refused; redirects and direct fallback are never followed. The CONNECT header
+is limited to 8 KiB and the entire helper remains under the 1–15 second
+deadline. The selected CA reader and normal provider hostname verification
+apply to TLS through the tunnel. The selection and CA are rechecked before
+reporting a result.
+
+Finite stages distinguish proxy DNS, proxy connect, tunnel and provider TLS.
+The report does not include a raw URL, private path, response headers,
+certificate or secret-derived hash. A successful tunnel proves only that the
+scripted transport was observed; it does **not** verify the credential, model,
+Claude host routing, protected execution or run permission. Actual host proxy
+routing and authenticated proxy support are outside this command's scope.
 
 The create prompt is hidden. Use `--prompt-auth-token` instead of
 `--prompt-api-key` for a supported bearer token. For an existing explicit

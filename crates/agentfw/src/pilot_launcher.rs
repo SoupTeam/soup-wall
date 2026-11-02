@@ -167,6 +167,13 @@ pub struct PilotLaunchArgs {
     /// Anonymous sealed provider-input descriptor supplied by the prepared entry.
     #[arg(long, hide = true)]
     pub provider_env_fd: Option<i32>,
+    /// Owned installation launch exclusion; supplied by its verified front door.
+    #[arg(long, hide = true, requires_all = ["maintenance_component_home", "maintenance_run"])]
+    pub maintenance_home: Option<PathBuf>,
+    #[arg(long, hide = true, requires_all = ["maintenance_home", "maintenance_run"])]
+    pub maintenance_component_home: Option<PathBuf>,
+    #[arg(long, hide = true, requires_all = ["maintenance_home", "maintenance_component_home"])]
+    pub maintenance_run: Option<String>,
     /// Anonymous sealed selected CA bytes, supplied only by the installed entry.
     #[arg(long, hide = true, requires = "provider_ca_sha256")]
     pub provider_ca_fd: Option<i32>,
@@ -594,7 +601,14 @@ pub fn resolve_server_runtime(
                 let entry = profile
                     .package_root
                     .join(crate::mcp::server_profile::SERVER_ENTRYPOINT);
-                let args = vec![entry.display().to_string(), "/workspace".to_string()];
+                let mut args = vec![entry.display().to_string()];
+                args.extend(
+                    profile
+                        .filesystem_roots
+                        .as_ref()
+                        .map(|b| b.arguments())
+                        .unwrap_or_else(|| vec!["/workspace".to_string()]),
+                );
                 (profile.runtime_path.display().to_string(), args)
             }
             GIT_SERVER_ID => {
@@ -635,7 +649,14 @@ pub fn resolve_server_runtime(
                     let entry = profile
                         .package_root
                         .join(crate::mcp::server_profile::SERVER_ENTRYPOINT);
-                    let args = vec![entry.display().to_string(), "/workspace".to_string()];
+                    let mut args = vec![entry.display().to_string()];
+                    args.extend(
+                        profile
+                            .filesystem_roots
+                            .as_ref()
+                            .map(|b| b.arguments())
+                            .unwrap_or_else(|| vec!["/workspace".to_string()]),
+                    );
                     (profile.runtime_path.display().to_string(), args)
                 }
                 GIT_SERVER_ID => {
@@ -1828,7 +1849,25 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     }
     let timeout = config.timeout;
     let deadline = tokio::time::Instant::now() + timeout;
+    #[cfg(target_os = "linux")]
+    let maintenance_gate = match (
+        &args.maintenance_home,
+        &args.maintenance_component_home,
+        &args.maintenance_run,
+    ) {
+        (Some(home), Some(component), Some(run)) => Some(crate::pilot_maintenance::admit(
+            home,
+            component,
+            run,
+            &config,
+            deadline.into_std(),
+        )?),
+        (None, None, None) => None,
+        _ => anyhow::bail!("maintenance_scope_incomplete"),
+    };
     let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
+    #[cfg(target_os = "linux")]
+    drop(maintenance_gate);
     #[cfg(target_os = "linux")]
     drop(selected_ca);
     let child_pid = child.id();
@@ -2212,6 +2251,9 @@ mod tests {
             mock_daemon_token: Some(crate::token::generate()),
             mock_instance_id: Some(crate::token::generate()),
             provider_env_fd: None,
+            maintenance_home: None,
+            maintenance_component_home: None,
+            maintenance_run: None,
             provider_ca_fd: None,
             provider_ca_sha256: None,
             linux_budget: None,
@@ -2286,6 +2328,9 @@ mod tests {
             mock_daemon_token: Some(test_token.clone()),
             mock_instance_id: Some(test_instance_id.clone()),
             provider_env_fd: None,
+            maintenance_home: None,
+            maintenance_component_home: None,
+            maintenance_run: None,
             provider_ca_fd: None,
             provider_ca_sha256: None,
             linux_budget: None,
@@ -2445,6 +2490,9 @@ mod tests {
             mock_daemon_token: Some(crate::token::generate()),
             mock_instance_id: Some(crate::token::generate()),
             provider_env_fd: None,
+            maintenance_home: None,
+            maintenance_component_home: None,
+            maintenance_run: None,
             provider_ca_fd: None,
             provider_ca_sha256: None,
             linux_budget: None,
@@ -2490,6 +2538,9 @@ mod tests {
             mock_daemon_token: None,
             mock_instance_id: None,
             provider_env_fd: None,
+            maintenance_home: None,
+            maintenance_component_home: None,
+            maintenance_run: None,
             provider_ca_fd: None,
             provider_ca_sha256: None,
             linux_budget: None,
@@ -2538,6 +2589,9 @@ mod tests {
             mock_daemon_token: None,
             mock_instance_id: None,
             provider_env_fd: None,
+            maintenance_home: None,
+            maintenance_component_home: None,
+            maintenance_run: None,
             provider_ca_fd: None,
             provider_ca_sha256: None,
             linux_budget: None,
@@ -2586,6 +2640,9 @@ mod tests {
             mock_daemon_token: None,
             mock_instance_id: None,
             provider_env_fd: None,
+            maintenance_home: None,
+            maintenance_component_home: None,
+            maintenance_run: None,
             provider_ca_fd: None,
             provider_ca_sha256: None,
             linux_budget: None,

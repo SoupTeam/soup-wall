@@ -7,10 +7,12 @@ host/port and optional CA bytes, performs DNS/TCP/TLS, and sends no HTTP data.
 from __future__ import annotations
 
 import ctypes
+import ipaddress
 import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import socket
 import ssl
@@ -29,11 +31,28 @@ FORMAT = "sw-pilot-provider-preflight/1"
 MAX_CA = 2 * 1024 * 1024
 MAX_WORKER_INPUT = MAX_CA * 2 + 8192  # JSON escapes PEM line breaks.
 MAX_WORKER_OUTPUT = 2048
-STAGES = frozenset(("local", "dns", "connect", "tls"))
+STAGES = frozenset(("local", "dns", "connect", "tls", "proxy_dns", "proxy_connect", "tunnel"))
 OUTCOMES = frozenset(("transport-observed", "refused", "unavailable", "incomplete"))
 REASONS = frozenset(("tcp_connected", "tls_verified", "dns_failed", "address_limit",
                      "connect_failed", "connect_timeout", "tls_invalid", "tls_failed",
-                     "tls_timeout", "deadline", "worker_failed"))
+                     "tls_timeout", "deadline", "worker_failed", "proxy_dns_failed",
+                     "proxy_address_limit", "proxy_connect_failed", "proxy_connect_timeout",
+                     "proxy_tunnel_refused", "proxy_auth_required", "proxy_redirect_refused",
+                     "proxy_response_invalid", "proxy_response_oversized", "proxy_tunnel_timeout",
+                     "proxy_tls_verified"))
+MAX_PROXY_HEADER = 8192
+MAX_CONNECT_REQUEST = 1024
+
+
+def _host_valid(host):
+    if type(host) is not str or not 0 < len(host) <= 253 or not host.isascii():
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return all(re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", part)
+                   for part in host.rstrip(".").split("."))
 NEXT = {
     "configuration-valid": "Use --transport for a bounded connection observation, or start the host explicitly.",
     "transport-observed": "Start the host explicitly if credential and model behavior must be tested.",
@@ -184,7 +203,7 @@ def _probe(payload, seconds):
             _stop(process)
 
 
-def check(home, profiles, *, transport=False, seconds=5):
+def check(home, profiles, *, transport=False, proxy_connect=False, seconds=5):
     """Read and revalidate exact selection; never return profile data."""
     if type(seconds) is not int or not 1 <= seconds <= 15:
         return report("refused", "local", "deadline_invalid", transport=transport)
@@ -222,19 +241,36 @@ def check(home, profiles, *, transport=False, seconds=5):
     except (OSError, ValueError, KeyError, TypeError):
         return report("refused", "local", "selection_changed", transport=transport)
     if not transport:
+        if proxy_connect:
+            return report("refused", "local", "proxy_opt_in_required")
         return report("configuration-valid", "local", "selection_valid", transport=False)
     # An implicit endpoint or configured proxy would make a direct observation
     # differ from the selected host route. Report unsupported, never bypass it.
     endpoint = public.get("ANTHROPIC_BASE_URL")
     if not endpoint:
         return report("unavailable", "local", "endpoint_not_explicit", transport=True)
-    if public.get("HTTP_PROXY") or public.get("HTTPS_PROXY"):
-        return report("unavailable", "local", "proxy_route_unsupported", transport=True)
     parsed = urlsplit(endpoint)
-    if ca_path and parsed.scheme != "https":
-        return report("unavailable", "local", "ca_route_unsupported", transport=True)
-    result = _probe({"host": parsed.hostname, "port": parsed.port or (443 if parsed.scheme == "https" else 80),
-                     "tls": parsed.scheme == "https", "ca": ca, "seconds": seconds}, seconds)
+    proxy = public.get("HTTPS_PROXY")
+    if proxy_connect:
+        # The accepted profile parser already rejects URL credentials. Limit this
+        # observation to a selected, unauthenticated HTTP CONNECT route for HTTPS.
+        if (not proxy or public.get("HTTP_PROXY") or public.get("NO_PROXY")
+                or parsed.scheme != "https"):
+            return report("unavailable", "local", "proxy_route_unsupported", transport=True)
+        proxy_url = urlsplit(proxy)
+        if proxy_url.scheme != "http" or proxy_url.path not in ("", "/"):
+            return report("unavailable", "local", "proxy_route_unsupported", transport=True)
+        payload = {"host": parsed.hostname, "port": parsed.port or 443, "tls": True,
+                   "ca": ca, "seconds": seconds, "proxy_host": proxy_url.hostname,
+                   "proxy_port": proxy_url.port or 80}
+    else:
+        if public.get("HTTP_PROXY") or proxy:
+            return report("unavailable", "local", "proxy_route_unsupported", transport=True)
+        if ca_path and parsed.scheme != "https":
+            return report("unavailable", "local", "ca_route_unsupported", transport=True)
+        payload = {"host": parsed.hostname, "port": parsed.port or (443 if parsed.scheme == "https" else 80),
+                   "tls": parsed.scheme == "https", "ca": ca, "seconds": seconds}
+    result = _probe(payload, seconds)
     try:
         profiles.unchanged(home, name, token)
         if ca_path and _ca_bytes(ca_path) != ca:
@@ -243,6 +279,102 @@ def check(home, profiles, *, transport=False, seconds=5):
         return report("refused", "local", "selection_changed", transport=True,
                       network=result["network_attempted"])
     return result
+
+
+def _proxy_response(connection, deadline):
+    """Read one finite CONNECT header, never a response body or redirect target."""
+    raw = bytearray()
+    while not raw.endswith(b"\r\n\r\n"):
+        if len(raw) >= MAX_PROXY_HEADER:
+            return "proxy_response_oversized"
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError
+        connection.settimeout(min(remaining, 3))
+        byte = connection.recv(1)
+        if not byte:
+            return "proxy_response_invalid"
+        raw.extend(byte)
+    lines = bytes(raw[:-4]).split(b"\r\n")
+    if (not lines or not re.fullmatch(rb"HTTP/1\.[01] [0-9]{3}(?: [\x20-\x7e]{0,128})?", lines[0])
+            or len(lines) > 65):
+        return "proxy_response_invalid"
+    for line in lines[1:]:
+        if (not re.fullmatch(rb"[!#$%&'*+.^_`|~0-9A-Za-z-]+: ?[\x20-\x7e]*", line)
+                or line.lower().startswith(b"transfer-encoding:")
+                or line.lower().startswith(b"content-length:")
+                and line.split(b":", 1)[1].strip() != b"0"):
+            return "proxy_response_invalid"
+    status = int(lines[0][9:12])
+    if status == 200:
+        return None
+    if status == 407:
+        return "proxy_auth_required"
+    if 300 <= status < 400:
+        return "proxy_redirect_refused"
+    return "proxy_tunnel_refused"
+
+
+def _proxy_probe(value, deadline, emit, finish):
+    emit("proxy_dns")
+    try:
+        addresses = socket.getaddrinfo(value["proxy_host"], value["proxy_port"], type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return finish("unavailable", "proxy_dns", "proxy_dns_failed")
+    if not 1 <= len(addresses) <= 16:
+        return finish("unavailable", "proxy_dns", "proxy_address_limit")
+    authority = value["host"]
+    if ":" in authority:
+        authority = f"[{authority}]"
+    authority = f"{authority}:{value['port']}"
+    request = f"CONNECT {authority} HTTP/1.1\r\nHost: {authority}\r\n\r\n".encode("ascii")
+    if len(request) > MAX_CONNECT_REQUEST:
+        return finish("refused", "tunnel", "proxy_response_invalid")
+    for family, socktype, proto, _, address in addresses:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return finish("incomplete", "proxy_connect", "deadline")
+        emit("proxy_connect")
+        current_stage = "proxy_connect"
+        try:
+            with socket.socket(family, socktype, proto) as connection:
+                connection.settimeout(min(remaining, 3))
+                connection.connect(address)
+                emit("tunnel")
+                current_stage = "tunnel"
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return finish("incomplete", "tunnel", "deadline")
+                connection.settimeout(min(remaining, 3))
+                connection.sendall(request)
+                response = _proxy_response(connection, deadline)
+                if response is not None:
+                    return finish("refused", "tunnel", response)
+                emit("tls")
+                current_stage = "tls"
+                context = ssl.create_default_context(cadata=value["ca"])
+                context.minimum_version = ssl.TLSVersion.TLSv1_2
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return finish("incomplete", "tls", "deadline")
+                connection.settimeout(min(remaining, 3))
+                with context.wrap_socket(connection, server_hostname=value["host"]):
+                    return finish("transport-observed", "tls", "proxy_tls_verified")
+        except ssl.SSLCertVerificationError:
+            return finish("refused", "tls", "tls_invalid")
+        except (ssl.SSLError, ValueError):
+            return finish("refused", "tls", "tls_failed")
+        except (socket.timeout, TimeoutError):
+            # The whole worker has one deadline; never try a direct route.
+            return finish("incomplete", current_stage,
+                          {"proxy_connect": "proxy_connect_timeout", "tunnel": "proxy_tunnel_timeout",
+                           "tls": "tls_timeout"}[current_stage])
+        except OSError:
+            if current_stage == "proxy_connect":
+                continue
+            return finish("unavailable", current_stage,
+                          "proxy_response_invalid" if current_stage == "tunnel" else "tls_failed")
+    return finish("unavailable", "proxy_connect", "proxy_connect_failed")
 
 
 def _worker():
@@ -255,12 +387,16 @@ def _worker():
         if len(raw) > MAX_WORKER_INPUT:
             return 2
         value = json.loads(raw)
-        if (type(value) is not dict or set(value) != {"host", "port", "tls", "ca", "seconds"}
-                or type(value["host"]) is not str or not 0 < len(value["host"]) <= 253
+        if (type(value) is not dict or set(value) not in (
+                {"host", "port", "tls", "ca", "seconds"},
+                {"host", "port", "tls", "ca", "seconds", "proxy_host", "proxy_port"})
+                or not _host_valid(value["host"])
                 or type(value["port"]) is not int or not 1 <= value["port"] <= 65535
                 or type(value["tls"]) is not bool or type(value["seconds"]) is not int
                 or not 1 <= value["seconds"] <= 15
-                or value["ca"] is not None and (type(value["ca"]) is not str or len(value["ca"]) > MAX_CA)):
+                or value["ca"] is not None and (type(value["ca"]) is not str or len(value["ca"]) > MAX_CA)
+                or "proxy_host" in value and (not _host_valid(value["proxy_host"]) or not value["tls"]
+                    or type(value["proxy_port"]) is not int or not 1 <= value["proxy_port"] <= 65535)):
             return 2
         deadline = time.monotonic() + value["seconds"]
         def emit(stage):
@@ -268,6 +404,8 @@ def _worker():
         def finish(status, stage, reason):
             print(json.dumps({"status": status, "stage": stage, "reason": reason}), flush=True)
             return 0
+        if "proxy_host" in value:
+            return _proxy_probe(value, deadline, emit, finish)
         emit("dns")
         try:
             addresses = socket.getaddrinfo(value["host"], value["port"], type=socket.SOCK_STREAM)

@@ -54,14 +54,20 @@ SCRIPTS = (
     "scripts/pilot-run-archive.py",
     "scripts/pilot-selection-lock.py",
     "scripts/pilot.py",
+    "scripts/pilot_maintenance.py",
+    "scripts/pilot_maintenance_launch.py",
+    "scripts/pilot_configuration_backup.py",
     "scripts/private_edit_self_test.py",
     "scripts/pilot_git_profiles.py",
+    "scripts/pilot_linked_worktree.py",
+    "scripts/pilot_filesystem_roots.py",
     "scripts/pilot_audit.py",
     "scripts/pilot_capacity.py",
     "scripts/pilot_policy.py",
     "scripts/pilot_preparation_lock.py",
     "scripts/pilot_prerequisite_cache_exchange.py",
     "scripts/pilot_provider.py",
+    "scripts/pilot_project_presets.py",
     "scripts/pilot_provider_ca.py",
     "scripts/pilot_provider_profiles.py",
     "scripts/pilot_provider_preflight.py",
@@ -84,6 +90,7 @@ SCRIPTS = (
     "scripts/wsl_qualification.py",
 )
 DATA_FILES = (
+    "profiles/mcp/git-linked-worktree-readonly-v1/contract.json",
     "rule_baseline/git_readonly_v1/rule_baseline.py",
     "rule_baseline/git_readonly_file_revisions_v1/rule_baseline.py",
     "rule_baseline/git_readonly_local_refs_v1/rule_baseline.py",
@@ -91,6 +98,7 @@ DATA_FILES = (
 )
 DATA_DIRECTORIES = (
     "profiles/mcp/filesystem-readonly-v1",
+    "profiles/mcp/filesystem-multi-root-readonly-v1",
     "profiles/mcp/git-readonly-v1",
     "profiles/mcp/git-local-clone-readonly-v1",
     "profiles/mcp/git-tracked-symlinks-readonly-v1",

@@ -342,3 +342,99 @@ failed cleanup or a missing actual host are failures; there is no skip or
 unsandboxed fallback. The workflow retains incomplete reports as well as logs.
 A support claim requires a passing combined report for the exact candidate;
 adding the procedure is not itself runtime acceptance.
+
+## Explicit multi-root profile
+
+`filesystem-multi-root-readonly-v1` (`sw-mcp/filesystem-multi-root-readonly/1`)
+is a separate opt-in profile for two to four existing directories. It uses the
+same pinned original server, schemas, dependency lock, classifier and policy.
+The single-root default remains a separate installation. Git linked worktrees
+are not required.
+
+Select stable lowercase IDs explicitly. Each ID maps to `/workspace/<ID>` inside
+the original server; host paths and relative paths are refused by this profile.
+The common parent and any unselected sibling are never mounted. IDs are sorted,
+unique and case-sensitive, with syntax `[a-z][a-z0-9_-]{0,31}`. Every declared
+scope is `read-only`; changing the set requires a new manifest and generation.
+
+```sh
+# The parent of this new manifest must already be private and owned (0700).
+agentfw pilot --home /absolute/agent-home filesystem-roots \
+  --root alpha=/absolute/project-alpha --root beta=/absolute/project-beta \
+  --output /absolute/private/roots.json
+# Preview above writes nothing. Repeat with --apply to create a fresh 0600 file.
+agentfw pilot --home /absolute/agent-home filesystem-roots \
+  --root alpha=/absolute/project-alpha --root beta=/absolute/project-beta \
+  --output /absolute/private/roots.json --apply
+```
+
+Use the [installed front door](PILOT_INSTALLED_FRONT_DOOR.md) with its explicit
+pinned runtime inputs. Add `--filesystem-roots-binding /absolute/private/roots.json`,
+`--filesystem-workspace /absolute/project-alpha` (the first sorted ID), and the
+separately selected ordinary `--git-workspace /absolute/reviewed-repository` to
+`preview` and `prepare --apply`. Keep the prefix, manifest, caches, runtimes,
+archives and run-state directory outside every selected root. Preparation is
+configuration, not observed protection. `status` becomes `observed-live` only
+when that exact selection's enforcing daemon and protected host are witnessed.
+
+Each root's canonical path, device/inode/owner and declared scope are retained
+in the manifest, profile, receipt and versioned prepared selection. Native
+startup independently opens every component without following links, pins all
+root descriptors and mounts each root read-only at its own ID. Before admission,
+after approval and before result delivery, the adapter rechecks that same set.
+Topology changes permanently withdraw the live set; restoring a directory does
+not revive its authority. File contents remain mutable, untrusted input and
+still pass existing result inspection.
+
+| Original selected tools | Complete resource extraction |
+| --- | --- |
+| `read_file`, `read_text_file`, `get_file_info` | Required `path`, including its explicit root ID |
+| `list_directory`, `list_directory_with_sizes` | Required `path`; `sortBy` defaults to `name` and grants no resource |
+| `directory_tree` | Required `path`; default `excludePatterns: []` only filters that root |
+| `search_files` | Required `path`; `pattern` and default `excludePatterns: []` are literal filters, never root selectors |
+| `read_multiple_files` | Every member of required `paths`, at most 64; any invalid member refuses the entire call before execution |
+| `list_allowed_directories` | Empty arguments bind the complete selected set; no ambient default directory |
+| Writes, edits, directory creation, moves, media reads | Remain unsupported; neither `path` nor `source`/`destination` can grant execution |
+
+Argument bytes are not rewritten. Existing input-schema and line/byte limits,
+classification, independent admission and original result delivery remain in
+force. Missing paths and ordinary file/directory type errors can reach the
+original server and retain its errors. A native root/custody refusal is a
+correlated `-32602`, with no partially released first resource; a later valid
+call remains possible unless the root set itself was withdrawn. In particular,
+`/workspace` is not a selected resource, and a symlink from one selected root
+to another cannot silently change a call's root binding.
+
+Support is native Ubuntu 24.04 x86-64 with the existing descriptor-consuming
+bubblewrap boundary. Topology observation requires local ext4, XFS, Btrfs or tmpfs; remote, FUSE,
+overlay and other filesystems refuse even if watch registration succeeds.
+All entries must be owned, readable, regular files or
+directories without shared write. Symlinks, hardlinked files, special files,
+nested mounts, duplicate/aliased/overlapping roots, replacement, missing roots
+and mutable topology refuse conservatively. The complete set is bounded to
+32768 entries, 128 directories and depth 32. WSL, Windows and macOS execution
+are not qualified by this opt-in profile. Existing classifier refusals (such
+as `directory_tree`) and result false positives are unchanged and must be
+reported separately from execution or root-binding failures.
+
+To update, explicitly create a new manifest and use `prepare --apply --rebuild`
+(or a new prefix). Retain the previous prefix and manifest for rollback; select
+that prefix explicitly and verify `status` before starting a fresh run. A stale
+manifest, changed scope, substituted profile or old single-root receipt cannot
+adopt extra roots. Do not edit a selected profile or reuse a live withdrawn set.
+
+Focused qualification uses `mcp-real-filesystem.yml` with exactly
+`installed_focus=filesystem-roots`, `native_preparation_only=true`, stability off and
+all other optional modes off/empty. It runs native binding regressions, builds
+an exact-source installed component outside the checkout, and exercises owned
+read/list/search, both-root arrays, whole-call refusals, an unselected canary,
+single-root sibling behavior, unchanged sources and process cleanup through
+the pinned original servers and genuine host with a local scripted provider.
+The fixed case inventory retains failed attempts. It is not a shared Ready,
+security or final admission cycle; those remain TL-owned.
+
+The selected roots do not grant policy approval. Existing provenance rules still
+apply: the installed pilot proof policy asks before reading a path learned from
+an MCP result. The focused multi-root qualification keeps that explicit Ask
+control, then checks healthy continuation with a separately supplied owned path.
+It does not erase taint or weaken the installed policy to obtain a pass.

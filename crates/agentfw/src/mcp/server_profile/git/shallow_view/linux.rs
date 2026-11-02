@@ -147,6 +147,7 @@ pub(crate) struct View {
     directories: BTreeSet<PathBuf>,
     images: Vec<(PathBuf, File)>,
     object_witness: bool,
+    linked: Option<super::super::linked_worktree::Binding>,
 }
 
 fn owned(metadata: &std::fs::Metadata) -> anyhow::Result<()> {
@@ -471,24 +472,49 @@ enum CaptureMode {
 
 impl View {
     pub(crate) fn capture(workspace: &File) -> anyhow::Result<Arc<Self>> {
-        Self::capture_inner(workspace, CaptureMode::SelectedShallow)
+        Self::capture_inner(workspace, CaptureMode::SelectedShallow, None)
     }
 
     /// Additive component capture. Existing selected-profile behavior is
     /// unchanged; this snapshot also withdraws on workspace entry changes.
     pub(crate) fn capture_object_witness(workspace: &File) -> anyhow::Result<Arc<Self>> {
-        Self::capture_inner(workspace, CaptureMode::ObjectWitness)
+        Self::capture_inner(workspace, CaptureMode::ObjectWitness, None)
     }
 
     pub(crate) fn capture_tracked_object_witness(workspace: &File) -> anyhow::Result<Arc<Self>> {
-        Self::capture_inner(workspace, CaptureMode::TrackedObjectWitness)
+        Self::capture_inner(workspace, CaptureMode::TrackedObjectWitness, None)
     }
 
-    fn capture_inner(workspace: &File, mode: CaptureMode) -> anyhow::Result<Arc<Self>> {
+    pub(crate) fn capture_linked(
+        workspace: &File,
+        binding: &super::super::linked_worktree::Binding,
+    ) -> anyhow::Result<Arc<Self>> {
+        Self::capture_inner(workspace, CaptureMode::ObjectWitness, Some(binding))
+    }
+
+    fn capture_inner(
+        workspace: &File,
+        mode: CaptureMode,
+        linked: Option<&super::super::linked_worktree::Binding>,
+    ) -> anyhow::Result<Arc<Self>> {
         let object_witness = mode != CaptureMode::SelectedShallow;
         let tracked = mode == CaptureMode::TrackedObjectWitness;
         owned(&workspace.metadata()?)?;
-        let (git, observed) = if object_witness {
+        let mut linked_admin = None;
+        let mut controls = Vec::new();
+        let (git, observed) = if let Some(binding) = linked {
+            let mut source = Withdrawal::new()?;
+            source.watch(workspace)?;
+            let (admin, common, watches) = binding.roots(workspace)?;
+            source.watch(&admin)?;
+            source.watch(&common)?;
+            for pin in watches {
+                source.watch(&pin)?;
+            }
+            controls = binding.controls(workspace, &admin)?;
+            linked_admin = Some(admin);
+            (common, Some(source))
+        } else if object_witness {
             let (git, source) = object_witness_directory(workspace)?;
             (git, Some(source))
         } else {
@@ -542,6 +568,16 @@ impl View {
             tracked,
             origins: BTreeMap::new(),
         };
+        let mut control_bytes = BTreeMap::new();
+        for (name, file, expected) in controls {
+            owned(&file.metadata()?)?;
+            let bytes = capture.read(file, 8192)?;
+            ensure!(
+                bytes == expected,
+                "linked_worktree_redirection_or_selection_mismatch"
+            );
+            control_bytes.insert(name, bytes);
+        }
         capture.directory(format!("{ROOT}/objects"))?;
         capture.directory(format!("{ROOT}/info"))?;
         let config = capture.read(child(&git, "config", false)?, 8192)?;
@@ -551,9 +587,10 @@ impl View {
             super::super::validate_configuration(&config)?;
         }
         capture.image(format!("{ROOT}/config"), &config)?;
-        let head = capture.read(child(&git, "HEAD", false)?, 256)?;
+        let head_root = linked_admin.as_ref().unwrap_or(&git);
+        let head = capture.read(child(head_root, "HEAD", false)?, 256)?;
         capture.image(format!("{ROOT}/HEAD"), &head)?;
-        if let Some(index) = capture.optional(&git, "index", 8 * 1024 * 1024)? {
+        if let Some(index) = capture.optional(head_root, "index", 8 * 1024 * 1024)? {
             capture.image(format!("{ROOT}/index"), &index)?;
         }
         let pack_directory = child(&capture.objects, "pack", true)?;
@@ -707,7 +744,36 @@ impl View {
             capture.source.valid(),
             "Git shallow source changed during capture"
         );
+        if let Some(binding) = linked {
+            use sha2::{Digest, Sha256};
+            use std::os::unix::fs::FileExt;
+            for (path, file) in &capture.images {
+                let mut bytes = vec![0; usize::try_from(file.metadata()?.len())?];
+                file.read_exact_at(&mut bytes, 0)?;
+                control_bytes.insert(
+                    path.strip_prefix("/workspace/")?
+                        .to_str()
+                        .context("linked_worktree_path_encoding")?
+                        .to_owned(),
+                    bytes,
+                );
+            }
+            let mut digest = Sha256::new();
+            for (name, bytes) in control_bytes {
+                digest.update(name.as_bytes());
+                digest.update([0]);
+                digest.update(format!("{:x}", Sha256::digest(bytes)).as_bytes());
+                digest.update(b"\n");
+            }
+            ensure!(
+                format!("{:x}", digest.finalize()) == binding.inputs_sha256,
+                "linked_worktree_selected_inputs_changed"
+            );
+            binding.revalidate_roots()?;
+            ensure!(capture.source.valid(), "linked_worktree_source_changed");
+        }
         Ok(Arc::new(Self {
+            linked: linked.cloned(),
             available: capture.object_cache.keys().cloned().collect(),
             source: Mutex::new(capture.source),
             directories: capture.directories,
@@ -761,6 +827,9 @@ impl View {
     }
 
     pub(crate) fn validate_call(&self, tool: &str, args: &Value) -> anyhow::Result<()> {
+        if let Some(binding) = &self.linked {
+            binding.revalidate_roots()?;
+        }
         ensure!(
             self.source.lock().is_ok_and(|mut source| source.valid()),
             "Git shallow source changed; a new protected session is required"
@@ -782,10 +851,16 @@ impl View {
     }
 
     pub(crate) fn mount(&self, command: &mut Command, pins: &mut Vec<File>) -> anyhow::Result<()> {
+        if let Some(binding) = &self.linked {
+            binding.revalidate_roots()?;
+        }
         ensure!(
             self.source.lock().is_ok_and(|mut source| source.valid()),
             "Git shallow source changed during startup"
         );
+        if let Some(binding) = &self.linked {
+            binding.mount_workspace(command, pins)?;
+        }
         command.args(["--size", "16777216", "--tmpfs", ROOT]);
         for path in &self.directories {
             command.arg("--dir").arg(path);
@@ -802,6 +877,9 @@ impl View {
             pins.push(image);
         }
         command.args(["--remount-ro", ROOT]);
+        if self.linked.is_some() {
+            command.args(["--remount-ro", "/workspace"]);
+        }
         Ok(())
     }
 }
