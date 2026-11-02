@@ -56,6 +56,42 @@ def extract_python(archive, destination):
         bundle.extractall(destination, members=members, filter="data")
 
 
+def verify_python_notices(identity):
+    """Require the exact local supplemental notice bundle, without following links."""
+    python = identity.get("python", {})
+    version = python.get("version", "")
+    notices = python.get("upstream_notices")
+    if (not isinstance(version, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
+            or not isinstance(notices, dict) or not 2 <= len(notices) <= 64):
+        raise ValueError("complete Python upstream notices are required")
+    prefix = "upstream-notices/python-" + version
+    names = set()
+    for name, expected in notices.items():
+        if (not isinstance(name, str) or not isinstance(expected, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", expected)):
+            raise ValueError("invalid Python upstream notice identity")
+        parts = PurePosixPath(name).parts
+        if (len(parts) != 3 or "/".join(parts[:2]) != prefix
+                or name != "/".join(parts)
+                or not re.fullmatch(r"(?:LICENSE\.[A-Za-z0-9._-]+\.txt|provenance\.json)", parts[2])):
+            raise ValueError("unsafe Python upstream notice path")
+        names.add(parts[2])
+    if "provenance.json" not in names:
+        raise ValueError("Python upstream notice provenance is required")
+    directory = ASSETS / prefix
+    for parent in (ASSETS / "upstream-notices", directory):
+        if parent.is_symlink() or not parent.is_dir():
+            raise ValueError("unsafe Python upstream notice directory")
+    if {path.name for path in directory.iterdir()} != names:
+        raise ValueError("Python upstream notice bundle differs from declaration")
+    for name, expected in notices.items():
+        path = ASSETS / name
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 2 * 1024 * 1024:
+            raise ValueError("unsafe Python upstream notice file")
+        if sha(path) != expected:
+            raise ValueError("Python upstream notice identity mismatch")
+
+
 class RuntimeLibrariesUnavailable(ValueError):
     """Bounded library identities suitable for prerequisite diagnostics."""
     def __init__(self, names):
@@ -118,6 +154,7 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     if not re.fullmatch(r"[0-9a-f]{64}", git_sha256) or sha(git) != git_sha256:
         raise ValueError("supplied Git binary digest mismatch")
     identity = json.loads((ASSETS / "upstream-identity.json").read_text())
+    verify_python_notices(identity)
     git_version = subprocess.check_output([str(git), "--version"], text=True, timeout=10, env=utility_environment()).strip()
     if git_version != "git version " + identity["git_version"]:
         raise ValueError("Git version differs from selected runtime")
@@ -191,6 +228,7 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     private_json(destination / "registry.json", registry(manifest, local_references=local_references, file_revisions=file_revisions, shallow_repository=shallow_repository, linked_worktree=linked_worktree is not None))
     shutil.copyfile(ASSETS / "policy.yaml", destination / "policy.yaml")
     os.chmod(destination / "policy.yaml", 0o600)
+    verify_python_notices(identity)
     shutil.copytree(ASSETS / "upstream-notices", destination / "upstream-notices")
     private_json(destination / "installation.json", {
         "format": "sou68-profile-installation/1", "profile": profile, "upstream_identity": identity,

@@ -26,6 +26,14 @@ top-level distributions remain blocking. It inventories
 license metadata and hashes existing notice files for every installed package.
 Missing declarations or notice text remain incomplete; no legal approval is inferred.
 
+The selected Git interpreter's stripped archive omits native dependency notices
+provided in the matching full Python standalone archive. The profile ships those
+exact texts with a hash-bound provenance record under
+`profiles/mcp/git-readonly-v1/upstream-notices/python-3.11.18/`.
+The installer verifies the complete declared local bundle before runtime probes
+and before copying it into the installed profile. This retains attribution;
+it does not certify license compliance or reproduce the source-to-binary build.
+
 Python inventory walks the selected site-packages tree once, refusing symlinks,
 paths outside that tree, depth above 32, more than 100,000 entries or more than
 1,000 distribution directories. Metadata, manifests, records and notices have
