@@ -1,6 +1,7 @@
 """Process-level local feedback controls; no hosted status or provider calls."""
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "scripts/local_pr_verify.py"
@@ -207,6 +209,51 @@ class LocalPrVerify(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertEqual(value["reason"], "plan_is_read_only")
         self.assertFalse(path.exists())
+
+    def test_zero_exit_with_detached_output_child_is_incomplete_and_reaped(self):
+        marker = Path(self.temp.name) / "early-exit-child.pid"
+        code = ("import pathlib,subprocess,sys; "
+                "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(15)'], "
+                "stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
+                f"pathlib.Path({str(marker)!r}).write_text(str(p.pid))")
+        status, reason, exit_code, _, _, duration = VERIFY.run_one(
+            [sys.executable, "-c", code], self.repo, os.environ.copy(),
+            time.monotonic() + 5)
+        self.assertTrue(marker.exists())
+        self.assertEqual((status, exit_code), ("incomplete", 0))
+        self.assertIn(reason, ("descendant_after_exit", "descendant_cleanup_unverified"))
+        self.assertLess(duration, 5)
+        pid = int(marker.read_text())
+        if os.name == "posix":
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                pass
+            else:
+                # A reparented zombie is inert; a sleeping child is not.
+                stat = Path(f"/proc/{pid}/stat")
+                self.assertTrue(stat.exists() and stat.read_text().split(") ", 1)[1][0] == "Z",
+                                "owned checker child is still executing")
+        else:
+            kernel = ctypes.windll.kernel32
+            kernel.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+            kernel.OpenProcess.restype = ctypes.c_void_p
+            kernel.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+            kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+            handle = kernel.OpenProcess(0x1000, False, pid)
+            if handle:
+                code = ctypes.c_ulong()
+                self.assertTrue(kernel.GetExitCodeProcess(handle, ctypes.byref(code)))
+                self.assertNotEqual(code.value, 259, "owned checker child is still executing")
+                kernel.CloseHandle(handle)
+
+    def test_unverified_cleanup_cannot_turn_zero_exit_into_pass(self):
+        with mock.patch.object(VERIFY, "_finish_owned_group", return_value=(False, False)):
+            status, reason, exit_code, _, _, _ = VERIFY.run_one(
+                [sys.executable, "-c", "pass"], self.repo, os.environ.copy(),
+                time.monotonic() + 5)
+        self.assertEqual((status, reason, exit_code),
+                         ("incomplete", "descendant_cleanup_unverified", 0))
 
     @unittest.skipUnless(os.name == "posix", "POSIX process-group witness")
     def test_sigint_reaps_owned_checker_descendants(self):

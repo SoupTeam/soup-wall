@@ -29,9 +29,13 @@ version and resolved executables. Floating Rust channels are refused. Rust
 checks require the pinned toolchain and locally available offline dependencies;
 missing prerequisites are `unavailable`, never passed. Cargo runs with
 `--locked --offline`, `RUSTUP_AUTO_INSTALL=0`, two build jobs and a scratch
-target directory. The command installs nothing, downloads nothing and makes no
-GitHub, paid-provider or model API call. It does not push, modify global Git
-configuration or post a status.
+target directory. Explicit `run` executes the selected scripts and build
+commands from the committed checkout being reviewed. Use it only for source
+you trust to execute locally. Cargo's offline flags prevent Cargo dependency
+downloads; they are not a general network or filesystem sandbox for executed
+scripts or build scripts. The runner itself installs nothing, downloads
+nothing and makes no GitHub, paid-provider or model API call. It does not push,
+modify global Git configuration or post a status.
 
 | Local check | When selected | Feedback, not a substitute for |
 | --- | --- | --- |
@@ -52,7 +56,9 @@ Checks run sequentially. Each check subprocess has a 1–300 second limit
 (default 120), the selected-check phase a 1–900 second limit (default 600),
 and Git preparation/cleanup have separate finite timeouts. Retained output is capped
 at 64 KiB per check with a 2 KiB excerpt. Cancellation and limits stop the
-owned process group; later checks become `not-run`. Result states are
+owned process group (a gated Windows job object or fresh POSIX session),
+including after a checker exits zero. A surviving child makes the check
+`incomplete`; later checks become `not-run`. Result states are
 `passed`, `failed`, `skipped`, `unavailable`, `not-run` and `incomplete`, with
 separate selected/executed/pass denominators, commands, exit codes and
 durations. A missing toolchain or timed-out check makes the local result
@@ -65,7 +71,8 @@ local paths or input data.
 The focused process regressions use owned synthetic Git projects, including a
 public Python/docs change, an actual failing syntax check, missing Rust,
 unknown paths, concurrent source mutation, cancellation with a child process,
-oversized output and a forged existing report. These are local verifier
+early zero exit with a child that closed output, oversized output and a forged
+existing report. These are local verifier
 controls, not observed provider protection or measured CI savings. Exact
 source and measured feedback from the Draft PR are recorded in its description;
 no reduction in hosted runner usage is claimed without paired CI data.

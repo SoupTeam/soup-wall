@@ -9,6 +9,7 @@ Neither mode is trusted candidate admission or native qualification.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -329,13 +330,113 @@ def _kill_tree(process):
         process.wait(timeout=3)
 
 
+def _owned_group_present(process):
+    """The fresh POSIX session remains addressable while any member remains."""
+    try:
+        os.killpg(process.pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+class _WindowsJob:
+    """Gate a checker until it is inside an owned Windows job object."""
+
+    def __init__(self):
+        self.kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        self.kernel.CreateJobObjectW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+        self.kernel.CreateJobObjectW.restype = ctypes.c_void_p
+        self.kernel.AssignProcessToJobObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        self.kernel.AssignProcessToJobObject.restype = ctypes.c_int
+        self.kernel.QueryInformationJobObject.argtypes = [ctypes.c_void_p, ctypes.c_int,
+                                                         ctypes.c_void_p, ctypes.c_uint32,
+                                                         ctypes.c_void_p]
+        self.kernel.QueryInformationJobObject.restype = ctypes.c_int
+        self.kernel.TerminateJobObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        self.kernel.TerminateJobObject.restype = ctypes.c_int
+        self.kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+        self.kernel.CloseHandle.restype = ctypes.c_int
+        self.handle = self.kernel.CreateJobObjectW(None, None)
+        if not self.handle:
+            raise OSError("job object unavailable")
+
+    def assign(self, process):
+        if not self.kernel.AssignProcessToJobObject(self.handle, int(process._handle)):
+            raise OSError("job assignment unavailable")
+
+    def active(self):
+        class Accounting(ctypes.Structure):
+            _fields_ = [("times", ctypes.c_longlong * 4),
+                        ("total_page_faults", ctypes.c_uint32),
+                        ("total_processes", ctypes.c_uint32),
+                        ("active_processes", ctypes.c_uint32),
+                        ("terminated_processes", ctypes.c_uint32)]
+        info = Accounting()
+        if not self.kernel.QueryInformationJobObject(self.handle, 1, ctypes.byref(info),
+                                                     ctypes.sizeof(info), None):
+            raise OSError("job accounting unavailable")
+        return info.active_processes
+
+    def terminate(self):
+        if not self.kernel.TerminateJobObject(self.handle, 1):
+            raise OSError("job termination unavailable")
+
+    def close(self):
+        self.kernel.CloseHandle(self.handle)
+
+
+def _finish_owned_group(process, job=None):
+    """Stop descendants even when the checker leader has already exited zero."""
+    if os.name == "nt":
+        try:
+            had_members = job.active() > 0
+            if had_members:
+                job.terminate()
+            process.wait(timeout=3)
+            until = time.monotonic() + 1
+            while job.active() and time.monotonic() < until:
+                time.sleep(.02)
+            return had_members, job.active() == 0
+        except (OSError, subprocess.TimeoutExpired):
+            _kill_tree(process)
+            return False, False
+    had_members = _owned_group_present(process)
+    _kill_tree(process)
+    until = time.monotonic() + 1
+    while _owned_group_present(process) and time.monotonic() < until:
+        time.sleep(.02)
+    return had_members, not _owned_group_present(process)
+
+
 def run_one(argv, cwd, env, deadline):
     started = time.monotonic()
+    job = None
     try:
-        process = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
-                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                   start_new_session=os.name != "nt",
-                                   creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
+        if os.name == "nt":
+            # The wrapper waits for the gate before starting the real checker.
+            # This removes the launch/assignment race and keeps all descendants
+            # in the job even if the real checker exits before its child.
+            wrapper = ("import subprocess,sys; sys.stdin.buffer.read(1); "
+                       "p=subprocess.Popen(sys.argv[1:], stdin=subprocess.DEVNULL); "
+                       "sys.exit(p.wait())")
+            process = subprocess.Popen([sys.executable, "-B", "-c", wrapper, *argv],
+                                       cwd=cwd, env=env, stdin=subprocess.PIPE,
+                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                       creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+            try:
+                job = _WindowsJob()
+                job.assign(process)
+                process.stdin.write(b"1")
+                process.stdin.close()
+            except OSError:
+                _kill_tree(process)
+                if job:
+                    job.close()
+                return "unavailable", "owned_job_unavailable", None, 0, "", 0
+        else:
+            process = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                       start_new_session=True)
     except OSError:
         return "unavailable", "executable_unavailable", None, 0, "", 0
     output = bytearray()
@@ -366,10 +467,15 @@ def run_one(argv, cwd, env, deadline):
             time.sleep(.05)
     except KeyboardInterrupt:
         reason = "cancelled"
-    if reason:
-        _kill_tree(process)
-    else:
-        process.wait(timeout=3)
+    # Reap/verify the owned session on every path. A successful leader can
+    # leave a child with closed output pipes, which the collector cannot see.
+    descendants, cleaned = _finish_owned_group(process, job)
+    if job:
+        job.close()
+    if not cleaned:
+        reason = "descendant_cleanup_unverified"
+    elif descendants and not reason:
+        reason = "descendant_after_exit"
     reader.join(timeout=1)
     if reader.is_alive():
         _kill_tree(process)
