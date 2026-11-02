@@ -56,6 +56,12 @@ class Controls(unittest.TestCase):
             result = subprocess.run([sys.executable, '-B', str(scripts / TOOL.name), '--pilot', str(entry), '--sha256', hashlib.sha256(entry.read_bytes()).hexdigest(), 'topic', 'provider', 'update'], capture_output=True, text=True, cwd=temp)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('--expected-version', result.stdout)
+            result = subprocess.run([sys.executable, '-B', str(scripts / TOOL.name),
+                                     '--pilot', str(entry), '--sha256', hashlib.sha256(entry.read_bytes()).hexdigest(),
+                                     '--update-sha256', hashlib.sha256((scripts / 'pilot_update.py').read_bytes()).hexdigest(),
+                                     'topic', 'update', 'rollback'], capture_output=True, text=True, cwd=temp)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('--confirm', result.stdout)
 
     def test_installed_parser_and_stale_digest(self):
         with tempfile.TemporaryDirectory() as temp:

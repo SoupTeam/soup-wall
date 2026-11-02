@@ -11,17 +11,25 @@ import subprocess
 import tempfile
 import os
 import types
+from unittest.mock import patch
 
 ALLOWED_READER = None
 
 
 def effects(parts):
-    if parts in (['preview'], ['status'], ['help'], ['provider', 'preview']):
+    if parts in (['preview'], ['status'], ['help'], ['provider', 'preview'], ['doctor'],
+                 ['lifecycle', 'status'], ['update', 'preview'], ['update', 'inspect']):
         return 'read_only'
     if parts == ['provider', 'check']:
         return 'read_only_unless_transport_is_selected'
     if parts == ['run']:
         return 'launch_and_provider'
+    if parts == ['prepare']:
+        return 'preview_unless_apply_then_prepare_and_possible_download'
+    if parts[:1] == ['provider'] and len(parts) > 1:
+        return 'preview_unless_apply_then_private_profile_mutation'
+    if parts[:1] == ['update'] and len(parts) > 1:
+        return 'lifecycle_mutation_requires_command_specific_confirmation'
     return 'may_mutate_launch_or_contact_provider_review_parser_help'
 
 
@@ -40,7 +48,7 @@ def guard(event, args):
         raise ValueError('help lookup attempted a process or network operation')
 
 
-def discover(path, expected):
+def discover(path, expected, update_sha256=None):
     if path.is_symlink() or any(parent.is_symlink() for parent in path.absolute().parents):
         raise ValueError('linked component path')
     with path.open('rb') as stream:
@@ -56,6 +64,7 @@ def discover(path, expected):
     rows = []
     def walk(node, parts):
         flags = []
+        positionals = []
         for action in node._actions:
             if isinstance(action, argparse._SubParsersAction):
                 for name, child in action.choices.items():
@@ -63,20 +72,57 @@ def discover(path, expected):
                         raise ValueError('unsafe command name')
                     walk(child, parts + [name])
             elif action.help != argparse.SUPPRESS:
+                if not action.option_strings:
+                    choices = list(action.choices or [])
+                    if any(not isinstance(word, str) or not re.fullmatch('[a-z][a-z0-9-]{0,63}', word) for word in choices):
+                        raise ValueError('unsafe positional choice')
+                    positionals.append({'name': action.dest, 'required': action.required, 'choices': choices})
                 for flag in action.option_strings:
                     if not re.fullmatch('-{1,2}[a-zA-Z0-9][a-zA-Z0-9-]*', flag):
                         raise ValueError('unsafe flag')
                     flags.append({'name': flag, 'required': action.required,
                                   'takes_value': action.nargs != 0,
                                   'type': getattr(action.type, '__name__', 'string') if action.nargs != 0 else 'boolean'})
-        rows.append({'command': parts, 'flags': flags,
+        rows.append({'command': parts, 'flags': flags, 'positionals': positionals,
                      'effects': effects(parts),
-                     'confirmation_flags': [f['name'] for f in flags if f['name'] in ('--apply', '--transport')]})
+                     'confirmation_flags': [f['name'] for f in flags if f['name'] in ('--apply', '--transport', '--confirm', '--expected-version', '--inventory-sha256')]})
     walk(parser, [])
+    delegated = None
+    if update_sha256 is not None:
+        delegate_path = path.with_name('pilot_update.py')
+        if delegate_path.is_symlink():
+            raise ValueError('linked delegated component')
+        delegate_raw = delegate_path.read_bytes()
+        if len(delegate_raw) > 1024 * 1024 or hashlib.sha256(delegate_raw).hexdigest() != update_sha256:
+            raise ValueError('delegated component digest mismatch')
+        delegate = types.ModuleType('selected_update')
+        delegate.__file__ = str(delegate_path.absolute())
+        exec(compile(delegate_raw, str(delegate_path.absolute()), 'exec'), delegate.__dict__)
+        captured = []
+        class ParserCaptured(Exception):
+            pass
+        def capture(node, *args, **kwargs):
+            captured.append(node)
+            raise ParserCaptured()
+        with patch.object(argparse.ArgumentParser, 'parse_args', capture):
+            try:
+                delegate.main([])
+            except ParserCaptured:
+                pass
+        if len(captured) != 1:
+            raise ValueError('unsupported delegated parser')
+        rows[:] = [row for row in rows if row['command'] != ['update']]
+        walk(captured[0], ['update'])
+        for action in captured[0]._actions:
+            if not action.option_strings and action.choices:
+                for operation in action.choices:
+                    walk(captured[0], ['update', operation])
+        delegated = update_sha256
     if len(rows) > 256:
         raise ValueError('catalog exceeds command limit')
     return {'schema': 'sw-agent-command-catalog/2', 'component_sha256': expected,
             'platform': 'native Ubuntu 24.04 pilot; lookup uses Python 3.11+',
+            'delegated_component_sha256': delegated,
             'outcome_references': sorted(key for key in getattr(module, 'HINTS', {}) if re.fullmatch('[a-z][a-z0-9_]{0,79}', key))[:256], 'commands': rows}
 
 
@@ -208,7 +254,9 @@ def rust_catalog_snapshot(path, expected, snapshot):
             elif section == 'Options:':
                 for flag in re.findall(r'(?<!\w)--?[a-zA-Z][a-zA-Z0-9-]*', re.split(r'\s{2,}', line.strip(), maxsplit=1)[0]):
                     flags.append({'name': flag, 'required': False, 'takes_value': '<' in line, 'type': 'parser_help'})
-        rows.append({'command': parts, 'flags': flags, 'effects': 'review_command_help_before_execution'})
+        rows.append({'command': parts, 'flags': flags, 'effects': effects(parts),
+                     'confirmation_flags': [flag['name'] for flag in flags if flag['name'] in
+                                            ('--apply', '--confirm', '--yes', '--approve', '--sha256')]})
     return {'schema': 'sw-agent-command-catalog/2', 'component_sha256': expected, 'commands': rows}
 
 
@@ -217,6 +265,7 @@ def main(argv=None):
     parser.add_argument('--pilot', type=Path)
     parser.add_argument('--agentfw', type=Path)
     parser.add_argument('--sha256', required=True)
+    parser.add_argument('--update-sha256')
     parser.add_argument('action', choices=('list', 'topic', 'completion'))
     parser.add_argument('topic', nargs='*')
     parser.add_argument('--shell', choices=('bash', 'zsh', 'fish'))
@@ -227,7 +276,7 @@ def main(argv=None):
             raise ValueError('invalid component digest')
         if (args.pilot is None) == (args.agentfw is None):
             raise ValueError('select one component')
-        data = discover(args.pilot, args.sha256) if args.pilot else rust_catalog(args.agentfw, args.sha256)
+        data = discover(args.pilot, args.sha256, args.update_sha256) if args.pilot else rust_catalog(args.agentfw, args.sha256)
         if args.action == 'completion':
             if not args.shell:
                 raise ValueError('shell is required')
