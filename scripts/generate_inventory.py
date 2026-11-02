@@ -72,7 +72,10 @@ def run_cmd(command, *, cwd=ROOT, timeout=DEFAULT_TIMEOUT, allowed=(0,)):
                     "command": command, "exit_code": process.returncode,
                     "stdout": out.read().decode("utf-8"), "stderr": err.read().decode("utf-8")}
         except (OSError, ValueError, UnicodeError) as error:
-            return {"status": "incomplete", "command": command, "reason": str(error)}
+            out.seek(0); err.seek(0)
+            return {"status": "incomplete", "command": command, "reason": str(error),
+                    "stdout": out.read(MAX_OUTPUT_BYTES).decode("utf-8", errors="replace"),
+                    "stderr": err.read(MAX_OUTPUT_BYTES).decode("utf-8", errors="replace")}
         finally:
             if process is not None and process.poll() is None:
                 if os.name == "posix":
@@ -92,7 +95,11 @@ def lock_graphs(root=ROOT):
     py = root / "profiles/mcp/git-readonly-v1/requirements.lock"
     node = root / "profiles/mcp/filesystem-readonly-v1/package-lock.json"
     rust = tomllib.loads(cargo.read_text())["package"]
-    cargo_graph = {("crates.io", p["name"], p["version"]) for p in rust if p.get("source")}
+    # OSV labels local and patched Cargo.lock entries with the crates.io
+    # ecosystem too. This is an expected scanner representation, not evidence
+    # that a local/vendored component came from that registry. Keep the actual
+    # lock sources separately in the report.
+    cargo_graph = {("crates.io", p["name"], p["version"]) for p in rust}
     requirements = []
     for line in py.read_text().splitlines():
         if not line.strip() or line.lstrip().startswith("#"):
@@ -115,13 +122,15 @@ def lock_graphs(root=ROOT):
     return graphs
 
 
-def verify_osv(data, graphs):
+def osv_observation(data, graphs):
     require(isinstance(data, dict) and isinstance(data.get("results"), list), "osv_schema")
     observed = {path: set() for path in graphs}
     findings = []
     for result in data["results"]:
         source = result.get("source", {})
-        require(source.get("type") == "lockfile", "osv_source_type")
+        # OSV 2.7 also emits `unknown` source rows for some requirement entries.
+        # Exact input path and complete identity equality remain mandatory.
+        require(source.get("type") in {"lockfile", "unknown"}, "osv_source_type")
         path = str(Path(source.get("path", "")).resolve())
         require(path in graphs, "osv_unexpected_source")
         require(isinstance(result.get("packages"), list), "osv_packages_missing")
@@ -133,11 +142,24 @@ def verify_osv(data, graphs):
                 name = python_name(name)
             observed[path].add((eco, name, version))
             require(isinstance(row.get("vulnerabilities", []), list), "osv_findings_schema")
-            findings.extend(row.get("vulnerabilities", []))
+            for finding in row.get("vulnerabilities", []):
+                findings.append({"source": path, "package": {"ecosystem": eco, "name": name, "version": version},
+                                 "advisory": finding, "reachability": "not_established"})
     for path, expected in graphs.items():
         require(observed[path] == expected, "osv_exact_graph_mismatch:" + Path(path).name)
-    require(not findings, "unresolved_osv_findings")
-    return {path: len(packages) for path, packages in observed.items()}
+    return {"coverage": {path: len(packages) for path, packages in observed.items()}, "findings": findings}
+
+
+def verify_osv(data, graphs):
+    observation = osv_observation(data, graphs)
+    require(not observation["findings"], "unresolved_osv_findings")
+    return observation["coverage"]
+
+
+def rust_license_command(report_path):
+    require(Path(report_path).resolve().is_relative_to(ROOT.resolve()), "rust_license_report_outside_source")
+    return [sys.executable, str(ROOT / "scripts/license_policy.py"), "--root", str(ROOT),
+            "--report", str(report_path)]
 
 
 def installed_graphs(generation, graphs):
@@ -244,6 +266,8 @@ def main(argv=None):
     parser.add_argument("--selection", "--receipt", dest="selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--native-reviews", type=Path)
+    parser.add_argument("--rustsec-db", type=Path,
+                        help="explicit pre-fetched RustSec database; audit uses --no-fetch")
     parser.add_argument("--output", type=Path, default=ROOT / "target/runtime_inventory.json")
     args = parser.parse_args(argv)
     report = {"format": "sw-installed-runtime-inventory/1", "status": "incomplete",
@@ -263,6 +287,7 @@ def main(argv=None):
         before = {path: sha(path) for path in graphs}
         report["lock_sha256"] = before
         report["packages"] = {path: sorted(values) for path, values in graphs.items()}
+        report["cargo_lock_components"] = tomllib.loads((ROOT / "Cargo.lock").read_text())["package"]
         report["notices"], python_graph, license_errors = installed_graphs(args.selection.parent, graphs)
         report["errors"].extend(license_errors)
         python_lock = next(path for path in graphs if path.endswith("requirements.lock"))
@@ -276,15 +301,23 @@ def main(argv=None):
         report["scan_input_sha256"] = {path: sha(path) for path in graphs}
         report["packages"] = {path: sorted(values) for path, values in graphs.items()}
         try:
+            if args.native_reviews is not None:
+                report["native_reviews_input"] = {"sha256": sha(args.native_reviews), "data": read_json(args.native_reviews)}
             report["native_reviews"] = verify_native_reviews(args.native_reviews, selection, args.selection.parent)
         except (OSError, ValueError, KeyError, TypeError) as error:
             report["errors"].append("native_reviews:" + str(error))
         # Keep scanner invocation and its complete bounded raw result, including
         # failed reports. Exit 1 and informational findings are never waived.
+        audit_command = ["cargo", "audit", "--json", "--file", str(ROOT / "Cargo.lock")]
+        if args.rustsec_db is not None:
+            audit_command.extend(["--no-fetch", "--db", str(args.rustsec_db.resolve(strict=True))])
+        target = ROOT / "target"
+        target.mkdir(exist_ok=True)
+        license_temp = tempfile.TemporaryDirectory(prefix="runtime-inventory-license-", dir=target)
+        license_path = Path(license_temp.name) / "report.json"
         commands = {
-            "cargo_audit": ["cargo", "audit", "--json", "--file", str(ROOT / "Cargo.lock")],
-            "rust_licenses": [sys.executable, str(ROOT / "scripts/license_policy.py"), "--root", str(ROOT),
-                              "--report", str(args.output.parent / (args.output.stem + "-rust-license-policy.json"))],
+            "cargo_audit": audit_command,
+            "rust_licenses": rust_license_command(license_path),
             "osv": ["osv-scanner", "scan", "source", "--format=json", "--all-packages",
                     *["--lockfile=" + ("requirements.txt:" if path.endswith("requirements.txt") else "") + path
                       for path in graphs]],
@@ -292,12 +325,18 @@ def main(argv=None):
         for name, command in commands.items():
             result = run_cmd(command)
             report["checks"][name] = result
+            if name == "rust_licenses" and license_path.exists():
+                report["rust_license_report"] = read_json(license_path)
             if result["status"] != "passed":
                 report["errors"].append(name + "_failed_or_incomplete")
-                continue
+                if name not in {"osv", "cargo_audit"} or result.get("exit_code") not in {0, 1}:
+                    continue
             try:
                 if name == "osv":
-                    report["osv_coverage"] = verify_osv(json.loads(result["stdout"], object_pairs_hook=pairs), graphs)
+                    observation = osv_observation(json.loads(result["stdout"], object_pairs_hook=pairs), graphs)
+                    report["osv_coverage"] = observation["coverage"]
+                    report["findings"] = observation["findings"]
+                    require(not observation["findings"], "unresolved_osv_findings")
                 elif name == "cargo_audit":
                     data = json.loads(result["stdout"], object_pairs_hook=pairs)
                     require(isinstance(data.get("vulnerabilities"), dict)
@@ -308,6 +347,7 @@ def main(argv=None):
                             and not any(data.get("warnings", {}).values()), "cargo_audit_incomplete_or_findings")
             except (ValueError, TypeError, KeyError) as error:
                 report["errors"].append(name + ":" + str(error))
+        license_temp.cleanup()
         require(before == {path: sha(path) for path in before}, "lockfiles_changed_during_scan")
         require(report["scan_input_sha256"] == {path: sha(path) for path in graphs}, "scan_inputs_changed")
         prep.verify_generation(args.selection.parent, args.expected_commit, probe_native=False)

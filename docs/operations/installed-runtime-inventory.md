@@ -32,11 +32,24 @@ Three bounded checks retain their commands, exit codes and raw output:
   and version must match the corresponding complete graph. Missing, additional,
   swapped or unrelated rows fail even when counts match.
 
+OSV's expected Cargo representation includes local and vendored lock entries
+under its `crates.io` ecosystem label. The report separately retains each actual
+Cargo lock source and checksum; that scanner label does not prove publication
+or ownership in the registry. Known OSV `unknown` source labels are accepted only
+with the exact supplied path and the same complete package identity checks.
+Findings and affected ranges are retained separately from coverage, including
+when the scanner exits nonzero. Reachability is not inferred from a version match.
+
 The invocation follows the [OSV source scanning interface](https://github.com/google/osv-scanner/blob/main/docs/scan-source.md).
 All unresolved findings, including informational findings, remain blocking.
 Missing scanners, timeouts, malformed JSON, empty coverage and failed exits cannot
 become a successful inventory. Source, selection and scan inputs are rechecked
 after scanning. Reports use new private files and never replace earlier attempts.
+Cargo license verification uses a disposable report beneath the source `target/`
+directory, as required by the existing policy checker, and embeds the parsed
+result in the requested private inventory. Timeout diagnostics retain bounded
+partial output. An explicitly pre-fetched RustSec checkout can be selected with
+`--rustsec-db`; the audit then uses `--no-fetch` without extending scan timeouts.
 
 Components outside package-manager scans require explicit reviewed evidence.
 The optional `--native-reviews` input uses format `sw-pilot-native-reviews/1`, with

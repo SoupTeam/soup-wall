@@ -58,6 +58,37 @@ class RuntimeInventoryTests(unittest.TestCase):
         report["results"][1]["packages"][0]["package"]["name"] = "Python_Lib"
         inventory.verify_osv(report, self.graphs)
 
+    def test_unknown_source_label_still_requires_exact_path_and_identity(self):
+        report = copy.deepcopy(self.report)
+        report["results"][1]["source"]["type"] = "unknown"
+        inventory.verify_osv(report, self.graphs)
+        report["results"][1]["packages"][0]["package"]["version"] = "unrelated"
+        with self.assertRaisesRegex(ValueError, "exact_graph_mismatch"):
+            inventory.verify_osv(report, self.graphs)
+
+    def test_full_local_cargo_rows_are_correlated_without_losing_source_origins(self):
+        graph = inventory.lock_graphs()[str((inventory.ROOT / "Cargo.lock").resolve())]
+        self.assertIn(("crates.io", "agentfw", "0.3.0"), graph)
+        self.assertIn(("crates.io", "kryptering", "0.6.0"), graph)
+
+    def test_findings_are_retained_separately_from_exact_coverage(self):
+        report = copy.deepcopy(self.report)
+        advisory = {"id": "TEST-1", "affected": [{"ranges": [{"events": [{"fixed": "2.0"}]}]}]}
+        report["results"][0]["packages"][0]["vulnerabilities"] = [advisory]
+        observation = inventory.osv_observation(report, self.graphs)
+        self.assertEqual(len(observation["coverage"]), 3)
+        self.assertEqual(observation["findings"][0]["advisory"], advisory)
+        self.assertEqual(observation["findings"][0]["reachability"], "not_established")
+        with self.assertRaisesRegex(ValueError, "unresolved_osv_findings"):
+            inventory.verify_osv(report, self.graphs)
+
+    def test_rust_license_report_is_scoped_to_source_even_for_external_inventory_output(self):
+        path = inventory.ROOT / "target/runtime-inventory-license-test/report.json"
+        command = inventory.rust_license_command(path)
+        self.assertEqual(command[-2:], ["--report", str(path)])
+        with self.assertRaisesRegex(ValueError, "outside_source"):
+            inventory.rust_license_command(inventory.ROOT.parent / "report.json")
+
     def test_real_shipped_graphs_are_finite_and_include_both_original_servers(self):
         graph = set.union(*inventory.lock_graphs().values())
         self.assertIn(("PyPI", "mcp-server-git", "2026.10.10"), graph)
@@ -74,9 +105,10 @@ class RuntimeInventoryTests(unittest.TestCase):
         self.assertEqual(result["exit_code"], 127)
 
     def test_timeout_is_bounded(self):
-        result = inventory.run_cmd([sys.executable, "-c", "import time; time.sleep(20)"], timeout=0.2)
+        result = inventory.run_cmd([sys.executable, "-c", "import time; print('entered',flush=True); time.sleep(20)"], timeout=0.2)
         self.assertEqual(result["status"], "incomplete")
         self.assertIn("timeout", result["reason"])
+        self.assertIn("entered", result["stdout"])
 
     def test_source_identity_is_not_an_installed_receipt(self):
         with tempfile.TemporaryDirectory() as temp:
