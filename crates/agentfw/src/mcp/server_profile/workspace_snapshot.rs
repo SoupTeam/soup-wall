@@ -453,6 +453,7 @@ mod tests {
     #[test]
     fn workspace_snapshot_consumes_python_published_nested_generation() {
         let temp = tempfile::tempdir().unwrap();
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
         let scripts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts");
         let output = std::process::Command::new("python3")
             .args(["-I", "-S", "-B", "-c", r#"
