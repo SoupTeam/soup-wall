@@ -104,7 +104,7 @@ mod linux {
         io::{Read, Seek, SeekFrom, Write},
         os::{
             fd::{AsRawFd, FromRawFd},
-            unix::fs::MetadataExt,
+            unix::fs::{MetadataExt, PermissionsExt},
         },
     };
     use tokio::process::Command;
@@ -119,6 +119,7 @@ mod linux {
         let mut file = unsafe { File::from_raw_fd(fd) };
         file.write_all(bytes)?;
         file.seek(SeekFrom::Start(0))?;
+        file.set_permissions(fs::Permissions::from_mode(0o400))?;
         ensure!(
             unsafe {
                 libc::fcntl(
