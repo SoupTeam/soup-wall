@@ -89,6 +89,29 @@ log SHA-256 `dfc77271441abc0f9f70680c61f9821ed0657d8eca45dfaa4958ee7f1829b06c`
 (artifact `sou210-installed-budget-presets-41414791512-1`). Raw syscall traces stay private.
 Later commits that change only this ledger are not re-qualified.
 
+### Final source `fb499809` (passed, 16 of 16)
+
+After the maintainer's descriptor-lifetime fix (`3a3b2e49`), two native cases were added for the unnamed
+`pilot run --budget-preset` launch path, so both installed launch routes are exercised. Attempts, all retained:
+
+| Run | Source | Outcome |
+| --- | --- | --- |
+| `41431224788` | `40030fad` | Failed in the new cases (author test error: wrong module name); the 13 earlier cases passed again |
+| `41433087121` | `4c2dde19` | First attempt failed in a shared timing-sensitive resumable-download unit test before this focus ran; after re-running that job, all 15 cases passed and `owned-cleanup` failed with `provider_trace_incomplete`: the SIGINT-stopped sibling's strace legitimately ends inside an unfinished syscall |
+| `41435508335` | `fb499809` | **Passed**: all 16 cases |
+
+Fix for the last failure (`fb499809`): the complete provider exec witness applies to the sibling that finished normally;
+cross-contamination is still checked for both traces (the maintainer additionally retains both complete witnesses before the
+intentional cancellation in `0fd2e0ca` on the integrated candidate). Final-source cases, all `passed`:
+`inert-preview`, `two-independent-presets`, `bounds-refused`, `unverified-delegation-refused`, `stale-update-refused`,
+`concurrent-update`, `damaged-store`, `two-budgeted-reads`, `controller-limit-witness`, `update-during-run`,
+`stale-profile-zero-start`, `unavailable-delegation-zero-start`, `root-replaced-refused`, `unnamed-run-preset`
+(two live leaves with the updated preset's exact `pids.max=96`, `memory.max`, `cpu.max`; two useful results; roots empty after)
+and `unnamed-stale-zero-start` (stale digest refused with `budget_preset_stale`, 0 protected starts, 0 connects), `owned-cleanup`.
+Report SHA-256 `2a5ee72b025e044ae754c56e81b46f7e9e8ba328f8eb8864b21ffe59b50b5d7f`, log SHA-256
+`c7b0b774531a78ac32e7c84372c399a5f935d030c8543ecde375ecb140e24ad0` (artifact `sou210-installed-budget-presets-41435508335-1`).
+Later ledger-only commits are not re-qualified.
+
 ## Known boundaries
 
 * Presets configure; they never claim enforcement. Activity is witnessed only by the existing
