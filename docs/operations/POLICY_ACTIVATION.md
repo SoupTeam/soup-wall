@@ -61,6 +61,11 @@ agentfw pilot $H policy-activation recover $C
   scratch with the same selection digest. It uses the same gate, journal and refusals; an unknown or
   never-confirmed generation refuses. It does not revive old session authority.
 
+Named project presets and other records that pinned the previous selection keep refusing (`selection_not_current`)
+until explicitly updated; nothing silently follows the new generation. A TERM or Ctrl-C during staging is a
+cancellation: the staging child is killed, nothing selected changes and no intent is left pending. Operator-facing
+output carries digests and generation ids only; the journal keeps the private paths that revert needs.
+
 After activating or reverting, `maintenance leave` with a fresh preview adopts the changed selection
 binding; only then does a launch start fresh authority from the selected generation.
 

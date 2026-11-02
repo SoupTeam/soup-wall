@@ -76,8 +76,15 @@ class Fixture(unittest.TestCase):
     def plan(self, digest='9' * 64):
         return {'confirmation_sha256': digest}
 
+    NEW_SELECTION = b'{"verified":"new generation"}'
+
     def target(self):
-        return {'generation': G_NEW, 'selection_sha256': '8' * 64, 'selection_path': self.preparation / 'generations' / G_NEW / 'selection.json',
+        path = self.preparation / 'generations' / G_NEW / 'selection.json'
+        if not path.exists():
+            path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+            path.write_bytes(self.NEW_SELECTION)
+            path.chmod(0o600)
+        return {'generation': G_NEW, 'selection_sha256': A.sha(self.NEW_SELECTION), 'selection_path': path,
                 'policy_sha256': CANDIDATE, 'candidate_sha256': 'e' * 64}
 
 
@@ -281,6 +288,14 @@ class Transition(Fixture):
         self.assertEqual(self.recover()['status'], 'conflicting_operator_edit')
         self.assertEqual((self.preparation / 'current.json').read_bytes(), b'garbage')
 
+    def test_a_generation_changed_after_verification_is_never_selected(self):
+        target = self.target()
+        target['selection_path'].write_bytes(b'{"changed":true}')
+        with patch.object(SW, 'require_inactive'), self.assertRaisesRegex(ValueError, 'generation_changed_before_publication'):
+            A.publish(self.ctx(), self.front, A.empty_journal(), self.plan(), 'activate', target)
+        self.assertEqual(self.marker_generation(), G_OLD)
+        self.assertFalse((self.preparation / A.JOURNAL).exists())
+
     def test_second_publication_from_the_same_stale_context_refuses(self):
         stale = self.ctx()
         self.publish(ctx=stale)
@@ -475,6 +490,34 @@ class RecoveryEntrypoint(Transition):
         with patch.object(A, 'context', return_value={**self.ctx(), 'bound': {}}):
             result = A.operation(self.args, self.front)
         self.assertEqual(result['status'], 'settled')
+
+
+class Cancellation(unittest.TestCase):
+    def test_term_unwinds_as_cancellation_and_the_previous_handler_is_restored(self):
+        import signal
+        previous = signal.getsignal(signal.SIGTERM)
+        with A.terminating_as_cancellation():
+            handler = signal.getsignal(signal.SIGTERM)
+            self.assertIsNot(handler, previous)
+            with self.assertRaises(KeyboardInterrupt):
+                handler(signal.SIGTERM, None)
+        self.assertEqual(signal.getsignal(signal.SIGTERM), previous)
+
+    def test_main_reports_cancellation_without_claiming_an_outcome(self):
+        front = types.SimpleNamespace(PROG='owned', platform_reason=lambda: None)
+        out = io.StringIO()
+        with patch.object(A.sys, 'platform', 'linux'), patch.object(A, 'operation', side_effect=KeyboardInterrupt), \
+                contextlib.redirect_stdout(out):
+            code = A.main(['inspect', '--prefix', '/a', '--state-root', '/b'], front)
+        value = json.loads(out.getvalue())
+        self.assertEqual((code, value['status'], value['reason'], value['executed']), (130, 'cancelled', 'policy_activation_cancelled', None))
+
+    def test_operator_views_never_print_private_paths_or_stored_state(self):
+        entry = {'operation': 'activate', 'previous_selection_path': '/private/a', 'target_selection_path': '/private/b',
+                 'after_state': {'x': 1}, 'before_marker_sha256': 'a' * 64}
+        view = A.public(entry, 'pending')
+        self.assertEqual(view, {'operation': 'activate', 'before_marker_sha256': 'a' * 64, 'outcome': 'pending'})
+        self.assertIn('previous_selection_path', A.record(entry, 'pending'))
 
 
 class Facts(unittest.TestCase):
@@ -674,10 +717,10 @@ class Operation(Fixture):
     def test_confirmed_activation_publishes_a_new_generation_and_copies_no_authority(self):
         plan = self.run_op('preview')
         selected = selection(policy_path=str(self.preparation / A.POLICIES / ('e' * 64) / 'policy.yaml'), policy_sha=CANDIDATE)
-        staged = {'status': 'staged-not-selected', 'generation': G_NEW, 'selection_sha256': '8' * 64,
-                  'selection': str(self.preparation / 'generations' / G_NEW / 'selection.json')}
+        staged = {'status': 'staged-not-selected', 'generation': G_NEW, 'selection_sha256': A.sha(self.NEW_SELECTION),
+                  'selection': str(self.target()['selection_path'])}
         with patch.object(A, 'stage_generation', return_value=staged) as stage, \
-                patch.object(A, 'verified_generation', return_value=(Path(staged['selection']), '8' * 64, selected)), \
+                patch.object(A, 'verified_generation', return_value=(Path(staged['selection']), staged['selection_sha256'], selected)), \
                 patch.object(SW, 'require_inactive'):
             result = self.run_op('confirm', confirm=plan['confirmation_sha256'])
             stage.assert_called_once()
@@ -689,10 +732,10 @@ class Operation(Fixture):
     def test_staged_generation_that_changes_anything_else_is_never_published(self):
         plan = self.run_op('preview')
         wrong = selection(policy_path='/elsewhere', policy_sha=CANDIDATE)
-        staged = {'status': 'staged-not-selected', 'generation': G_NEW, 'selection_sha256': '8' * 64,
-                  'selection': str(self.preparation / 'generations' / G_NEW / 'selection.json')}
+        staged = {'status': 'staged-not-selected', 'generation': G_NEW, 'selection_sha256': A.sha(self.NEW_SELECTION),
+                  'selection': str(self.target()['selection_path'])}
         with patch.object(A, 'stage_generation', return_value=staged), \
-                patch.object(A, 'verified_generation', return_value=(Path(staged['selection']), '8' * 64, wrong)), \
+                patch.object(A, 'verified_generation', return_value=(Path(staged['selection']), staged['selection_sha256'], wrong)), \
                 patch.object(SW, 'require_inactive'), self.assertRaisesRegex(ValueError, 'generation_policy_not_selected'):
             self.run_op('confirm', confirm=plan['confirmation_sha256'])
         self.assertEqual(json.loads(SW.marker(self.preparation)[1])['generation'], G_OLD)

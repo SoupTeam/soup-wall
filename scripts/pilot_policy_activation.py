@@ -8,13 +8,14 @@ observed protection. The next launch starts fresh authority from whichever gener
 """
 from __future__ import annotations
 import argparse
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 import hashlib
 import importlib.util
 import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import uuid
@@ -122,7 +123,13 @@ def write_journal(preparation, value):
 
 
 def record(entry, outcome):
+    """The journal's own retained view (includes the paths revert needs)."""
     return {**{k: v for k, v in entry.items() if k not in ('after_state', 'after_marker')}, 'outcome': outcome}
+
+
+def public(entry, outcome):
+    """Operator-facing view: digests and generation ids only, never private paths or the stored state."""
+    return {k: v for k, v in record(entry, outcome).items() if not k.endswith('_path')}
 
 
 def settle(preparation, journal, outcome):
@@ -396,6 +403,9 @@ def publish(ctx, front, journal, plan, operation, target):
         _, latest_raw, _ = sw.marker(preparation)
         require(sha(latest_raw) == pending['before_marker_sha256']
                 and sha(front.layout(prefix)['state'].read_bytes()) == pending['before_state_sha256'], 'concurrent_selection_change')
+        # The generation verified earlier must still be exactly what is about to be selected.
+        require(sw.regular(Path(target['selection_path']))[1] and sha(sw.regular(Path(target['selection_path']))[1])
+                == target['selection_sha256'], 'generation_changed_before_publication')
         require_idle(ctx)
         journal['pending'] = pending
         write_journal(preparation, journal)
@@ -527,11 +537,32 @@ def split_inspect(args, front):
             'state': 'split-pending-recovery', 'marker_generation': marker['generation'],
             'matches_journal': marker_sha in (pending['before_marker_sha256'], pending['after_marker_sha256'])
             and state_sha in (pending['before_state_sha256'], pending['after_state_sha256']),
-            'pending': record(pending, 'pending'),
+            'pending': public(pending, 'pending'),
             'action': 'Run `policy-activation recover` for this prefix; launches stay refused until it settles.'}
 
 
+@contextmanager
+def terminating_as_cancellation():
+    """A TERM during staging must unwind through the same cancellation path as Ctrl-C (children are killed)."""
+    def cancel(_signum, _frame):
+        raise KeyboardInterrupt
+    try:
+        previous = signal.signal(signal.SIGTERM, cancel)
+    except ValueError:  # not the main thread
+        yield
+        return
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
 def operation(args, front):
+    with terminating_as_cancellation():
+        return dispatch(args, front)
+
+
+def dispatch(args, front):
     if args.action == 'recover':
         return recover_operation(args, front)
     try:
@@ -584,7 +615,7 @@ def inspect_report(ctx, view, journal):
     origin = 'operator-candidate' if Path(files['policy']['path']).parent.parent == stored else 'baseline'
     return {'format': FORMAT, 'status': 'inspected', 'executed': False, 'active_protection': 'not-observed',
             'current': current_summary(ctx), 'selected_policy_origin': origin,
-            'pending': None if journal['pending'] is None else record(journal['pending'], 'pending'),
+            'pending': None if journal['pending'] is None else public(journal['pending'], 'pending'),
             'history': [{k: h[k] for k in ('operation', 'previous_generation', 'target_generation', 'candidate_sha256',
                                            'target_policy_sha256', 'outcome')} for h in journal['history']],
             'maintenance': view, 'blockers': blockers(view, journal)}
@@ -616,6 +647,11 @@ def main(argv, front):
         report = operation(args, front)
         print(json.dumps(report, sort_keys=True))
         return 2 if report.get('status') == 'conflicting_operator_edit' else 0
+    except KeyboardInterrupt:
+        report.update(status='cancelled', reason='policy_activation_cancelled', executed=None,
+                      action='Run `policy-activation inspect`; a pending transition is settled only by `recover`.')
+        print(json.dumps(report, sort_keys=True))
+        return 130
     except Exception as error:
         reason = str(error)
         report['reason'] = (reason if PUBLIC.fullmatch(reason) else
