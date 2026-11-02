@@ -380,7 +380,12 @@ def qualify(args, door, home, env, report, first, installed, receiver):
             public = (args.output / ('budget-' + str(i) + '.out.private')).read_bytes() + \
                      (args.output / ('budget-' + str(i) + '.err.private')).read_bytes()
             require(all(c.encode() not in public for c in canaries), 'budget_run_output_canary')
-            installed.provider_exec_witness(args.output / ('budget-' + str(i) + '.trace.private'), args.claude, canaries[i], models[i].url)
+            trace = args.output / ('budget-' + str(i) + '.trace.private')
+            require(canaries[1 - i].encode() not in trace.read_bytes(), 'budget_provider_cross_contamination')
+            if i == 1:
+                # Run 0 was stopped by SIGINT: its trace legitimately ends inside an unfinished syscall, so the
+                # complete-exec witness is applied to the run that finished normally, not to a truncated trace.
+                installed.provider_exec_witness(trace, args.claude, canaries[i], models[i].url)
         finish('owned-cleanup', all_stopped=True, roots_empty=True, sources_preserved=True, receiver_effects=0)
         evidence.update(status='passed', source_after=base.source())
         require(evidence['source_after'] == evidence['source'], 'budget_source_identity_changed')
