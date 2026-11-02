@@ -302,6 +302,14 @@ def qualify(args, door, home, env, report, first, installed, receiver):
         no_selected_start(trace)
         finish('stale-profile-zero-start', selected_started=0, network_connections=0)
 
+        # Verify both complete provider exec graphs before intentional cancellation can
+        # truncate run 0's trace. Cancellation must not remove its credential witness.
+        evidence['provider_exec_before_cancel'] = [
+            installed.provider_exec_witness(args.output / ('budget-' + str(i) + '.trace.private'),
+                                            args.claude, canaries[i], models[i].url)
+            for i in range(2)
+        ]
+
         os.killpg(processes[0].pid, signal.SIGINT)
         processes[0].wait(timeout=60)
         require(processes[1].poll() is None, 'budget_sibling_stopped')
