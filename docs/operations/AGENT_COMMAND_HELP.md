@@ -1,5 +1,7 @@
 # Offline command discovery
 
+The installable guided-pilot component includes `scripts/agent-command-help.py` and this guide. Use the helper from the verified installed component tree, alongside its `scripts/pilot.py` and `scripts/pilot_update.py`; no source checkout or separate script download is needed. The trusted digests remain explicit, as in the examples below.
+
 Choose a reviewed installed component and its trusted SHA-256. Python discovery calls its parser factory; Rust discovery invokes only that binary with nested `--help`. Review and trust the component and its dependencies before selection. The audit hook detects common process/network operations during Python lookup; it is not a sandbox for arbitrary Python code.
 
 ```sh

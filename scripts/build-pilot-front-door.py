@@ -42,6 +42,8 @@ MAX_NAME = 100
 # derives the closure from the sources and fails when this list misses one.
 SCRIPTS = (
     "scripts/agent-audit-report.py",
+    "scripts/agent-command-help.py",
+    "scripts/agent-diagnostic-diff.py",
     "scripts/edit-run-archive.py",
     "scripts/build-native-pilot-inputs.py",
     "scripts/install-sou62-filesystem-profile.py",
@@ -94,6 +96,8 @@ SCRIPTS = (
     "scripts/wsl_qualification.py",
 )
 DATA_FILES = (
+    "docs/operations/AGENT_COMMAND_HELP.md",
+    "docs/operations/AGENT_DIAGNOSTIC_DIFF.md",
     "profiles/mcp/git-linked-worktree-readonly-v1/contract.json",
     "rule_baseline/git_readonly_v1/rule_baseline.py",
     "rule_baseline/git_readonly_file_revisions_v1/rule_baseline.py",

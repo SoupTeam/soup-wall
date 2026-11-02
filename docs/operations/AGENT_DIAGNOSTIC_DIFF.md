@@ -1,5 +1,7 @@
 # Offline diagnostic diff
 
+The installable guided-pilot component includes `scripts/agent-diagnostic-diff.py`, its adjacent audit reader and this guide. Invoke the helper from the verified installed component tree; no checkout or separate copy of the scripts is needed.
+
 Compare two existing `sw-agent-doctor-support/1` directories. Keep this script beside the accepted `agent-audit-report.py` reader and its platform helpers when installing it outside a checkout.
 
 ```sh
