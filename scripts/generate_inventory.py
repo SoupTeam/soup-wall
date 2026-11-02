@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -56,7 +57,8 @@ def run_cmd(command, *, cwd=ROOT, timeout=DEFAULT_TIMEOUT, allowed=(0,)):
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         process = None
         try:
-            process = subprocess.Popen(command, cwd=cwd, stdin=subprocess.DEVNULL, stdout=out, stderr=err)
+            process = subprocess.Popen(command, cwd=cwd, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
+                                       start_new_session=os.name == "posix")
             deadline = time.monotonic() + timeout
             while process.poll() is None:
                 require(time.monotonic() < deadline, "scanner_timeout")
@@ -73,7 +75,10 @@ def run_cmd(command, *, cwd=ROOT, timeout=DEFAULT_TIMEOUT, allowed=(0,)):
             return {"status": "incomplete", "command": command, "reason": str(error)}
         finally:
             if process is not None and process.poll() is None:
-                process.kill()
+                if os.name == "posix":
+                    os.killpg(process.pid, signal.SIGKILL)
+                else:
+                    process.kill()
                 process.wait(timeout=5)
 
 
@@ -279,7 +284,7 @@ def main(argv=None):
         commands = {
             "cargo_audit": ["cargo", "audit", "--json", "--file", str(ROOT / "Cargo.lock")],
             "rust_licenses": [sys.executable, str(ROOT / "scripts/license_policy.py"), "--root", str(ROOT),
-                              "--report", str(args.output.parent / "rust-license-policy.json")],
+                              "--report", str(args.output.parent / (args.output.stem + "-rust-license-policy.json"))],
             "osv": ["osv-scanner", "scan", "source", "--format=json", "--all-packages",
                     *["--lockfile=" + ("requirements.txt:" if path.endswith("requirements.txt") else "") + path
                       for path in graphs]],

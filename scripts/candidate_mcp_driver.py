@@ -33,7 +33,7 @@ def drain_stderr():
 def drain_stdout():
     size = 0
     try:
-        for line in proc.stdout:
+        for line in iter(lambda: proc.stdout.readline(1024 * 1024 + 1), ""):
             size += len(line)
             if size > 1024 * 1024 or responses.full():
                 stream_errors.append("collector_stdout_limit")
