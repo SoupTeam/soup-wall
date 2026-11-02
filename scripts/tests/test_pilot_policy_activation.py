@@ -169,6 +169,23 @@ class SameScope(unittest.TestCase):
         A.same_scope(selection(), value, self.ITEM)
 
 
+class IdleScan(unittest.TestCase):
+    def test_wrappers_that_name_the_selected_agent_are_not_orphaned_runs(self):
+        self.assertIn(os.getpid(), A.ancestors())
+        ctx = {'paths': {'agentfw': Path('/owned/agentfw'), 'claude': Path('/owned/claude')}}
+        with patch.object(SW, 'require_inactive') as scan:
+            A.require_idle(ctx)
+        summary = scan.call_args.args[0]
+        self.assertEqual((summary['agent_path'], summary['claude_path']), ('/owned/agentfw', '/owned/claude'))
+        self.assertIn(os.getpid(), scan.call_args.kwargs['ignore'])
+
+    def test_a_real_selected_process_elsewhere_still_refuses(self):
+        ctx = {'paths': {'agentfw': Path('/owned/agentfw'), 'claude': Path('/owned/claude')}}
+        with patch.object(SW, 'require_inactive', side_effect=ValueError('active_or_uncertain_pilot_run')), \
+                self.assertRaisesRegex(ValueError, 'active_or_uncertain'):
+            A.require_idle(ctx)
+
+
 class Blockers(unittest.TestCase):
     VIEW = {'mode': 'entered', 'installation': 'matches', 'active': 0, 'uncertain': False}
 

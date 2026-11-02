@@ -67,6 +67,23 @@ def modules():
     return _MODULES
 
 
+def ancestors():
+    """This process and its parents. A wrapper naming the selected agent is not an orphaned pilot run."""
+    found, pid = set(), os.getpid()
+    while pid > 1 and pid not in found:
+        found.add(pid)
+        try:
+            pid = int((Path('/proc') / str(pid) / 'stat').read_bytes().rsplit(b') ', 1)[1].split()[1])
+        except (OSError, IndexError, ValueError):
+            break
+    return frozenset(found)
+
+
+def require_idle(ctx):
+    modules()['sw'].require_inactive({'agent_path': str(ctx['paths']['agentfw']), 'claude_path': str(ctx['paths']['claude'])},
+                                     ignore=ancestors())
+
+
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False).encode()
 
@@ -377,7 +394,7 @@ def publish(ctx, front, journal, plan, operation, target):
         _, latest_raw, _ = sw.marker(preparation)
         require(sha(latest_raw) == pending['before_marker_sha256']
                 and sha(front.layout(prefix)['state'].read_bytes()) == pending['before_state_sha256'], 'concurrent_selection_change')
-        sw.require_inactive({'agent_path': str(ctx['paths']['agentfw']), 'claude_path': str(ctx['paths']['claude'])})
+        require_idle(ctx)
         journal['pending'] = pending
         write_journal(preparation, journal)
         inject('after_intent')
@@ -456,7 +473,7 @@ def operation(args, front):
             return {**plan, 'status': 'preview', 'mutates': False, 'executed': False}
         require(args.confirm == plan['confirmation_sha256'], 'confirmation_stale')
         require(not plan['blockers'], plan['blockers'][0] if plan['blockers'] else 'blocked')
-        sw.require_inactive({'agent_path': str(ctx['paths']['agentfw']), 'claude_path': str(ctx['paths']['claude'])})
+        require_idle(ctx)
         if args.action == 'revert':
             pending = publish(ctx, front, journal, plan, 'revert', target)
             result = {'status': 'reverted'}
