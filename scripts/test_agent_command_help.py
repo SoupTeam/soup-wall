@@ -19,6 +19,7 @@ class Controls(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             binary = Path(temp) / 'agentfw'
             shutil.copy2(os.environ['AGENTFW_TEST_BINARY'], binary)
+            subprocess.run(['strip', '--strip-debug', str(binary)], check=True, timeout=30)
             result = subprocess.run([sys.executable, '-B', str(TOOL), '--agentfw', str(binary),
                                      '--sha256', hashlib.sha256(binary.read_bytes()).hexdigest(), 'list'],
                                     cwd=temp, capture_output=True, text=True, timeout=120)

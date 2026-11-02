@@ -289,8 +289,11 @@ def main(argv=None):
         else:
             print(json.dumps(data, indent=2))
         return 0
-    except (OSError, ValueError, AttributeError, ImportError):
-        print('error: unsupported or changed installed component', file=sys.stderr)
+    except (OSError, ValueError, AttributeError, ImportError) as error:
+        reasons = {'unsafe binary', 'binary exceeds cap', 'binary digest mismatch',
+                   'command tree exceeds cap', 'help reader failed or exceeded cap', 'help reader timed out'}
+        reason = str(error) if type(error) is ValueError and str(error) in reasons else 'unsupported or changed installed component'
+        print('error: ' + reason, file=sys.stderr)
         return 2
 
 
