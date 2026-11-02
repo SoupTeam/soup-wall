@@ -75,7 +75,10 @@ def topology(fd, counts, depth=0):
             (after.st_dev, after.st_ino, after.st_mtime_ns, after.st_ctime_ns), 'tree_changed')
 
 
-def inventory(roots):
+def inventory(roots, *, internal_file_links=False):
+    if internal_file_links:
+        import pilot_filesystem_links as links
+        return links.inventory(roots)
     require(isinstance(roots, list) and 2 <= len(roots) <= 4, 'count')
     result = []
     counts = [0, 0]
@@ -95,7 +98,18 @@ def inventory(roots):
     return {'format': FORMAT, 'roots': result}
 
 
+def profile(value):
+    return 'sw-mcp/filesystem-multi-root-file-links-readonly/1' if value['format'] == 'sw-pilot-filesystem-root-file-links/1' else PROFILE
+
+
+def profile_id(value):
+    return 'filesystem-multi-root-file-links-readonly-v1' if profile(value) != PROFILE else ID
+
+
 def verify(value, workspace=None):
+    if isinstance(value, dict) and value.get('format') == 'sw-pilot-filesystem-root-file-links/1':
+        import pilot_filesystem_links as links
+        return links.verify(value, workspace)
     require(isinstance(value, dict) and set(value) == {'format', 'roots'} and value['format'] == FORMAT,
             'binding_schema')
     roots = value['roots']
@@ -153,9 +167,10 @@ def main(argv=None):
     parser.add_argument('--root', action='append', required=True, metavar='ID=ABSOLUTE_PATH')
     parser.add_argument('--output', type=Path)
     parser.add_argument('--apply', action='store_true')
+    parser.add_argument('--internal-file-links', action='store_true', help='Explicit bounded relative file links; independent optional profile')
     args = parser.parse_args(argv)
     require(all('=' in root for root in args.root), 'root_argument')
-    binding = inventory([tuple(root.split('=', 1)) for root in args.root])
+    binding = inventory([tuple(root.split('=', 1)) for root in args.root], internal_file_links=args.internal_file_links)
     if args.apply:
         require(args.output is not None and args.output.is_absolute(), 'absolute_output_required')
         outside([args.output], binding)
@@ -163,10 +178,12 @@ def main(argv=None):
         try:
             require(not os.fstat(fd).st_mode & 0o077, 'private_output_parent_required')
             require(verify(binding) == binding, 'selected_root_changed')
+            raw = (json.dumps(binding, sort_keys=True, indent=2) + '\n').encode()
+            require(len(raw) <= 65536, 'manifest_bound')
             file = os.open(args.output.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
                            0o600, dir_fd=fd)
             with os.fdopen(file, 'wb') as stream:
-                stream.write((json.dumps(binding, sort_keys=True, indent=2) + '\n').encode())
+                stream.write(raw)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.fsync(fd)

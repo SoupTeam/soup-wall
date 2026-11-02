@@ -21,13 +21,22 @@ pub struct Root {
 pub struct Binding {
     pub format: String,
     pub roots: Vec<Root>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub links: Option<Vec<super::filesystem_links::Selection>>,
 }
 
 impl Binding {
     pub fn validate_schema(&self, workspace: &Path) -> anyhow::Result<()> {
         ensure!(
-            self.format == BINDING_FORMAT && (2..=4).contains(&self.roots.len()),
+            matches!(
+                self.format.as_str(),
+                BINDING_FORMAT | super::filesystem_links::BINDING_FORMAT
+            ) && (2..=4).contains(&self.roots.len()),
             "filesystem_roots_binding_schema"
+        );
+        ensure!(
+            (self.format == super::filesystem_links::BINDING_FORMAT) == self.links.is_some(),
+            "filesystem_links_selection_required"
         );
         for (index, root) in self.roots.iter().enumerate() {
             ensure!(
@@ -329,6 +338,7 @@ pub(crate) mod linux {
         binding: Binding,
         roots: Vec<File>,
         observer: Mutex<Observer>,
+        links: Option<super::super::filesystem_links::Guard>,
     }
     impl Guard {
         pub(crate) fn capture(binding: &Binding) -> anyhow::Result<Self> {
@@ -339,6 +349,14 @@ pub(crate) mod linux {
                     .context("filesystem_roots_count")?
                     .path,
             )?;
+            if binding.format == super::super::filesystem_links::BINDING_FORMAT {
+                return Ok(Self {
+                    binding: binding.clone(),
+                    roots: Vec::new(),
+                    observer: Mutex::new(Observer::new()?),
+                    links: Some(super::super::filesystem_links::Guard::capture(binding)?),
+                });
+            }
             let mut observer = Observer::new()?;
             let mut roots = Vec::new();
             for root in &binding.roots {
@@ -351,6 +369,7 @@ pub(crate) mod linux {
                 binding: binding.clone(),
                 roots,
                 observer: Mutex::new(observer),
+                links: None,
             };
             guard.validate()?;
             Ok(guard)
@@ -372,6 +391,9 @@ pub(crate) mod linux {
             name: &str,
             args: &serde_json::Value,
         ) -> anyhow::Result<()> {
+            if let Some(links) = &self.links {
+                return links.validate_call(name, args);
+            }
             self.validate()?;
             for (root, relative) in self.binding.resources(name, args)? {
                 let ordinal = self
@@ -417,6 +439,9 @@ pub(crate) mod linux {
             command: &mut Command,
             pins: &mut Vec<File>,
         ) -> anyhow::Result<()> {
+            if let Some(links) = &self.links {
+                return links.mount(command, pins);
+            }
             self.validate()?;
             command.args(["--size", "1048576", "--tmpfs", "/workspace"]);
             for (root, file) in self.binding.roots.iter().zip(&self.roots) {
@@ -472,6 +497,7 @@ mod tests {
             Binding {
                 format: BINDING_FORMAT.into(),
                 roots,
+                links: None,
             },
         )
     }

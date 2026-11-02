@@ -816,7 +816,9 @@ fn validate_registry(
     // them to this relay's callable profiles or advertised discovery result.
     // Arbitrary unadvertised registry entries remain a startup refusal.
     let peer_format = match format {
-        server_profile::FORMAT | server_profile::filesystem_roots::FORMAT => collector
+        server_profile::FORMAT
+        | server_profile::filesystem_roots::FORMAT
+        | server_profile::filesystem_links::FORMAT => collector
             .config
             .native
             .registry
@@ -841,7 +843,9 @@ fn validate_registry(
             .find(|format| {
                 matches!(
                     *format,
-                    server_profile::FORMAT | server_profile::filesystem_roots::FORMAT
+                    server_profile::FORMAT
+                        | server_profile::filesystem_roots::FORMAT
+                        | server_profile::filesystem_links::FORMAT
                 )
             })
             .unwrap_or(server_profile::FORMAT),
