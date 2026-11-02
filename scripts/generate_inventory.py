@@ -13,7 +13,7 @@ import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import signal
 import subprocess
@@ -89,6 +89,20 @@ def python_name(name):
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
+def scanner_identity(ecosystem, name, version):
+    if ecosystem == "PyPI":
+        name = python_name(name)
+        # PEP 440 release components permit zero padding. OSV 2.7 reports,
+        # for example, installed pip 25.2 as 25.2.0. Preserve raw versions in
+        # the inventory; normalize only plain numeric releases for comparison.
+        if re.fullmatch(r"[0-9]+(?:\.[0-9]+)*", version):
+            parts = [int(part) for part in version.split(".")]
+            while len(parts) > 1 and parts[-1] == 0:
+                parts.pop()
+            version = ".".join(map(str, parts))
+    return ecosystem, name, version
+
+
 def lock_graphs(root=ROOT):
     root = Path(root)
     cargo = root / "Cargo.lock"
@@ -128,9 +142,7 @@ def osv_observation(data, graphs):
     findings = []
     for result in data["results"]:
         source = result.get("source", {})
-        # OSV 2.7 also emits `unknown` source rows for some requirement entries.
-        # Exact input path and complete identity equality remain mandatory.
-        require(source.get("type") in {"lockfile", "unknown"}, "osv_source_type")
+        require(source.get("type") == "lockfile", "osv_source_type")
         path = str(Path(source.get("path", "")).resolve())
         require(path in graphs, "osv_unexpected_source")
         require(isinstance(result.get("packages"), list), "osv_packages_missing")
@@ -140,13 +152,15 @@ def osv_observation(data, graphs):
             require(all(isinstance(v, str) and v for v in (eco, name, version)), "osv_package_identity_missing")
             if eco == "PyPI":
                 name = python_name(name)
-            observed[path].add((eco, name, version))
+            observed[path].add(scanner_identity(eco, name, version))
             require(isinstance(row.get("vulnerabilities", []), list), "osv_findings_schema")
             for finding in row.get("vulnerabilities", []):
                 findings.append({"source": path, "package": {"ecosystem": eco, "name": name, "version": version},
                                  "advisory": finding, "reachability": "not_established"})
     for path, expected in graphs.items():
-        require(observed[path] == expected, "osv_exact_graph_mismatch:" + Path(path).name)
+        normalized = {scanner_identity(*item) for item in expected}
+        require(len(normalized) == len(expected), "ambiguous_expected_graph")
+        require(observed[path] == normalized, "osv_exact_graph_mismatch:" + Path(path).name)
     return {"coverage": {path: len(packages) for path, packages in observed.items()}, "findings": findings}
 
 
@@ -160,6 +174,55 @@ def rust_license_command(report_path):
     require(Path(report_path).resolve().is_relative_to(ROOT.resolve()), "rust_license_report_outside_source")
     return [sys.executable, str(ROOT / "scripts/license_policy.py"), "--root", str(ROOT),
             "--report", str(report_path)]
+
+
+def rustsec_identity(path, expected):
+    require(isinstance(expected, str) and re.fullmatch(r"[0-9a-f]{40}", expected), "expected_rustsec_commit_required")
+    path = Path(path).resolve(strict=True)
+    values = []
+    for arguments in (("rev-parse", "HEAD"), ("config", "--get", "remote.origin.url"),
+                      ("status", "--porcelain", "--untracked-files=all")):
+        result = run_cmd(["git", "-C", str(path), *arguments], timeout=15)
+        require(result["status"] == "passed", "rustsec_identity_unavailable")
+        values.append(result["stdout"].strip())
+    commit, origin, changed = values
+    require(commit == expected and not changed, "rustsec_database_changed")
+    require(origin.lower().rstrip("/").removesuffix(".git") == "https://github.com/rustsec/advisory-db",
+            "rustsec_database_origin_mismatch")
+    return {"commit": commit, "source": "https://github.com/RustSec/advisory-db", "dirty": False}
+
+
+def verify_cargo_audit(data):
+    require(isinstance(data.get("database"), dict)
+            and isinstance(data["database"].get("advisory-count"), int)
+            and data["database"]["advisory-count"] > 0
+            and isinstance(data.get("vulnerabilities"), dict)
+            and data["vulnerabilities"].get("found") is False
+            and data["vulnerabilities"].get("list") == []
+            and data.get("lockfile", {}).get("dependency-count", 0) > 0
+            and isinstance(data.get("warnings"), dict)
+            and not any(data["warnings"].values()), "cargo_audit_incomplete_or_findings")
+
+
+def original_server_notices(generation, metadata):
+    """Use the already-shipped original notice when npm omits its own file."""
+    identity = read_json(ROOT / "profiles/mcp/filesystem-readonly-v1/upstream-identity.json")
+    selected = identity["package"]
+    if (metadata.get("name"), metadata.get("version")) != (selected["name"], selected["version"]):
+        return []
+    profile = generation / "filesystem-profile"
+    notices = [row for row in identity["upstreamNotices"] if row.get("component") == "server"]
+    require(len(notices) == 1, "original_server_notice_identity_missing")
+    result = []
+    for row in notices:
+        parts = PurePosixPath(row["path"]).parts
+        require(len(parts) == 2 and parts[0] == "upstream-notices" and parts[1] not in {".", ".."},
+                "original_server_notice_path")
+        path = profile / row["path"]
+        require(not path.is_symlink() and path.resolve().is_relative_to(profile.resolve())
+                and sha(path) == row["sha256"], "original_server_notice_changed")
+        result.append(path)
+    return result
 
 
 def installed_graphs(generation, graphs):
@@ -178,6 +241,8 @@ def installed_graphs(generation, graphs):
         npm_graph.add(("npm", metadata["name"], metadata["version"]))
         files = [p for p in directory.iterdir() if p.is_file() and p.name.lower().startswith(
             ("license", "licence", "copying", "notice", "copyright"))]
+        if not files:
+            files = original_server_notices(generation, metadata)
         notices.append({"ecosystem": "npm", "name": metadata["name"], "version": metadata["version"],
                         "license": metadata.get("license"), "files": {str(p): sha(p) for p in files}})
     py_graph = set()
@@ -268,6 +333,7 @@ def main(argv=None):
     parser.add_argument("--native-reviews", type=Path)
     parser.add_argument("--rustsec-db", type=Path,
                         help="explicit pre-fetched RustSec database; audit uses --no-fetch")
+    parser.add_argument("--rustsec-commit", help="full expected commit of the explicit official RustSec checkout")
     parser.add_argument("--output", type=Path, default=ROOT / "target/runtime_inventory.json")
     args = parser.parse_args(argv)
     report = {"format": "sw-installed-runtime-inventory/1", "status": "incomplete",
@@ -310,7 +376,10 @@ def main(argv=None):
         # failed reports. Exit 1 and informational findings are never waived.
         audit_command = ["cargo", "audit", "--json", "--file", str(ROOT / "Cargo.lock")]
         if args.rustsec_db is not None:
+            report["rustsec_database"] = rustsec_identity(args.rustsec_db, args.rustsec_commit)
             audit_command.extend(["--no-fetch", "--db", str(args.rustsec_db.resolve(strict=True))])
+        else:
+            require(args.rustsec_commit is None, "rustsec_commit_requires_database")
         target = ROOT / "target"
         target.mkdir(exist_ok=True)
         license_temp = tempfile.TemporaryDirectory(prefix="runtime-inventory-license-", dir=target)
@@ -318,7 +387,7 @@ def main(argv=None):
         commands = {
             "cargo_audit": audit_command,
             "rust_licenses": rust_license_command(license_path),
-            "osv": ["osv-scanner", "scan", "source", "--format=json", "--all-packages",
+            "osv": ["osv-scanner", "scan", "source", "--format=json", "--all-packages", "--all-vulns", "--no-resolve",
                     *["--lockfile=" + ("requirements.txt:" if path.endswith("requirements.txt") else "") + path
                       for path in graphs]],
         }
@@ -339,17 +408,16 @@ def main(argv=None):
                     require(not observation["findings"], "unresolved_osv_findings")
                 elif name == "cargo_audit":
                     data = json.loads(result["stdout"], object_pairs_hook=pairs)
-                    require(isinstance(data.get("vulnerabilities"), dict)
-                            and data["vulnerabilities"].get("found") is False
-                            and data["vulnerabilities"].get("list") == []
-                            and data.get("lockfile", {}).get("dependency-count", 0) > 0
-                            and isinstance(data.get("database"), dict)
-                            and not any(data.get("warnings", {}).values()), "cargo_audit_incomplete_or_findings")
+                    report["cargo_audit_report"] = data
+                    verify_cargo_audit(data)
             except (ValueError, TypeError, KeyError) as error:
                 report["errors"].append(name + ":" + str(error))
         license_temp.cleanup()
         require(before == {path: sha(path) for path in before}, "lockfiles_changed_during_scan")
         require(report["scan_input_sha256"] == {path: sha(path) for path in graphs}, "scan_inputs_changed")
+        if args.rustsec_db is not None:
+            require(report["rustsec_database"] == rustsec_identity(args.rustsec_db, args.rustsec_commit),
+                    "rustsec_database_changed_during_scan")
         prep.verify_generation(args.selection.parent, args.expected_commit, probe_native=False)
         if not report["errors"]:
             report["status"] = "checks_passed"

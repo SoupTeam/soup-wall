@@ -35,8 +35,11 @@ Three bounded checks retain their commands, exit codes and raw output:
 OSV's expected Cargo representation includes local and vendored lock entries
 under its `crates.io` ecosystem label. The report separately retains each actual
 Cargo lock source and checksum; that scanner label does not prove publication
-or ownership in the registry. Known OSV `unknown` source labels are accepted only
-with the exact supplied path and the same complete package identity checks.
+or ownership in the registry. Resolution is disabled because these inputs already
+enumerate the installed transitive graph; an uninstalled conditional dependency
+must not be added by a resolver. Unknown/virtual sources remain incomplete.
+Only numeric PyPI release zero padding is normalized for comparison (`25.2`
+and `25.2.0`); prerelease, postrelease and different numeric versions remain distinct.
 Findings and affected ranges are retained separately from coverage, including
 when the scanner exits nonzero. Reachability is not inferred from a version match.
 
@@ -49,7 +52,15 @@ Cargo license verification uses a disposable report beneath the source `target/`
 directory, as required by the existing policy checker, and embeds the parsed
 result in the requested private inventory. Timeout diagnostics retain bounded
 partial output. An explicitly pre-fetched RustSec checkout can be selected with
-`--rustsec-db`; the audit then uses `--no-fetch` without extending scan timeouts.
+`--rustsec-db` together with `--rustsec-commit`; the audit then uses `--no-fetch`
+without extending scan timeouts. The official origin, expected commit and clean
+checkout are checked before and after scanning. An empty advisory database cannot
+clear the audit. All-vulnerability output remains enabled.
+
+When the original filesystem npm archive omits its license file, inventory uses
+the exact upstream server notice already shipped and hashed by the accepted
+installer. The original license declaration is preserved; this fallback does not
+approve an ambiguous declaration or change the license policy.
 
 Components outside package-manager scans require explicit reviewed evidence.
 The optional `--native-reviews` input uses format `sw-pilot-native-reviews/1`, with

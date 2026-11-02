@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import generate_inventory as inventory
@@ -58,13 +59,39 @@ class RuntimeInventoryTests(unittest.TestCase):
         report["results"][1]["packages"][0]["package"]["name"] = "Python_Lib"
         inventory.verify_osv(report, self.graphs)
 
-    def test_unknown_source_label_still_requires_exact_path_and_identity(self):
+    def test_unresolved_virtual_dependencies_are_not_installed_coverage(self):
         report = copy.deepcopy(self.report)
         report["results"][1]["source"]["type"] = "unknown"
-        inventory.verify_osv(report, self.graphs)
-        report["results"][1]["packages"][0]["package"]["version"] = "unrelated"
-        with self.assertRaisesRegex(ValueError, "exact_graph_mismatch"):
+        with self.assertRaisesRegex(ValueError, "source_type"):
             inventory.verify_osv(report, self.graphs)
+
+    def test_numeric_python_release_zero_padding_is_equivalent_but_other_versions_are_not(self):
+        report = copy.deepcopy(self.report)
+        report["results"][1]["packages"][0]["package"]["version"] = "2.0.0"
+        inventory.verify_osv(report, self.graphs)
+        for version in ("2.0.1", "2.0rc1", "2.0.post1", "20.0"):
+            report["results"][1]["packages"][0]["package"]["version"] = version
+            with self.subTest(version=version), self.assertRaisesRegex(ValueError, "exact_graph_mismatch"):
+                inventory.verify_osv(report, self.graphs)
+
+    def test_original_server_notice_must_match_the_shipped_source_identity(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "profiles/mcp/filesystem-readonly-v1"
+            source.mkdir(parents=True)
+            generation = root / "generation"
+            notice = generation / "filesystem-profile/upstream-notices/server-LICENSE"
+            notice.parent.mkdir(parents=True)
+            notice.write_text("Original upstream license text")
+            identity = {"package": {"name": "original-server", "version": "1.0"}, "upstreamNotices": [{
+                "component": "server", "path": "upstream-notices/server-LICENSE", "sha256": inventory.sha(notice)}]}
+            (source / "upstream-identity.json").write_text(json.dumps(identity))
+            with patch.object(inventory, "ROOT", root):
+                self.assertEqual(inventory.original_server_notices(generation, {"name": "original-server", "version": "1.0"}), [notice])
+                self.assertEqual(inventory.original_server_notices(generation, {"name": "unrelated", "version": "1.0"}), [])
+                notice.write_text("Replaced")
+                with self.assertRaisesRegex(ValueError, "notice_changed"):
+                    inventory.original_server_notices(generation, {"name": "original-server", "version": "1.0"})
 
     def test_full_local_cargo_rows_are_correlated_without_losing_source_origins(self):
         graph = inventory.lock_graphs()[str((inventory.ROOT / "Cargo.lock").resolve())]
@@ -88,6 +115,34 @@ class RuntimeInventoryTests(unittest.TestCase):
         self.assertEqual(command[-2:], ["--report", str(path)])
         with self.assertRaisesRegex(ValueError, "outside_source"):
             inventory.rust_license_command(inventory.ROOT.parent / "report.json")
+
+    def test_prefetched_rustsec_requires_exact_clean_official_source(self):
+        with tempfile.TemporaryDirectory() as temp:
+            replies = [{"status": "passed", "stdout": "a" * 40},
+                       {"status": "passed", "stdout": "https://github.com/RustSec/advisory-db.git"},
+                       {"status": "passed", "stdout": ""}]
+            with patch.object(inventory, "run_cmd", side_effect=copy.deepcopy(replies)):
+                self.assertEqual(inventory.rustsec_identity(temp, "a" * 40)["commit"], "a" * 40)
+            for index, value in [(0, "b" * 40), (1, "https://example.invalid/database"), (2, " M changed.toml")]:
+                changed = copy.deepcopy(replies)
+                changed[index]["stdout"] = value
+                with patch.object(inventory, "run_cmd", side_effect=changed), self.assertRaises(ValueError):
+                    inventory.rustsec_identity(temp, "a" * 40)
+            with self.assertRaisesRegex(ValueError, "expected_rustsec_commit_required"):
+                inventory.rustsec_identity(temp, None)
+
+    def test_cargo_audit_cannot_clear_an_empty_database_or_informational_findings(self):
+        report = {"database": {"advisory-count": 1}, "lockfile": {"dependency-count": 1},
+                  "vulnerabilities": {"found": False, "list": []}, "warnings": {}}
+        inventory.verify_cargo_audit(report)
+        empty = copy.deepcopy(report)
+        empty["database"]["advisory-count"] = 0
+        with self.assertRaisesRegex(ValueError, "incomplete_or_findings"):
+            inventory.verify_cargo_audit(empty)
+        warning = copy.deepcopy(report)
+        warning["warnings"] = {"unmaintained": [{"package": "example"}]}
+        with self.assertRaisesRegex(ValueError, "incomplete_or_findings"):
+            inventory.verify_cargo_audit(warning)
 
     def test_real_shipped_graphs_are_finite_and_include_both_original_servers(self):
         graph = set.union(*inventory.lock_graphs().values())
