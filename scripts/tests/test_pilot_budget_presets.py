@@ -646,6 +646,7 @@ class ProjectSelection(Base):
 
 
 @POSIX
+@patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'owned-provider-fixture'})
 class PreparedRunIntegration(Base):
     """pilot-run revalidates the preset itself, whichever launcher path selected it."""
 
