@@ -11,8 +11,8 @@ and screenshots:
 | --- | --- |
 | Platform | hosted Ubuntu 24.04 x86_64 container, non-root user (not a physical host, not WSL2) |
 | Base | main `f66a2242` |
-| Source | commit `12b1ffff`, tree `da6f5286c8db16b57d8ab71c17e733b9385cc7d7`, clean |
-| Console `llm-firewall` | `d08ff820fae88db492592980cb6ea4ec29dd9ff79f20f69c375bd72460cd3eff` (debug, local Rust 1.97.0, not the pinned 1.99.1) |
+| Source | commit `a164e612` (review fix on top of the PR's `8ebdf24c`), tree `adb8087c4023c317e3739a1cccd52cbb8d409d31`, clean |
+| Console `llm-firewall` | `b9db00b1f77d99190876031002707267d42e8e6c086bdb056e252424feb64881` (debug, local Rust 1.97.0, not the pinned 1.99.1) |
 | Agent `agentfw` | `0bf1f6e150566b2722f3250d81a0524b4388bbcf440cd9cf299f96bd9521ec37` (same build) |
 | Stores | disposable SQLite file; disposable PostgreSQL 16.15 cluster on 127.0.0.1 with TLS (owned CA, `sslmode=require`) |
 | Browser | Chromium (Playwright) as Viewer, Operator and Owner |
@@ -30,7 +30,7 @@ no retained report or screenshot contains them.
 
 ## Result: `scripts/console-fleet-triage-acceptance.py` passed
 
-SQLite: **36 checks**. PostgreSQL: **37 checks** (adds the TLS migration).
+SQLite: **40 checks**. PostgreSQL: **41 checks** (adds the TLS migration).
 
 | Step | Observed on both stores |
 | --- | --- |
@@ -44,6 +44,7 @@ SQLite: **36 checks**. PostgreSQL: **37 checks** (adds the TLS migration).
 | Delayed page | a held next-page reply released after switching to Beta was not shown |
 | No side effects | no non-GET browser request, unchanged URL, no browser storage; enrollments and group members unchanged |
 | Restart | Console stopped: the triage read fails and the list clears; after restart Operator, Owner and Viewer each see attention 37 and no mutation control in the section |
+| Count bound | a third tenant with 10,001 Agents where only `agent-10000`, beyond the bound, has an applied acknowledgement: by prefix, by "no recorded problem" with oldest acknowledgement first and by age paging it is neither counted nor listed (`complete: false`, 10,000 counted, 0 matching); the browser says later Agents are neither counted nor listed, shows "Seen 25 of 10000 matching" and lists nothing for the prefix |
 | Layout | 390 px wide page without horizontal overflow |
 
 Screenshots: [all outcomes](console-fleet-triage-2026-11-02/sqlite-triage-edge.png),
@@ -56,14 +57,19 @@ Screenshots: [all outcomes](console-fleet-triage-2026-11-02/sqlite-triage-edge.p
   Agent ID and by oldest acknowledgement without loss or duplicates; HTTP
   authorization (Viewer, Operator, Owner, no session, Agent credential),
   unknown tenant and invalid queries; the 10,000-Agent count bound reported
-  as incomplete; empty and unknown tenants.
-- `scripts/tests/test_console_fleet_triage_browser.py` (8, synthetic
+  as incomplete, with pages drawn from the same counted Agents (an
+  acknowledged Agent beyond the bound is never listed by prefix,
+  oldest-acknowledgement filter or full age paging; this fails on the
+  previous query); empty and unknown tenants.
+- `scripts/tests/test_console_fleet_triage_browser.py` (10, synthetic
   fixtures): counts, denominators and filter buttons; pages, partial counts,
   repeated and missing Agents after changes; a stale reply after a tenant
   switch; mixed-tenant, unknown problem, HTML-shaped ID, duplicate, filter
   mismatch, wrong tenant, negative count and wrong contract responses
   refused; 401, 403, 404 and 503; deep links; local prefix refusal and empty
-  state; 390 px layout.
+  state; 390 px layout; a listed Agent outside the counted universe and
+  inconsistent counts refused (never "Seen 1 of 0"); more Agents seen than
+  the latest count reported as a change, never as "Seen 30 of 26".
 - History, enrollment and rollout browser suites (49) still pass with the
   module on the page; `proxy_tenants.rs` checks the served page.
 

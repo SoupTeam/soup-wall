@@ -2,13 +2,15 @@
   "backend": "postgres",
   "binaries": {
     "agentfw": "0bf1f6e150566b2722f3250d81a0524b4388bbcf440cd9cf299f96bd9521ec37",
-    "llm-firewall": "d08ff820fae88db492592980cb6ea4ec29dd9ff79f20f69c375bd72460cd3eff"
+    "llm-firewall": "b9db00b1f77d99190876031002707267d42e8e6c086bdb056e252424feb64881"
   },
   "checks": {
     "agent-api-fetch": true,
     "agent-api-rejection": true,
     "agent-credential-401": true,
+    "bounded-universe-pages-match-counts": true,
     "browser-ack-oldest-sort": true,
+    "browser-bounded-universe-wording": true,
     "browser-counts-match-projection": true,
     "browser-denominator-and-no-health-claim": true,
     "browser-filter-rejected": true,
@@ -16,6 +18,7 @@
     "browser-no-writes-url-or-storage": true,
     "browser-old-acknowledgement-historical": true,
     "browser-operator-after-restart": true,
+    "browser-outside-agent-not-listed": true,
     "browser-owner-after-restart": true,
     "browser-prefix-all-outcomes": true,
     "browser-second-page": true,
@@ -27,6 +30,7 @@
     "invalid-queries-400": true,
     "narrow-no-horizontal-overflow": true,
     "no-session-401": true,
+    "outside-agent-applied": true,
     "post-not-a-mutation": true,
     "postgres-explicit-migration": true,
     "projection-counts": true,
@@ -44,7 +48,7 @@
     "unknown-tenant-404": true
   },
   "config_sha256": {
-    "console": "f87d5bbcad5b1b571a972d5ab510f57688ddde463c8cf2a05ce0d22ebd75b1c7"
+    "console": "1d92adc73a6636bef04d009d1d6898655472cdc40d56587ee2cb8ad31275ddf5"
   },
   "format": "sw-console-fleet-triage-acceptance/1",
   "postgres": {
@@ -54,6 +58,23 @@
   },
   "scope": "one disposable private Linux deployment; synthetic tenants and Agent IDs; recorded Console evidence only, not liveness, production, multi-host or runtime attestation",
   "snapshots": {
+    "bounded_universe": [
+      {
+        "complete": false,
+        "counted_agents": 10000,
+        "matching": 0
+      },
+      {
+        "complete": false,
+        "counted_agents": 10000,
+        "matching": 0
+      },
+      {
+        "complete": false,
+        "counted_agents": 10000,
+        "matching": 0
+      }
+    ],
     "counts": {
       "attention": 38,
       "complete": true,
@@ -71,8 +92,8 @@
       "stale_ack": 1
     }
   },
-  "source_commit": "12b1ffffc82d3009c71434f4ae5e6f42cf9674dc",
+  "source_commit": "a164e61293efd92831785ee6906d113cd5960aca",
   "source_dirty": false,
-  "source_tree": "da6f5286c8db16b57d8ab71c17e733b9385cc7d7",
+  "source_tree": "adb8087c4023c317e3739a1cccd52cbb8d409d31",
   "status": "passed"
 }
