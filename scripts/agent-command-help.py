@@ -82,14 +82,24 @@ def discover(path, expected):
 
 def completion(data, shell, context=None):
     context = list(context or [])
+    if shell not in ('bash', 'zsh', 'fish') or len(data['commands']) > 256:
+        raise ValueError('unsupported completion input')
+    if any(not isinstance(word, str) or not re.fullmatch('[a-z][a-z0-9-]{0,63}', word) for word in context):
+        raise ValueError('unsafe completion context')
     selected = []
     for row in data['commands']:
         command = row['command']
+        if not isinstance(command, list) or len(command) > 8 or any(
+                not isinstance(word, str) or not re.fullmatch('[a-z][a-z0-9-]{0,63}', word) for word in command):
+            raise ValueError('unsafe completion command')
+        if len(row['flags']) > 256 or any(not isinstance(flag.get('name'), str) or not re.fullmatch(
+                '-{1,2}[a-zA-Z0-9][a-zA-Z0-9-]{0,79}', flag['name']) for flag in row['flags']):
+            raise ValueError('unsafe completion flag')
         if command[:len(context)] == context:
             selected.append(row)
     if not selected:
         raise ValueError('unknown completion context')
-    words = sorted({word for row in selected for word in row['command'][len(context):]} |
+    words = sorted({row['command'][len(context)] for row in selected if len(row['command']) > len(context)} |
                    {flag['name'] for row in selected if row['command'] == context for flag in row['flags']})
     joined = ' '.join(words)
     if shell == 'bash':

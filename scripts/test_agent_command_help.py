@@ -80,6 +80,36 @@ class Controls(unittest.TestCase):
         self.assertIn("-l 'json'", fish)
         self.assertNotIn("'transport'", fish)
 
+    def test_imported_completion_candidates_cannot_inject_shell(self):
+        for value in ('$(touch marker)', "x'; exit 99; '", 'x\ncommand'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                reader_completion({'commands': [{'command': [value], 'flags': []}]}, 'bash', [])
+
+    def test_completion_lists_only_immediate_children(self):
+        data = {'commands': [{'command': [], 'flags': []},
+                             {'command': ['provider'], 'flags': []},
+                             {'command': ['provider', 'preview'], 'flags': []}]}
+        output = reader_completion(data, 'bash', [])
+        self.assertNotIn('preview', output)
+
+    def test_generated_bash_runs_without_executing_hostile_current_word(self):
+        bash = shutil.which('bash')
+        if sys.platform == 'win32':
+            bash = str(Path('C:/Program Files/Git/bin/bash.exe'))
+        if not bash or not Path(bash).is_file():
+            self.skipTest('Bash is unavailable')
+        data = {'commands': [{'command': [], 'flags': []},
+                             {'command': ['provider'], 'flags': []}]}
+        script = reader_completion(data, 'bash', [])
+        script += '\nCOMP_WORDS=(pilot pro); COMP_CWORD=1; _pilot_help_complete; printf "%s\\n" "${COMPREPLY[@]}"\n'
+        script += 'COMP_WORDS=(pilot \'$(touch marker)\'); _pilot_help_complete; test ! -e marker\n'
+        with tempfile.TemporaryDirectory() as temp:
+            result = subprocess.run([bash, '--noprofile', '--norc'], input=script,
+                                    text=True, capture_output=True, cwd=temp, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('provider', result.stdout)
+            self.assertFalse((Path(temp) / 'marker').exists())
+
 
 def reader_completion(data, shell, context):
     spec = importlib.util.spec_from_file_location('help_reader_context', TOOL)
