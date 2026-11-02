@@ -155,13 +155,17 @@ class SameScope(unittest.TestCase):
             'role_removed': lambda v: v['files'].pop('git'),
             'policy_other_file': lambda v: v['files']['policy'].update(sha256='0' * 64),
             'registry': lambda v: v['prepared_profiles']['git'].update(registry_sha256='0' * 64),
-            'package': lambda v: v['prepared_profiles']['filesystem'].update(package_tree_sha256='0' * 64),
             'profile_policy': lambda v: v['prepared_profiles']['git'].update(policy_sha256='0' * 64),
             'profile_format': lambda v: v['prepared_profiles']['git'].update(format='x'),
         }
         for name, change in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
                 A.same_scope(selection(), mutate(change), self.ITEM)
+
+    def test_package_tree_digest_may_differ_because_it_embeds_install_paths(self):
+        value = self.new()
+        value['prepared_profiles']['git']['package_tree_sha256'] = '0' * 64
+        A.same_scope(selection(), value, self.ITEM)
 
     def test_node_path_may_move_but_not_its_digest(self):
         value = self.new()

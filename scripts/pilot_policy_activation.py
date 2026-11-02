@@ -351,7 +351,9 @@ def same_scope(old, new, policy_item):
             require(new['files'][role] == item, 'generation_scope_changed')
     for kind in ('filesystem', 'git'):
         before, after = old['prepared_profiles'][kind], new['prepared_profiles'][kind]
-        for key in ('format', 'registry_sha256', 'package_tree_sha256', 'policy_sha256'):
+        # The package tree digest is verified against its own installation by verify_generation; it embeds
+        # absolute install paths, so it cannot be equal across generations. Tools, classes and policy must be.
+        for key in ('format', 'registry_sha256', 'policy_sha256'):
             require(before[key] == after[key], 'generation_profile_changed')
 
 

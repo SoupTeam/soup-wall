@@ -18,7 +18,6 @@ CASES = ('useful-read-under-base', 'candidate-inert', 'preview-inert', 'open-ins
          'tampered-candidate-refused', 'stale-confirmation-refused', 'killed-staging-keeps-old-generation',
          'concurrent-confirmation', 'activation-observed', 'newly-denied-zero-execution', 'hard-deny-ask-preserved',
          'revert-fresh-authority', 'owned-cleanup')
-OPEN = re.compile(r'openat\([^)]*"[^"]*README\.md"[^)]*\)\s*=\s*\d+')
 
 
 def qualify(args, door, home, env, report, *, guided, receiver, baseline, selection, load):
@@ -81,8 +80,11 @@ def qualify(args, door, home, env, report, *, guided, receiver, baseline, select
     def pointers():
         return (guided.BASE.sha(preparation / 'current.json'), guided.BASE.sha(args.prefix / 'front-door.json'))
 
+    # Only the selected project's README: unrelated package READMEs opened while servers load are not witnesses.
+    target = re.compile(r'openat\([^)]*"(?:/workspace|' + re.escape(str(args.project)) + r')/README\.md"[^)]*\)\s*=\s*\d+')
+
     def opens(trace):
-        return len(OPEN.findall(trace.read_text(errors='replace')))
+        return len(target.findall(trace.read_text(errors='replace')))
 
     def results_ok(row, results, expect_error):
         require(row['exit'] == 0 and row['process_cleanup']['all_stopped'], 'activation_run_not_clean')
@@ -261,6 +263,8 @@ def qualify(args, door, home, env, report, *, guided, receiver, baseline, select
     for contender in contenders:
         out, _ = contender.communicate(timeout=1800)
         outcomes.append((contender.returncode, json.loads(out.decode().splitlines()[-1])))
+    evidence['concurrent'] = [{'exit': code, 'status': o.get('status'), 'reason': o.get('reason'), 'detail': o.get('detail')}
+                              for code, o in outcomes]
     winners = [o for code, o in outcomes if code == 0]
     losers = [o for code, o in outcomes if code != 0]
     require(len(winners) == 1 and len(losers) == 1 and winners[0]['status'] == 'activated'
