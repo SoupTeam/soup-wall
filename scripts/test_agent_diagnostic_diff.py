@@ -129,6 +129,20 @@ class Controls(unittest.TestCase):
         self.assertIn('pilot.checks.pilot_policy.sha256', result['changed_fields'])
         self.assertNotIn('a' * 64, json.dumps(result))
 
+    def test_comparison_cannot_launch_or_contact_network(self):
+        with patch('subprocess.Popen', side_effect=AssertionError('unexpected child')), \
+             patch('socket.socket', side_effect=AssertionError('unexpected network')):
+            fields = {'checks.pilot_policy.sha256': 'a' * 64}
+            result = tool.compare({'fields': fields}, {'fields': {}})
+        self.assertEqual(result['rows'][0]['state'], 'missing')
+        self.assertEqual(result['correlation'], 'none_no_authenticated_cross_bundle_call_binding')
+
+    def test_duplicate_check_and_unknown_schema_refused(self):
+        check = {'id': 'configuration', 'source': 'private_config_yaml',
+                 'outcome': 'ready', 'reason_code': 'config_valid'}
+        with self.assertRaises(ValueError):
+            tool.project_checks([check, check], 'checks.', {})
+
     @unittest.skipUnless(sys.platform == 'linux', 'native Linux private reader control')
     def test_native_private_reader_and_output(self):
         with tempfile.TemporaryDirectory() as temp:
