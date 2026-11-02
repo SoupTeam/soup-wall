@@ -39,6 +39,17 @@ jobs:
           cargo test --locked -p agentfw --lib support_bundle
       - name: Installed command outside checkout
         run: cargo test --locked -p agentfw --test doctor -- --nocapture
+      - name: Qualify selected offline tooling
+        env:
+          AGENTFW_TEST_BINARY: ${{ github.workspace }}/target/debug/agentfw
+        run: |
+          cargo build --locked -p agentfw --bin agentfw
+          if test -f scripts/test_agent_diagnostic_diff.py; then
+            python3 -B -m unittest scripts.test_agent_diagnostic_diff -v
+          fi
+          if test -f scripts/test_agent_command_help.py; then
+            bash scripts/qualify-command-shells.sh
+          fi
       - name: Warnings denied
         run: cargo clippy --locked -p agentfw --all-targets -- -D warnings
 
