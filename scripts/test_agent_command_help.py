@@ -246,10 +246,11 @@ class Controls(unittest.TestCase):
                              {'command': ['provider'], 'flags': []},
                              {'command': ['provider', 'preview'], 'flags': []}]}
         script = reader_completion(data, 'fish', [])
-        script += "complete -C 'pilot provider pre'\n"
+        script += "complete -C 'pilot '\ncomplete -C 'pilot provider pre'\n"
         result = subprocess.run([shell, '--no-config'], input=script, text=True, capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('preview', result.stdout)
+        self.assertIn('provider', result.stdout)
 
 
 def reader_completion(data, shell, context):

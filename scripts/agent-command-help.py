@@ -205,7 +205,8 @@ def _completion(data, shell, context=None):
             return '\n'.join(lines) + '\n'
         lines = ['function __pilot_help_context', ' set -l words (commandline -opc)',
                  ' test (count $words) -ge 1; or return 1', ' set -e words[1]',
-                 ' test (string join " " -- $words) = "$argv[1]"', 'end']
+                 ' set -l context (string join " " -- $words)',
+                 ' test "$context" = "$argv[1]"', 'end']
         for key, value in cases:
             for word in value.split():
                 option = "-l '" + word[2:] + "'" if word.startswith('--') else "-s '" + word[1:] + "'" if word.startswith('-') else "-a '" + word + "'"
