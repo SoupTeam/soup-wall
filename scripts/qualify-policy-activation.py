@@ -311,11 +311,16 @@ def qualify(args, door, home, env, report, *, guided, receiver, baseline, select
     # A real storage failure on the front-door state write: the marker already selects the old generation while
     # front-door.json still names the activated one (marker-new / state-old). No process is killed; the syscall fails.
     interrupt = work / 'revert-interrupt.trace.private'
-    command = [str(args.strace), '-f', '-qq', '-e', 'trace=rename', '-e', 'inject=rename:error=EIO:when=1',
+    renames = 'rename,renameat,renameat2'
+    command = [str(args.strace), '-f', '-qq', '-e', 'trace=' + renames, '-e', 'inject=' + renames + ':error=EIO:when=1',
                '-P', str(args.prefix / 'front-door.json'), '-o', str(interrupt),
                str(args.agentfw), 'pilot', '--home', str(home), 'policy-activation', 'revert', '--prefix', str(args.prefix),
                '--state-root', str(args.state_root), '--generation', old_generation, '--confirm', undo['confirmation_sha256']]
     interrupted = subprocess.run(command, cwd=door.cwd, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=600)
+    if interrupted.returncode == 0:
+        text = interrupt.read_text(errors='replace') if interrupt.exists() else ''
+        evidence['interrupt_trace'] = [line[:200] for line in text.splitlines()[:12]]
+        evidence['interrupt_output'] = interrupted.stdout.decode('utf-8', 'replace')[-300:]
     require(interrupted.returncode != 0, 'activation_interruption_not_injected')
     current_marker = json.loads((preparation / 'current.json').read_bytes())
     state_selection = json.loads((args.prefix / 'front-door.json').read_bytes())['selection']
