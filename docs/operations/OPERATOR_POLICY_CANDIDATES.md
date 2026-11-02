@@ -85,7 +85,8 @@ four exported files. It creates no directory and does not trust matching policy
 bytes alone. Interrupted staging is not an active candidate; keep uncertain
 leftovers for inspection and use a fresh destination rather than blind overwrite.
 
-Activation remains a separate independently reviewed operation. Existing
+Activation remains a separate independently reviewed operation; an idle installed Linux
+pilot can use [`pilot policy-activation`](POLICY_ACTIVATION.md) for restricting deny-only candidates. Existing
 `mcp-profile preview/install/upgrade` governs compiled native profiles; this
 command does not call that route. A changed global Agent policy must use the
 existing reviewed configuration/managed policy route and a freshly prepared,

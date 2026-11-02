@@ -58,6 +58,7 @@ PROFILE_FAILURE_CODES = frozenset({"provider_home_invalid", "provider_home_chang
     "provider_version_required", "provider_version_stale", "provider_version_missing", "provider_version_in_use",
     "provider_version_limit", "provider_index_invalid", "provider_update_no_changes"})
 HINTS = {
+    "budget_preset_confirmation_required": "Name the preset and its exact digest from `budget-preset inspect`; the run never picks a newer version or runs unbudgeted.",
     "not_prepared": "No prepared selection under this prefix. Run `pilot.py preview`, then `pilot.py prepare --apply`.",
     "front_door_state_invalid": "The front-door record is unreadable or changed. Prepare again with --apply.",
     "stale_source": "The selection was prepared from another commit. Check out the reviewed commit or prepare again with --apply.",
@@ -555,6 +556,14 @@ def run(args):
         words += ["--state-root", str(args.state_root)]
     if args.prompt is not None:
         words += ["--prompt", args.prompt]
+    preset, preset_digest = getattr(args, "budget_preset", None), getattr(args, "budget_preset_digest", None)
+    if preset is not None or preset_digest is not None:
+        # Both are required: a name alone could silently select a newer version.
+        require(preset is not None and preset_digest is not None
+                and getattr(args, "agent_home", None) is not None, "budget_preset_confirmation_required")
+        # The same installation home that owns the maintenance gate owns the preset catalog.
+        words += ["--budget-preset", preset, "--expected-budget-preset-digest", preset_digest,
+                  "--budget-preset-home", str(getattr(args, "maintenance_home", None) or args.agent_home)]
     # The terminal delivers Ctrl-C to the whole foreground group; the accepted
     # supervisor owns cancellation and cleanup, so this process only waits.
     # TERM and HUP sent to this process are forwarded unchanged.
@@ -922,6 +931,8 @@ def parser():
     command.add_argument("--ask-wait-seconds", type=int, default=0)
     command.add_argument("--state-root", type=Path)
     command.add_argument("--port", type=int, default=0)
+    command.add_argument("--budget-preset", help="existing named Linux budget preset for this run only")
+    command.add_argument("--budget-preset-digest", help="exact preset digest from `budget-preset inspect/check`")
     command = commands.add_parser("status", parents=[shared])
     command.add_argument("--state-root", type=Path)
     maintenance = commands.add_parser("maintenance", help="pause new owned installed launches; keep existing hosts")
@@ -985,6 +996,8 @@ def parser():
     commands.add_parser("worktree-selection", help="explicitly bind the roots of a linked Git worktree")
     commands.add_parser("filesystem-roots", help="explicitly bind separately selected read-only root IDs")
     commands.add_parser("project", help="inspect, check and explicitly manage named project presets")
+    commands.add_parser("policy-activation", help="activate a reviewed deny-only policy candidate for an idle installation")
+    commands.add_parser("budget-preset", help="inspect, check and explicitly manage named Linux resource-budget presets")
     commands.add_parser("help")
     commands.add_parser("update", help="preview, apply, recover or roll back a complete local pilot generation")
     commands.add_parser("configuration", help="privately back up and restore supported declarative configuration")
@@ -1032,6 +1045,14 @@ def main(argv=None):
         project_home = installed_home = Path(project_words[1]); project_words = project_words[2:]
     if project_words and project_words[0].startswith('--agent-home='):
         project_home = installed_home = Path(project_words[0].split('=', 1)[1]); project_words = project_words[1:]
+    if project_words[:1] == ['policy-activation']:
+        import types
+        front = types.SimpleNamespace(**globals(), PROJECT_HOME=project_home, INSTALLED_HOME=installed_home)
+        return load('front_door_policy_activation', 'pilot_policy_activation.py').main(project_words[1:], front)
+    if project_words[:1] == ['budget-preset']:
+        import types
+        front = types.SimpleNamespace(**globals(), PROJECT_HOME=project_home, INSTALLED_HOME=installed_home)
+        return load('front_door_budget_presets', 'pilot_budget_presets.py').main(project_words[1:], front)
     if project_words[:1] == ['project']:
         module = load('front_door_project_presets', 'pilot_project_presets.py')
         # Explicit object avoids relying on importlib registration of this entry.
@@ -1078,7 +1099,8 @@ def main(argv=None):
                 for field in ("operation", "confirm"):
                     value = getattr(args, field, None)
                     if value is not None: words += ["--" + field, value]
-            for name in ("prompt", "timeout_seconds", "ask_wait_seconds", "state_root", "port"):
+            for name in ("prompt", "timeout_seconds", "ask_wait_seconds", "state_root", "port",
+                         "budget_preset", "budget_preset_digest"):
                 value = getattr(args, name, None)
                 if value is not None:
                     words += ["--" + name.replace("_", "-"), str(value)]
