@@ -9,6 +9,7 @@ cd "$ROOT"
 export RUSTUP_TOOLCHAIN=1.94.1 RUSTUP_AUTO_INSTALL=0
 [[ "$(rustc --version)" == 'rustc 1.94.1 '* ]] || { echo 'Exact native Rust 1.94.1 required' >&2; exit 1; }
 [[ -z "$(git status --porcelain --untracked-files=all)" ]] || { echo 'Clean committed source required' >&2; exit 1; }
+export CANDIDATE_EXPECTED_COMMIT="$(git rev-parse HEAD)"
 : "${CANDIDATE_BWRAP:?Supply the reviewed bubblewrap 0.13.1 binary}"
 : "${CANDIDATE_BWRAP_SHA256:?Supply its independently recorded SHA-256}"
 echo "$CANDIDATE_BWRAP_SHA256  $CANDIDATE_BWRAP" | sha256sum --check --status
@@ -57,6 +58,9 @@ rm -rf "$TARGET_DIR/npm-cache/_logs"
 # Include transitive notices with the exact lock graph before removing installed packages.
 python3 scripts/candidate_manifest.py "$TARGET_DIR"
 rm -rf "$TARGET_DIR/profiles/mcp/filesystem-readonly-v1/node_modules"
+[[ "$(git rev-parse HEAD)" == "$CANDIDATE_EXPECTED_COMMIT" && -z "$(git status --porcelain --untracked-files=all)" ]] || {
+    echo 'Source changed during candidate preparation; output is not accepted' >&2; exit 1;
+}
 python3 scripts/candidate_manifest.py "$TARGET_DIR" --finalize
 tar -czf "$TARGET_DIR.tar.gz" -C "$ROOT/target" soup-wall-linux-amd64
 sha256sum "$TARGET_DIR.tar.gz"
