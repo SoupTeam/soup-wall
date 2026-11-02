@@ -1,0 +1,55 @@
+{
+  "format": "sw-private-candidate-development-checkpoint/1",
+  "status": "incomplete-not-release-qualification",
+  "date": "2026-11-02",
+  "implementation_source": "ffac6bf7f91585b45aa7826a7cba194fe606966d",
+  "targeted_controls": {
+    "platform": "Windows",
+    "candidate_test_methods": 14,
+    "inventory_test_methods": 15,
+    "status": "passed",
+    "documentation_links": "passed",
+    "bash_syntax": "passed"
+  },
+  "installed_offline_kit": {
+    "platform": "WSL2 Ubuntu 24.04 x86_64, unprivileged operator",
+    "source": "2ccbf64a7d3504538f5db1ab79194c143d61036d",
+    "archive_sha256": "dce95d60f633f6bc6a9268c4230e85eb758eaea5619107ff49c39c312ab78221",
+    "compiler": "rustc 1.94.1 (e408947bf 2026-03-25)",
+    "build_profile": "debug",
+    "status": "passed-at-recorded-source",
+    "checks": [
+      "complete pre-extraction inventory and pinned archive validation",
+      "extracted executable modes",
+      "original filesystem profile install with networking unavailable, 104 npm packages",
+      "unrelated setup-error and malformed-envelope negatives",
+      "fabricated collector marker rejected without fresh daemon records",
+      "useful original-server read",
+      "protected unsupported write with independent absent-file witness",
+      "result injection refusal correlated with fresh native_call/native_result audit records",
+      "broken-path control",
+      "daemon-loss refusal"
+    ]
+  },
+  "additional_native_builds": {
+    "source": "2ccbf64a7d3504538f5db1ab79194c143d61036d",
+    "agent_binaries": "built",
+    "agent_library_tests": "compiled-only-not-executed"
+  },
+  "remaining": [
+    "Replay the latest implementation, including direct original-write calibration and per-attempt evidence reservation, on Linux.",
+    "Prepare the complete two-server pilot from the latest clean source and run its inventory against real scanners and explicit native advisory/notice reviews.",
+    "Complete independent review, Ready qualification, source admission and maintainer merge."
+  ],
+  "environment_blocker": {
+    "operation": "restart Ubuntu-24.04 for final replay and full installed inventory",
+    "error": "Wsl/Service/CreateInstance/CreateVm/HCS/ERROR_NO_SYSTEM_RESOURCES",
+    "temporary_configuration": "A temporary 4GB WSL memory cap allowed one diagnostic boot; later launches still failed. The temporary configuration file was removed and its original absence restored."
+  },
+  "claims_excluded": [
+    "latest-source native acceptance",
+    "complete installed advisory or license clearance",
+    "byte-for-byte compiler reproducibility",
+    "release or publication authority"
+  ]
+}
