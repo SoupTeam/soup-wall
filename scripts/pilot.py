@@ -8,6 +8,7 @@
     pilot.py status --prefix DIR
     pilot.py provider preview|check|create|update|restore|prune|select|remove [options]
     pilot.py configuration inventory|backup|inspect|restore-preview|restore|recover [options]
+    pilot.py snapshot preview|create|inspect|remove [options]
     pilot.py help
 
 This is a front door over the accepted scripts, not a second installer:
@@ -46,7 +47,7 @@ CLAUDE_VERSION = "2.1.251 (Claude Code)"
 CLAUDE_RELATIVE = "node_modules/@anthropic-ai/claude-code-linux-x64/claude"
 EXECUTABLE_INPUTS = ("agentfw", "git_launcher", "sandbox_tests", "git", "bwrap", "node", "npm", "claude", "python")
 FILE_INPUTS = ("node_archive", "python_archive", "git_archive", "bwrap_archive", "git_worktree_binding", "filesystem_roots_binding")
-DIR_INPUTS = ("npm_cache", "wheelhouse", "filesystem_workspace", "git_workspace", "native_output", "agent_output",
+DIR_INPUTS = ("workspace_snapshot", "npm_cache", "wheelhouse", "filesystem_workspace", "git_workspace", "native_output", "agent_output",
               "pkg_config_libdir", "pkg_config_sysroot", "meson_pythonpath")
 NEVER = ["start a daemon, Claude host or MCP server", "edit a project, Git repository or Claude configuration",
          "create or change an active selection", "download or build anything", "contact a model provider"]
@@ -277,7 +278,7 @@ def prepare_words(args, inputs, paths, commit, produced):
             selected[name] = inputs[name]
     for name, value in selected.items():
         words += ["--" + name.replace("_", "-"), value]
-    for name in ("node_archive", "python_archive", "npm_cache", "wheelhouse", "filesystem_workspace", "git_workspace", "git_worktree_binding", "filesystem_roots_binding"):
+    for name in ("node_archive", "python_archive", "npm_cache", "wheelhouse", "filesystem_workspace", "git_workspace", "git_worktree_binding", "filesystem_roots_binding", "workspace_snapshot"):
         if name in inputs:
             words += ["--" + name.replace("_", "-"), inputs[name]]
     words += ["--filesystem-classifier", ROOT / "rule_baseline/rule_baseline.py",
@@ -319,6 +320,11 @@ def plan(args):
         PREP.FS_ROOTS.outside([prefix, *[path for role,path in inputs.items()
             if role not in ('filesystem_workspace','git_workspace')]], binding)
         report['filesystem_roots'] = binding
+    if 'workspace_snapshot' in inputs:
+        snapshot=PREP.SNAPSHOTS.load(inputs['workspace_snapshot'])
+        require(inputs.get('filesystem_workspace')==Path(snapshot['generation'])/'workspace','workspace_snapshot_workspace_mismatch')
+        require('filesystem_roots_binding' not in inputs and args.git_profile==PREP.GIT_PROFILES.DEFAULT,'workspace_snapshot_profile_combination_unsupported')
+        report['workspace_snapshot']=PREP.SNAPSHOTS.inspect(inputs['workspace_snapshot'])
     paths = layout(prefix, inputs)
     native, agent = stage_words(args, inputs, paths, current["commit"])
     stages = []
@@ -773,7 +779,8 @@ def status(args):
                              "--expected-commit", state["commit"]], timeout=PLAN_SECONDS, cwd=ROOT)
         if code == 0 and value.get("status") == "plan":
             report["selection"] = {"state": "configured", "path": state["selection"], "commit": state["commit"],
-                                   "workspaces": value.get("workspaces"), "git_selection": value.get("git_selection")}
+                                   "workspaces": value.get("workspaces"), "git_selection": value.get("git_selection"),
+                                   "workspace_snapshot":value.get("workspace_snapshot")}
             selection = PREP.PILOT.strict_json(Path(state["selection"]).read_bytes())
             expected = expected_identity(state, selection)
         else:
@@ -994,6 +1001,7 @@ def parser():
     remove.add_argument("--name", required=True)
     remove.add_argument("--apply", action="store_true")
     commands.add_parser("worktree-selection", help="explicitly bind the roots of a linked Git worktree")
+    commands.add_parser("snapshot", help="explicitly preview, capture, inspect and remove private workspace snapshots")
     commands.add_parser("filesystem-roots", help="explicitly bind separately selected read-only root IDs")
     commands.add_parser("project", help="inspect, check and explicitly manage named project presets")
     commands.add_parser("policy-activation", help="activate a reviewed deny-only policy candidate for an idle installation")
@@ -1017,6 +1025,13 @@ def main(argv=None):
         linked_words = linked_words[2:]
     if linked_words and linked_words[0].startswith('--agent-home='):
         linked_words = linked_words[1:]
+    if linked_words[:1] == ['snapshot']:
+        home=Path.home()/'.agentfw'
+        if list(supplied)[:1]==['--agent-home']:home=Path(supplied[1])
+        elif supplied and supplied[0].startswith('--agent-home='):home=Path(supplied[0].split('=',1)[1])
+        import types
+        front=types.SimpleNamespace(snapshot_home=home,ROOT=ROOT,provider_profiles=provider_profiles,load=load)
+        return PREP.SNAPSHOTS.main(linked_words[1:],front)
     if linked_words[:1] == ['worktree-selection']:
         try:
             return load('front_door_linked_worktree', 'pilot_linked_worktree.py').main(linked_words[1:])

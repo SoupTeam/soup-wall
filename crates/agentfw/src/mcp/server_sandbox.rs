@@ -39,6 +39,8 @@ pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap
 pub(crate) fn profile_name(format: &str) -> &'static str {
     if format == super::server_profile::git::linked_worktree::FORMAT {
         "sw-mcp/git-linked-worktree-readonly/linux-bwrap-landlock/1"
+    } else if format == super::server_profile::filesystem_links::FORMAT {
+        "sw-mcp/filesystem-multi-root-file-links-readonly/linux-bwrap/1"
     } else if format == super::server_profile::filesystem_roots::FORMAT {
         "sw-mcp/filesystem-multi-root-readonly/linux-bwrap/1"
     } else if format == super::server_profile::git::FILE_READS_FORMAT {
@@ -895,6 +897,13 @@ fn prepare_linux_command_inner(
             profile.linked_worktree.as_ref(),
         )?
     };
+    let workspace_snapshot = profile
+        .workspace_snapshot
+        .as_ref()
+        .map(|binding| {
+            super::server_profile::workspace_snapshot::View::capture(binding, &profile.workspace)
+        })
+        .transpose()?;
     let filesystem_roots = profile
         .filesystem_roots
         .as_ref()
@@ -1059,6 +1068,9 @@ fn prepare_linux_command_inner(
     if let Some(snapshot) = &verified_git_snapshot {
         snapshot.mount(&mut command, &mut pins)?;
     } else if let Some(view) = &git_view {
+        view.mount(&mut command, &mut pins)?;
+    }
+    if let Some(view) = &workspace_snapshot {
         view.mount(&mut command, &mut pins)?;
     }
     if let Some(roots) = &filesystem_roots {

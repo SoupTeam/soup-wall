@@ -754,8 +754,13 @@ def main():
             PREP.supported_platform()
             # The lock spans admission, daemon/host lifetime and owned cleanup.
             # Transitions take the exclusive side before observing current.json.
-            with SELECTION_LOCK.hold(args.selection.parent.parent.parent, exclusive=False):
+            from contextlib import ExitStack
+            with SELECTION_LOCK.hold(args.selection.parent.parent.parent, exclusive=False), ExitStack() as snapshot_lease:
                 selection, _, profiles = selected(args)
+                if selection.get('workspace_snapshot') is not None:
+                    snapshot_lease.enter_context(PREP.SNAPSHOTS.hold(selection['workspace_snapshot']))
+                    selection, _, profiles=selected(args)
+                    report['workspace_snapshot']=PREP.SNAPSHOTS.inspect(selection['workspace_snapshot']['generation'])
                 report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
                               git_selection=selection.get("git_selection", {"id": PREP.GIT_PROFILES.DEFAULT,
                                   "selection_version": "legacy-default-only"}),
@@ -764,6 +769,8 @@ def main():
                 run(args, report)
         else:
             selection, _, profiles = selected(args)
+            if selection.get('workspace_snapshot') is not None:
+                report['workspace_snapshot']=PREP.SNAPSHOTS.inspect(selection['workspace_snapshot']['generation'])
             report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
                           git_selection=selection.get("git_selection", {"id": PREP.GIT_PROFILES.DEFAULT,
                               "selection_version": "legacy-default-only"}),
@@ -775,7 +782,7 @@ def main():
         if budget_requested(args) and code in {"native_linux_x86_64_required",
                 "native_ubuntu_required_wsl_is_separate", "ubuntu_24_04_required"}:
             report["resource_budget"]["status"] = "unsupported"
-        report.update(status="failed", reason=code if code in PUBLIC_FAILURE_CODES
+        report.update(status="failed", reason=code if code in PUBLIC_FAILURE_CODES or code in PREP.SNAPSHOTS.PUBLIC_REASONS
                       else "pilot_input_or_runtime_failure")
         if args.maintenance_home is not None and (not report.get("executed") or code.startswith("maintenance_")):
             report["maintenance"] = {"status": "refused-or-uncertain",

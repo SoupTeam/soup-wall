@@ -84,8 +84,8 @@ def libraries(node):
 
 
 def registry(manifest, *, filesystem_roots=False):
-    profile_format = FS_ROOTS.PROFILE if filesystem_roots else FORMAT
-    return {"contract_version": "sw-native/1", "registry_id": FS_ROOTS.ID if filesystem_roots else "filesystem-readonly-v1", "tools": [
+    profile_format = (FS_ROOTS.profile(filesystem_roots) if isinstance(filesystem_roots, dict) else FS_ROOTS.PROFILE) if filesystem_roots else FORMAT
+    return {"contract_version": "sw-native/1", "registry_id": (FS_ROOTS.profile_id(filesystem_roots) if isinstance(filesystem_roots, dict) else FS_ROOTS.ID) if filesystem_roots else "filesystem-readonly-v1", "tools": [
         {"name": tool["name"], "schema_sha256": hashlib.sha256(canonical(tool["inputSchema"])).hexdigest(),
          "action_class": MUTATORS.get(tool["name"], "read_only"),
          "result_provenance": "untrusted", "egress": [],
@@ -99,7 +99,7 @@ def private_json(path, value):
         stream.write(json.dumps(value, indent=2, ensure_ascii=False) + "\n")
 
 
-def install(destination, workspace, node, bwrap, npm, *, npm_cache=None, offline=False, log=None, filesystem_roots=None):
+def install(destination, workspace, node, bwrap, npm, *, npm_cache=None, offline=False, log=None, filesystem_roots=None, workspace_snapshot=None):
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise ValueError("this profile requires Linux x86-64")
     workspace, node, bwrap = [Path(path).resolve(strict=True) for path in (workspace, node, bwrap)]
@@ -107,6 +107,11 @@ def install(destination, workspace, node, bwrap, npm, *, npm_cache=None, offline
     if filesystem_roots is not None:
         FS_ROOTS.verify(filesystem_roots, workspace)
         FS_ROOTS.outside([destination, node, bwrap, npm, npm_cache], filesystem_roots)
+    if workspace_snapshot is not None:
+        import pilot_workspace_snapshot as snapshots
+        snapshots.require(filesystem_roots is None and workspace == Path(workspace_snapshot['generation'])/'workspace', 'profile_combination_unsupported')
+        snapshots.verify(workspace_snapshot)
+        snapshots.separate([destination,Path(workspace_snapshot['generation'])])
     if destination.exists() or destination.is_symlink():
         raise ValueError("destination must be a new directory")
     if not workspace.is_dir() or workspace == Path("/"):
@@ -158,10 +163,13 @@ def install(destination, workspace, node, bwrap, npm, *, npm_cache=None, offline
                "bwrapPath": str(bwrap), "bwrapSha256": sha(bwrap), "libraries": dependencies}
     if filesystem_roots is not None:
         FS_ROOTS.verify(filesystem_roots, workspace)
-        profile.update(format=FS_ROOTS.PROFILE, filesystemRoots=filesystem_roots,
+        profile.update(format=FS_ROOTS.profile(filesystem_roots), filesystemRoots=filesystem_roots,
                        workspaceIdentity=filesystem_roots['roots'][0]['identity'])
+    if workspace_snapshot is not None:
+        snapshots.verify(workspace_snapshot)
+        profile.update(workspaceSnapshot=workspace_snapshot,workspaceIdentity=workspace_snapshot['workspaceIdentity'])
     private_json(destination / "profile.json", profile)
-    private_json(destination / "registry.json", registry(manifest, filesystem_roots=filesystem_roots is not None))
+    private_json(destination / "registry.json", registry(manifest, filesystem_roots=filesystem_roots or False))
     shutil.copyfile(ASSETS / "policy.yaml", destination / "policy.yaml")
     os.chmod(destination / "policy.yaml", 0o600)
     private_json(destination / "installation.json", {

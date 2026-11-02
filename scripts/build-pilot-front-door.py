@@ -42,6 +42,8 @@ MAX_NAME = 100
 # derives the closure from the sources and fails when this list misses one.
 SCRIPTS = (
     "scripts/agent-audit-report.py",
+    "scripts/agent-command-help.py",
+    "scripts/agent-diagnostic-diff.py",
     "scripts/edit-run-archive.py",
     "scripts/build-native-pilot-inputs.py",
     "scripts/install-sou62-filesystem-profile.py",
@@ -61,6 +63,8 @@ SCRIPTS = (
     "scripts/pilot_git_profiles.py",
     "scripts/pilot_linked_worktree.py",
     "scripts/pilot_filesystem_roots.py",
+    "scripts/pilot_workspace_snapshot.py",
+    "scripts/pilot_filesystem_links.py",
     "scripts/pilot_audit.py",
     "scripts/pilot_capacity.py",
     "scripts/pilot_policy.py",
@@ -92,6 +96,8 @@ SCRIPTS = (
     "scripts/wsl_qualification.py",
 )
 DATA_FILES = (
+    "docs/operations/AGENT_COMMAND_HELP.md",
+    "docs/operations/AGENT_DIAGNOSTIC_DIFF.md",
     "profiles/mcp/git-linked-worktree-readonly-v1/contract.json",
     "rule_baseline/git_readonly_v1/rule_baseline.py",
     "rule_baseline/git_readonly_file_revisions_v1/rule_baseline.py",
@@ -101,6 +107,7 @@ DATA_FILES = (
 DATA_DIRECTORIES = (
     "profiles/mcp/filesystem-readonly-v1",
     "profiles/mcp/filesystem-multi-root-readonly-v1",
+    "profiles/mcp/filesystem-multi-root-file-links-readonly-v1",
     "profiles/mcp/git-readonly-v1",
     "profiles/mcp/git-local-clone-readonly-v1",
     "profiles/mcp/git-tracked-symlinks-readonly-v1",
