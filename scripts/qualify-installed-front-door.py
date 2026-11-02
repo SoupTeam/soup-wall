@@ -856,6 +856,16 @@ def qualify(args, report):
             require(report['source_after'] == before, 'source_changed')
             return
 
+        if args.budget_presets_only:
+            import types
+            suite = types.SimpleNamespace(QUAL=QUAL, BASE=BASE, require=require, load=load,
+                                          provider_exec_witness=provider_exec_witness, agent_executions=agent_executions)
+            load('installed_budget_qualification', 'qualify-budget-presets.py').qualify(
+                args, door, agent_home, env, report, selection, suite, receiver)
+            report['source_after'] = BASE.source()
+            require(report['source_after'] == before, 'source_changed')
+            return
+
         if args.project_presets_only:
             import types
             suite = types.SimpleNamespace(QUAL=QUAL, BASE=BASE, require=require, load=load,
@@ -1096,6 +1106,9 @@ def main():
     parser.add_argument("--project-presets-only", action="store_true", help="focused installed named-project qualification")
     parser.add_argument("--policy-activation-only", action="store_true",
                         help="focused SOU-209 installed deny-only policy activation qualification")
+    parser.add_argument("--budget-presets-only", action="store_true",
+                        help="focused SOU-210 installed named Linux budget-preset qualification")
+    parser.add_argument("--budget-unit", help="disposable delegated systemd service (sou79-RUN-ATTEMPT.service)")
     parser.add_argument("--provider-ca-only", action="store_true",
                         help="focused SOU-195 installed-host HTTPS CA and rotation qualification")
     for name in INPUT_NAMES:
@@ -1107,6 +1120,8 @@ def main():
               "provider": "owned-scripted-loopback", "live_model_effectiveness": "not_tested"}
     try:
         require(not args.output.exists() and not args.output.is_relative_to(ROOT), "new_output_outside_checkout_required")
+        require(not args.budget_presets_only or re.fullmatch(r"sou79-[0-9]+-[0-9]+\.service", args.budget_unit or ""),
+                "budget_presets_require_disposable_delegated_unit")
         require(args.git is not None, "explicit_git_required_for_owned_fixture_repository")
         require(all(getattr(args, name) is not None for name in ("agentfw", "git_launcher", "sandbox_tests")),
                 "explicit_agent_executables_required")
@@ -1142,6 +1157,9 @@ def main():
     if args.filesystem_roots_only:
         roots = report.get('filesystem_roots', {})
         summary['filesystem_roots'] = {k: roots.get(k) for k in ('status', 'active_case', 'last_cli', 'last_run', 'result_boundaries', 'post_run_sources_unchanged', 'processes_stopped', 'collector_failures', 'owned_first_errors', 'sibling_control', 'policy_taint_control')}
+    if args.budget_presets_only:
+        budget = report.get("budget_presets", {})
+        summary["budget_presets"] = {key: budget.get(key) for key in ("status", "active_case", "last_cli")}
     if args.project_presets_only:
         project = report.get("project_presets", {})
         summary["project_presets"] = {key: project.get(key) for key in ("status", "active_case", "last_cli")}

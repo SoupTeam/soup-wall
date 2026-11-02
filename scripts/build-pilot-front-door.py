@@ -68,6 +68,7 @@ SCRIPTS = (
     "scripts/pilot_prerequisite_cache_exchange.py",
     "scripts/pilot_provider.py",
     "scripts/pilot_policy_activation.py",
+    "scripts/pilot_budget_presets.py",
     "scripts/pilot_project_presets.py",
     "scripts/pilot_provider_ca.py",
     "scripts/pilot_provider_profiles.py",
