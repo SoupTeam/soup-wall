@@ -4,8 +4,9 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import generate_inventory as inventory
@@ -227,6 +228,195 @@ class RuntimeInventoryTests(unittest.TestCase):
             self.assertEqual(len(notices), 3)
             self.assertEqual(len(errors), 2)
             self.assertTrue(all("runtime_license_review_required" in error for error in errors))
+
+    def vendor_fixture(self, root, *, name="urllib3", version="1.0", owner="pip", metadata=False):
+        site = root / "python-package/python/lib/python3.11/site-packages"
+        vendor = site / owner / "_vendor"
+        vendor.mkdir(parents=True, exist_ok=True)
+        module = "pkg_resources" if name == "setuptools" else name.replace("-", "_")
+        code = vendor / (module + ".py")
+        code.write_text("# Selected vendored component; never executed by inventory.\n")
+        if owner == "pip":
+            (vendor / "vendor.txt").write_text(f"{name}=={version}\n")
+            (vendor / (module + ".LICENSE")).write_text("Actual component notice")
+        if metadata:
+            dist = vendor / (name + "-" + version + ".dist-info")
+            dist.mkdir()
+            (dist / "METADATA").write_text(f"Name: {name}\nVersion: {version}\nLicense-Expression: MIT\n")
+            (dist / "LICENSE").write_text("Actual nested distribution notice")
+            (dist / "RECORD").write_text(f"{code.name},,\n")
+        return vendor
+
+    def test_vendored_vulnerable_pin_is_in_exact_scanner_graph_and_retains_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.installed_fixture(root)
+            vendor = self.vendor_fixture(root)
+            notices, graph, errors = inventory.installed_graphs(root, self.graphs)
+            identity = ("PyPI", "urllib3", "1.0")
+            self.assertIn(identity, graph)
+            row = next(row for row in notices if row["name"] == "urllib3")
+            self.assertEqual(row["origin"]["owner"], "pip")
+            self.assertEqual(row["identity_files"], {str(vendor / "vendor.txt"): inventory.sha(vendor / "vendor.txt")})
+            self.assertEqual(row["files"], {str(vendor / "urllib3.LICENSE"): inventory.sha(vendor / "urllib3.LICENSE")})
+            self.assertIn("runtime_license_notice_incomplete:urllib3", errors)
+            path = str((root / "installed-requirements.txt").resolve())
+            report = {"results": [{"source": {"type": "lockfile", "path": path}, "packages": [
+                {"package": dict(zip(("ecosystem", "name", "version"), item)),
+                 "vulnerabilities": [{"id": "VENDORED-ADVISORY"}] if item == identity else []}
+                for item in graph]}]}
+            observation = inventory.osv_observation(report, {path: graph})
+            self.assertEqual(observation["findings"][0]["package"]["name"], "urllib3")
+            with self.assertRaisesRegex(ValueError, "unresolved_osv_findings"):
+                inventory.verify_osv(report, {path: graph})
+            report["results"][0]["packages"] = [row for row in report["results"][0]["packages"]
+                                                      if row["package"]["name"] != "urllib3"]
+            with self.assertRaisesRegex(ValueError, "exact_graph_mismatch"):
+                inventory.osv_observation(report, {path: graph})
+
+    def test_parallel_vendored_versions_and_origins_are_not_dropped(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.installed_fixture(root, extra="setuptools")
+            self.vendor_fixture(root, name="python-lib", version="1.0", owner="setuptools", metadata=True)
+            notices, graph, errors = inventory.installed_graphs(root, self.graphs)
+            self.assertTrue({("PyPI", "python-lib", "1.0"), ("PyPI", "python-lib", "2.0")} <= graph)
+            rows = [row for row in notices if row["name"] == "python-lib"]
+            self.assertEqual(len(rows), 2)
+            self.assertEqual({row["origin"]["kind"] for row in rows}, {"installed_distribution", "vendored_distribution"})
+            self.assertFalse(errors)
+
+    def test_vendor_metadata_cannot_satisfy_missing_top_level_lock_entry(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.installed_fixture(root, extra="setuptools")
+            self.vendor_fixture(root, name="python-lib", version="2.0", owner="setuptools", metadata=True)
+            site = root / "python-package/python/lib/python3.11/site-packages"
+            (site / "python-lib.dist-info/METADATA").write_text("Name: other\nVersion: 2.0\nLicense: MIT\n")
+            with self.assertRaisesRegex(ValueError, "installed_python_graph_mismatch"):
+                inventory.installed_graphs(root, self.graphs)
+
+    def test_unpinned_ambiguous_and_wrong_vendor_versions_are_rejected(self):
+        for text, reason in [("urllib3>=1.0", "unpinned"), ("urllib3==1.0\nurllib3==2.0", "duplicate"),
+                             ("urllib3==2.0", "version_mismatch"), ("urllib3==1.0;evil", "invalid")]:
+            with self.subTest(text=text), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                self.installed_fixture(root)
+                vendor = self.vendor_fixture(root, metadata=True)
+                (vendor / "vendor.txt").write_text(text)
+                with self.assertRaisesRegex(ValueError, reason):
+                    inventory.installed_graphs(root, self.graphs)
+
+    def test_missing_vendor_material_and_manifest_and_unpinned_code_are_rejected(self):
+        for change, reason in [("code", "material_missing"), ("manifest", "manifest_missing"), ("extra", "unpinned_material")]:
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                self.installed_fixture(root)
+                vendor = self.vendor_fixture(root)
+                if change == "code":
+                    (vendor / "urllib3.py").unlink()
+                elif change == "manifest":
+                    (vendor / "vendor.txt").unlink()
+                else:
+                    (vendor / "unidentified.py").write_text("# Not pinned")
+                with self.assertRaisesRegex(ValueError, reason):
+                    inventory.installed_graphs(root, self.graphs)
+
+    def test_nested_metadata_needs_real_record_material_and_safe_paths(self):
+        for record, reason in [(None, "record_missing"), ("absent.py,,\n", "material_missing"),
+                               ("../escape.py,,\n", "unsafe_path"), ("/escape.py,,\n", "unsafe_path")]:
+            with self.subTest(record=record), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                self.installed_fixture(root, extra="setuptools")
+                vendor = self.vendor_fixture(root, owner="setuptools", metadata=True)
+                path = vendor / "urllib3-1.0.dist-info/RECORD"
+                if record is None:
+                    path.unlink()
+                else:
+                    path.write_text(record)
+                with self.assertRaisesRegex(ValueError, reason):
+                    inventory.installed_graphs(root, self.graphs)
+
+    def test_wrong_or_absent_nested_identity_cannot_hide_vendor_code(self):
+        for change, reason in [("wrong_version", "metadata_identity_mismatch"),
+                               ("duplicate_header", "metadata_ambiguous"),
+                               ("extra_code", "unattributed_material"),
+                               ("unpinned_pip_metadata", "unpinned_metadata")]:
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                owner = "pip" if change == "unpinned_pip_metadata" else "setuptools"
+                self.installed_fixture(root, extra=owner)
+                vendor = self.vendor_fixture(root, owner=owner, metadata=True)
+                metadata = vendor / "urllib3-1.0.dist-info/METADATA"
+                if change == "wrong_version":
+                    metadata.write_text("Name: urllib3\nVersion: 2.0\nLicense: MIT\n")
+                elif change == "duplicate_header":
+                    metadata.write_text("Name: urllib3\nVersion: 1.0\nVersion: 2.0\nLicense: MIT\n")
+                elif change == "extra_code":
+                    (vendor / "hidden.py").write_text("# Missing distribution metadata")
+                else:
+                    (vendor / "vendor.txt").write_text("requests==1.0\n")
+                with self.assertRaisesRegex(ValueError, reason):
+                    inventory.installed_graphs(root, self.graphs)
+
+    def test_nested_opaque_license_or_missing_notice_remains_blocking(self):
+        for missing in ("license", "notice"):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                self.installed_fixture(root, extra="setuptools")
+                vendor = self.vendor_fixture(root, owner="setuptools", metadata=True)
+                dist = vendor / "urllib3-1.0.dist-info"
+                if missing == "license":
+                    (dist / "METADATA").write_text("Name: urllib3\nVersion: 1.0\nLicense: Opaque-License\n")
+                else:
+                    (dist / "LICENSE").unlink()
+                notices, graph, errors = inventory.installed_graphs(root, self.graphs)
+                self.assertIn(("PyPI", "urllib3", "1.0"), graph)
+                self.assertEqual(len([error for error in errors if "urllib3" in error]), 1)
+
+    def test_main_scans_union_and_rechecks_selected_tree_contract(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.installed_fixture(root)
+            self.vendor_fixture(root, name="setuptools", version="70.3.0")
+            selection = root / "selection.json"
+            selection.write_text(json.dumps({"prepared_profiles": {}, "source": {}, "files": {}}))
+            graphs = {}
+            for basename, graph in zip(("Cargo.lock", "requirements.lock", "package-lock.json"), self.graphs.values()):
+                path = root / basename
+                path.write_text("selected scan input")
+                graphs[str(path.resolve())] = graph
+            prep = SimpleNamespace(verify_generation=Mock())
+            spec = SimpleNamespace(loader=SimpleNamespace(exec_module=lambda module: None))
+            output = root / "fresh-report.json"
+            def scan(command, **kwargs):
+                if command[0] == "osv-scanner":
+                    path = root / "fresh-report-installed-requirements.txt"
+                    packages = [inventory.python_identity(*line.split("==")) for line in path.read_text().splitlines()]
+                    observed = {**graphs}
+                    observed.pop(str((root / "requirements.lock").resolve()))
+                    observed[str(path.resolve())] = set(packages)
+                    data = {"results": [{"source": {"type": "lockfile", "path": source}, "packages": [
+                        {"package": dict(zip(("ecosystem", "name", "version"), item))} for item in graph]}
+                        for source, graph in observed.items()]}
+                else:
+                    data = {"database": {"advisory-count": 1}, "lockfile": {"dependency-count": 1},
+                            "vulnerabilities": {"found": False, "list": []}, "warnings": {}}
+                return {"status": "passed", "exit_code": 0, "command": command, "stdout": json.dumps(data), "stderr": ""}
+            with patch.object(inventory.importlib.util, "spec_from_file_location", return_value=spec), \
+                    patch.object(inventory.importlib.util, "module_from_spec", return_value=prep), \
+                    patch.object(inventory, "lock_graphs", return_value=copy.deepcopy(graphs)), \
+                    patch.object(inventory, "verify_native_reviews", return_value={}), \
+                    patch.object(inventory, "run_cmd", side_effect=scan):
+                self.assertEqual(inventory.main(["--selection", str(selection), "--expected-commit", "a" * 40,
+                                                 "--output", str(output)]), 1)
+            self.assertEqual(prep.verify_generation.call_count, 2)
+            prep.verify_generation.assert_called_with(root, "a" * 40, probe_native=False)
+            report = json.loads(output.read_text())
+            self.assertIn(["PyPI", "setuptools", "70.3.0"], report["python_graphs"]["vendored"])
+            self.assertNotIn(["PyPI", "setuptools", "70.3.0"], report["python_graphs"]["top_level"])
+            self.assertIn("setuptools==70.3.0", (root / "fresh-report-installed-requirements.txt").read_text())
+            self.assertIn("osv_coverage", report)
 
 
 if __name__ == "__main__":

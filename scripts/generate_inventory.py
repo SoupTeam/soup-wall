@@ -7,6 +7,7 @@ incomplete checks and findings remain blocking; this command cannot publish.
 """
 from __future__ import annotations
 import argparse
+import csv
 from datetime import datetime, timezone
 import email
 import hashlib
@@ -225,6 +226,169 @@ def original_server_notices(generation, metadata):
     return result
 
 
+def python_tree(site):
+    """One finite, non-symlink walk inside the already-verified selected tree."""
+    require(site.is_dir() and not site.is_symlink(), "python_site_missing_or_symlink")
+    directories, files = [], []
+    for current, children, names in os.walk(site, followlinks=False):
+        current = Path(current)
+        require(len(current.relative_to(site).parts) <= 32, "python_tree_depth_limit")
+        for name in sorted(children + names):
+            path = current / name
+            require(not path.is_symlink() and path.resolve().is_relative_to(site.resolve()),
+                    "python_tree_unsafe_path")
+            (directories if name in children else files).append(path)
+            require(len(directories) + len(files) <= 100000, "python_tree_entry_limit")
+    return directories, files
+
+
+def python_identity(name, version):
+    require(isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,199}", name)
+            and isinstance(version, str)
+            and re.fullmatch(r"[0-9][A-Za-z0-9.!+_-]{0,199}", version),
+            "python_distribution_identity_missing_or_invalid")
+    return "PyPI", python_name(name), version
+
+
+def python_metadata(path):
+    require(path.is_file() and path.stat().st_size <= MAX_OUTPUT_BYTES, "python_metadata_missing_or_size_limit")
+    metadata = email.message_from_bytes(path.read_bytes())
+    require(all(len(metadata.get_all(key, [])) == 1 for key in ("Name", "Version"))
+            and len(metadata.get_all("License-Expression", [])) <= 1
+            and len(metadata.get_all("License", [])) <= 1, "python_metadata_ambiguous")
+    python_identity(metadata.get("Name"), metadata.get("Version"))
+    return metadata
+
+
+def python_notice_files(files, root):
+    result = {}
+    for path in files:
+        if path.is_relative_to(root) and path.name.lower().startswith(
+                ("license", "licence", "copying", "notice", "copyright")):
+            require(path.stat().st_size <= MAX_OUTPUT_BYTES, "python_notice_size_limit")
+            result[str(path)] = sha(path)
+    return result
+
+
+def installed_python(site, expected):
+    directories, files = python_tree(site)
+    distributions = [path for path in directories if path.name.endswith(".dist-info")]
+    require(len(distributions) <= 1000, "python_distribution_count_limit")
+    top, vendored, notices, owners = set(), set(), [], {}
+    recorded_code = set()
+    for directory in sorted(distributions):
+        metadata_path = directory / "METADATA"
+        metadata = python_metadata(metadata_path)
+        identity = python_identity(metadata["Name"], metadata["Version"])
+        nested = directory.parent != site
+        owner = None
+        if nested:
+            relative = directory.relative_to(site).parts
+            require(len(relative) >= 3 and relative[:2] in {("pip", "_vendor"), ("setuptools", "_vendor")},
+                    "unexpected_python_vendor_origin")
+            owner = relative[0]
+            directory_name, separator, directory_version = directory.name.removesuffix(".dist-info").rpartition("-")
+            require(separator and python_name(directory_name) == identity[1] and directory_version == identity[2],
+                    "python_vendor_metadata_identity_mismatch")
+            record = directory / "RECORD"
+            require(record in files and record.stat().st_size <= MAX_OUTPUT_BYTES,
+                    "python_vendor_record_missing_or_size_limit")
+            material = []
+            for count, row in enumerate(csv.reader(record.read_text(encoding="utf-8").splitlines()), 1):
+                require(count <= 100000, "python_vendor_record_count_limit")
+                require(len(row) == 3 and row[0] and "\\" not in row[0], "python_vendor_record_invalid")
+                path = PurePosixPath(row[0])
+                require(not path.is_absolute() and not any(part in {".", ".."} for part in path.parts)
+                        and ":" not in row[0], "python_vendor_record_unsafe_path")
+                target = directory.parent.joinpath(*path.parts)
+                if not target.is_relative_to(directory) and target.suffix in {".py", ".so", ".pyd"}:
+                    require(target in files, "python_vendor_material_missing:" + identity[1])
+                    material.append(target)
+            require(material, "python_vendor_material_missing:" + identity[1])
+            recorded_code.update(material)
+            vendored.add(identity)
+        else:
+            require(not any(item[1] == identity[1] for item in top), "duplicate_installed_python_distribution")
+            top.add(identity)
+            owners[identity[1]] = directory
+        notices.append({"ecosystem": "PyPI", "name": metadata["Name"], "version": metadata["Version"],
+                        "license": metadata.get("License-Expression") or metadata.get("License"),
+                        "license_declarations": {key: metadata.get_all(key, []) for key in
+                                                 ("License-Expression", "License", "License-File", "Classifier")},
+                        "origin": {"kind": "vendored_distribution" if nested else "installed_distribution",
+                                   "owner": owner, "path": str(directory)},
+                        "identity_files": {str(metadata_path): sha(metadata_path)},
+                        "files": python_notice_files(files, directory)})
+        if nested:
+            notices[-1]["identity_files"][str(record)] = sha(record)
+    # Only the top-level installed graph may satisfy the hashed wheel lock.
+    require(expected <= top, "installed_python_graph_mismatch")
+    require(all(name in {"pip", "setuptools"} for _, name, _ in top - expected),
+            "unexpected_python_distribution")
+    require(all(row["origin"]["owner"] in owners for row in notices
+                if row["origin"]["kind"] == "vendored_distribution"), "python_vendor_owner_missing")
+    setuptools_vendor = site / "setuptools/_vendor"
+    setuptools_code = {path for path in files if path.is_relative_to(setuptools_vendor)
+                       and path.suffix in {".py", ".so", ".pyd"} and path != setuptools_vendor / "__init__.py"}
+    require(setuptools_code <= recorded_code, "python_vendor_unattributed_material")
+
+    pip_vendor = site / "pip/_vendor"
+    if site / "pip" in directories or pip_vendor in directories:
+        require("pip" in owners, "python_vendor_owner_missing")
+        require(pip_vendor in directories, "python_vendor_material_missing:pip")
+        manifest = pip_vendor / "vendor.txt"
+        require(manifest in files and manifest.stat().st_size <= MAX_OUTPUT_BYTES,
+                "python_vendor_manifest_missing_or_size_limit")
+        pins = {}
+        for line in manifest.read_text(encoding="utf-8").splitlines():
+            line = line.partition("#")[0].strip()
+            if not line:
+                continue
+            match = re.fullmatch(r"([A-Za-z0-9_.-]+)==([^\s]+)", line)
+            require(match is not None, "python_vendor_unpinned_requirement")
+            identity = python_identity(match[1], match[2])
+            require(identity[1] not in pins and len(pins) < 1000, "python_vendor_duplicate_or_count_limit")
+            pins[identity[1]] = identity
+        require(pins, "python_vendor_empty_manifest")
+        require(all(python_name(row["name"]) in pins for row in notices if row["origin"]["owner"] == "pip"),
+                "python_vendor_unpinned_metadata")
+        material = set()
+        for name, identity in sorted(pins.items()):
+            # pip vendors only pkg_resources from this setuptools pin.
+            module = "pkg_resources" if name == "setuptools" else name.replace("-", "_")
+            package = pip_vendor / module
+            if package not in directories:
+                package = pip_vendor / (module + ".py")
+            require(package in directories or package in files, "python_vendor_material_missing:" + name)
+            require(package in files or any(path.is_relative_to(package) and path.suffix == ".py" for path in files),
+                    "python_vendor_material_missing:" + name)
+            material.add(package)
+            matches = [row for row in notices if row["origin"]["owner"] == "pip"
+                       and python_name(row["name"]) == name]
+            require(all(row["version"] == identity[2] for row in matches), "python_vendor_version_mismatch")
+            component_files = python_notice_files(files, package) if package in directories else {}
+            # Modern wheels also retain pip's per-vendor notices under its dist-info.
+            component_files.update(python_notice_files(files, owners["pip"] / "licenses/src/pip/_vendor" / module))
+            if package in files:
+                for path in files:
+                    if path.parent == pip_vendor and path.name.lower().startswith(module.lower() + ".license"):
+                        require(path.stat().st_size <= MAX_OUTPUT_BYTES, "python_notice_size_limit")
+                        component_files[str(path)] = sha(path)
+            vendored.add(identity)
+            if not matches:
+                notices.append({"ecosystem": "PyPI", "name": identity[1], "version": identity[2],
+                                "license": None,
+                                "origin": {"kind": "vendored_manifest", "owner": "pip", "path": str(package)},
+                                "identity_files": {str(manifest): sha(manifest)}, "files": component_files})
+        # Code without a manifest pin cannot silently disappear from coverage.
+        immediate = {path for path in directories if path.parent == pip_vendor and path.name != "__pycache__"}
+        immediate.update(path for path in files if path.parent == pip_vendor
+                         and path.suffix == ".py" and path.name != "__init__.py")
+        immediate = {path for path in immediate if not path.name.endswith(".dist-info")}
+        require(immediate <= material, "python_vendor_unpinned_material")
+    return notices, top | vendored
+
+
 def installed_graphs(generation, graphs):
     fs = read_json(generation / "filesystem-profile/profile.json")
     git = read_json(generation / "git-profile/profile.json")
@@ -245,25 +409,11 @@ def installed_graphs(generation, graphs):
             files = original_server_notices(generation, metadata)
         notices.append({"ecosystem": "npm", "name": metadata["name"], "version": metadata["version"],
                         "license": metadata.get("license"), "files": {str(p): sha(p) for p in files}})
-    py_graph = set()
     site = Path(git["packageRoot"]) / "python/lib/python3.11/site-packages"
-    for directory in sorted(site.glob("*.dist-info")):
-        metadata = email.message_from_bytes((directory / "METADATA").read_bytes())
-        name, version = metadata.get("Name"), metadata.get("Version")
-        require(bool(name) and bool(version), "python_distribution_identity_missing")
-        # Bootstrap packages from the pinned interpreter archive are inventoried
-        # and scanned even when absent from the server's wheel lock.
-        py_graph.add(("PyPI", python_name(name), version))
-        files = [p for p in directory.rglob("*") if p.is_file() and (
-            "license" in p.name.lower() or p.name.lower().startswith(("copying", "notice")))]
-        notices.append({"ecosystem": "PyPI", "name": name, "version": version,
-                        "license": metadata.get("License-Expression") or metadata.get("License"),
-                        "files": {str(p): sha(p) for p in files}})
     expected = {next(iter(values))[0]: values for values in graphs.values()}
     require(npm_graph == expected["npm"], "installed_npm_graph_mismatch")
-    require(expected["PyPI"] <= py_graph, "installed_python_graph_mismatch")
-    extra = py_graph - expected["PyPI"]
-    require(all(name in {"pip", "setuptools"} for _, name, _ in extra), "unexpected_python_distribution")
+    python_notices, py_graph = installed_python(site, expected["PyPI"])
+    notices.extend(python_notices)
     # The accepted interpreter archive also redistributes its bootstrap tools.
     # Scan these real installed versions rather than omitting them or adding
     # invented wheel hashes to the strict runtime installer lock.
@@ -295,7 +445,7 @@ def verify_native_reviews(path, selection, generation):
     upstream = read_json(ROOT / "profiles/mcp/git-readonly-v1/upstream-identity.json")
     pins = {"git": (upstream["git_version"], upstream["git_source_sha256"]),
             "git_python": (upstream["python"]["version"], upstream["python"]["sha256"]),
-            "node": ("22.22.0", "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37"),
+            "node": ("22.23.4", "1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce"),
             "bwrap": ("0.13.1", "0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d")}
     for role, review in data["components"].items():
         require(review.get("binary_sha256") == expected_binaries[role]["sha256"], "native_review_binary_mismatch")
@@ -356,6 +506,11 @@ def main(argv=None):
         report["cargo_lock_components"] = tomllib.loads((ROOT / "Cargo.lock").read_text())["package"]
         report["notices"], python_graph, license_errors = installed_graphs(args.selection.parent, graphs)
         report["errors"].extend(license_errors)
+        report["python_graphs"] = {
+            kind: sorted({python_identity(row["name"], row["version"]) for row in report["notices"]
+                          if row["ecosystem"] == "PyPI"
+                          and (row["origin"]["kind"] == "installed_distribution") == (kind == "top_level")})
+            for kind in ("top_level", "vendored")}
         python_lock = next(path for path in graphs if path.endswith("requirements.lock"))
         scan_requirements = args.output.parent / (args.output.stem + "-installed-requirements.txt")
         args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -19,9 +19,42 @@ registries, policies and library digests through the existing preparation reader
 It enumerates the actual installed Python distributions and npm packages and
 compares them with the hashed Python and npm locks. Bootstrap pip/setuptools
 redistributed in the pinned interpreter archive are included in a separate exact
-scanner input. Extra unrelated distributions remain blocking. It inventories
+scanner input. The top-level Python graph must still contain every locked wheel
+at its exact version, with only pip/setuptools bootstrap extras permitted.
+Nested distributions cannot satisfy missing top-level wheels. Extra unrelated
+top-level distributions remain blocking. It inventories
 license metadata and hashes existing notice files for every installed package.
 Missing declarations or notice text remain incomplete; no legal approval is inferred.
+
+Python inventory walks the selected site-packages tree once, refusing symlinks,
+paths outside that tree, depth above 32, more than 100,000 entries or more than
+1,000 distribution directories. Metadata, manifests, records and notices have
+bounded sizes. Nested `.dist-info` distributions are accepted only beneath the
+bootstrap tools' `pip/_vendor` and `setuptools/_vendor` trees. Their actual
+`METADATA` identities, safe `RECORD` paths and present component code establish
+inventory entries. Both identity files are hashed. A RECORD hash is retained as
+installed evidence; it does not invent a downloaded wheel identity or lock.
+
+Pip's `_vendor/vendor.txt` supplies exact pins for redistributed components
+without their own distribution metadata. Unpinned or duplicate declarations,
+conflicting nested metadata, missing component code, and unpinned immediate
+vendor modules remain blocking. Pip's setuptools pin describes its actual
+`pkg_resources` subtree. The report retains each component's owner, material
+path, identity-file hashes and attributable notice hashes, including pip's
+per-component notices retained in its `.dist-info/licenses` tree. Raw license
+declarations and classifiers are retained when metadata supplies them. A vendor
+pin or a notice's text does not supply an SPDX approval: absent or opaque license
+declarations still require review under the existing policy.
+
+`python_graphs.top_level` and `python_graphs.vendored` retain the separate graphs.
+The scanner requirements are their union, deduplicated by name **and version**;
+multiple installed origins remain in the notice evidence even for equal
+identities. Parallel versions remain distinct scanner entries. This temporary
+scanner input has no fabricated wheel hashes and does not change the hashed
+installer lock. The existing preparation reader verifies the selected package
+tree before inventory and again after scanning. A changed runtime requires a
+fresh prepared selection and report; earlier reports keep their original source,
+time and coverage claims and are not relabelled as complete vendor inventories.
 
 Three bounded checks retain their commands, exit codes and raw output:
 
