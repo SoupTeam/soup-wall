@@ -102,6 +102,40 @@ def completion(data, shell, context=None):
     words = sorted({row['command'][len(context)] for row in selected if len(row['command']) > len(context)} |
                    {flag['name'] for row in selected if row['command'] == context for flag in row['flags']})
     joined = ' '.join(words)
+    if not context:
+        cases = []
+        for row in data['commands']:
+            path = row['command']
+            candidates = {other['command'][len(path)] for other in data['commands']
+                          if other['command'][:len(path)] == path and len(other['command']) > len(path)}
+            candidates.update(flag['name'] for flag in row['flags'])
+            cases.append((' '.join(path), ' '.join(sorted(candidates))))
+        if shell == 'bash':
+            lines = ['_pilot_help_complete() {', ' local context="" word choices="" i',
+                     ' COMPREPLY=()', ' for ((i=1; i<COMP_CWORD; i++)); do',
+                     '  word=${COMP_WORDS[i]}', '  case "$word" in -* ) return ;; esac',
+                     '  context="${context:+$context }$word"', ' done', ' case "$context" in']
+            lines += ["  '" + key + "') choices='" + value + "' ;;" for key, value in cases]
+            lines += ['  *) return ;;', ' esac',
+                      ' while IFS= read -r word; do COMPREPLY+=("$word"); done < <(compgen -W "$choices" -- "${COMP_WORDS[COMP_CWORD]}")',
+                      '}', 'complete -F _pilot_help_complete pilot']
+            return '\n'.join(lines) + '\n'
+        if shell == 'zsh':
+            lines = ['#compdef pilot', '_pilot_help_complete() {', ' local context="" word choices="" i',
+                     ' for ((i=2; i<CURRENT; i++)); do', '  word=${words[i]}',
+                     '  case "$word" in -*) return ;; esac',
+                     '  context="${context:+$context }$word"', ' done', ' case "$context" in']
+            lines += ["  '" + key + "') choices='" + value + "' ;;" for key, value in cases]
+            lines += ['  *) return ;;', ' esac', ' compadd -- ${=choices}', '}', 'compdef _pilot_help_complete pilot']
+            return '\n'.join(lines) + '\n'
+        lines = ['function __pilot_help_context', ' set -l words (commandline -opc)',
+                 ' test (count $words) -ge 1; or return 1', ' set -e words[1]',
+                 ' test (string join " " -- $words) = "$argv[1]"', 'end']
+        for key, value in cases:
+            for word in value.split():
+                option = "-l '" + word[2:] + "'" if word.startswith('--') else "-s '" + word[1:] + "'" if word.startswith('-') else "-a '" + word + "'"
+                lines.append("complete -c pilot -f -n '__pilot_help_context \"" + key + "\"' " + option)
+        return '\n'.join(lines) + '\n'
     if shell == 'bash':
         return "_pilot_help_complete() { COMPREPLY=( $(compgen -W '" + joined + "' -- \"${COMP_WORDS[COMP_CWORD]}\") ); }\ncomplete -F _pilot_help_complete pilot\n"
     if shell == 'zsh':

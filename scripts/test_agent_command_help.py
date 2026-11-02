@@ -7,12 +7,27 @@ import tempfile
 import unittest
 import shutil
 import importlib.util
+import os
 from unittest.mock import patch
 
 TOOL = Path(__file__).with_name('agent-command-help.py')
 
 
 class Controls(unittest.TestCase):
+    @unittest.skipUnless(os.environ.get('AGENTFW_TEST_BINARY') and sys.platform == 'linux', 'installed Rust binary required')
+    def test_installed_rust_command_tree(self):
+        with tempfile.TemporaryDirectory() as temp:
+            binary = Path(temp) / 'agentfw'
+            shutil.copy2(os.environ['AGENTFW_TEST_BINARY'], binary)
+            result = subprocess.run([sys.executable, '-B', str(TOOL), '--agentfw', str(binary),
+                                     '--sha256', hashlib.sha256(binary.read_bytes()).hexdigest(), 'list'],
+                                    cwd=temp, capture_output=True, text=True, timeout=120)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            catalog = json.loads(result.stdout)
+            commands = [row['command'] for row in catalog['commands']]
+            self.assertIn(['doctor'], commands)
+            self.assertTrue(any('lifecycle' in row for row in commands))
+
     def test_verified_python_bytes_survive_path_replacement(self):
         spec = importlib.util.spec_from_file_location('help_reader', TOOL)
         reader = importlib.util.module_from_spec(spec)
@@ -90,7 +105,8 @@ class Controls(unittest.TestCase):
                              {'command': ['provider'], 'flags': []},
                              {'command': ['provider', 'preview'], 'flags': []}]}
         output = reader_completion(data, 'bash', [])
-        self.assertNotIn('preview', output)
+        self.assertIn("'') choices='provider'", output)
+        self.assertIn("'provider') choices='preview'", output)
 
     def test_generated_bash_runs_without_executing_hostile_current_word(self):
         bash = shutil.which('bash')
