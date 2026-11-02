@@ -682,6 +682,11 @@ def prepare_locked(args, output, requested, linked_binding=None, fs_roots=None):
     verify_generation(generation, args.expected_commit)
     record = {"format": "sw-pilot-preparation/1", "generation": generation.name,
               "selection_sha256": FS.sha(selection_path), "status": "prepared-not-active"}
+    if getattr(args, "stage_only", False):
+        # Explicit staging for a separately confirmed transition: the generation is complete and
+        # verified, but the previous marker stays selected. The caller publishes it, or never does.
+        return {"status": "staged-not-selected", "selection": str(selection_path), "generation": generation.name,
+                "selection_sha256": record["selection_sha256"]}
     publish_marker(output, record)
     result = {"status": "prepared-not-active", "selection": str(selection_path), "generation": generation.name}
     if wsl_report is not None:
@@ -694,6 +699,7 @@ def main():
     capacity.add_arguments(parser)
     parser.add_argument("--prepare", action="store_true", help="explicitly prepare and select a verified generation")
     parser.add_argument("--rebuild", action="store_true", help="prepare a new generation and retain the old one")
+    parser.add_argument("--stage-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--allow-download", action="store_true", help="permit locked npm/pip and pinned Python download")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--wsl-root", type=Path,
@@ -719,6 +725,8 @@ def main():
             parser.error("--capacity-plan is read-only; use it without --prepare or --guard-capacity")
         print(json.dumps(capacity.cli_plan("assets", args), sort_keys=True))
         return 0
+    if args.stage_only and not (args.prepare and args.rebuild):
+        parser.error("--stage-only requires --prepare --rebuild")
     if args.guard_capacity and not args.prepare:
         parser.error("--guard-capacity requires --prepare")
     if not args.prepare:

@@ -111,6 +111,9 @@ An optional `--linux-budget /absolute/private/budget.json` references the accept
 Run pins those exact bytes and never retries without the requested budget.
 Omitting the option deliberately creates an unbudgeted binding.
 
+A named Linux budget (see [PILOT_BUDGET_PRESETS.md](PILOT_BUDGET_PRESETS.md)) can be selected instead with
+`--budget-preset NAME`; the project stores its exact digest and every run resolves it again.
+
 Every check and real run revalidates the full selection, source/runtime/profile
 identities, root device/inode/owner, provider version and budget reference.
 The existing supervisor independently checks selection, provider, state parent
