@@ -279,7 +279,7 @@ class Validation(unittest.TestCase):
     def test_unsupported_shapes_and_roots_refuse(self):
         for bad in (config(pidsMax=True), config(pidsMax='64'), config(pidsMax=64.0), config(root='/tmp/cgroup'),
                     config(root='/sys/fs/cgroup'), config(root='/sys/fs/cgroup/'), config(root='/sys/fs/cgroup/a/../b'),
-                    config(root='/sys/fs/cgroup/a//b'), config(root='/sys/fs/cgroup/a/'), config(root='/sys/fs/cgroup/é'),
+                    config(root='/sys/fs/cgroup/a//b'), config(root='/sys/fs/cgroup/a/'), config(root='/sys/fs/cgroup/Ã©'),
                     config(root='/sys/fs/cgroup/a\\b'), config(root='/sys/fs/cgroup/a b'),
                     dict(config(), extra=1), {k: v for k, v in config().items() if k != 'wallMillis'},
                     dict(config(), format='sw-mcp/linux-cgroup-budget/2'), []):
@@ -722,6 +722,17 @@ class PreparedRunIntegration(Base):
                 self.assertEqual(RUN.main(), 1)
             self.assertEqual(json.loads(out.getvalue())['reason'], 'budget_preset_selection_conflict')
         spawn.assert_not_called()
+
+
+@unittest.skipUnless(Path('/proc/self/fd').is_dir(), 'Linux descriptor-count witness')
+class DescriptorLifetime(unittest.TestCase):
+    def test_catalog_reads_do_not_accumulate_directory_descriptors(self):
+        with tempfile.TemporaryDirectory(prefix='budget-preset-fds-') as temporary:
+            with B.Store(Path(temporary).resolve(), create=True) as store:
+                before = len(os.listdir('/proc/self/fd'))
+                for _ in range(64):
+                    store.read()
+                self.assertEqual(len(os.listdir('/proc/self/fd')), before)
 
 
 if __name__ == '__main__':

@@ -275,7 +275,11 @@ class Store:
             os.close(sfd)
 
     def check(self):
-        require(private_directory(open_absolute(self.home)) == private_directory(self.parent), 'store_parent_changed')
+        current = open_absolute(self.home)
+        try:
+            require(private_directory(current) == private_directory(self.parent), 'store_parent_changed')
+        finally:
+            os.close(current)
         if self.fd is not None:
             m = os.fstat(self.fd)
             named = os.stat(DIRECTORY, dir_fd=self.parent, follow_symlinks=False)
