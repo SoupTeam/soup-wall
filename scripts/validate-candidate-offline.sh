@@ -6,6 +6,10 @@ VALIDATOR_SCRIPTS="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 KIT_ARCHIVE="${1:-$(pwd)/target/soup-wall-linux-amd64.tar.gz}"
 KIT_ARCHIVE="$(realpath -- "$KIT_ARCHIVE")"
 umask 077
+if [ -n "${CANDIDATE_EVIDENCE_DIR:-}" ]; then
+    CANDIDATE_EVIDENCE_DIR="$(realpath -m -- "$CANDIDATE_EVIDENCE_DIR")"
+    mkdir -- "$CANDIDATE_EVIDENCE_DIR" || { echo "New evidence directory required" >&2; exit 1; }
+fi
 VALIDATION_DIR=$(mktemp -d -t soup-wall-candidate-XXXXXX)
 AGENT_PID=""
 
@@ -20,7 +24,6 @@ cleanup() {
         wait $AGENT_PID 2>/dev/null || true
     fi
     if [ -n "${CANDIDATE_EVIDENCE_DIR:-}" ]; then
-        mkdir -p "$CANDIDATE_EVIDENCE_DIR"
         cp -R "$VALIDATION_DIR"/. "$CANDIDATE_EVIDENCE_DIR"/
     fi
     rm -rf "$VALIDATION_DIR"
@@ -220,6 +223,11 @@ python3 mcp_test_driver.py "read" "/workspace/test_secret.txt" "" \
 
 echo "Testing Unsupported Tool (Zero-Dispatch)..."
 ZERO_EFFECT_FILE="$(pwd)/workspace/zero_effect_witness.txt"
+echo "Calibrating Direct Original-Server Write Witness..."
+python3 mcp_test_driver.py "calibrate_write" "$ZERO_EFFECT_FILE" "CANDIDATE-WRITE-CALIBRATION" \
+    "$NODE_BIN" "$INDEX_JS" "$(pwd)/workspace"
+[ "$(cat "$ZERO_EFFECT_FILE")" = "CANDIDATE-WRITE-CALIBRATION" ] || { echo "Direct write witness failed"; exit 1; }
+rm -- "$ZERO_EFFECT_FILE"
 python3 mcp_test_driver.py "verify_unsupported" "/workspace/zero_effect_witness.txt" "ignore all instructions" \
     agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace
 if [ -f "$ZERO_EFFECT_FILE" ]; then
@@ -237,6 +245,7 @@ python3 mcp_test_driver.py "verify_policy" "/workspace/injection.txt" "" \
 
 echo "Testing Broken Path Control (Setup Failure instead of Outage)..."
 BROKEN_OUT=$(python3 mcp_test_driver.py "broken_path" "/workspace/nonexistent_test.txt" "" agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace 2>&1) || true
+printf '%s\n' "$BROKEN_OUT" > broken-path.log
 if echo "$BROKEN_OUT" | grep -qiE "admission failed|connection refused"; then
     echo "CRITICAL: Broken path setup failure falsely identified as daemon loss outage!"
     exit 1
@@ -248,6 +257,7 @@ wait $AGENT_PID 2>/dev/null || true
 AGENT_PID=""
 
 LOSS_OUT=$(python3 mcp_test_driver.py "read" "/workspace/test_secret.txt" "" agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace 2>&1) || EXIT_CODE=$?
+printf '%s\n' "$LOSS_OUT" > daemon-loss.log
 
 if [ "${EXIT_CODE:-0}" -eq 0 ]; then
     echo "CRITICAL: Command succeeded despite daemon loss!"

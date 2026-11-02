@@ -80,7 +80,7 @@ try:
     if "error" in read_response(2):
         raise ValueError("discovery_failed")
 
-    if action == "verify_unsupported":
+    if action in ("verify_unsupported", "calibrate_write"):
         send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write_file","arguments":{"path":path,"content":content}}})
     elif action == "verify_generic_error":
         send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_file","arguments":{}}})
@@ -110,7 +110,11 @@ except Exception as e:
         audit.close()
     sys.exit(f"CRITICAL: Failed to communicate with collector: {e}")
 
-if action == "read" or action == "broken_path":
+if action == "calibrate_write":
+    if "error" in resp or resp.get("result", {}).get("isError"):
+        sys.exit(f"CRITICAL: Direct original-server calibration failed: {resp}")
+
+elif action == "read" or action == "broken_path":
     if action == "read":
         if "error" in resp or resp.get("result", {}).get("isError"):
             sys.exit(f"CRITICAL: Unexpected error on read: {resp}")
