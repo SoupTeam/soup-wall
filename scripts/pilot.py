@@ -996,6 +996,7 @@ def parser():
     commands.add_parser("worktree-selection", help="explicitly bind the roots of a linked Git worktree")
     commands.add_parser("filesystem-roots", help="explicitly bind separately selected read-only root IDs")
     commands.add_parser("project", help="inspect, check and explicitly manage named project presets")
+    commands.add_parser("policy-activation", help="activate a reviewed deny-only policy candidate for an idle installation")
     commands.add_parser("budget-preset", help="inspect, check and explicitly manage named Linux resource-budget presets")
     commands.add_parser("help")
     commands.add_parser("update", help="preview, apply, recover or roll back a complete local pilot generation")
@@ -1044,6 +1045,10 @@ def main(argv=None):
         project_home = installed_home = Path(project_words[1]); project_words = project_words[2:]
     if project_words and project_words[0].startswith('--agent-home='):
         project_home = installed_home = Path(project_words[0].split('=', 1)[1]); project_words = project_words[1:]
+    if project_words[:1] == ['policy-activation']:
+        import types
+        front = types.SimpleNamespace(**globals(), PROJECT_HOME=project_home, INSTALLED_HOME=installed_home)
+        return load('front_door_policy_activation', 'pilot_policy_activation.py').main(project_words[1:], front)
     if project_words[:1] == ['budget-preset']:
         import types
         front = types.SimpleNamespace(**globals(), PROJECT_HOME=project_home, INSTALLED_HOME=installed_home)

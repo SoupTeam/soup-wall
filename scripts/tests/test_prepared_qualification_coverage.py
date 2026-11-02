@@ -224,6 +224,28 @@ class PreparedQualificationCoverage(unittest.TestCase):
                 self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
                 self.assertIn("--maintenance-only", body)
 
+    def test_policy_activation_dispatch_is_separate_from_full_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.installed_focus": "policy-activation",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                body = step(text, "Qualify installed policy-candidate activation with original host")
+                self.assertTrue(enabled(body, **context))
+                self.assertFalse(enabled(body))
+                for missing in ("installed_focus", "native_preparation_only"):
+                    self.assertFalse(enabled(body, **{
+                        **context, "github.event.inputs." + missing: "",
+                    }))
+                self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
+                self.assertIn("--policy-activation-only", body)
+
     def test_budget_preset_dispatch_is_separate_from_full_qualification(self):
         context = {"github.event_name": "workflow_dispatch",
                    "github.event.inputs.installed_focus": "budget-presets",

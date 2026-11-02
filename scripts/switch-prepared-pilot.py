@@ -183,7 +183,7 @@ def generation(output, identifier, source_root):
     return summary
 
 
-def require_inactive(*summaries):
+def require_inactive(*summaries, ignore=frozenset()):
     """Find orphaned accepted pilot processes after locking out new launches.
 
     A surviving daemon/host has no supervisor lock after abrupt owner loss.
@@ -193,7 +193,7 @@ def require_inactive(*summaries):
     selected = {entry[key] for entry in summaries for key in ("agent_path", "claude_path")}
     require(Path("/proc").is_dir(), "pilot_process_observation_unavailable")
     for process in Path("/proc").iterdir():
-        if not process.name.isdecimal() or int(process.name) == os.getpid():
+        if not process.name.isdecimal() or int(process.name) == os.getpid() or int(process.name) in ignore:
             continue
         try:
             if process.stat().st_uid != os.getuid():
