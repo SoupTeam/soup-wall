@@ -37,7 +37,8 @@ def page_html():
             .replace("/* FLEET_PANEL */", (SRC / "fleet_panel.js").read_text(encoding="utf-8"))
             .replace("/* ROLLOUT_PANEL */", (SRC / "rollout_panel.js").read_text(encoding="utf-8"))
             .replace("/* ENROLLMENT_PANEL */", (SRC / "enrollment_panel.js").read_text(encoding="utf-8"))
-            .replace("/* AGENT_HISTORY */", (SRC / "agent_history.js").read_text(encoding="utf-8")))
+            .replace("/* AGENT_HISTORY */", (SRC / "agent_history.js").read_text(encoding="utf-8"))
+            .replace("/* FLEET_TRIAGE */", (SRC / "fleet_triage.js").read_text(encoding="utf-8")))
 
 
 @unittest.skipUnless(AVAILABLE, "optional Playwright browser fixture dependency unavailable")
@@ -107,6 +108,14 @@ class RolloutPanelBrowserTests(unittest.TestCase):
             tenant = path.split("/")[4]
             self.json(route, {"contract_version": "sw-agent-fleet/1", "tenant_id": tenant, "agents": [],
                               "next_after": None, "observed_at_unix": 1800000000})
+        elif path.endswith("/agent-triage"):
+            tenant = path.split("/")[4]
+            q = dict(p.split("=", 1) for p in request.url.split("?", 1)[1].split("&"))
+            zero = dict.fromkeys(["counted_agents", "attention", "pending", "rejected", "mismatch", "revoked", "incomplete_history",
+                                  "no_ack", "stale_ack", "no_history", "no_recorded_problem", "matching"], 0)
+            self.json(route, {"contract_version": "sw-agent-fleet-triage/1", "tenant_id": tenant, "observed_at_unix": 1800000000,
+                              "problem": q["problem"], "sort": q["sort"], "prefix": q["prefix"], "ack_age_seconds": int(q["ack_age_seconds"]),
+                              "counts": dict(zero, scan_limit=10000, complete=True), "agents": [], "next": None})
         elif path.endswith(("/model-policy", "/limits")):
             self.json(route, None)
         elif path.endswith(("/tokens", "/audit")):

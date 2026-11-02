@@ -8,6 +8,8 @@
 
 #[path = "fleet_postgres.rs"]
 mod fleet;
+#[path = "fleet_triage_postgres.rs"]
+mod fleet_triage;
 #[path = "managed_postgres.rs"]
 mod managed;
 

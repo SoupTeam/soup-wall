@@ -96,7 +96,10 @@ const fleet = (() => {
   $("fleet-next").addEventListener("click",()=>{if(next)loadList(next);});
   $("fleet-first").addEventListener("click",()=>loadList());
   $("fleet-history-next").addEventListener("click",()=>{if(selected && historyNext!=null)loadAgent(selected,historyNext);});
-  return { reload() { if (tenant) loadList(); }, select(id) {
+  // Deep link from the triage overview: the same selection as a click in the
+  // list, which also builds the recorded history.
+  const open = agent => { if (!tenant) return; loadAgent(agent); $("fleet-agent-detail").scrollIntoView({ block: "start" }); };
+  return { open, reload() { if (tenant) loadList(); }, select(id) {
     epoch++; tenant=id; listRequest++; listController?.abort(); clearDetail();
     next=null; $("fleet-list").replaceChildren(); $("fleet-next").disabled=true;
     $("fleet-prefix").value="";$("fleet-enrollment").value="all";$("fleet-delivery").value="all";
