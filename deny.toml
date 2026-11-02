@@ -1,0 +1,23 @@
+# deny.toml
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "BSL-1.0",
+    "CDLA-Permissive-2.0"
+]
+
+[[licenses.exceptions]]
+allow = ["0BSD"]
+name = "adler2"
+version = "2.0.1"
+
+[[licenses.exceptions]]
+allow = ["Unlicense"]
+name = "aho-corasick"
+version = "1.1.5"

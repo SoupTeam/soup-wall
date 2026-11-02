@@ -1,0 +1,4110 @@
+{
+  "metadata": {
+    "timestamp": "2026-10-30T19:19:05.370874Z",
+    "receipt_source": "profiles/mcp/git-readonly-v1/upstream-identity.json",
+    "commit": "aa6e28758446a11059ada5e51756e41086db8087"
+  },
+  "coverage": {
+    "receipt_graphs": {
+      "status": "success"
+    }
+  },
+  "receipt_verification": {
+    "files": {
+      "upstream-initialize.json": {
+        "status": "verified",
+        "sha256": "d3cf3433f2e2fe8bef9389e8aa93f9bb3f7f00082f7b14a7c915d06aabae042d"
+      },
+      "upstream-tools-list.json": {
+        "status": "verified",
+        "sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b"
+      },
+      "requirements.lock": {
+        "status": "verified",
+        "sha256": "a2ea6fba6061834cadd0a51de9d5214fe4bd404ead81960a7777fa89af0a49c9"
+      }
+    },
+    "status": "success"
+  },
+  "advisories": {
+    "rust": {
+      "database": {
+        "advisory-count": 1395,
+        "last-commit": "2295466c4e9df26647fd67d8fa1c705ac2fc7f81",
+        "last-updated": "2026-10-30T12:12:39+01:00"
+      },
+      "lockfile": {
+        "dependency-count": 443
+      },
+      "settings": {
+        "target_arch": [],
+        "target_os": [],
+        "severity": null,
+        "ignore": [],
+        "informational_warnings": [
+          "unmaintained",
+          "unsound",
+          "notice"
+        ]
+      },
+      "vulnerabilities": {
+        "found": false,
+        "count": 0,
+        "list": []
+      },
+      "warnings": {
+        "unmaintained": [
+          {
+            "kind": "unmaintained",
+            "package": {
+              "name": "paste",
+              "version": "1.0.15",
+              "source": "registry+https://github.com/rust-lang/crates.io-index",
+              "checksum": "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a",
+              "replace": null
+            },
+            "advisory": {
+              "id": "RUSTSEC-2024-0436",
+              "package": "paste",
+              "title": "paste - no longer maintained",
+              "description": "The creator of the crate `paste` has stated in the [`README.md`](https://github.com/dtolnay/paste/blob/master/README.md) \nthat this project is not longer maintained as well as archived the repository\n\n## Possible Alternative(s)\n\n- [`pastey`]: a fork of paste and is aimed to be a drop-in replacement with additional features for paste crate\n- [`with_builtin_macros`]: crate providing a [superset of `paste`'s functionality including general `macro_rules!` eager expansions](https://docs.rs/with_builtin_macros/0.1.0/with_builtin_macros/macro.with_eager_expansions.html)  and `concat!`/`concat_idents!` macros\n\n[`pastey`]: https://crates.io/crates/pastey\n[`with_builtin_macros`]: https://crates.io/crates/with_builtin_macros",
+              "date": "2024-10-07",
+              "aliases": [],
+              "related": [],
+              "collection": "crates",
+              "categories": [],
+              "keywords": [],
+              "cvss": null,
+              "informational": "unmaintained",
+              "references": [],
+              "source": null,
+              "url": "https://github.com/dtolnay/paste",
+              "withdrawn": null,
+              "license": "CC0-1.0",
+              "expect-deleted": false
+            },
+            "affected": null,
+            "versions": {
+              "patched": [],
+              "unaffected": []
+            }
+          },
+          {
+            "kind": "unmaintained",
+            "package": {
+              "name": "unsafe-libyaml",
+              "version": "0.2.11",
+              "source": "registry+https://github.com/rust-lang/crates.io-index",
+              "checksum": "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861",
+              "replace": null
+            },
+            "advisory": {
+              "id": "RUSTSEC-2024-0449",
+              "package": "unsafe-libyaml",
+              "title": "unsafe-libyaml is unmaintained",
+              "description": "The [repository](https://github.com/dtolnay/unsafe-libyaml) was archived by\nits owner on 2024-03-25 and is read-only. The last release is 0.2.11\n(March 2024).\n\n`unsafe-libyaml` is a machine translation of libyaml's C code into unsafe\nRust (c2rust). Bugs found in it will not be fixed upstream. It is used by\n`serde_yaml` (itself deprecated) and by forks such as `serde_yaml_ng`.\n\n## Alternatives\n\nConsider a YAML parser written in safe Rust, for example:\n\n- [saphyr](https://crates.io/crates/saphyr) ([serde-saphyr](https://crates.io/crates/serde-saphyr) for serde users)\n- [noyalib](https://crates.io/crates/noyalib)",
+              "date": "2024-03-25",
+              "aliases": [],
+              "related": [],
+              "collection": "crates",
+              "categories": [],
+              "keywords": [],
+              "cvss": null,
+              "informational": "unmaintained",
+              "references": [],
+              "source": null,
+              "url": "https://github.com/dtolnay/unsafe-libyaml",
+              "withdrawn": null,
+              "license": "CC0-1.0",
+              "expect-deleted": false
+            },
+            "affected": null,
+            "versions": {
+              "patched": [],
+              "unaffected": []
+            }
+          }
+        ]
+      }
+    },
+    "osv_universal": {
+      "results": [
+        {
+          "source": {
+            "path": "/mnt/c/Users/tamik/soup-wall/Cargo.lock",
+            "type": "lockfile"
+          },
+          "packages": [
+            {
+              "package": {
+                "name": "adler2",
+                "version": "2.0.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/adler2@2.0.1"
+              }
+            },
+            {
+              "package": {
+                "name": "aead",
+                "version": "0.6.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/aead@0.6.1"
+              }
+            },
+            {
+              "package": {
+                "name": "aes",
+                "version": "0.9.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/aes@0.9.3"
+              }
+            },
+            {
+              "package": {
+                "name": "aes-gcm",
+                "version": "0.11.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/aes-gcm@0.11.1"
+              }
+            },
+            {
+              "package": {
+                "name": "agentfw",
+                "version": "0.3.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/agentfw@0.3.0"
+              }
+            },
+            {
+              "package": {
+                "name": "ahash",
+                "version": "0.8.12",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/ahash@0.8.12"
+              }
+            },
+            {
+              "package": {
+                "name": "aho-corasick",
+                "version": "1.1.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/aho-corasick@1.1.5"
+              }
+            },
+            {
+              "package": {
+                "name": "allocator-api2",
+                "version": "0.2.21",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/allocator-api2@0.2.21"
+              }
+            },
+            {
+              "package": {
+                "name": "android_system_properties",
+                "version": "0.1.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/android_system_properties@0.1.6"
+              }
+            },
+            {
+              "package": {
+                "name": "anstream",
+                "version": "1.0.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/anstream@1.0.0"
+              }
+            },
+            {
+              "package": {
+                "name": "anstyle",
+                "version": "1.0.14",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/anstyle@1.0.14"
+              }
+            },
+            {
+              "package": {
+                "name": "anstyle-parse",
+                "version": "1.0.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/anstyle-parse@1.0.0"
+              }
+            },
+            {
+              "package": {
+                "name": "anstyle-query",
+                "version": "1.1.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/anstyle-query@1.1.5"
+              }
+            },
+            {
+              "package": {
+                "name": "anstyle-wincon",
+                "version": "3.0.11",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/anstyle-wincon@3.0.11"
+              }
+            },
+            {
+              "package": {
+                "name": "anyhow",
+                "version": "1.0.104",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/anyhow@1.0.104"
+              }
+            },
+            {
+              "package": {
+                "name": "arc-swap",
+                "version": "1.9.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/arc-swap@1.9.2"
+              }
+            },
+            {
+              "package": {
+                "name": "arcstr",
+                "version": "1.2.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/arcstr@1.2.0"
+              }
+            },
+            {
+              "package": {
+                "name": "assert-json-diff",
+                "version": "2.0.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/assert-json-diff@2.0.2"
+              }
+            },
+            {
+              "package": {
+                "name": "async-lock",
+                "version": "3.4.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/async-lock@3.4.2"
+              }
+            },
+            {
+              "package": {
+                "name": "async-trait",
+                "version": "0.1.92",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/async-trait@0.1.92"
+              }
+            },
+            {
+              "package": {
+                "name": "atomic-waker",
+                "version": "1.1.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/atomic-waker@1.1.2"
+              }
+            },
+            {
+              "package": {
+                "name": "autocfg",
+                "version": "1.5.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/autocfg@1.5.1"
+              }
+            },
+            {
+              "package": {
+                "name": "aws-lc-rs",
+                "version": "1.18.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/aws-lc-rs@1.18.2"
+              }
+            },
+            {
+              "package": {
+                "name": "aws-lc-sys",
+                "version": "0.46.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/aws-lc-sys@0.46.0"
+              }
+            },
+            {
+              "package": {
+                "name": "axum",
+                "version": "0.7.9",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/axum@0.7.9"
+              }
+            },
+            {
+              "package": {
+                "name": "axum-core",
+                "version": "0.4.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/axum-core@0.4.5"
+              }
+            },
+            {
+              "package": {
+                "name": "backon",
+                "version": "1.6.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/backon@1.6.0"
+              }
+            },
+            {
+              "package": {
+                "name": "base64",
+                "version": "0.13.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/base64@0.13.1"
+              }
+            },
+            {
+              "package": {
+                "name": "base64",
+                "version": "0.22.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/base64@0.22.1"
+              }
+            },
+            {
+              "package": {
+                "name": "base64",
+                "version": "0.23.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/base64@0.23.1"
+              }
+            },
+            {
+              "package": {
+                "name": "base64ct",
+                "version": "1.8.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/base64ct@1.8.3"
+              }
+            },
+            {
+              "package": {
+                "name": "bergshamra",
+                "version": "0.9.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bergshamra@0.9.2"
+              }
+            },
+            {
+              "package": {
+                "name": "bergshamra-c14n",
+                "version": "0.9.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bergshamra-c14n@0.9.2"
+              }
+            },
+            {
+              "package": {
+                "name": "bergshamra-core",
+                "version": "0.9.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bergshamra-core@0.9.2"
+              }
+            },
+            {
+              "package": {
+                "name": "bergshamra-crypto",
+                "version": "0.9.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bergshamra-crypto@0.9.2"
+              }
+            },
+            {
+              "package": {
+                "name": "bergshamra-dsig",
+                "version": "0.9.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bergshamra-dsig@0.9.2"
+              }
+            },
+            {
+              "package": {
+                "name": "bergshamra-enc",
+                "version": "0.9.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bergshamra-enc@0.9.2"
+              }
+            },
+            {
+              "package": {
+                "name": "bergshamra-keys",
+                "version": "0.9.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bergshamra-keys@0.9.2"
+              }
+            },
+            {
+              "package": {
+                "name": "bergshamra-pkcs12",
+                "version": "0.9.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bergshamra-pkcs12@0.9.2"
+              }
+            },
+            {
+              "package": {
+                "name": "bergshamra-transforms",
+                "version": "0.9.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bergshamra-transforms@0.9.2"
+              }
+            },
+            {
+              "package": {
+                "name": "bergshamra-xml",
+                "version": "0.9.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bergshamra-xml@0.9.2"
+              }
+            },
+            {
+              "package": {
+                "name": "bit-set",
+                "version": "0.8.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bit-set@0.8.0"
+              }
+            },
+            {
+              "package": {
+                "name": "bit-vec",
+                "version": "0.8.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bit-vec@0.8.0"
+              }
+            },
+            {
+              "package": {
+                "name": "bitflags",
+                "version": "2.13.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bitflags@2.13.1"
+              }
+            },
+            {
+              "package": {
+                "name": "block-buffer",
+                "version": "0.10.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/block-buffer@0.10.4"
+              }
+            },
+            {
+              "package": {
+                "name": "block-buffer",
+                "version": "0.12.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/block-buffer@0.12.1"
+              }
+            },
+            {
+              "package": {
+                "name": "block-padding",
+                "version": "0.4.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/block-padding@0.4.2"
+              }
+            },
+            {
+              "package": {
+                "name": "bumpalo",
+                "version": "3.20.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bumpalo@3.20.3"
+              }
+            },
+            {
+              "package": {
+                "name": "bytemuck",
+                "version": "1.25.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bytemuck@1.25.2"
+              }
+            },
+            {
+              "package": {
+                "name": "bytemuck_derive",
+                "version": "1.12.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bytemuck_derive@1.12.0"
+              }
+            },
+            {
+              "package": {
+                "name": "byteorder",
+                "version": "1.5.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/byteorder@1.5.0"
+              }
+            },
+            {
+              "package": {
+                "name": "bytes",
+                "version": "1.12.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/bytes@1.12.1"
+              }
+            },
+            {
+              "package": {
+                "name": "candle-core",
+                "version": "0.11.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/candle-core@0.11.0"
+              }
+            },
+            {
+              "package": {
+                "name": "candle-nn",
+                "version": "0.11.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/candle-nn@0.11.0"
+              }
+            },
+            {
+              "package": {
+                "name": "candle-transformers",
+                "version": "0.11.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/candle-transformers@0.11.0"
+              }
+            },
+            {
+              "package": {
+                "name": "castaway",
+                "version": "0.2.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/castaway@0.2.4"
+              }
+            },
+            {
+              "package": {
+                "name": "cc",
+                "version": "1.4.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/cc@1.4.4"
+              }
+            },
+            {
+              "package": {
+                "name": "cfg-if",
+                "version": "1.0.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/cfg-if@1.0.4"
+              }
+            },
+            {
+              "package": {
+                "name": "cfg_aliases",
+                "version": "0.2.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/cfg_aliases@0.2.2"
+              }
+            },
+            {
+              "package": {
+                "name": "chacha20",
+                "version": "0.10.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/chacha20@0.10.2"
+              }
+            },
+            {
+              "package": {
+                "name": "chrono",
+                "version": "0.4.45",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/chrono@0.4.45"
+              }
+            },
+            {
+              "package": {
+                "name": "cipher",
+                "version": "0.5.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/cipher@0.5.2"
+              }
+            },
+            {
+              "package": {
+                "name": "clap",
+                "version": "4.6.7",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/clap@4.6.7"
+              }
+            },
+            {
+              "package": {
+                "name": "clap_builder",
+                "version": "4.6.7",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/clap_builder@4.6.7"
+              }
+            },
+            {
+              "package": {
+                "name": "clap_derive",
+                "version": "4.6.7",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/clap_derive@4.6.7"
+              }
+            },
+            {
+              "package": {
+                "name": "clap_lex",
+                "version": "1.1.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/clap_lex@1.1.0"
+              }
+            },
+            {
+              "package": {
+                "name": "cmake",
+                "version": "0.1.58",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/cmake@0.1.58"
+              }
+            },
+            {
+              "package": {
+                "name": "cmov",
+                "version": "0.5.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/cmov@0.5.4"
+              }
+            },
+            {
+              "package": {
+                "name": "cms",
+                "version": "0.2.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/cms@0.2.3"
+              }
+            },
+            {
+              "package": {
+                "name": "colorchoice",
+                "version": "1.0.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/colorchoice@1.0.5"
+              }
+            },
+            {
+              "package": {
+                "name": "combine",
+                "version": "4.6.8",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/combine@4.6.8"
+              }
+            },
+            {
+              "package": {
+                "name": "compact_str",
+                "version": "0.9.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/compact_str@0.9.1"
+              }
+            },
+            {
+              "package": {
+                "name": "const-oid",
+                "version": "0.10.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/const-oid@0.10.2"
+              }
+            },
+            {
+              "package": {
+                "name": "const-oid",
+                "version": "0.9.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/const-oid@0.9.6"
+              }
+            },
+            {
+              "package": {
+                "name": "core-foundation",
+                "version": "0.10.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/core-foundation@0.10.1"
+              }
+            },
+            {
+              "package": {
+                "name": "core-foundation-sys",
+                "version": "0.8.7",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/core-foundation-sys@0.8.7"
+              }
+            },
+            {
+              "package": {
+                "name": "cpubits",
+                "version": "0.1.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/cpubits@0.1.1"
+              }
+            },
+            {
+              "package": {
+                "name": "cpufeatures",
+                "version": "0.2.17",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/cpufeatures@0.2.17"
+              }
+            },
+            {
+              "package": {
+                "name": "cpufeatures",
+                "version": "0.3.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/cpufeatures@0.3.0"
+              }
+            },
+            {
+              "package": {
+                "name": "crc32fast",
+                "version": "1.5.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/crc32fast@1.5.0"
+              }
+            },
+            {
+              "package": {
+                "name": "crossbeam-deque",
+                "version": "0.8.7",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/crossbeam-deque@0.8.7"
+              }
+            },
+            {
+              "package": {
+                "name": "crossbeam-epoch",
+                "version": "0.9.20",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/crossbeam-epoch@0.9.20"
+              }
+            },
+            {
+              "package": {
+                "name": "crossbeam-utils",
+                "version": "0.8.22",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/crossbeam-utils@0.8.22"
+              }
+            },
+            {
+              "package": {
+                "name": "crunchy",
+                "version": "0.2.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/crunchy@0.2.4"
+              }
+            },
+            {
+              "package": {
+                "name": "crypto-common",
+                "version": "0.1.7",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/crypto-common@0.1.7"
+              }
+            },
+            {
+              "package": {
+                "name": "crypto-common",
+                "version": "0.2.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/crypto-common@0.2.2"
+              }
+            },
+            {
+              "package": {
+                "name": "ctr",
+                "version": "0.10.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/ctr@0.10.1"
+              }
+            },
+            {
+              "package": {
+                "name": "ctutils",
+                "version": "0.4.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/ctutils@0.4.4"
+              }
+            },
+            {
+              "package": {
+                "name": "daachorse",
+                "version": "3.0.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/daachorse@3.0.3"
+              }
+            },
+            {
+              "package": {
+                "name": "darling",
+                "version": "0.20.11",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/darling@0.20.11"
+              }
+            },
+            {
+              "package": {
+                "name": "darling_core",
+                "version": "0.20.11",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/darling_core@0.20.11"
+              }
+            },
+            {
+              "package": {
+                "name": "darling_macro",
+                "version": "0.20.11",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/darling_macro@0.20.11"
+              }
+            },
+            {
+              "package": {
+                "name": "dary_heap",
+                "version": "0.3.9",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/dary_heap@0.3.9"
+              }
+            },
+            {
+              "package": {
+                "name": "deadpool",
+                "version": "0.12.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/deadpool@0.12.3"
+              }
+            },
+            {
+              "package": {
+                "name": "deadpool",
+                "version": "0.13.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/deadpool@0.13.1"
+              }
+            },
+            {
+              "package": {
+                "name": "deadpool-postgres",
+                "version": "0.14.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/deadpool-postgres@0.14.2"
+              }
+            },
+            {
+              "package": {
+                "name": "deadpool-runtime",
+                "version": "0.1.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/deadpool-runtime@0.1.4"
+              }
+            },
+            {
+              "package": {
+                "name": "deadpool-runtime",
+                "version": "0.3.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/deadpool-runtime@0.3.1"
+              }
+            },
+            {
+              "package": {
+                "name": "der",
+                "version": "0.7.10",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/der@0.7.10"
+              }
+            },
+            {
+              "package": {
+                "name": "der_derive",
+                "version": "0.7.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/der_derive@0.7.3"
+              }
+            },
+            {
+              "package": {
+                "name": "deranged",
+                "version": "0.5.8",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/deranged@0.5.8"
+              }
+            },
+            {
+              "package": {
+                "name": "derive_builder",
+                "version": "0.20.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/derive_builder@0.20.2"
+              }
+            },
+            {
+              "package": {
+                "name": "derive_builder_core",
+                "version": "0.20.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/derive_builder_core@0.20.2"
+              }
+            },
+            {
+              "package": {
+                "name": "derive_builder_macro",
+                "version": "0.20.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/derive_builder_macro@0.20.2"
+              }
+            },
+            {
+              "package": {
+                "name": "digest",
+                "version": "0.10.7",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/digest@0.10.7"
+              }
+            },
+            {
+              "package": {
+                "name": "digest",
+                "version": "0.11.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/digest@0.11.3"
+              }
+            },
+            {
+              "package": {
+                "name": "displaydoc",
+                "version": "0.2.7",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/displaydoc@0.2.7"
+              }
+            },
+            {
+              "package": {
+                "name": "dotenvy",
+                "version": "0.15.7",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/dotenvy@0.15.7"
+              }
+            },
+            {
+              "package": {
+                "name": "dunce",
+                "version": "1.0.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/dunce@1.0.5"
+              }
+            },
+            {
+              "package": {
+                "name": "dyn-stack",
+                "version": "0.13.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/dyn-stack@0.13.2"
+              }
+            },
+            {
+              "package": {
+                "name": "dyn-stack-macros",
+                "version": "0.1.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/dyn-stack-macros@0.1.3"
+              }
+            },
+            {
+              "package": {
+                "name": "either",
+                "version": "1.18.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/either@1.18.0"
+              }
+            },
+            {
+              "package": {
+                "name": "enum-as-inner",
+                "version": "0.6.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/enum-as-inner@0.6.1"
+              }
+            },
+            {
+              "package": {
+                "name": "equivalent",
+                "version": "1.0.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/equivalent@1.0.2"
+              }
+            },
+            {
+              "package": {
+                "name": "errno",
+                "version": "0.3.14",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/errno@0.3.14"
+              }
+            },
+            {
+              "package": {
+                "name": "esaxx-rs",
+                "version": "0.1.10",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/esaxx-rs@0.1.10"
+              }
+            },
+            {
+              "package": {
+                "name": "event-listener",
+                "version": "5.4.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/event-listener@5.4.2"
+              }
+            },
+            {
+              "package": {
+                "name": "event-listener-strategy",
+                "version": "0.5.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/event-listener-strategy@0.5.4"
+              }
+            },
+            {
+              "package": {
+                "name": "fallible-iterator",
+                "version": "0.2.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/fallible-iterator@0.2.0"
+              }
+            },
+            {
+              "package": {
+                "name": "fallible-iterator",
+                "version": "0.3.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/fallible-iterator@0.3.0"
+              }
+            },
+            {
+              "package": {
+                "name": "fallible-streaming-iterator",
+                "version": "0.1.9",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/fallible-streaming-iterator@0.1.9"
+              }
+            },
+            {
+              "package": {
+                "name": "fancy-regex",
+                "version": "0.18.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/fancy-regex@0.18.0"
+              }
+            },
+            {
+              "package": {
+                "name": "fastrand",
+                "version": "2.5.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/fastrand@2.5.0"
+              }
+            },
+            {
+              "package": {
+                "name": "find-msvc-tools",
+                "version": "0.1.11",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/find-msvc-tools@0.1.11"
+              }
+            },
+            {
+              "package": {
+                "name": "flagset",
+                "version": "0.4.7",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/flagset@0.4.7"
+              }
+            },
+            {
+              "package": {
+                "name": "flate2",
+                "version": "1.1.10",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/flate2@1.1.10"
+              }
+            },
+            {
+              "package": {
+                "name": "float8",
+                "version": "0.7.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/float8@0.7.0"
+              }
+            },
+            {
+              "package": {
+                "name": "fnv",
+                "version": "1.0.7",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/fnv@1.0.7"
+              }
+            },
+            {
+              "package": {
+                "name": "foldhash",
+                "version": "0.2.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/foldhash@0.2.0"
+              }
+            },
+            {
+              "package": {
+                "name": "form_urlencoded",
+                "version": "1.2.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/form_urlencoded@1.2.2"
+              }
+            },
+            {
+              "package": {
+                "name": "fs_extra",
+                "version": "1.3.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/fs_extra@1.3.0"
+              }
+            },
+            {
+              "package": {
+                "name": "futures",
+                "version": "0.3.34",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/futures@0.3.34"
+              }
+            },
+            {
+              "package": {
+                "name": "futures-channel",
+                "version": "0.3.34",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/futures-channel@0.3.34"
+              }
+            },
+            {
+              "package": {
+                "name": "futures-core",
+                "version": "0.3.34",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/futures-core@0.3.34"
+              }
+            },
+            {
+              "package": {
+                "name": "futures-executor",
+                "version": "0.3.34",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/futures-executor@0.3.34"
+              }
+            },
+            {
+              "package": {
+                "name": "futures-io",
+                "version": "0.3.34",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/futures-io@0.3.34"
+              }
+            },
+            {
+              "package": {
+                "name": "futures-macro",
+                "version": "0.3.34",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/futures-macro@0.3.34"
+              }
+            },
+            {
+              "package": {
+                "name": "futures-sink",
+                "version": "0.3.34",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/futures-sink@0.3.34"
+              }
+            },
+            {
+              "package": {
+                "name": "futures-task",
+                "version": "0.3.34",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/futures-task@0.3.34"
+              }
+            },
+            {
+              "package": {
+                "name": "futures-util",
+                "version": "0.3.34",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/futures-util@0.3.34"
+              }
+            },
+            {
+              "package": {
+                "name": "gemm",
+                "version": "0.19.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/gemm@0.19.0"
+              }
+            },
+            {
+              "package": {
+                "name": "gemm-c32",
+                "version": "0.19.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/gemm-c32@0.19.0"
+              }
+            },
+            {
+              "package": {
+                "name": "gemm-c64",
+                "version": "0.19.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/gemm-c64@0.19.0"
+              }
+            },
+            {
+              "package": {
+                "name": "gemm-common",
+                "version": "0.19.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/gemm-common@0.19.0"
+              }
+            },
+            {
+              "package": {
+                "name": "gemm-f16",
+                "version": "0.19.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/gemm-f16@0.19.0"
+              }
+            },
+            {
+              "package": {
+                "name": "gemm-f32",
+                "version": "0.19.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/gemm-f32@0.19.0"
+              }
+            },
+            {
+              "package": {
+                "name": "gemm-f64",
+                "version": "0.19.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/gemm-f64@0.19.0"
+              }
+            },
+            {
+              "package": {
+                "name": "generic-array",
+                "version": "0.14.7",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/generic-array@0.14.7"
+              }
+            },
+            {
+              "package": {
+                "name": "getrandom",
+                "version": "0.2.17",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/getrandom@0.2.17"
+              }
+            },
+            {
+              "package": {
+                "name": "getrandom",
+                "version": "0.3.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/getrandom@0.3.4"
+              }
+            },
+            {
+              "package": {
+                "name": "getrandom",
+                "version": "0.4.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/getrandom@0.4.3"
+              }
+            },
+            {
+              "package": {
+                "name": "ghash",
+                "version": "0.6.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/ghash@0.6.0"
+              }
+            },
+            {
+              "package": {
+                "name": "h2",
+                "version": "0.4.18",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/h2@0.4.18"
+              }
+            },
+            {
+              "package": {
+                "name": "half",
+                "version": "2.7.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/half@2.7.1"
+              }
+            },
+            {
+              "package": {
+                "name": "hashbrown",
+                "version": "0.14.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/hashbrown@0.14.5"
+              }
+            },
+            {
+              "package": {
+                "name": "hashbrown",
+                "version": "0.16.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/hashbrown@0.16.1"
+              }
+            },
+            {
+              "package": {
+                "name": "hashbrown",
+                "version": "0.17.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/hashbrown@0.17.1"
+              }
+            },
+            {
+              "package": {
+                "name": "hashlink",
+                "version": "0.9.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/hashlink@0.9.1"
+              }
+            },
+            {
+              "package": {
+                "name": "heck",
+                "version": "0.5.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/heck@0.5.0"
+              }
+            },
+            {
+              "package": {
+                "name": "hermit-abi",
+                "version": "0.5.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/hermit-abi@0.5.2"
+              }
+            },
+            {
+              "package": {
+                "name": "hex",
+                "version": "0.4.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/hex@0.4.3"
+              }
+            },
+            {
+              "package": {
+                "name": "hmac",
+                "version": "0.12.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/hmac@0.12.1"
+              }
+            },
+            {
+              "package": {
+                "name": "hmac",
+                "version": "0.13.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/hmac@0.13.0"
+              }
+            },
+            {
+              "package": {
+                "name": "http",
+                "version": "1.5.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/http@1.5.0"
+              }
+            },
+            {
+              "package": {
+                "name": "http-body",
+                "version": "1.1.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/http-body@1.1.0"
+              }
+            },
+            {
+              "package": {
+                "name": "http-body-util",
+                "version": "0.1.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/http-body-util@0.1.5"
+              }
+            },
+            {
+              "package": {
+                "name": "httparse",
+                "version": "1.10.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/httparse@1.10.1"
+              }
+            },
+            {
+              "package": {
+                "name": "httpdate",
+                "version": "1.0.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/httpdate@1.0.3"
+              }
+            },
+            {
+              "package": {
+                "name": "hybrid-array",
+                "version": "0.4.15",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/hybrid-array@0.4.15"
+              }
+            },
+            {
+              "package": {
+                "name": "hyper",
+                "version": "1.11.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/hyper@1.11.0"
+              }
+            },
+            {
+              "package": {
+                "name": "hyper-rustls",
+                "version": "0.27.9",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/hyper-rustls@0.27.9"
+              }
+            },
+            {
+              "package": {
+                "name": "hyper-util",
+                "version": "0.1.20",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/hyper-util@0.1.20"
+              }
+            },
+            {
+              "package": {
+                "name": "iana-time-zone",
+                "version": "0.1.65",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/iana-time-zone@0.1.65"
+              }
+            },
+            {
+              "package": {
+                "name": "iana-time-zone-haiku",
+                "version": "0.1.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/iana-time-zone-haiku@0.1.2"
+              }
+            },
+            {
+              "package": {
+                "name": "icu_collections",
+                "version": "2.3.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/icu_collections@2.3.0"
+              }
+            },
+            {
+              "package": {
+                "name": "icu_locale_core",
+                "version": "2.3.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/icu_locale_core@2.3.0"
+              }
+            },
+            {
+              "package": {
+                "name": "icu_normalizer",
+                "version": "2.3.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/icu_normalizer@2.3.0"
+              }
+            },
+            {
+              "package": {
+                "name": "icu_normalizer_data",
+                "version": "2.3.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/icu_normalizer_data@2.3.0"
+              }
+            },
+            {
+              "package": {
+                "name": "icu_properties",
+                "version": "2.3.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/icu_properties@2.3.0"
+              }
+            },
+            {
+              "package": {
+                "name": "icu_properties_data",
+                "version": "2.3.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/icu_properties_data@2.3.0"
+              }
+            },
+            {
+              "package": {
+                "name": "icu_provider",
+                "version": "2.3.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/icu_provider@2.3.1"
+              }
+            },
+            {
+              "package": {
+                "name": "ident_case",
+                "version": "1.0.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/ident_case@1.0.1"
+              }
+            },
+            {
+              "package": {
+                "name": "idna",
+                "version": "1.1.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/idna@1.1.0"
+              }
+            },
+            {
+              "package": {
+                "name": "idna_adapter",
+                "version": "1.2.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/idna_adapter@1.2.2"
+              }
+            },
+            {
+              "package": {
+                "name": "indexmap",
+                "version": "2.14.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/indexmap@2.14.0"
+              }
+            },
+            {
+              "package": {
+                "name": "inout",
+                "version": "0.2.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/inout@0.2.2"
+              }
+            },
+            {
+              "package": {
+                "name": "ipnet",
+                "version": "2.12.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/ipnet@2.12.1"
+              }
+            },
+            {
+              "package": {
+                "name": "is_terminal_polyfill",
+                "version": "1.70.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/is_terminal_polyfill@1.70.2"
+              }
+            },
+            {
+              "package": {
+                "name": "itertools",
+                "version": "0.14.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/itertools@0.14.0"
+              }
+            },
+            {
+              "package": {
+                "name": "itoa",
+                "version": "1.0.18",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/itoa@1.0.18"
+              }
+            },
+            {
+              "package": {
+                "name": "jobserver",
+                "version": "0.1.35",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/jobserver@0.1.35"
+              }
+            },
+            {
+              "package": {
+                "name": "js-sys",
+                "version": "0.3.104",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/js-sys@0.3.104"
+              }
+            },
+            {
+              "package": {
+                "name": "jsonwebtoken",
+                "version": "11.1.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/jsonwebtoken@11.1.0"
+              }
+            },
+            {
+              "package": {
+                "name": "kryptering",
+                "version": "0.6.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/kryptering@0.6.0"
+              }
+            },
+            {
+              "package": {
+                "name": "lazy_static",
+                "version": "1.5.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/lazy_static@1.5.0"
+              }
+            },
+            {
+              "package": {
+                "name": "libc",
+                "version": "0.2.190",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/libc@0.2.190"
+              }
+            },
+            {
+              "package": {
+                "name": "libm",
+                "version": "0.2.16",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/libm@0.2.16"
+              }
+            },
+            {
+              "package": {
+                "name": "libredox",
+                "version": "0.1.25",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/libredox@0.1.25"
+              }
+            },
+            {
+              "package": {
+                "name": "libsqlite3-sys",
+                "version": "0.30.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/libsqlite3-sys@0.30.1"
+              }
+            },
+            {
+              "package": {
+                "name": "linux-raw-sys",
+                "version": "0.12.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/linux-raw-sys@0.12.1"
+              }
+            },
+            {
+              "package": {
+                "name": "litemap",
+                "version": "0.8.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/litemap@0.8.3"
+              }
+            },
+            {
+              "package": {
+                "name": "llm-firewall",
+                "version": "0.2.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/llm-firewall@0.2.0"
+              }
+            },
+            {
+              "package": {
+                "name": "lock_api",
+                "version": "0.4.14",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/lock_api@0.4.14"
+              }
+            },
+            {
+              "package": {
+                "name": "log",
+                "version": "0.4.34",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/log@0.4.34"
+              }
+            },
+            {
+              "package": {
+                "name": "lru-slab",
+                "version": "0.1.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/lru-slab@0.1.2"
+              }
+            },
+            {
+              "package": {
+                "name": "macro_rules_attribute",
+                "version": "0.2.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/macro_rules_attribute@0.2.3"
+              }
+            },
+            {
+              "package": {
+                "name": "macro_rules_attribute-proc_macro",
+                "version": "0.2.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/macro_rules_attribute-proc_macro@0.2.3"
+              }
+            },
+            {
+              "package": {
+                "name": "matchers",
+                "version": "0.2.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/matchers@0.2.0"
+              }
+            },
+            {
+              "package": {
+                "name": "matchit",
+                "version": "0.7.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/matchit@0.7.3"
+              }
+            },
+            {
+              "package": {
+                "name": "md-5",
+                "version": "0.11.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/md-5@0.11.0"
+              }
+            },
+            {
+              "package": {
+                "name": "memchr",
+                "version": "2.8.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/memchr@2.8.3"
+              }
+            },
+            {
+              "package": {
+                "name": "memmap2",
+                "version": "0.9.11",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/memmap2@0.9.11"
+              }
+            },
+            {
+              "package": {
+                "name": "mime",
+                "version": "0.3.17",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/mime@0.3.17"
+              }
+            },
+            {
+              "package": {
+                "name": "minimal-lexical",
+                "version": "0.2.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/minimal-lexical@0.2.1"
+              }
+            },
+            {
+              "package": {
+                "name": "miniz_oxide",
+                "version": "0.9.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/miniz_oxide@0.9.1"
+              }
+            },
+            {
+              "package": {
+                "name": "mio",
+                "version": "1.2.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/mio@1.2.2"
+              }
+            },
+            {
+              "package": {
+                "name": "monostate",
+                "version": "0.1.18",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/monostate@0.1.18"
+              }
+            },
+            {
+              "package": {
+                "name": "monostate-impl",
+                "version": "0.1.18",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/monostate-impl@0.1.18"
+              }
+            },
+            {
+              "package": {
+                "name": "nix",
+                "version": "0.31.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/nix@0.31.3"
+              }
+            },
+            {
+              "package": {
+                "name": "nom",
+                "version": "7.1.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/nom@7.1.3"
+              }
+            },
+            {
+              "package": {
+                "name": "nu-ansi-term",
+                "version": "0.50.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/nu-ansi-term@0.50.3"
+              }
+            },
+            {
+              "package": {
+                "name": "num-bigint",
+                "version": "0.5.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/num-bigint@0.5.1"
+              }
+            },
+            {
+              "package": {
+                "name": "num-complex",
+                "version": "0.4.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/num-complex@0.4.6"
+              }
+            },
+            {
+              "package": {
+                "name": "num-conv",
+                "version": "0.2.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/num-conv@0.2.2"
+              }
+            },
+            {
+              "package": {
+                "name": "num-integer",
+                "version": "0.1.47",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/num-integer@0.1.47"
+              }
+            },
+            {
+              "package": {
+                "name": "num-traits",
+                "version": "0.2.19",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/num-traits@0.2.19"
+              }
+            },
+            {
+              "package": {
+                "name": "num_cpus",
+                "version": "1.17.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/num_cpus@1.17.0"
+              }
+            },
+            {
+              "package": {
+                "name": "objc2-core-foundation",
+                "version": "0.3.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/objc2-core-foundation@0.3.2"
+              }
+            },
+            {
+              "package": {
+                "name": "objc2-system-configuration",
+                "version": "0.3.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/objc2-system-configuration@0.3.2"
+              }
+            },
+            {
+              "package": {
+                "name": "once_cell",
+                "version": "1.21.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/once_cell@1.21.4"
+              }
+            },
+            {
+              "package": {
+                "name": "once_cell_polyfill",
+                "version": "1.70.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/once_cell_polyfill@1.70.2"
+              }
+            },
+            {
+              "package": {
+                "name": "onig",
+                "version": "6.5.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/onig@6.5.3"
+              }
+            },
+            {
+              "package": {
+                "name": "onig_sys",
+                "version": "69.9.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/onig_sys@69.9.3"
+              }
+            },
+            {
+              "package": {
+                "name": "openssl-probe",
+                "version": "0.2.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/openssl-probe@0.2.1"
+              }
+            },
+            {
+              "package": {
+                "name": "parking",
+                "version": "2.2.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/parking@2.2.1"
+              }
+            },
+            {
+              "package": {
+                "name": "parking_lot",
+                "version": "0.12.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/parking_lot@0.12.5"
+              }
+            },
+            {
+              "package": {
+                "name": "parking_lot_core",
+                "version": "0.9.12",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/parking_lot_core@0.9.12"
+              }
+            },
+            {
+              "package": {
+                "name": "paste",
+                "version": "1.0.15",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/paste@1.0.15"
+              },
+              "groups": [
+                {
+                  "ids": [
+                    "RUSTSEC-2024-0436"
+                  ],
+                  "aliases": [
+                    "RUSTSEC-2024-0436"
+                  ],
+                  "max_severity": ""
+                }
+              ],
+              "vulnerabilities": [
+                {
+                  "affected": [
+                    {
+                      "database_specific": {
+                        "categories": [],
+                        "cvss": null,
+                        "informational": "unmaintained",
+                        "source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2024-0436.json"
+                      },
+                      "ecosystem_specific": {
+                        "affected_functions": null,
+                        "affects": {
+                          "arch": [],
+                          "functions": [],
+                          "os": []
+                        }
+                      },
+                      "package": {
+                        "ecosystem": "crates.io",
+                        "name": "paste",
+                        "purl": "pkg:cargo/paste"
+                      },
+                      "ranges": [
+                        {
+                          "events": [
+                            {
+                              "introduced": "0.0.0-0"
+                            }
+                          ],
+                          "type": "SEMVER"
+                        }
+                      ]
+                    }
+                  ],
+                  "database_specific": {
+                    "license": "CC0-1.0"
+                  },
+                  "details": "The creator of the crate `paste` has stated in the [`README.md`](https://github.com/dtolnay/paste/blob/master/README.md) \nthat this project is not longer maintained as well as archived the repository\n\n## Possible Alternative(s)\n\n- [`pastey`]: a fork of paste and is aimed to be a drop-in replacement with additional features for paste crate\n- [`with_builtin_macros`]: crate providing a [superset of `paste`'s functionality including general `macro_rules!` eager expansions](https://docs.rs/with_builtin_macros/0.1.0/with_builtin_macros/macro.with_eager_expansions.html)  and `concat!`/`concat_idents!` macros\n\n[`pastey`]: https://crates.io/crates/pastey\n[`with_builtin_macros`]: https://crates.io/crates/with_builtin_macros",
+                  "id": "RUSTSEC-2024-0436",
+                  "modified": "2026-01-27T22:03:15.694766Z",
+                  "published": "2024-10-07T12:00:00Z",
+                  "references": [
+                    {
+                      "type": "PACKAGE",
+                      "url": "https://crates.io/crates/paste"
+                    },
+                    {
+                      "type": "ADVISORY",
+                      "url": "https://rustsec.org/advisories/RUSTSEC-2024-0436.html"
+                    },
+                    {
+                      "type": "WEB",
+                      "url": "https://github.com/dtolnay/paste"
+                    }
+                  ],
+                  "schema_version": "1.7.3",
+                  "summary": "paste - no longer maintained"
+                }
+              ]
+            },
+            {
+              "package": {
+                "name": "pastey",
+                "version": "0.2.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/pastey@0.2.3"
+              }
+            },
+            {
+              "package": {
+                "name": "pem-rfc7468",
+                "version": "0.7.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/pem-rfc7468@0.7.0"
+              }
+            },
+            {
+              "package": {
+                "name": "percent-encoding",
+                "version": "2.3.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/percent-encoding@2.3.2"
+              }
+            },
+            {
+              "package": {
+                "name": "phf",
+                "version": "0.13.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/phf@0.13.1"
+              }
+            },
+            {
+              "package": {
+                "name": "phf_shared",
+                "version": "0.13.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/phf_shared@0.13.1"
+              }
+            },
+            {
+              "package": {
+                "name": "pin-project-lite",
+                "version": "0.2.17",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/pin-project-lite@0.2.17"
+              }
+            },
+            {
+              "package": {
+                "name": "pkcs8",
+                "version": "0.10.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/pkcs8@0.10.2"
+              }
+            },
+            {
+              "package": {
+                "name": "pkg-config",
+                "version": "0.3.34",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/pkg-config@0.3.34"
+              }
+            },
+            {
+              "package": {
+                "name": "polyval",
+                "version": "0.7.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/polyval@0.7.3"
+              }
+            },
+            {
+              "package": {
+                "name": "postgres-protocol",
+                "version": "0.6.12",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/postgres-protocol@0.6.12"
+              }
+            },
+            {
+              "package": {
+                "name": "postgres-types",
+                "version": "0.2.14",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/postgres-types@0.2.14"
+              }
+            },
+            {
+              "package": {
+                "name": "potential_utf",
+                "version": "0.1.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/potential_utf@0.1.6"
+              }
+            },
+            {
+              "package": {
+                "name": "powerfmt",
+                "version": "0.2.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/powerfmt@0.2.0"
+              }
+            },
+            {
+              "package": {
+                "name": "ppv-lite86",
+                "version": "0.2.21",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/ppv-lite86@0.2.21"
+              }
+            },
+            {
+              "package": {
+                "name": "proc-macro2",
+                "version": "1.0.107",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/proc-macro2@1.0.107"
+              }
+            },
+            {
+              "package": {
+                "name": "pulp",
+                "version": "0.22.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/pulp@0.22.3"
+              }
+            },
+            {
+              "package": {
+                "name": "pulp-wasm-simd-flag",
+                "version": "0.1.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/pulp-wasm-simd-flag@0.1.1"
+              }
+            },
+            {
+              "package": {
+                "name": "quick-xml",
+                "version": "0.42.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/quick-xml@0.42.0"
+              }
+            },
+            {
+              "package": {
+                "name": "quinn",
+                "version": "0.11.11",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/quinn@0.11.11"
+              }
+            },
+            {
+              "package": {
+                "name": "quinn-proto",
+                "version": "0.11.19",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/quinn-proto@0.11.19"
+              }
+            },
+            {
+              "package": {
+                "name": "quinn-udp",
+                "version": "0.5.15",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/quinn-udp@0.5.15"
+              }
+            },
+            {
+              "package": {
+                "name": "quote",
+                "version": "1.0.47",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/quote@1.0.47"
+              }
+            },
+            {
+              "package": {
+                "name": "r-efi",
+                "version": "5.3.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/r-efi@5.3.0"
+              }
+            },
+            {
+              "package": {
+                "name": "r-efi",
+                "version": "6.0.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/r-efi@6.0.0"
+              }
+            },
+            {
+              "package": {
+                "name": "rand",
+                "version": "0.10.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rand@0.10.3"
+              }
+            },
+            {
+              "package": {
+                "name": "rand",
+                "version": "0.9.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rand@0.9.5"
+              }
+            },
+            {
+              "package": {
+                "name": "rand_chacha",
+                "version": "0.9.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rand_chacha@0.9.0"
+              }
+            },
+            {
+              "package": {
+                "name": "rand_core",
+                "version": "0.10.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rand_core@0.10.1"
+              }
+            },
+            {
+              "package": {
+                "name": "rand_core",
+                "version": "0.6.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rand_core@0.6.4"
+              }
+            },
+            {
+              "package": {
+                "name": "rand_core",
+                "version": "0.9.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rand_core@0.9.5"
+              }
+            },
+            {
+              "package": {
+                "name": "rand_distr",
+                "version": "0.5.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rand_distr@0.5.1"
+              }
+            },
+            {
+              "package": {
+                "name": "rand_pcg",
+                "version": "0.10.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rand_pcg@0.10.2"
+              }
+            },
+            {
+              "package": {
+                "name": "raw-cpuid",
+                "version": "11.6.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/raw-cpuid@11.6.0"
+              }
+            },
+            {
+              "package": {
+                "name": "rayon",
+                "version": "1.12.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rayon@1.12.0"
+              }
+            },
+            {
+              "package": {
+                "name": "rayon-cond",
+                "version": "0.4.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rayon-cond@0.4.0"
+              }
+            },
+            {
+              "package": {
+                "name": "rayon-core",
+                "version": "1.13.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rayon-core@1.13.0"
+              }
+            },
+            {
+              "package": {
+                "name": "reborrow",
+                "version": "0.5.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/reborrow@0.5.5"
+              }
+            },
+            {
+              "package": {
+                "name": "redis",
+                "version": "1.7.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/redis@1.7.1"
+              }
+            },
+            {
+              "package": {
+                "name": "redox_syscall",
+                "version": "0.5.18",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/redox_syscall@0.5.18"
+              }
+            },
+            {
+              "package": {
+                "name": "regex",
+                "version": "1.13.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/regex@1.13.1"
+              }
+            },
+            {
+              "package": {
+                "name": "regex-automata",
+                "version": "0.4.18",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/regex-automata@0.4.18"
+              }
+            },
+            {
+              "package": {
+                "name": "regex-syntax",
+                "version": "0.8.11",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/regex-syntax@0.8.11"
+              }
+            },
+            {
+              "package": {
+                "name": "reqwest",
+                "version": "0.12.28",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/reqwest@0.12.28"
+              }
+            },
+            {
+              "package": {
+                "name": "ring",
+                "version": "0.17.14",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/ring@0.17.14"
+              }
+            },
+            {
+              "package": {
+                "name": "rusqlite",
+                "version": "0.32.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rusqlite@0.32.1"
+              }
+            },
+            {
+              "package": {
+                "name": "rustc-hash",
+                "version": "2.1.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rustc-hash@2.1.3"
+              }
+            },
+            {
+              "package": {
+                "name": "rustix",
+                "version": "1.1.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rustix@1.1.4"
+              }
+            },
+            {
+              "package": {
+                "name": "rustls",
+                "version": "0.23.46",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rustls@0.23.46"
+              }
+            },
+            {
+              "package": {
+                "name": "rustls-native-certs",
+                "version": "0.8.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rustls-native-certs@0.8.4"
+              }
+            },
+            {
+              "package": {
+                "name": "rustls-pki-types",
+                "version": "1.15.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rustls-pki-types@1.15.1"
+              }
+            },
+            {
+              "package": {
+                "name": "rustls-webpki",
+                "version": "0.103.16",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rustls-webpki@0.103.16"
+              }
+            },
+            {
+              "package": {
+                "name": "rustversion",
+                "version": "1.0.23",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/rustversion@1.0.23"
+              }
+            },
+            {
+              "package": {
+                "name": "ryu",
+                "version": "1.0.23",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/ryu@1.0.23"
+              }
+            },
+            {
+              "package": {
+                "name": "safetensors",
+                "version": "0.8.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/safetensors@0.8.0"
+              }
+            },
+            {
+              "package": {
+                "name": "same-file",
+                "version": "1.0.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/same-file@1.0.6"
+              }
+            },
+            {
+              "package": {
+                "name": "saml-rs",
+                "version": "0.6.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/saml-rs@0.6.1"
+              }
+            },
+            {
+              "package": {
+                "name": "schannel",
+                "version": "0.1.29",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/schannel@0.1.29"
+              }
+            },
+            {
+              "package": {
+                "name": "scopeguard",
+                "version": "1.2.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/scopeguard@1.2.0"
+              }
+            },
+            {
+              "package": {
+                "name": "security-framework",
+                "version": "3.7.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/security-framework@3.7.0"
+              }
+            },
+            {
+              "package": {
+                "name": "security-framework-sys",
+                "version": "2.17.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/security-framework-sys@2.17.0"
+              }
+            },
+            {
+              "package": {
+                "name": "seq-macro",
+                "version": "0.3.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/seq-macro@0.3.6"
+              }
+            },
+            {
+              "package": {
+                "name": "serde",
+                "version": "1.0.229",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/serde@1.0.229"
+              }
+            },
+            {
+              "package": {
+                "name": "serde_core",
+                "version": "1.0.229",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/serde_core@1.0.229"
+              }
+            },
+            {
+              "package": {
+                "name": "serde_derive",
+                "version": "1.0.229",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/serde_derive@1.0.229"
+              }
+            },
+            {
+              "package": {
+                "name": "serde_json",
+                "version": "1.0.154",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/serde_json@1.0.154"
+              }
+            },
+            {
+              "package": {
+                "name": "serde_path_to_error",
+                "version": "0.1.20",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/serde_path_to_error@0.1.20"
+              }
+            },
+            {
+              "package": {
+                "name": "serde_plain",
+                "version": "1.0.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/serde_plain@1.0.2"
+              }
+            },
+            {
+              "package": {
+                "name": "serde_urlencoded",
+                "version": "0.7.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/serde_urlencoded@0.7.1"
+              }
+            },
+            {
+              "package": {
+                "name": "serde_yaml",
+                "version": "0.9.34+deprecated",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/serde_yaml@0.9.34%2Bdeprecated"
+              }
+            },
+            {
+              "package": {
+                "name": "sha1_smol",
+                "version": "1.0.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/sha1_smol@1.0.1"
+              }
+            },
+            {
+              "package": {
+                "name": "sha2",
+                "version": "0.10.9",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/sha2@0.10.9"
+              }
+            },
+            {
+              "package": {
+                "name": "sha2",
+                "version": "0.11.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/sha2@0.11.0"
+              }
+            },
+            {
+              "package": {
+                "name": "sharded-slab",
+                "version": "0.1.7",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/sharded-slab@0.1.7"
+              }
+            },
+            {
+              "package": {
+                "name": "shlex",
+                "version": "2.0.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/shlex@2.0.1"
+              }
+            },
+            {
+              "package": {
+                "name": "signal-hook-registry",
+                "version": "1.4.8",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/signal-hook-registry@1.4.8"
+              }
+            },
+            {
+              "package": {
+                "name": "signature",
+                "version": "2.2.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/signature@2.2.0"
+              }
+            },
+            {
+              "package": {
+                "name": "simd-adler32",
+                "version": "0.3.10",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/simd-adler32@0.3.10"
+              }
+            },
+            {
+              "package": {
+                "name": "siphasher",
+                "version": "1.0.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/siphasher@1.0.4"
+              }
+            },
+            {
+              "package": {
+                "name": "slab",
+                "version": "0.4.12",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/slab@0.4.12"
+              }
+            },
+            {
+              "package": {
+                "name": "smallvec",
+                "version": "1.15.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/smallvec@1.15.2"
+              }
+            },
+            {
+              "package": {
+                "name": "socket2",
+                "version": "0.6.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/socket2@0.6.5"
+              }
+            },
+            {
+              "package": {
+                "name": "soup-wall-adapter",
+                "version": "0.1.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/soup-wall-adapter@0.1.0"
+              }
+            },
+            {
+              "package": {
+                "name": "soup-wall-agent",
+                "version": "0.2.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/soup-wall-agent@0.2.0"
+              }
+            },
+            {
+              "package": {
+                "name": "soup-wall-bench",
+                "version": "0.2.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/soup-wall-bench@0.2.0"
+              }
+            },
+            {
+              "package": {
+                "name": "soup-wall-core",
+                "version": "0.2.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/soup-wall-core@0.2.0"
+              }
+            },
+            {
+              "package": {
+                "name": "spki",
+                "version": "0.7.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/spki@0.7.3"
+              }
+            },
+            {
+              "package": {
+                "name": "spm_precompiled",
+                "version": "0.1.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/spm_precompiled@0.1.4"
+              }
+            },
+            {
+              "package": {
+                "name": "stable_deref_trait",
+                "version": "1.2.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/stable_deref_trait@1.2.1"
+              }
+            },
+            {
+              "package": {
+                "name": "static_assertions",
+                "version": "1.1.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/static_assertions@1.1.0"
+              }
+            },
+            {
+              "package": {
+                "name": "stringprep",
+                "version": "0.1.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/stringprep@0.1.5"
+              }
+            },
+            {
+              "package": {
+                "name": "strsim",
+                "version": "0.11.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/strsim@0.11.1"
+              }
+            },
+            {
+              "package": {
+                "name": "subtle",
+                "version": "2.6.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/subtle@2.6.1"
+              }
+            },
+            {
+              "package": {
+                "name": "syn",
+                "version": "2.0.119",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/syn@2.0.119"
+              }
+            },
+            {
+              "package": {
+                "name": "syn",
+                "version": "3.0.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/syn@3.0.3"
+              }
+            },
+            {
+              "package": {
+                "name": "sync_wrapper",
+                "version": "1.0.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/sync_wrapper@1.0.2"
+              }
+            },
+            {
+              "package": {
+                "name": "synstructure",
+                "version": "0.13.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/synstructure@0.13.2"
+              }
+            },
+            {
+              "package": {
+                "name": "sysctl",
+                "version": "0.6.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/sysctl@0.6.0"
+              }
+            },
+            {
+              "package": {
+                "name": "tempfile",
+                "version": "3.27.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tempfile@3.27.0"
+              }
+            },
+            {
+              "package": {
+                "name": "thiserror",
+                "version": "1.0.69",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/thiserror@1.0.69"
+              }
+            },
+            {
+              "package": {
+                "name": "thiserror",
+                "version": "2.0.20",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/thiserror@2.0.20"
+              }
+            },
+            {
+              "package": {
+                "name": "thiserror-impl",
+                "version": "1.0.69",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/thiserror-impl@1.0.69"
+              }
+            },
+            {
+              "package": {
+                "name": "thiserror-impl",
+                "version": "2.0.20",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/thiserror-impl@2.0.20"
+              }
+            },
+            {
+              "package": {
+                "name": "thread_local",
+                "version": "1.1.10",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/thread_local@1.1.10"
+              }
+            },
+            {
+              "package": {
+                "name": "time",
+                "version": "0.3.55",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/time@0.3.55"
+              }
+            },
+            {
+              "package": {
+                "name": "time-core",
+                "version": "0.1.9",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/time-core@0.1.9"
+              }
+            },
+            {
+              "package": {
+                "name": "time-macros",
+                "version": "0.2.32",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/time-macros@0.2.32"
+              }
+            },
+            {
+              "package": {
+                "name": "tinystr",
+                "version": "0.8.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tinystr@0.8.4"
+              }
+            },
+            {
+              "package": {
+                "name": "tinyvec",
+                "version": "1.12.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tinyvec@1.12.0"
+              }
+            },
+            {
+              "package": {
+                "name": "tinyvec_macros",
+                "version": "0.1.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tinyvec_macros@0.1.1"
+              }
+            },
+            {
+              "package": {
+                "name": "tls_codec",
+                "version": "0.4.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tls_codec@0.4.2"
+              }
+            },
+            {
+              "package": {
+                "name": "tls_codec_derive",
+                "version": "0.4.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tls_codec_derive@0.4.2"
+              }
+            },
+            {
+              "package": {
+                "name": "tokenizers",
+                "version": "0.22.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tokenizers@0.22.2"
+              }
+            },
+            {
+              "package": {
+                "name": "tokenizers",
+                "version": "0.23.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tokenizers@0.23.2"
+              }
+            },
+            {
+              "package": {
+                "name": "tokio",
+                "version": "1.53.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tokio@1.53.3"
+              }
+            },
+            {
+              "package": {
+                "name": "tokio-macros",
+                "version": "2.7.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tokio-macros@2.7.2"
+              }
+            },
+            {
+              "package": {
+                "name": "tokio-postgres",
+                "version": "0.7.18",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tokio-postgres@0.7.18"
+              }
+            },
+            {
+              "package": {
+                "name": "tokio-postgres-rustls",
+                "version": "0.14.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tokio-postgres-rustls@0.14.0"
+              }
+            },
+            {
+              "package": {
+                "name": "tokio-rustls",
+                "version": "0.26.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tokio-rustls@0.26.6"
+              }
+            },
+            {
+              "package": {
+                "name": "tokio-util",
+                "version": "0.7.19",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tokio-util@0.7.19"
+              }
+            },
+            {
+              "package": {
+                "name": "tower",
+                "version": "0.5.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tower@0.5.3"
+              }
+            },
+            {
+              "package": {
+                "name": "tower-http",
+                "version": "0.6.11",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tower-http@0.6.11"
+              }
+            },
+            {
+              "package": {
+                "name": "tower-layer",
+                "version": "0.3.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tower-layer@0.3.3"
+              }
+            },
+            {
+              "package": {
+                "name": "tower-service",
+                "version": "0.3.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tower-service@0.3.3"
+              }
+            },
+            {
+              "package": {
+                "name": "tracing",
+                "version": "0.1.44",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tracing@0.1.44"
+              }
+            },
+            {
+              "package": {
+                "name": "tracing-attributes",
+                "version": "0.1.31",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tracing-attributes@0.1.31"
+              }
+            },
+            {
+              "package": {
+                "name": "tracing-core",
+                "version": "0.1.36",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tracing-core@0.1.36"
+              }
+            },
+            {
+              "package": {
+                "name": "tracing-log",
+                "version": "0.2.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tracing-log@0.2.0"
+              }
+            },
+            {
+              "package": {
+                "name": "tracing-serde",
+                "version": "0.2.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tracing-serde@0.2.0"
+              }
+            },
+            {
+              "package": {
+                "name": "tracing-subscriber",
+                "version": "0.3.23",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tracing-subscriber@0.3.23"
+              }
+            },
+            {
+              "package": {
+                "name": "try-lock",
+                "version": "0.2.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/try-lock@0.2.5"
+              }
+            },
+            {
+              "package": {
+                "name": "tsp-ltv",
+                "version": "0.5.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/tsp-ltv@0.5.0"
+              }
+            },
+            {
+              "package": {
+                "name": "typed-path",
+                "version": "0.12.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/typed-path@0.12.3"
+              }
+            },
+            {
+              "package": {
+                "name": "typenum",
+                "version": "1.20.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/typenum@1.20.1"
+              }
+            },
+            {
+              "package": {
+                "name": "unicode-bidi",
+                "version": "0.3.18",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/unicode-bidi@0.3.18"
+              }
+            },
+            {
+              "package": {
+                "name": "unicode-ident",
+                "version": "1.0.24",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/unicode-ident@1.0.24"
+              }
+            },
+            {
+              "package": {
+                "name": "unicode-normalization",
+                "version": "0.1.25",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/unicode-normalization@0.1.25"
+              }
+            },
+            {
+              "package": {
+                "name": "unicode-normalization-alignments",
+                "version": "0.1.12",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/unicode-normalization-alignments@0.1.12"
+              }
+            },
+            {
+              "package": {
+                "name": "unicode-properties",
+                "version": "0.1.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/unicode-properties@0.1.4"
+              }
+            },
+            {
+              "package": {
+                "name": "unicode-segmentation",
+                "version": "1.13.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/unicode-segmentation@1.13.3"
+              }
+            },
+            {
+              "package": {
+                "name": "unicode_categories",
+                "version": "0.1.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/unicode_categories@0.1.1"
+              }
+            },
+            {
+              "package": {
+                "name": "universal-hash",
+                "version": "0.6.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/universal-hash@0.6.1"
+              }
+            },
+            {
+              "package": {
+                "name": "unsafe-libyaml",
+                "version": "0.2.11",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/unsafe-libyaml@0.2.11"
+              },
+              "groups": [
+                {
+                  "ids": [
+                    "RUSTSEC-2024-0449"
+                  ],
+                  "aliases": [
+                    "RUSTSEC-2024-0449"
+                  ],
+                  "max_severity": ""
+                }
+              ],
+              "vulnerabilities": [
+                {
+                  "affected": [
+                    {
+                      "database_specific": {
+                        "categories": [],
+                        "cvss": null,
+                        "informational": "unmaintained",
+                        "source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2024-0449.json"
+                      },
+                      "ecosystem_specific": {
+                        "affected_functions": null,
+                        "affects": {
+                          "arch": [],
+                          "functions": [],
+                          "os": []
+                        }
+                      },
+                      "package": {
+                        "ecosystem": "crates.io",
+                        "name": "unsafe-libyaml",
+                        "purl": "pkg:cargo/unsafe-libyaml"
+                      },
+                      "ranges": [
+                        {
+                          "events": [
+                            {
+                              "introduced": "0.0.0-0"
+                            }
+                          ],
+                          "type": "SEMVER"
+                        }
+                      ]
+                    }
+                  ],
+                  "database_specific": {
+                    "license": "CC0-1.0"
+                  },
+                  "details": "The [repository](https://github.com/dtolnay/unsafe-libyaml) was archived by\nits owner on 2024-03-25 and is read-only. The last release is 0.2.11\n(March 2024).\n\n`unsafe-libyaml` is a machine translation of libyaml's C code into unsafe\nRust (c2rust). Bugs found in it will not be fixed upstream. It is used by\n`serde_yaml` (itself deprecated) and by forks such as `serde_yaml_ng`.\n\n## Alternatives\n\nConsider a YAML parser written in safe Rust, for example:\n\n- [saphyr](https://crates.io/crates/saphyr) ([serde-saphyr](https://crates.io/crates/serde-saphyr) for serde users)\n- [noyalib](https://crates.io/crates/noyalib)",
+                  "id": "RUSTSEC-2024-0449",
+                  "modified": "2026-10-12T11:45:02.518189315Z",
+                  "published": "2024-03-25T12:00:00Z",
+                  "references": [
+                    {
+                      "type": "PACKAGE",
+                      "url": "https://crates.io/crates/unsafe-libyaml"
+                    },
+                    {
+                      "type": "ADVISORY",
+                      "url": "https://rustsec.org/advisories/RUSTSEC-2024-0449.html"
+                    },
+                    {
+                      "type": "WEB",
+                      "url": "https://github.com/dtolnay/unsafe-libyaml"
+                    }
+                  ],
+                  "schema_version": "1.9.0",
+                  "summary": "unsafe-libyaml is unmaintained"
+                }
+              ]
+            },
+            {
+              "package": {
+                "name": "untrusted",
+                "version": "0.7.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/untrusted@0.7.1"
+              }
+            },
+            {
+              "package": {
+                "name": "untrusted",
+                "version": "0.9.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/untrusted@0.9.0"
+              }
+            },
+            {
+              "package": {
+                "name": "uppsala",
+                "version": "0.10.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/uppsala@0.10.1"
+              }
+            },
+            {
+              "package": {
+                "name": "url",
+                "version": "2.5.8",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/url@2.5.8"
+              }
+            },
+            {
+              "package": {
+                "name": "utf8_iter",
+                "version": "1.0.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/utf8_iter@1.0.4"
+              }
+            },
+            {
+              "package": {
+                "name": "utf8parse",
+                "version": "0.2.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/utf8parse@0.2.2"
+              }
+            },
+            {
+              "package": {
+                "name": "uuid",
+                "version": "1.26.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/uuid@1.26.1"
+              }
+            },
+            {
+              "package": {
+                "name": "valuable",
+                "version": "0.1.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/valuable@0.1.1"
+              }
+            },
+            {
+              "package": {
+                "name": "vcpkg",
+                "version": "0.2.15",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/vcpkg@0.2.15"
+              }
+            },
+            {
+              "package": {
+                "name": "version_check",
+                "version": "0.9.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/version_check@0.9.5"
+              }
+            },
+            {
+              "package": {
+                "name": "walkdir",
+                "version": "2.5.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/walkdir@2.5.0"
+              }
+            },
+            {
+              "package": {
+                "name": "want",
+                "version": "0.3.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/want@0.3.1"
+              }
+            },
+            {
+              "package": {
+                "name": "wasi",
+                "version": "0.11.1+wasi-snapshot-preview1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/wasi@0.11.1%2Bwasi-snapshot-preview1"
+              }
+            },
+            {
+              "package": {
+                "name": "wasi",
+                "version": "0.14.7+wasi-0.2.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/wasi@0.14.7%2Bwasi-0.2.4"
+              }
+            },
+            {
+              "package": {
+                "name": "wasip2",
+                "version": "1.0.4+wasi-0.2.12",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/wasip2@1.0.4%2Bwasi-0.2.12"
+              }
+            },
+            {
+              "package": {
+                "name": "wasite",
+                "version": "1.0.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/wasite@1.0.2"
+              }
+            },
+            {
+              "package": {
+                "name": "wasm-bindgen",
+                "version": "0.2.127",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/wasm-bindgen@0.2.127"
+              }
+            },
+            {
+              "package": {
+                "name": "wasm-bindgen-futures",
+                "version": "0.4.77",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/wasm-bindgen-futures@0.4.77"
+              }
+            },
+            {
+              "package": {
+                "name": "wasm-bindgen-macro",
+                "version": "0.2.127",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/wasm-bindgen-macro@0.2.127"
+              }
+            },
+            {
+              "package": {
+                "name": "wasm-bindgen-macro-support",
+                "version": "0.2.127",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/wasm-bindgen-macro-support@0.2.127"
+              }
+            },
+            {
+              "package": {
+                "name": "wasm-bindgen-shared",
+                "version": "0.2.127",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/wasm-bindgen-shared@0.2.127"
+              }
+            },
+            {
+              "package": {
+                "name": "wasm-streams",
+                "version": "0.4.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/wasm-streams@0.4.2"
+              }
+            },
+            {
+              "package": {
+                "name": "web-sys",
+                "version": "0.3.104",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/web-sys@0.3.104"
+              }
+            },
+            {
+              "package": {
+                "name": "web-time",
+                "version": "1.1.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/web-time@1.1.0"
+              }
+            },
+            {
+              "package": {
+                "name": "webpki-roots",
+                "version": "1.0.10",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/webpki-roots@1.0.10"
+              }
+            },
+            {
+              "package": {
+                "name": "whoami",
+                "version": "2.1.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/whoami@2.1.3"
+              }
+            },
+            {
+              "package": {
+                "name": "winapi-util",
+                "version": "0.1.11",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/winapi-util@0.1.11"
+              }
+            },
+            {
+              "package": {
+                "name": "windows-core",
+                "version": "0.62.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows-core@0.62.2"
+              }
+            },
+            {
+              "package": {
+                "name": "windows-implement",
+                "version": "0.60.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows-implement@0.60.2"
+              }
+            },
+            {
+              "package": {
+                "name": "windows-interface",
+                "version": "0.59.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows-interface@0.59.3"
+              }
+            },
+            {
+              "package": {
+                "name": "windows-link",
+                "version": "0.2.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows-link@0.2.1"
+              }
+            },
+            {
+              "package": {
+                "name": "windows-result",
+                "version": "0.4.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows-result@0.4.1"
+              }
+            },
+            {
+              "package": {
+                "name": "windows-strings",
+                "version": "0.5.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows-strings@0.5.1"
+              }
+            },
+            {
+              "package": {
+                "name": "windows-sys",
+                "version": "0.52.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows-sys@0.52.0"
+              }
+            },
+            {
+              "package": {
+                "name": "windows-sys",
+                "version": "0.61.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows-sys@0.61.2"
+              }
+            },
+            {
+              "package": {
+                "name": "windows-targets",
+                "version": "0.52.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows-targets@0.52.6"
+              }
+            },
+            {
+              "package": {
+                "name": "windows_aarch64_gnullvm",
+                "version": "0.52.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows_aarch64_gnullvm@0.52.6"
+              }
+            },
+            {
+              "package": {
+                "name": "windows_aarch64_msvc",
+                "version": "0.52.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows_aarch64_msvc@0.52.6"
+              }
+            },
+            {
+              "package": {
+                "name": "windows_i686_gnu",
+                "version": "0.52.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows_i686_gnu@0.52.6"
+              }
+            },
+            {
+              "package": {
+                "name": "windows_i686_gnullvm",
+                "version": "0.52.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows_i686_gnullvm@0.52.6"
+              }
+            },
+            {
+              "package": {
+                "name": "windows_i686_msvc",
+                "version": "0.52.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows_i686_msvc@0.52.6"
+              }
+            },
+            {
+              "package": {
+                "name": "windows_x86_64_gnu",
+                "version": "0.52.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows_x86_64_gnu@0.52.6"
+              }
+            },
+            {
+              "package": {
+                "name": "windows_x86_64_gnullvm",
+                "version": "0.52.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows_x86_64_gnullvm@0.52.6"
+              }
+            },
+            {
+              "package": {
+                "name": "windows_x86_64_msvc",
+                "version": "0.52.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/windows_x86_64_msvc@0.52.6"
+              }
+            },
+            {
+              "package": {
+                "name": "wiremock",
+                "version": "0.6.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/wiremock@0.6.5"
+              }
+            },
+            {
+              "package": {
+                "name": "wit-bindgen",
+                "version": "0.57.1",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/wit-bindgen@0.57.1"
+              }
+            },
+            {
+              "package": {
+                "name": "writeable",
+                "version": "0.6.4",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/writeable@0.6.4"
+              }
+            },
+            {
+              "package": {
+                "name": "x509-cert",
+                "version": "0.2.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/x509-cert@0.2.5"
+              }
+            },
+            {
+              "package": {
+                "name": "xxhash-rust",
+                "version": "0.8.19",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/xxhash-rust@0.8.19"
+              }
+            },
+            {
+              "package": {
+                "name": "yasna",
+                "version": "0.5.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/yasna@0.5.2"
+              }
+            },
+            {
+              "package": {
+                "name": "yoke",
+                "version": "0.8.3",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/yoke@0.8.3"
+              }
+            },
+            {
+              "package": {
+                "name": "yoke-derive",
+                "version": "0.8.2",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/yoke-derive@0.8.2"
+              }
+            },
+            {
+              "package": {
+                "name": "zerocopy",
+                "version": "0.8.56",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/zerocopy@0.8.56"
+              }
+            },
+            {
+              "package": {
+                "name": "zerocopy-derive",
+                "version": "0.8.56",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/zerocopy-derive@0.8.56"
+              }
+            },
+            {
+              "package": {
+                "name": "zerofrom",
+                "version": "0.1.8",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/zerofrom@0.1.8"
+              }
+            },
+            {
+              "package": {
+                "name": "zerofrom-derive",
+                "version": "0.1.7",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/zerofrom-derive@0.1.7"
+              }
+            },
+            {
+              "package": {
+                "name": "zeroize",
+                "version": "1.9.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/zeroize@1.9.0"
+              }
+            },
+            {
+              "package": {
+                "name": "zeroize_derive",
+                "version": "1.5.0",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/zeroize_derive@1.5.0"
+              }
+            },
+            {
+              "package": {
+                "name": "zerotrie",
+                "version": "0.2.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/zerotrie@0.2.5"
+              }
+            },
+            {
+              "package": {
+                "name": "zerovec",
+                "version": "0.11.8",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/zerovec@0.11.8"
+              }
+            },
+            {
+              "package": {
+                "name": "zerovec-derive",
+                "version": "0.11.6",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/zerovec-derive@0.11.6"
+              }
+            },
+            {
+              "package": {
+                "name": "zip",
+                "version": "9.0.5",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/zip@9.0.5"
+              }
+            },
+            {
+              "package": {
+                "name": "zmij",
+                "version": "1.0.23",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/zmij@1.0.23"
+              }
+            }
+          ]
+        },
+        {
+          "source": {
+            "path": "/mnt/c/Users/tamik/soup-wall/profiles/mcp/git-readonly-v1/requirements.lock",
+            "type": "lockfile"
+          },
+          "packages": [
+            {
+              "package": {
+                "name": "gitpython",
+                "version": "3.2.1",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/gitpython@3.2.1"
+              }
+            },
+            {
+              "package": {
+                "name": "pyjwt",
+                "version": "2.15.1",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/pyjwt@2.15.1"
+              }
+            },
+            {
+              "package": {
+                "name": "annotated-types",
+                "version": "0.8.0",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/annotated-types@0.8.0"
+              }
+            },
+            {
+              "package": {
+                "name": "anyio",
+                "version": "4.15.1",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/anyio@4.15.1"
+              }
+            },
+            {
+              "package": {
+                "name": "attrs",
+                "version": "26.1.0",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/attrs@26.1.0"
+              }
+            },
+            {
+              "package": {
+                "name": "certifi",
+                "version": "2026.10.19",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/certifi@2026.10.19"
+              }
+            },
+            {
+              "package": {
+                "name": "cffi",
+                "version": "2.1.1",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/cffi@2.1.1"
+              }
+            },
+            {
+              "package": {
+                "name": "click",
+                "version": "8.5.0",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/click@8.5.0"
+              }
+            },
+            {
+              "package": {
+                "name": "cryptography",
+                "version": "50.0.2",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/cryptography@50.0.2"
+              }
+            },
+            {
+              "package": {
+                "name": "gitdb",
+                "version": "4.0.12",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/gitdb@4.0.12"
+              }
+            },
+            {
+              "package": {
+                "name": "h11",
+                "version": "0.16.0",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/h11@0.16.0"
+              }
+            },
+            {
+              "package": {
+                "name": "httpcore",
+                "version": "1.0.9",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/httpcore@1.0.9"
+              }
+            },
+            {
+              "package": {
+                "name": "httpx",
+                "version": "0.28.1",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/httpx@0.28.1"
+              }
+            },
+            {
+              "package": {
+                "name": "httpx-sse",
+                "version": "0.4.3",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/httpx-sse@0.4.3"
+              }
+            },
+            {
+              "package": {
+                "name": "idna",
+                "version": "3.20",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/idna@3.20"
+              }
+            },
+            {
+              "package": {
+                "name": "jsonschema",
+                "version": "4.26.0",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/jsonschema@4.26.0"
+              }
+            },
+            {
+              "package": {
+                "name": "jsonschema-specifications",
+                "version": "2025.9.1",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/jsonschema-specifications@2025.9.1"
+              }
+            },
+            {
+              "package": {
+                "name": "mcp",
+                "version": "1.30.0",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/mcp@1.30.0"
+              }
+            },
+            {
+              "package": {
+                "name": "mcp-server-git",
+                "version": "2026.10.10",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/mcp-server-git@2026.10.10"
+              }
+            },
+            {
+              "package": {
+                "name": "pycparser",
+                "version": "3.11",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/pycparser@3.11"
+              }
+            },
+            {
+              "package": {
+                "name": "pydantic",
+                "version": "2.14.1",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/pydantic@2.14.1"
+              }
+            },
+            {
+              "package": {
+                "name": "pydantic-settings",
+                "version": "2.16.0",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/pydantic-settings@2.16.0"
+              }
+            },
+            {
+              "package": {
+                "name": "pydantic-core",
+                "version": "2.50.1",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/pydantic-core@2.50.1"
+              }
+            },
+            {
+              "package": {
+                "name": "python-dotenv",
+                "version": "1.2.4",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/python-dotenv@1.2.4"
+              }
+            },
+            {
+              "package": {
+                "name": "python-multipart",
+                "version": "0.0.32",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/python-multipart@0.0.32"
+              }
+            },
+            {
+              "package": {
+                "name": "referencing",
+                "version": "0.37.0",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/referencing@0.37.0"
+              }
+            },
+            {
+              "package": {
+                "name": "rpds-py",
+                "version": "2026.9.1",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/rpds-py@2026.9.1"
+              }
+            },
+            {
+              "package": {
+                "name": "smmap",
+                "version": "5.0.3",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/smmap@5.0.3"
+              }
+            },
+            {
+              "package": {
+                "name": "sse-starlette",
+                "version": "3.5.0",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/sse-starlette@3.5.0"
+              }
+            },
+            {
+              "package": {
+                "name": "starlette",
+                "version": "1.8.0",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/starlette@1.8.0"
+              }
+            },
+            {
+              "package": {
+                "name": "typing-inspection",
+                "version": "0.4.4",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/typing-inspection@0.4.4"
+              }
+            },
+            {
+              "package": {
+                "name": "typing-extensions",
+                "version": "4.16.0",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/typing-extensions@4.16.0"
+              }
+            },
+            {
+              "package": {
+                "name": "uvicorn",
+                "version": "0.54.0",
+                "ecosystem": "PyPI",
+                "purl": "pkg:pypi/uvicorn@0.54.0"
+              }
+            }
+          ]
+        }
+      ],
+      "experimental_config": {
+        "licenses": {
+          "summary": false,
+          "allowlist": null
+        }
+      }
+    }
+  },
+  "licenses": {
+    "rust_status": "ok"
+  }
+}
