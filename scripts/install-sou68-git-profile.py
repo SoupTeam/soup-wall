@@ -24,6 +24,7 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pilot_provider import utility_environment
+from pilot_wheelhouse import install_arguments, prepare_wheelhouse
 ASSETS = ROOT / "profiles/mcp/git-readonly-v1"
 FORMAT = "sw-mcp/git-readonly/1"
 SHALLOW_FORMAT = "sw-mcp/git-readonly-shallow/1"
@@ -92,6 +93,56 @@ def verify_python_notices(identity):
             raise ValueError("Python upstream notice identity mismatch")
 
 
+def verify_runtime_license_notices(identity):
+    """Verify source-bound supplemental attribution before copying it."""
+    declaration = identity.get("runtime_license_provenance", {})
+    relative = "upstream-notices/runtime-licenses/provenance.json"
+    if (not isinstance(declaration, dict) or declaration.get("path") != relative
+            or not isinstance(declaration.get("sha256"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", declaration["sha256"])):
+        raise ValueError("runtime license provenance identity required")
+    directory = ASSETS / "upstream-notices/runtime-licenses"
+    for parent in (directory.parent, directory):
+        if parent.is_symlink() or not parent.is_dir():
+            raise ValueError("unsafe runtime license notice directory")
+    path = ASSETS / relative
+    if (path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024
+            or sha(path) != declaration["sha256"]):
+        raise ValueError("runtime license provenance identity mismatch")
+    data = json.loads(path.read_bytes())
+    components = data.get("components")
+    if (data.get("format") != "sw-python-runtime-license-provenance/1"
+            or not isinstance(components, list) or not 1 <= len(components) <= 256
+            or not all(isinstance(component, dict) for component in components)):
+        raise ValueError("invalid runtime license provenance components")
+    expected = {"provenance.json": declaration["sha256"]}
+    for component in components:
+        supplemental = component.get("supplemental_notices", [])
+        if not isinstance(supplemental, list) or len(supplemental) > 64:
+            raise ValueError("invalid runtime supplemental notices")
+        for notice in supplemental:
+            if not isinstance(notice, dict):
+                raise ValueError("invalid runtime supplemental notice")
+            name, digest = notice.get("path", ""), notice.get("sha256", "")
+            if not isinstance(name, str) or not isinstance(digest, str):
+                raise ValueError("invalid runtime supplemental notice identity")
+            parts = PurePosixPath(name).parts
+            if (len(parts) != 3 or name != "/".join(parts)
+                    or parts[:2] != ("upstream-notices", "runtime-licenses")
+                    or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}", parts[2])
+                    or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                    or (parts[2] in expected and expected[parts[2]] != digest)):
+                raise ValueError("unsafe runtime supplemental notice identity")
+            expected[parts[2]] = digest
+    if {p.name for p in directory.iterdir()} != set(expected):
+        raise ValueError("runtime license notice bundle differs from declaration")
+    for name, digest in expected.items():
+        path = directory / name
+        if (path.is_symlink() or not path.is_file() or path.stat().st_size > 2 * 1024 * 1024
+                or sha(path) != digest):
+            raise ValueError("runtime supplemental notice identity mismatch")
+
+
 class RuntimeLibrariesUnavailable(ValueError):
     """Bounded library identities suitable for prerequisite diagnostics."""
     def __init__(self, names):
@@ -155,6 +206,7 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
         raise ValueError("supplied Git binary digest mismatch")
     identity = json.loads((ASSETS / "upstream-identity.json").read_text())
     verify_python_notices(identity)
+    verify_runtime_license_notices(identity)
     git_version = subprocess.check_output([str(git), "--version"], text=True, timeout=10, env=utility_environment()).strip()
     if git_version != "git version " + identity["git_version"]:
         raise ValueError("Git version differs from selected runtime")
@@ -198,13 +250,10 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
            "TMPDIR": str(tmp), "TEMP": str(tmp), "TMP": str(tmp), "LANG": "C.UTF-8"}
     if subprocess.check_output([str(python), "-I", "--version"], env=env, text=True, timeout=10).strip() != "Python " + identity["python"]["version"]:
         raise ValueError("Python version mismatch")
-    if not allow_download and wheelhouse is None:
-        raise ValueError("local wheelhouse is required without explicit downloads")
-    offline_args = ["--no-index", "--find-links", str(Path(wheelhouse).resolve(strict=True))] if not allow_download else []
     try:
-        subprocess.run([str(python), "-I", "-m", "pip", "--isolated", "install", "--require-hashes",
-                        "--only-binary=:all:", "--no-compile", "--no-cache-dir", "--disable-pip-version-check",
-                        *offline_args, "-r", str(ASSETS / "requirements.lock")], env=env, check=True, timeout=300,
+        verified_wheels = prepare_wheelhouse(ASSETS / "wheels.lock.json", ASSETS / "requirements.lock",
+            destination / "wheelhouse", source=wheelhouse, allow_download=allow_download and wheelhouse is None)
+        subprocess.run([str(python), *install_arguments(verified_wheels, ASSETS / "requirements.lock")], env=env, check=True, timeout=300,
                        stdout=log, stderr=subprocess.STDOUT if log is not None else None)
     finally:
         if tmp == (destination / "tmp").resolve():
@@ -229,6 +278,7 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     shutil.copyfile(ASSETS / "policy.yaml", destination / "policy.yaml")
     os.chmod(destination / "policy.yaml", 0o600)
     verify_python_notices(identity)
+    verify_runtime_license_notices(identity)
     shutil.copytree(ASSETS / "upstream-notices", destination / "upstream-notices")
     private_json(destination / "installation.json", {
         "format": "sou68-profile-installation/1", "profile": profile, "upstream_identity": identity,

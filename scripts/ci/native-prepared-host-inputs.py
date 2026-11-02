@@ -40,6 +40,31 @@ def require(value, reason):
         raise RuntimeError(reason)
 
 
+def accepted_inputs(source, names, git):
+    """Return only accepted bytes after checking the entire candidate input set."""
+    accepted = {}
+    for name in names:
+        data = git('show', ACCEPTED + ':' + name)
+        require((source / name).read_bytes() == data, 'accepted_setup_input_changed')
+        accepted[name] = data
+    return accepted
+
+
+def stage_wheel_inputs(accepted, output):
+    """Use accepted snapshots even if candidate files later change."""
+    paths = {}
+    for role, name, source in (
+        ('helper', 'accepted-wheelhouse.py', 'scripts/pilot_wheelhouse.py'),
+        ('manifest', 'accepted-wheels.lock.json', 'profiles/mcp/git-readonly-v1/wheels.lock.json'),
+        ('requirements', 'accepted-git-requirements.lock', 'profiles/mcp/git-readonly-v1/requirements.lock'),
+    ):
+        path = output / name
+        with path.open('xb') as stream:
+            stream.write(accepted[source])
+        paths[role] = path
+    return paths
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--issue', choices=('142', '143'), required=True)
@@ -119,7 +144,8 @@ def main():
                     'sandbox_tests': str(tests[0]), 'python': str(Path(sys.executable).resolve(strict=True))}
         for role, name in [('agentfw', 'agentfw'), ('git_launcher', 'agentfw-git-sandbox')]:
             require(sha(selected[role]) == first['binary_sha256'][name], 'native_binary_identity_changed')
-        # Guard only the exact data consumed by networked setup, not candidate code.
+        # Every networked setup input and the stdlib downloader must match
+        # accepted main before any accepted helper is copied or executed.
         guarded = [
             'profiles/mcp/filesystem-readonly-v1/package.json',
             'profiles/mcp/filesystem-readonly-v1/package-lock.json',
@@ -127,12 +153,14 @@ def main():
             'profiles/mcp/filesystem-readonly-v1/claude-host/package.json',
             'profiles/mcp/filesystem-readonly-v1/claude-host/package-lock.json',
             'profiles/mcp/git-readonly-v1/requirements.lock',
+            'profiles/mcp/git-readonly-v1/wheels.lock.json',
             'profiles/mcp/git-readonly-v1/upstream-identity.json',
             'scripts/ci_bwrap_userns.py',
+            'scripts/pilot_wheelhouse.py',
         ]
-        for name in guarded:
-            require((src / name).read_bytes() == git('show', ACCEPTED + ':' + name), 'accepted_setup_input_changed')
-        (out / 'accepted-ci-bwrap.py').write_bytes(git('show', ACCEPTED + ':scripts/ci_bwrap_userns.py'))
+        accepted = accepted_inputs(src, guarded, git)
+        (out / 'accepted-ci-bwrap.py').write_bytes(accepted['scripts/ci_bwrap_userns.py'])
+        wheel_inputs = stage_wheel_inputs(accepted, out)
         assets = out / 'assets'
         for name, (url, digest, compression) in DOWNLOADS.items():
             archive = assets / (name + '.tar.' + compression)
@@ -190,15 +218,11 @@ def main():
                 '--userconfig=' + str(user_npmrc), '--globalconfig=' + str(global_npmrc), '--cache', out / 'npm-cache',
                 '--prefix', directory], selected_env=node_env)
         python = assets / 'python/bin/python3.11'
-        run('cache-git-wheels', [python, '-I', '-m', 'pip', '--isolated', 'download', '--require-hashes',
-             '--only-binary=:all:', '--disable-pip-version-check', '--dest', out / 'wheelhouse',
-             '-r', src / 'profiles/mcp/git-readonly-v1/requirements.lock'])
-        requirements = (src / 'profiles/mcp/git-readonly-v1/requirements.lock').read_text().splitlines()
-        allowed = set(re.findall(r'--hash=sha256:([0-9a-f]{64})', '\n'.join(requirements)))
+        run('cache-git-wheels', [python, '-I', wheel_inputs['helper'],
+             '--manifest', wheel_inputs['manifest'],
+             '--requirements', wheel_inputs['requirements'],
+             '--destination', out / 'wheelhouse', '--allow-download'], timeout=300)
         wheels = list((out / 'wheelhouse').glob('*.whl'))
-        require(len(wheels) == len([row for row in requirements if row.strip()]) == 33,
-                'complete_pinned_wheelhouse_required')
-        require(all(sha(path) in allowed for path in wheels), 'wheelhouse_digest_unreviewed')
         selected.update(node_archive=str(assets / 'node.tar.xz'), python_archive=str(assets / 'python.tar.gz'),
                         node=str(assets / 'node/bin/node'), npm=str(assets / 'node/bin/npm'),
                         bwrap_source=str(assets / 'bwrap-build/bwrap'), git=str(assets / 'git/git'),

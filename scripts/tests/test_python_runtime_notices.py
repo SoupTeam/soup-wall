@@ -25,6 +25,8 @@ class PythonRuntimeNotices(unittest.TestCase):
         self.identity = json.loads((INSTALL.ASSETS / "upstream-identity.json").read_bytes())
         self.prefix = "upstream-notices/python-" + self.identity["python"]["version"]
         shutil.copytree(INSTALL.ASSETS / self.prefix, self.assets / self.prefix)
+        shutil.copytree(INSTALL.ASSETS / "upstream-notices/runtime-licenses",
+                        self.assets / "upstream-notices/runtime-licenses")
         (self.assets / "upstream-identity.json").write_text(json.dumps(self.identity))
         self.asset_patch = patch.object(INSTALL, "ASSETS", self.assets)
         self.asset_patch.start()
@@ -32,6 +34,32 @@ class PythonRuntimeNotices(unittest.TestCase):
 
     def verify(self, identity=None):
         INSTALL.verify_python_notices(self.identity if identity is None else identity)
+
+    def test_runtime_supplemental_bundle_is_verified_and_every_member_is_required(self):
+        INSTALL.verify_runtime_license_notices(self.identity)
+        folder = self.assets / "upstream-notices/runtime-licenses"
+        for path in folder.iterdir():
+            raw = path.read_bytes()
+            with self.subTest(path=path.name, mutation="corrupt"):
+                path.write_bytes(b"changed" + raw[7:])
+                with self.assertRaisesRegex(ValueError, "identity mismatch"):
+                    INSTALL.verify_runtime_license_notices(self.identity)
+            path.write_bytes(raw)
+            with self.subTest(path=path.name, mutation="missing"):
+                path.unlink()
+                with self.assertRaises(ValueError):
+                    INSTALL.verify_runtime_license_notices(self.identity)
+            path.write_bytes(raw)
+        (folder / "unbound.txt").write_bytes(b"unbound")
+        with self.assertRaisesRegex(ValueError, "differs from declaration"):
+            INSTALL.verify_runtime_license_notices(self.identity)
+
+    def test_runtime_provenance_refuses_absent_or_unsafe_binding(self):
+        for value in (None, {}, {"path": "../escape", "sha256": "a" * 64}):
+            identity = copy.deepcopy(self.identity)
+            identity["runtime_license_provenance"] = value
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "identity required"):
+                INSTALL.verify_runtime_license_notices(identity)
 
     def test_complete_declared_bundle_is_verified_and_retained_by_profile_copy(self):
         self.verify()

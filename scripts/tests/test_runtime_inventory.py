@@ -2,6 +2,7 @@
 import copy
 import json
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -228,6 +229,209 @@ class RuntimeInventoryTests(unittest.TestCase):
             self.assertEqual(len(notices), 3)
             self.assertEqual(len(errors), 2)
             self.assertTrue(all("runtime_license_review_required" in error for error in errors))
+
+    def provenance_fixture(self, root, *, name="python-lib", expression="BSD-3-Clause", owner=None):
+        site = root / "python-package/python/lib/python3.11/site-packages"
+        notices, graph = inventory.installed_python(site, self.graphs[next(
+            path for path in self.graphs if path.endswith("requirements.lock"))])
+        notice = next(row for row in notices if row["name"] == name and row["origin"]["owner"] == owner)
+        def relative_map(files):
+            return {Path(path).relative_to(site).as_posix(): digest for path, digest in files.items()}
+        source = root / "profiles/mcp/git-readonly-v1"
+        source.mkdir(parents=True)
+        relative = "upstream-notices/runtime-licenses/provenance.json"
+        supplement = "upstream-notices/runtime-licenses/original-NOTICE"
+        text = source / supplement
+        text.parent.mkdir(parents=True)
+        text.write_text("Exact original upstream attribution\n")
+        row = {"ecosystem": "PyPI", "name": name, "version": notice["version"],
+               "origin": {**notice["origin"], "path": Path(notice["origin"]["path"]).relative_to(site).as_posix()},
+               "original_declared_license": notice["license"],
+               "original_license_declarations": notice.get("license_declarations"),
+               "observed_identity_files": relative_map(notice["identity_files"]),
+               "installed_notices": relative_map(notice["files"]),
+               "source": {"archive_url": "https://files.pythonhosted.org/packages/exact.whl",
+                          "archive_sha256": "a" * 64, "metadata_sha256": "b" * 64,
+                          "notices": [{"sha256": digest} for digest in notice["files"].values()]
+                                     + [{"sha256": inventory.sha(text)}]},
+               "evidenced_spdx_expression": expression, "obligations": ["Retain attribution"],
+               "supplemental_notices": [{"path": supplement, "sha256": inventory.sha(text)}]}
+        if owner:
+            parent = next(item for item in notices if item["name"] == owner
+                          and item["origin"]["kind"] == "installed_distribution")
+            row["parent_distribution"] = {"name": owner, "version": parent["version"],
+                                           "identity_files": relative_map(parent["identity_files"])}
+        provenance = source / relative
+        provenance.write_text(json.dumps({"format": "sw-python-runtime-license-provenance/1", "components": [row]}))
+        binding = {"path": relative, "sha256": inventory.sha(provenance)}
+        (source / "upstream-identity.json").write_text(json.dumps({"runtime_license_provenance": binding}))
+        installed = root / "git-profile"
+        shutil.copytree(source / "upstream-notices", installed / "upstream-notices")
+        (installed / "installation.json").write_text(json.dumps({"upstream_identity": {"runtime_license_provenance": binding}}))
+        policy = root / "policy/license-policy.toml"
+        policy.parent.mkdir()
+        shutil.copyfile(inventory.ROOT / "policy/license-policy.toml", policy)
+        return site, source, installed, row
+
+    def test_exact_provenance_resolves_legacy_metadata_and_preserves_raw_declarations(self):
+        for raw, expression in (("BSD License", "BSD-3-Clause"), (None, "MIT")):
+            with self.subTest(raw=raw), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                self.installed_fixture(root)
+                metadata = root / "python-package/python/lib/python3.11/site-packages/python-lib.dist-info/METADATA"
+                metadata.write_text("Name: python-lib\nVersion: 2.0\n" + (f"License: {raw}\n" if raw else ""))
+                self.provenance_fixture(root, expression=expression)
+                with patch.object(inventory, "ROOT", root):
+                    notices, graph, errors = inventory.installed_graphs(root, self.graphs)
+                self.assertFalse(errors)
+                notice = next(row for row in notices if row["name"] == "python-lib")
+                self.assertEqual(notice["license"], raw)
+                self.assertEqual(notice["original_declared_license"], raw)
+                self.assertEqual(notice["license_declarations"]["License"], [raw] if raw else [])
+                self.assertEqual(notice["effective_license"], expression)
+                self.assertEqual(notice["attribution"]["status"], "notice_verified")
+                self.assertFalse(notice["policy_disposition_required"])
+                self.assertEqual(graph, {("PyPI", "python-lib", "2.0"), ("PyPI", "pip", "1.0")})
+                self.assertTrue(any(path.endswith("original-NOTICE") for path in notice["files"]))
+
+    def test_verified_attribution_does_not_waive_disallowed_licenses(self):
+        for expression in ("LGPL-3.0-or-later", "MPL-2.0", "PSF-2.0", "BlueOak-1.0.0"):
+            with self.subTest(expression=expression), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                self.installed_fixture(root)
+                self.provenance_fixture(root, expression=expression)
+                with patch.object(inventory, "ROOT", root):
+                    notices, _, errors = inventory.installed_graphs(root, self.graphs)
+                notice = next(row for row in notices if row["name"] == "python-lib")
+                self.assertEqual(notice["attribution"]["status"], "notice_verified")
+                self.assertTrue(notice["policy_disposition_required"])
+                self.assertEqual(notice["policy"]["status"], "disallowed")
+                self.assertIn("runtime_license_review_required:python-lib", errors)
+
+    def test_provenance_source_and_installed_bindings_cannot_fall_back(self):
+        for change in ("source_hash", "source_missing", "installed_missing", "installed_changed",
+                       "supplement_missing", "supplement_changed", "source_supplement_changed", "receipt_binding"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                self.installed_fixture(root)
+                _, source, installed, row = self.provenance_fixture(root)
+                source_path = source / "upstream-notices/runtime-licenses/provenance.json"
+                installed_path = installed / "upstream-notices/runtime-licenses/provenance.json"
+                supplemental = installed / row["supplemental_notices"][0]["path"]
+                if change == "source_hash": source_path.write_text(source_path.read_text() + " ")
+                elif change == "source_missing": source_path.unlink()
+                elif change == "installed_missing": installed_path.unlink()
+                elif change == "installed_changed": installed_path.write_text("{}")
+                elif change == "supplement_missing": supplemental.unlink()
+                elif change == "supplement_changed": supplemental.write_text("Replaced")
+                elif change == "source_supplement_changed": (source / row["supplemental_notices"][0]["path"]).write_text("Replaced")
+                else: (installed / "installation.json").write_text('{"upstream_identity":{}}')
+                with patch.object(inventory, "ROOT", root):
+                    notices, graph, errors = inventory.installed_graphs(root, self.graphs)
+                self.assertTrue(any(error.startswith("runtime_license_provenance:") for error in errors))
+                self.assertEqual(len(notices), 3)
+                self.assertEqual(len(graph), 2)
+                notice = next(row for row in notices if row["name"] == "python-lib")
+                self.assertEqual(notice["attribution"]["status"], "rejected")
+                self.assertEqual(notice["license"], "MIT")
+                self.assertIsNone(notice["effective_license"])
+
+    def test_provenance_rejects_changed_identity_notice_and_parent(self):
+        for change in ("metadata", "notice", "parent"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                self.installed_fixture(root)
+                self.vendor_fixture(root)
+                site, _, _, _ = self.provenance_fixture(root, name="urllib3", expression="MIT", owner="pip")
+                path = {"metadata": site / "pip/_vendor/vendor.txt", "notice": site / "pip/_vendor/urllib3.LICENSE",
+                        "parent": site / "pip.dist-info/METADATA"}[change]
+                path.write_text(path.read_text() + ("# changed\n" if change == "metadata" else "\nChanged evidence\n"))
+                with patch.object(inventory, "ROOT", root):
+                    notices, _, errors = inventory.installed_graphs(root, self.graphs)
+                notice = next(row for row in notices if row["name"] == "urllib3")
+                self.assertIsNone(notice["effective_license"])
+                self.assertEqual(notice["attribution"]["status"], "rejected")
+                self.assertTrue(any("runtime_license_provenance_mismatch:urllib3" in error for error in errors))
+
+    def test_unknown_version_origin_and_source_only_assets_never_supply_a_mapping(self):
+        for change in ("version", "owner", "kind", "source_only"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                self.installed_fixture(root)
+                self.vendor_fixture(root)
+                site, _, installed, _ = self.provenance_fixture(root, name="urllib3", expression="MIT", owner="pip")
+                with patch.object(inventory, "ROOT", root):
+                    provenance = inventory.runtime_license_provenance(root)
+                    notices, before = inventory.installed_python(site, self.graphs[next(
+                        path for path in self.graphs if path.endswith("requirements.lock"))])
+                    target = next(row for row in notices if row["name"] == "urllib3")
+                    if change == "version": target["version"] = "2.0"
+                    elif change == "owner": target["origin"]["owner"] = "setuptools"
+                    elif change == "kind": target["origin"]["kind"] = "installed_distribution"
+                    else:
+                        (installed / "installation.json").unlink()
+                        shutil.rmtree(installed / "upstream-notices")
+                        provenance = inventory.runtime_license_provenance(root)
+                        self.assertIsNone(provenance)
+                    inventory.apply_runtime_license_provenance(notices, site, root, provenance)
+                self.assertIsNone(target["effective_license"])
+                self.assertNotIn("attribution", target)
+                self.assertIn(("PyPI", "urllib3", "1.0"), before)
+
+    def test_authors_and_declared_notices_are_collected_without_sibling_sweeps(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            dist = root / "example.dist-info"
+            dist.mkdir()
+            files = [dist / "AUTHORS", dist / "CREDITS", root / "other.dist-info/LICENSE"]
+            for path in files:
+                path.parent.mkdir(exist_ok=True)
+                path.write_text("Original text")
+            observed = inventory.python_notice_files(files, dist, ["CREDITS"])
+            self.assertEqual(set(observed), {str(dist / "AUTHORS"), str(dist / "CREDITS")})
+            for unsafe in ("../LICENSE", "/LICENSE", "C:/LICENSE", "sub\\LICENSE"):
+                with self.subTest(unsafe=unsafe), self.assertRaisesRegex(ValueError, "unsafe_path"):
+                    inventory.python_notice_files(files, dist, [unsafe])
+
+    def test_bound_notices_reject_path_escapes_and_symlinks(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            path = root / "LICENSE"
+            path.write_text("Original")
+            for unsafe in ("../LICENSE", "/LICENSE", "nested/../LICENSE", "C:/LICENSE", "sub\\LICENSE"):
+                with self.subTest(unsafe=unsafe), self.assertRaisesRegex(ValueError, "unsafe_path"):
+                    inventory.bound_file(root, unsafe, inventory.sha(path))
+            link = root / "linked"
+            try:
+                link.symlink_to(path)
+            except OSError:
+                pass  # Windows accounts may lack symbolic-link creation privileges.
+            else:
+                with self.assertRaisesRegex(ValueError, "unsafe_path"):
+                    inventory.bound_file(root, "linked", inventory.sha(path))
+
+    def test_shipped_provenance_has_exact_bounded_rows_and_installed_assets(self):
+        source = inventory.ROOT / "profiles/mcp/git-readonly-v1"
+        identity = inventory.read_json(source / "upstream-identity.json")
+        with tempfile.TemporaryDirectory() as temp:
+            generation = Path(temp)
+            installed = generation / "git-profile"
+            installed.mkdir()
+            shutil.copytree(source / "upstream-notices/runtime-licenses", installed / "upstream-notices/runtime-licenses")
+            (installed / "installation.json").write_text(json.dumps({"upstream_identity": identity}))
+            evidence = inventory.runtime_license_provenance(generation)
+            self.assertIsNotNone(evidence)
+            self.assertEqual(len(evidence["components"]), 23)
+            supplemental = []
+            for row in evidence["components"]:
+                self.assertNotIn("approved", row)
+                self.assertNotIn("selected_license", row)
+                self.assertIn("original_declared_license", row)
+                if row["origin"]["owner"]:
+                    self.assertEqual(row["parent_distribution"]["name"], row["origin"]["owner"])
+                supplemental.extend(item["path"] for item in row["supplemental_notices"])
+            self.assertEqual({Path(path).name for path in supplemental},
+                             {"gitdb-4.0.12-AUTHORS", "pygments-2.20.0-AUTHORS", "requests-2.34.2-NOTICE"})
 
     def vendor_fixture(self, root, *, name="urllib3", version="1.0", owner="pip", metadata=False):
         site = root / "python-package/python/lib/python3.11/site-packages"

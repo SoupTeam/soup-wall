@@ -260,11 +260,15 @@ def python_metadata(path):
     return metadata
 
 
-def python_notice_files(files, root):
+def python_notice_files(files, root, declared=()):
     result = {}
+    declared_paths = set()
+    for name in declared:
+        relative = safe_relative(name)
+        declared_paths.update((root.joinpath(*relative.parts), root / "licenses" / relative))
     for path in files:
-        if path.is_relative_to(root) and path.name.lower().startswith(
-                ("license", "licence", "copying", "notice", "copyright")):
+        if path.is_relative_to(root) and (path in declared_paths or path.name.lower().startswith(
+                ("license", "licence", "copying", "notice", "copyright", "authors"))):
             require(path.stat().st_size <= MAX_OUTPUT_BYTES, "python_notice_size_limit")
             result[str(path)] = sha(path)
     return result
@@ -318,7 +322,7 @@ def installed_python(site, expected):
                         "origin": {"kind": "vendored_distribution" if nested else "installed_distribution",
                                    "owner": owner, "path": str(directory)},
                         "identity_files": {str(metadata_path): sha(metadata_path)},
-                        "files": python_notice_files(files, directory)})
+                        "files": python_notice_files(files, directory, metadata.get_all("License-File", []))})
         if nested:
             notices[-1]["identity_files"][str(record)] = sha(record)
     # Only the top-level installed graph may satisfy the hashed wheel lock.
@@ -389,6 +393,151 @@ def installed_python(site, expected):
     return notices, top | vendored
 
 
+def safe_relative(value):
+    require(isinstance(value, str) and value and "\\" not in value and ":" not in value,
+            "runtime_license_unsafe_path")
+    path = PurePosixPath(value)
+    require(not path.is_absolute() and all(part not in {"", ".", ".."} for part in value.split("/")),
+            "runtime_license_unsafe_path")
+    return path
+
+
+def bound_file(root, relative, digest):
+    relative = safe_relative(relative)
+    require(isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest),
+            "runtime_license_digest_invalid")
+    path = Path(root)
+    require(path.is_dir() and not path.is_symlink() and not any(parent.is_symlink() for parent in path.parents),
+            "runtime_license_unsafe_path")
+    for part in relative.parts:
+        path = path / part
+        require(not path.is_symlink(), "runtime_license_unsafe_path")
+    require(path.resolve().is_relative_to(Path(root).resolve()) and path.is_file()
+            and path.stat().st_size <= MAX_OUTPUT_BYTES and sha(path) == digest,
+            "runtime_license_bound_file_changed:" + str(relative))
+    return path
+
+
+def runtime_license_provenance(generation):
+    """Source evidence is usable only with the identical installed asset bundle."""
+    source = ROOT / "profiles/mcp/git-readonly-v1"
+    identity = read_json(source / "upstream-identity.json")
+    binding = identity.get("runtime_license_provenance")
+    installed = generation / "git-profile"
+    receipt_path = installed / "installation.json"
+    receipt_binding = None
+    if receipt_path.exists():
+        require(not receipt_path.is_symlink(), "runtime_license_unsafe_path")
+        receipt_binding = read_json(receipt_path).get("upstream_identity", {}).get("runtime_license_provenance")
+    if binding is None:
+        require(receipt_binding is None, "runtime_license_source_binding_missing")
+        return None
+    require(isinstance(binding, dict) and set(binding) == {"path", "sha256"}
+            and binding["path"] == "upstream-notices/runtime-licenses/provenance.json",
+            "runtime_license_provenance_binding_invalid")
+    source_path = bound_file(source, binding["path"], binding["sha256"])
+    # Small unit fixtures predate prepared generation receipts. They must not
+    # acquire source-only attribution. Real prepared generations have a receipt.
+    if not receipt_path.exists() and not (installed / binding["path"]).exists():
+        return None
+    require(receipt_binding == binding, "runtime_license_installed_binding_mismatch")
+    installed_path = bound_file(installed, binding["path"], binding["sha256"])
+    data = read_json(source_path)
+    require(data.get("format") == "sw-python-runtime-license-provenance/1"
+            and isinstance(data.get("components"), list) and 0 < len(data["components"]) <= 1000,
+            "runtime_license_provenance_schema")
+    require(read_json(installed_path) == data, "runtime_license_installed_provenance_mismatch")
+    keys = set()
+    for row in data["components"]:
+        key = provenance_key(row)
+        require(key not in keys and row.get("observed_identity_files") and row.get("installed_notices")
+                and "original_declared_license" in row and "original_license_declarations" in row,
+                "runtime_license_component_schema")
+        keys.add(key)
+        evidence = row.get("source", {})
+        require(evidence.get("archive_url", "").startswith("https://files.pythonhosted.org/")
+                and all(re.fullmatch(r"[0-9a-f]{64}", evidence.get(key, ""))
+                        for key in ("archive_sha256", "metadata_sha256"))
+                and evidence.get("notices") and row.get("obligations")
+                and isinstance(row.get("evidenced_spdx_expression"), str),
+                "runtime_license_source_evidence_invalid")
+        for notice in row.get("supplemental_notices", []):
+            require(notice["path"] != "upstream-notices/runtime-licenses/provenance.json"
+                    and safe_relative(notice["path"]).parts[:2] == ("upstream-notices", "runtime-licenses"),
+                    "runtime_license_unsafe_path")
+            bound_file(source, notice["path"], notice["sha256"])
+            bound_file(installed, notice["path"], notice["sha256"])
+    return {"binding": binding, "components": data["components"]}
+
+
+def provenance_key(row):
+    origin = row.get("origin", {})
+    return (*python_identity(row["name"], row["version"]), row.get("ecosystem"),
+            origin.get("kind"), origin.get("owner"))
+
+
+def apply_runtime_license_provenance(notices, site, generation, provenance):
+    """Resolve exact factual attribution; never bypass judge_spdx policy."""
+    errors = []
+    for notice in notices:
+        notice["original_declared_license"] = notice.get("license")
+        notice["effective_license"] = notice.get("license")
+        if notice.get("ecosystem") != "PyPI" or provenance is None:
+            continue
+        matches = [row for row in provenance["components"] if provenance_key(row) == provenance_key(notice)]
+        if not matches:
+            continue
+        require(len(matches) == 1, "runtime_license_ambiguous_mapping")
+        row = matches[0]
+        try:
+            require(notice["license"] == row["original_declared_license"]
+                    and notice.get("license_declarations") == row["original_license_declarations"]
+                    and Path(notice["origin"]["path"]).relative_to(site).as_posix() == row["origin"]["path"],
+                    "runtime_license_observed_identity_mismatch")
+            actual_identity = {Path(path).relative_to(site).as_posix(): digest
+                               for path, digest in notice["identity_files"].items()}
+            require(actual_identity == row["observed_identity_files"], "runtime_license_observed_identity_mismatch")
+            for path, digest in row["observed_identity_files"].items():
+                bound_file(site, path, digest)
+            parent = row.get("parent_distribution")
+            if notice["origin"]["owner"] is not None:
+                require(parent is not None and parent["name"] == notice["origin"]["owner"],
+                        "runtime_license_parent_identity_mismatch")
+                parents = [item for item in notices if item.get("ecosystem") == "PyPI"
+                           and python_name(item["name"]) == parent["name"]
+                           and item["version"] == parent["version"]
+                           and item["origin"]["kind"] == "installed_distribution"]
+                require(len(parents) == 1 and
+                        {Path(path).relative_to(site).as_posix(): digest
+                         for path, digest in parents[0]["identity_files"].items()} == parent["identity_files"],
+                        "runtime_license_parent_identity_mismatch")
+                for path, digest in parent["identity_files"].items():
+                    bound_file(site, path, digest)
+            source_digests = {item["sha256"] for item in row["source"]["notices"]}
+            for path, digest in row["installed_notices"].items():
+                actual = bound_file(site, path, digest)
+                require(notice["files"].get(str(actual)) == digest and digest in source_digests,
+                        "runtime_license_notice_mismatch")
+            require(all(digest in source_digests for digest in notice["files"].values()),
+                    "runtime_license_notice_mismatch")
+            supplemental = {}
+            for item in row.get("supplemental_notices", []):
+                require(item["sha256"] in source_digests, "runtime_license_notice_mismatch")
+                path = bound_file(generation / "git-profile", item["path"], item["sha256"])
+                supplemental[str(path)] = item["sha256"]
+            require(source_digests <= set(notice["files"].values()) | set(supplemental.values()),
+                    "runtime_license_notice_incomplete")
+            notice["files"].update(supplemental)
+            notice["effective_license"] = row["evidenced_spdx_expression"]
+            notice["attribution"] = {"status": "notice_verified", "provenance": provenance["binding"],
+                                     "source": row["source"], "obligations": row["obligations"]}
+        except (ValueError, OSError, KeyError, TypeError) as error:
+            notice["effective_license"] = None
+            notice["attribution"] = {"status": "rejected", "reason": str(error)}
+            errors.append("runtime_license_provenance_mismatch:" + notice["name"] + ":" + str(error))
+    return errors
+
+
 def installed_graphs(generation, graphs):
     fs = read_json(generation / "filesystem-profile/profile.json")
     git = read_json(generation / "git-profile/profile.json")
@@ -420,13 +569,27 @@ def installed_graphs(generation, graphs):
     import license_policy
     policy = tomllib.loads((ROOT / "policy/license-policy.toml").read_text())
     errors = []
+    provenance = None
+    provenance_failure = None
+    try:
+        provenance = runtime_license_provenance(generation)
+    except (ValueError, OSError, KeyError, TypeError) as error:
+        provenance_failure = str(error)
+        errors.append("runtime_license_provenance:" + str(error))
+    errors.extend(apply_runtime_license_provenance(notices, site, generation, provenance))
+    if provenance_failure is not None:
+        for notice in python_notices:
+            notice["effective_license"] = None
+            notice["attribution"] = {"status": "rejected", "reason": provenance_failure}
     for notice in notices:
-        expression = notice.get("license")
+        expression = notice.get("effective_license")
         if not isinstance(expression, str) or not notice["files"]:
+            notice["policy_disposition_required"] = True
             errors.append("runtime_license_notice_incomplete:" + notice["name"])
             continue
         status, selected, reason = license_policy.judge_spdx(expression, policy)
         notice["policy"] = {"status": status, "selected": selected, "reason": reason}
+        notice["policy_disposition_required"] = status != "approved"
         if status != "approved":
             errors.append("runtime_license_review_required:" + notice["name"])
     return notices, py_graph, errors

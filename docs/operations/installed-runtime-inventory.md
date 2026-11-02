@@ -6,6 +6,15 @@ file, tools-list text or package count cannot establish an installed graph.
 The source must be the exact clean selected commit. No installation or dependency
 update occurs during inventory generation.
 
+Git profile preparation uses the finite `wheels.lock.json` manifest, tied to the
+existing hashed requirements. Explicit downloads use a bounded standard-library
+HTTPS reader for those exact files; pip always installs from a verified local
+wheelhouse with `--no-index`. Supplying an offline wheelhouse never falls back to
+the network. This avoids pip's vendored HTTP parser during bootstrap without
+removing its installed vendored packages from advisory coverage. Accepted CI
+input guards remain unchanged; new setup data and helper code still require
+maintainer admission.
+
 ```bash
 python3 scripts/generate_inventory.py \
   --selection /private/prepared/generations/example/selection.json \
@@ -24,7 +33,9 @@ at its exact version, with only pip/setuptools bootstrap extras permitted.
 Nested distributions cannot satisfy missing top-level wheels. Extra unrelated
 top-level distributions remain blocking. It inventories
 license metadata and hashes existing notice files for every installed package.
-Missing declarations or notice text remain incomplete; no legal approval is inferred.
+Missing declarations or notice text remain incomplete unless an exact, verified
+attribution record supplies the missing factual evidence. Legal approval still
+comes only from the existing license policy.
 
 The selected Git interpreter's stripped archive omits native dependency notices
 provided in the matching full Python standalone archive. The profile ships those
@@ -50,9 +61,48 @@ vendor modules remain blocking. Pip's setuptools pin describes its actual
 `pkg_resources` subtree. The report retains each component's owner, material
 path, identity-file hashes and attributable notice hashes, including pip's
 per-component notices retained in its `.dist-info/licenses` tree. Raw license
-declarations and classifiers are retained when metadata supplies them. A vendor
-pin or a notice's text does not supply an SPDX approval: absent or opaque license
-declarations still require review under the existing policy.
+declarations and classifiers are retained when metadata supplies them. AUTHORS
+files and safely named `License-File` declarations are collected inside the
+component's own distribution tree; unrelated sibling files do not satisfy its
+notice requirement.
+
+The Git profile's `upstream-identity.json` may declare
+`runtime_license_provenance`, containing exactly `path` and `sha256`. The path is
+`upstream-notices/runtime-licenses/provenance.json`, whose format is
+`sw-python-runtime-license-provenance/1`. Its 23 bounded records describe exact
+observed versions and origins, including vendor owners, metadata or manifest and
+RECORD hashes, parent bootstrap distribution identities, attributable notice
+hashes, authoritative source wheel URLs and hashes, source metadata declarations,
+evidenced SPDX interpretations, and notice-retention obligations. Generic legacy
+labels are not normalized globally. For example, the exact gitdb 4.0.12 wheel's
+BSD text and wheel RECORD support its BSD-3-Clause interpretation; that evidence
+does not reinterpret other packages labelled `BSD License` or source-only GPL
+fixtures as installed wheel contents.
+
+Inventory verifies the provenance digest against the source identity and the
+actual installed copy. Prepared generations must retain the same binding in
+`git-profile/installation.json` under `upstream_identity`. A missing declared
+file, unequal binding, unsafe path, symlink, changed identity file, stale parent
+distribution, or changed notice remains blocking. A source record alone cannot
+establish installed attribution. Small fixtures without prepared receipts and
+installed provenance receive no mapping. An unknown version or origin does not
+inherit a nearby record. Provenance failures retain the observed inventory and
+blocking errors while scanner checks continue.
+
+The original `license`, `license_declarations`, `origin`, and identity hashes
+remain in each inventory row. `original_declared_license` explicitly preserves
+the raw value, including null. Only a fully matched record can supply
+`effective_license`; the unchanged `judge_spdx` policy evaluates that expression.
+`attribution.status: "notice_verified"` describes factual attribution separately
+from `policy_disposition_required` and the existing policy result. Verified
+autocommand LGPL, certifi MPL, and typing_extensions/distlib PSF evidence still
+requires policy disposition. No license allowlist or acceptance threshold changes.
+
+Exact original gitdb AUTHORS, Pygments AUTHORS, and Requests NOTICE texts are
+retained as supplemental assets in the same runtime notice directory. A mapping
+can append them to its notice files only after the source and actual installed
+copies match their source-wheel digests. A missing or altered installed
+supplement cannot be replaced by a source-only path or an approval flag.
 
 `python_graphs.top_level` and `python_graphs.vendored` retain the separate graphs.
 The scanner requirements are their union, deduplicated by name **and version**;

@@ -10,7 +10,7 @@
     "profiles/mcp/filesystem-readonly-v1/upstream-identity.json": "5b6e5b89dcd67a462bdd60b2ba9183bb5c95218cfb14eb76b78ec07c3d62c866",
     "profiles/mcp/filesystem-readonly-v1/policy.yaml": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
     "profiles/mcp/git-readonly-v1/upstream-tools-list.json": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
-    "profiles/mcp/git-readonly-v1/upstream-identity.json": "31d7559e03b3f5e96a7121afcc3b4895b051c30542736d4b058d568930cd8012",
+    "profiles/mcp/git-readonly-v1/upstream-identity.json": "0c80b3f2e3307a16d449d4cdd2c6514d9e025eea8d38a9710b610dc10f3da64e",
     "profiles/mcp/git-readonly-v1/policy.yaml": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c"
   }
 }

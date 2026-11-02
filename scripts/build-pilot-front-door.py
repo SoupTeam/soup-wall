@@ -76,6 +76,7 @@ SCRIPTS = (
     "scripts/pilot_resumable_download.py",
     "scripts/pilot_source_identity.py",
     "scripts/pilot_runtime_identity.py",
+    "scripts/pilot_wheelhouse.py",
     "scripts/roadmap_support.py",
     "scripts/pilot_update.py",
     "scripts/switch-prepared-pilot.py",

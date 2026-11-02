@@ -71,6 +71,7 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p 'test_candidate_*.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_runtime_inventory.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_python_runtime_notices.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_wheelhouse.py' -v
       - name: SOU-35 public grouped-review and custody regressions
         run: |
           python3 -m venv target/sou35-venv
