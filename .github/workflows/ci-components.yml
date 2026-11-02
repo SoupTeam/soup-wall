@@ -2058,6 +2058,21 @@ jobs:
         run: |
           cargo test --locked -p agentfw --lib filesystem_roots -- --test-threads=1
           cargo test --locked -p agentfw --lib native::approval::tests::selected_tests -- --test-threads=1
+      - name: Validate focused maintenance dispatch
+        if: github.event.inputs.installed_focus == 'maintenance'
+        shell: bash
+        env:
+          DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PYCODE'
+          import json, os
+          inputs = json.loads(os.environ['DISPATCH_INPUTS'])
+          assert inputs.get('native_preparation_only') == 'true'
+          assert inputs.get('stability_mode', 'off') == 'off'
+          assert all(value in ('', 'false') for key, value in inputs.items()
+                     if key not in {'installed_focus', 'native_preparation_only', 'stability_mode'})
+          PYCODE
       - name: Validate focused project preset dispatch
         if: github.event.inputs.project_presets_only == 'true'
         shell: bash
@@ -3102,7 +3117,7 @@ jobs:
           raise SystemExit(subprocess.call(command))
           PY
       - name: Qualify exact prepared selection through enforcing daemon and original servers
-        if: github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -3122,7 +3137,7 @@ jobs:
           path.write_text(json.dumps(values, sort_keys=True) + '\n')
           PY
       - name: Run the first-use demo through the prepared original host
-        if: github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -3132,7 +3147,7 @@ jobs:
             --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
             --strace "$(command -v strace)" --output "$RUNNER_TEMP/sou120-demo"
       - name: Qualify the guided first-use entry point through the original host
-        if: github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -3148,7 +3163,7 @@ jobs:
             --python "$(command -v python3)" --allow-download \
             2>&1 | tee "$RUNNER_TEMP/front-door.log"
       - name: Qualify the installed guided pilot front door through the original host
-        if: github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && github.event.inputs.prepared_operations_only != 'true' && github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && github.event.inputs.prepared_operations_only != 'true' && github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -3158,6 +3173,8 @@ jobs:
           cargo test --locked -p agentfw --lib pilot_component
           # The component is built from this checkout and started only as the
           # installed `agentfw pilot` of this job's SOU-119 build.
+          # Installed launch custody refuses writable hosted-toolcache ancestors.
+          # Use the protected interpreter already selected for the component.
           python3 -B scripts/qualify-installed-front-door.py --run --provider-profiles \
             --output "$RUNNER_TEMP/installed-front-door" --expected-commit "$(git rev-parse HEAD)" \
             --component-python /usr/bin/python3.12 \
@@ -3166,7 +3183,7 @@ jobs:
             --sandbox-tests "$SOU119_SANDBOX_TESTS" \
             --node-archive "$asset/node.tar.xz" \
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python "$(command -v python3)" --allow-download \
+            --python /usr/bin/python3.12 --allow-download \
             2>&1 | tee "$RUNNER_TEMP/installed-front-door.log"
       - name: Qualify installed provider CA custody through owned HTTPS
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.provider_ca_only == 'true' && github.event.inputs.native_preparation_only == 'true'
@@ -3183,7 +3200,7 @@ jobs:
             --sandbox-tests "$SOU119_SANDBOX_TESTS" \
             --node-archive "$asset/node.tar.xz" \
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python "$(command -v python3)" --allow-download \
+            --python /usr/bin/python3.12 --allow-download \
             2>&1 | tee "$RUNNER_TEMP/installed-provider-ca.log"
       - name: Qualify installed linked worktrees through original servers
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'linked-worktrees' && github.event.inputs.native_preparation_only == 'true'
@@ -3200,7 +3217,7 @@ jobs:
             --sandbox-tests "$SOU119_SANDBOX_TESTS" \
             --node-archive "$asset/node.tar.xz" \
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python "$(command -v python3)" --allow-download \
+            --python /usr/bin/python3.12 --allow-download \
             2>&1 | tee "$RUNNER_TEMP/installed-linked-worktrees.log"
       - name: Retain bounded installed linked worktree result including failed attempt
         if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'linked-worktrees'
@@ -3227,7 +3244,7 @@ jobs:
             --sandbox-tests "$SOU119_SANDBOX_TESTS" \
             --node-archive "$asset/node.tar.xz" \
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python "$(command -v python3)" --allow-download \
+            --python /usr/bin/python3.12 --allow-download \
             2>&1 | tee "$RUNNER_TEMP/installed-filesystem-roots.log"
       - name: Retain bounded installed filesystem root result including failed attempt
         if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'filesystem-roots'
@@ -3239,6 +3256,36 @@ jobs:
             ${{ runner.temp }}/installed-filesystem-roots.log
           if-no-files-found: warn
           retention-days: 30
+      - name: Qualify owned installed maintenance with original host
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'maintenance' && github.event.inputs.native_preparation_only == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="$RUNNER_TEMP/sou111-assets"
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_maintenance.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_run_operations.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_maintenance_qualification.py -v
+          cargo fmt --all --check
+          python3 -B scripts/qualify-installed-front-door.py --run --maintenance-only \
+            --output "$RUNNER_TEMP/sou200-maintenance" --expected-commit "$(git rev-parse HEAD)" \
+            --component-python /usr/bin/python3.12 \
+            --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
+            --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
+            --sandbox-tests "$SOU119_SANDBOX_TESTS" \
+            --node-archive "$asset/node.tar.xz" \
+            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --allow-download \
+            2>&1 | tee "$RUNNER_TEMP/sou200-maintenance.log"
+      - name: Retain finite maintenance report including failure
+        if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'maintenance'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou200-installed-maintenance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou200-maintenance/report.json
+            ${{ runner.temp }}/sou200-maintenance.log
+          if-no-files-found: warn
+          retention-days: 7
       - name: Qualify installed project presets through two owned projects
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.project_presets_only == 'true' && github.event.inputs.native_preparation_only == 'true'
         shell: bash
@@ -3254,7 +3301,7 @@ jobs:
             --sandbox-tests "$SOU119_SANDBOX_TESTS" \
             --node-archive "$asset/node.tar.xz" \
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python "$(command -v python3)" --allow-download \
+            --python /usr/bin/python3.12 --allow-download \
             2>&1 | tee "$RUNNER_TEMP/installed-project-presets.log"
       - name: Retain bounded installed provider CA result including failed attempt
         if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.provider_ca_only == 'true'
@@ -3277,7 +3324,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Qualify terminal Ask inbox through the original Claude host
-        if: github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.operator_results_only != 'true') && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.operator_results_only != 'true') && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -3291,7 +3338,7 @@ jobs:
             --strace "$(command -v strace)" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou135-inbox"
       - name: Qualify owned prepared-selection launch and failures with the original host
-        if: github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -3314,7 +3361,7 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
             --output "$RUNNER_TEMP/pilot-storage-qualification"
       - name: Qualify prepared-run audit rotation and failed-store continuation
-        if: github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -3325,7 +3372,7 @@ jobs:
             --validation-timeout-seconds 120 --audit-retention-only \
             --output "$RUNNER_TEMP/sou132-qualification"
       - name: Qualify reused bounded audit engine restart and fail-safe retention
-        if: github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -3345,7 +3392,7 @@ jobs:
           agent="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["files"]["agentfw"]["path"])' "$selection")"
           python3 -B scripts/sou84_owned_acceptance.py --agent "$agent" --output-dir "$RUNNER_TEMP/sou132-retention"
       - name: Targeted existing-project read-only pilot with actual host and independent effects
-        if: github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event_name == 'workflow_dispatch' && (github.event.inputs.existing_project_only == 'true' || github.event.inputs.native_preparation_only == 'true')) && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event_name == 'workflow_dispatch' && (github.event.inputs.existing_project_only == 'true' || github.event.inputs.native_preparation_only == 'true')) && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail

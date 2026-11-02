@@ -338,6 +338,11 @@ def main(argv, front):
                              '--provider-version', b['provider']['version'], '--provider-sha256', b['provider']['sha256'],
                              '--state-root', b['state_root']['path'], '--expected-state-identity', ':'.join(map(str,b['state_root']['identity'])),
                              '--timeout-seconds', str(args.timeout_seconds)]
+                    if getattr(front, 'INSTALLED_HOME', None) is not None:
+                        # The same installation gate as the unnamed run: a named preset
+                        # is an installed launch path, not a direct preparation script.
+                        words += ['--maintenance-home', str(args.agent_home),
+                                  '--maintenance-component-home', str(args.agent_home)]
                     if b['budget'] is not None:
                         words += ['--linux-budget', b['budget']['path'], '--expected-budget-sha256', b['budget']['sha256']]
                     if args.prompt is not None:

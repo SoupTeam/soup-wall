@@ -121,6 +121,34 @@ class StoreBoundaries(unittest.TestCase):
         result=json.loads(out.getvalue());self.assertEqual(result['reason'],'project_inputs_changed')
         self.assertIs(result['executed'],False);self.assertIs(result['authority'],False)
 
+    def captured_run_words(self, installed):
+        import types
+        import contextlib
+        import io
+        binding = dict(self.b)
+        with P.Store(self.home, PROFILES, create=True) as store:
+            store.write('create', 'one', binding)
+            version = P.digest(P.encoded(store.read()['records']['one']))
+        front = types.SimpleNamespace(PROG='owned', PROJECT_HOME=self.home, INSTALLED_HOME=self.home if installed else None,
+                                      provider_profiles=lambda: PROFILES, platform_reason=lambda: None,
+                                      PYTHON_FLAGS=['-I'], RUNNER=Path('/owned/pilot-run.py'))
+        seen = []
+        with patch.object(P.sys, 'platform', 'linux'), patch.object(P, 'verify'), \
+                patch.object(P.os, 'execve', side_effect=lambda _exe, words, _env: seen.append(words)), \
+                contextlib.redirect_stdout(io.StringIO()):
+            P.main(['run', '--name', 'one', '--expected-version', version, '--apply'], front)
+        self.assertEqual(len(seen), 1)
+        return seen[0]
+
+    def test_installed_named_project_run_carries_the_maintenance_gate_context(self):
+        words = self.captured_run_words(True)
+        for flag in ('--maintenance-home', '--maintenance-component-home'):
+            self.assertEqual(words[words.index(flag) + 1], str(self.home))
+
+    def test_direct_named_project_run_stays_outside_the_installed_gate(self):
+        words = self.captured_run_words(False)
+        self.assertFalse(any(word.startswith('--maintenance') for word in words))
+
     def test_conflicting_updates_only_one_can_use_a_record_digest(self):
         with P.Store(self.home,PROFILES,create=True) as store:
             old=store.write('create','one',self.b)
