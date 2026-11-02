@@ -219,10 +219,13 @@ def parse_strict(raw, role):
     return value
 
 
+NAME_ROOT = [ROOT]  # set by --name-root; the CLI is the only writer
+
+
 def portable_name(path):
-    """Repository-relative POSIX path when inside the repository, otherwise the basename."""
+    """POSIX path relative to the name root (default: the repository) when inside it, otherwise the basename."""
     try:
-        return Path(path).resolve().relative_to(ROOT).as_posix()
+        return Path(path).resolve().relative_to(Path(NAME_ROOT[0]).resolve()).as_posix()
     except ValueError:
         return Path(path).name
 
@@ -303,19 +306,27 @@ class Git:
 
 
 def custody(raw, git, role):
-    """Original-artifact digest. A CRLF checkout copy is accepted only when its LF bytes are a committed blob."""
+    """Original-artifact identity plus the observation of the bytes actually read.
+
+    The identity (status, git_blob, introduced_by, original_sha256, bytes) describes the committed artifact and
+    is the same on every checkout. `read` records what this checkout held: the bytes read and whether a CRLF
+    working copy had to be normalized to reach the committed LF blob. A CRLF copy is accepted only when its LF
+    bytes are a committed blob; normalization is never claimed for bytes that needed none."""
     candidates = [('none', raw)]
     if b'\r\n' in raw:
         candidates.append(('crlf_to_lf_checkout', raw.replace(b'\r\n', b'\n')))
+    read = {'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw)}
     for normalization, data in candidates:
         oid, commit = git.blob_commit(data)
         if commit:
             return data, {'status': 'committed_blob', 'git_blob': oid, 'introduced_by': commit,
-                          'normalization': normalization, 'original_sha256': hashlib.sha256(data).hexdigest(),
-                          'bytes': len(data), 'method': 'local git object store: blob id of the bytes read'}
+                          'original_sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data),
+                          'method': 'local git object store: blob id of the bytes read',
+                          'read': dict(read, normalization=normalization)}
     return raw, {'status': 'unverified_not_in_repository_history', 'git_blob': None, 'introduced_by': None,
-                 'normalization': 'none', 'original_sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw),
-                 'method': 'none: the bytes are not a committed blob reachable from HEAD'}
+                 'original_sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw),
+                 'method': 'none: the bytes are not a committed blob reachable from HEAD',
+                 'read': dict(read, normalization='none')}
 
 
 def verify_source(source, git, role, files_optional=False):
@@ -533,7 +544,8 @@ def _normalize(role, summary_path, manifest_path, receipt_path, git):
     if receipt_path is not None:
         require(manifest is not None, 'build_receipt_needs_manifest', role, 'receipt binds manifest digests')
         receipt_raw = read_bounded(receipt_path, LIMITS['receipt_bytes'], role + '_receipt')
-        receipt = parse_strict(receipt_raw, role + '_receipt')
+        receipt_data, receipt_held = custody(receipt_raw, git, role + '_receipt')
+        receipt = parse_strict(receipt_data, role + '_receipt')
         require(receipt.get('format') == RECEIPT_FORMAT, 'unsupported_report_format', role + '_receipt',
                 repr(receipt.get('format'))[:64])
         require(_same(receipt.get('source'), summary.get('source')), 'build_receipt_binding_mismatch', role, 'source')
@@ -552,7 +564,7 @@ def _normalize(role, summary_path, manifest_path, receipt_path, git):
             require(position < len(build_command), 'build_receipt_binding_mismatch', role, '--profile')
             profile = build_command[position]
         build = {'status': 'receipt_bound', 'profile': profile,
-                 'receipt_sha256': hashlib.sha256(receipt_raw).hexdigest(),
+                 'receipt_sha256': receipt_held['original_sha256'],
                  'detail': 'cargo profile from the receipt build command; receipt source and agentfw/git_launcher '
                            'digests equal the summary source and manifest'}
         binaries = dict(binaries, status='receipt_bound',
@@ -1579,11 +1591,27 @@ def dumps(value):
     return json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False) + '\n'
 
 
+# A spreadsheet may evaluate a cell whose first non-blank character is one of these (ASCII and full-width).
+FORMULA_PREFIXES = ('=', '+', '-', '@', '\uff1d', '\uff0b', '\uff0d', '\uff20')
+
+
+def csv_text(value):
+    """Spreadsheet-inert text cell. A leading apostrophe is added when a spreadsheet could treat the text as a
+    formula (first non-blank character in FORMULA_PREFIXES), when it starts with a tab, carriage return, line
+    feed or other control character, or when it already starts with an apostrophe (so decoding is exact: drop
+    one leading apostrophe if present). Numbers, booleans and empty cells are not text and stay unchanged."""
+    if not isinstance(value, str) or not value:
+        return value
+    if value[0] == "'" or ord(value[0]) < 32 or value[0] == '\x7f' or value.lstrip(' ').startswith(FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
 def render_csv(rows, header):
     stream = io.StringIO()
     writer = csv.writer(stream, lineterminator='\n')
-    writer.writerow(header)
-    writer.writerows(rows)
+    writer.writerow([csv_text(cell) for cell in header])
+    writer.writerows([csv_text(cell) for cell in row] for row in rows)
     return stream.getvalue()
 
 
@@ -1619,7 +1647,8 @@ def strata_csv(result):
 
 
 def _fmt(value):
-    return '' if value is None else repr(value)
+    """Numeric measurement cell: the number itself (csv writes its repr), or empty when absent."""
+    return '' if value is None else value
 
 
 def _ms(value):
@@ -1743,6 +1772,28 @@ def run_comparison(args, git=None):
     return code, result, [('baseline', base), ('candidate', cand)]
 
 
+OBSERVATION_FILE = 'checkout-observation.json'
+CHECKOUT_OBSERVATION = 'sw-native-performance-checkout-observation/1'
+
+
+def separate_checkout_observation(result):
+    """Move every custody `read` record out of the result. Returns (canonical result, observation document)."""
+    canonical = copy.deepcopy(result)
+    inputs = {}
+    for role, observation in sorted((canonical.get('observations') or {}).items()):
+        held = observation['input']['custody']
+        entry = {'name': observation['input']['name'], 'read': held.pop('read')}
+        held['read'] = {'recorded_separately': OBSERVATION_FILE, 'scope': 'checkout-specific; not part of this output'}
+        manifest = observation['input'].get('manifest')
+        if manifest:
+            entry['manifest'] = {'name': manifest['name'], 'read': manifest['custody'].pop('read')}
+            manifest['custody']['read'] = dict(held['read'])
+        inputs[role] = entry
+    return canonical, {'contract': CHECKOUT_OBSERVATION, 'inputs': inputs,
+                       'meaning': 'bytes as read from this checkout; the canonical output carries only the '
+                                  'checkout-independent committed-artifact identity'}
+
+
 def write_outputs(out_dir, result, observations):
     write_text(out_dir, 'comparison.json', dumps(result))
     write_text(out_dir, 'report.md', render_markdown(result))
@@ -1761,19 +1812,28 @@ def main(argv=None):
         parser.add_argument(f'--{role}-manifest', type=Path, help='manifest.json declared before the first trial')
         parser.add_argument(f'--{role}-receipt', type=Path, help=RECEIPT_FORMAT + ' build receipt')
     parser.add_argument('--paired', action='store_true', help='require trial-level paired differences')
+    parser.add_argument('--checkout-observation-out', type=Path,
+                        help='new or empty directory for ' + OBSERVATION_FILE + '; the main output then holds only '
+                             'checkout-independent fields (portable, canonical)')
+    parser.add_argument('--name-root', type=Path, default=ROOT, help='inputs are named relative to this directory')
     parser.add_argument('--repository', type=Path, default=ROOT, help='local git repository used as witness')
     parser.add_argument('--out-dir', type=Path, required=True, help='new or empty private output directory')
     try:
         args = parser.parse_args(argv)
     except SystemExit as error:
         return 3 if error.code else 0
+    NAME_ROOT[0] = args.name_root
     try:
         out_dir = prepare_out_dir(args.out_dir)
+        observation_dir = prepare_out_dir(args.checkout_observation_out) if args.checkout_observation_out else None
     except Rejected as error:
         print(json.dumps({'status': 'usage_error', 'code': error.code, 'detail': error.detail}))
         return 3
     code, result, observations = run_comparison(args)
     try:
+        if observation_dir is not None:
+            result, checkout = separate_checkout_observation(result)
+            write_text(observation_dir, OBSERVATION_FILE, dumps(checkout))
         write_outputs(out_dir, result, observations)
     except Rejected as error:
         print(json.dumps({'status': 'rejected', 'code': error.code}))

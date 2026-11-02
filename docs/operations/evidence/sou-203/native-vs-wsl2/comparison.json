@@ -275,8 +275,11 @@
           "git_blob": "35bb5839ac231789f0c2e4eee5accd5ca289c6c3",
           "introduced_by": "020e2c1fed0a9923a0ece396f895fe4beae9fdd4",
           "method": "local git object store: blob id of the bytes read",
-          "normalization": "crlf_to_lf_checkout",
           "original_sha256": "e11625ecad25734ee4ab6848d6d8cdcc5d25b50ca291e5ce632e4908c662f0c2",
+          "read": {
+            "recorded_separately": "checkout-observation.json",
+            "scope": "checkout-specific; not part of this output"
+          },
           "status": "committed_blob"
         },
         "evidence_sha256": "3065fdacd2c0ea3053fa5709ac5b54e7e0c2e3544a3f4baf7a8957cc2c56bc43",
@@ -286,8 +289,11 @@
             "git_blob": "efa63daa7edbfdf4b4e1a545ae3a9ccc4e7d2b38",
             "introduced_by": "020e2c1fed0a9923a0ece396f895fe4beae9fdd4",
             "method": "local git object store: blob id of the bytes read",
-            "normalization": "crlf_to_lf_checkout",
             "original_sha256": "326de15d02f97c8d0865277ba9372f533c40cd31a0f41ffb6ff6890aaf6fdf75",
+            "read": {
+              "recorded_separately": "checkout-observation.json",
+              "scope": "checkout-specific; not part of this output"
+            },
             "status": "committed_blob"
           },
           "declared_at": "2026-10-26T15:17:19Z",
@@ -642,8 +648,11 @@
           "git_blob": "7e3424487e2bc8190d3a83aaf35daf855f9ea109",
           "introduced_by": "bdaadc15348156ea179131423b663ea86b162f67",
           "method": "local git object store: blob id of the bytes read",
-          "normalization": "crlf_to_lf_checkout",
           "original_sha256": "7238dce777f03bdeb2a5e4e8de2324079681a1b317267f080e8225f88b35e1c4",
+          "read": {
+            "recorded_separately": "checkout-observation.json",
+            "scope": "checkout-specific; not part of this output"
+          },
           "status": "committed_blob"
         },
         "evidence_sha256": "f5fd52900d98f91663af88d1355a6e05c867660c0d791f930a979eab0d043403",

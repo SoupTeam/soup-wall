@@ -46,34 +46,43 @@ CASES = {
 }
 
 
-def broken_copy(directory):
-    """Deliberately broken input: one genuine trial lowered by 100 ms, published aggregates left as they were."""
-    value = json.loads((ROOT / SOU141 / 'native-final-ask-series-summary.json').read_text())
+def broken_copy(directory, input_root=ROOT):
+    """Deliberately broken input: one genuine trial lowered by 100 ms, published aggregates left as they were.
+    Written as explicit LF bytes so the private copy is identical on every platform."""
+    value = json.loads((Path(input_root) / SOU141 / 'native-final-ask-series-summary.json').read_bytes())
     value['runs'][2]['summary']['trials']['git']['continuation_ms_by_trial'][5]['decision_to_result_ms'] -= 100
     path = Path(directory) / 'broken-final-ask-series-summary.json'
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + '\n')
+    path.write_bytes((json.dumps(value, indent=2, sort_keys=True) + '\n').encode('utf-8'))
     return str(path)
 
 
-def generate(out_dir):
-    out_dir = Path(out_dir)
+def generate(out_dir, observation_dir, input_root=ROOT):
+    """Canonical (checkout-independent) bundle into out_dir; this checkout's read observations into
+    observation_dir, one checkout-observation.json per case. Inputs are read from input_root, named
+    relative to it, and verified against the repository's git objects."""
+    out_dir, observation_dir, input_root = Path(out_dir), Path(observation_dir), Path(input_root)
     codes = {}
     with tempfile.TemporaryDirectory(prefix='sou203-broken-') as private:
         cases = dict(CASES)
-        cases['broken-copy-control'] = (['--baseline', broken_copy(private), '--candidate', broken_copy(private)], 2)
+        broken = broken_copy(private, input_root)
+        cases['broken-copy-control'] = (['--baseline', broken, '--candidate', broken], 2)
         for name, (words, expected) in sorted(cases.items()):
-            code = NP.main([*(str(ROOT / w) if w.startswith((SOU141, SOU124, SOU106)) else w for w in words),
-                            '--repository', str(ROOT), '--out-dir', str(out_dir / name)])
+            code = NP.main([*(str(input_root / w) if w.startswith((SOU141, SOU124, SOU106)) else w for w in words),
+                            '--repository', str(ROOT), '--name-root', str(input_root),
+                            '--checkout-observation-out', str(observation_dir / name),
+                            '--out-dir', str(out_dir / name)])
             codes[name] = code
             if code != expected:
                 raise SystemExit(f'{name}: exit {code}, expected {expected}')
     return codes
 
 
-def check():
+def check(input_root=ROOT):
+    """Regenerate privately from input_root and compare the canonical files with the committed bundle."""
     with tempfile.TemporaryDirectory(prefix='sou203-check-') as tmp:
-        generate(tmp)
-        fresh = {p.relative_to(tmp).as_posix(): p.read_bytes() for p in sorted(Path(tmp).rglob('*')) if p.is_file()}
+        generate(Path(tmp) / 'bundle', Path(tmp) / 'observation', input_root)
+        fresh = {p.relative_to(Path(tmp) / 'bundle').as_posix(): p.read_bytes()
+                 for p in sorted((Path(tmp) / 'bundle').rglob('*')) if p.is_file()}
     committed = {p.relative_to(BUNDLE).as_posix(): p.read_bytes() for p in sorted(BUNDLE.rglob('*'))
                  if p.is_file() and p.name != 'README.md'}
     differing = sorted(k for k in set(fresh) | set(committed) if fresh.get(k) != committed.get(k))
@@ -85,12 +94,17 @@ def check():
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--out-dir', type=Path, help='new or empty directory for the regenerated bundle')
+    group.add_argument('--out-dir', type=Path, help='new or empty directory for the regenerated canonical bundle')
     group.add_argument('--check', action='store_true', help='regenerate privately and compare to the bundle')
+    parser.add_argument('--observation-dir', type=Path,
+                        help='with --out-dir: new or empty directory for the read observations of this checkout '
+                             '(never part of the committed bundle)')
     args = parser.parse_args(argv)
     if args.check:
         return check()
-    print(json.dumps({'cases': generate(args.out_dir)}, sort_keys=True))
+    if args.observation_dir is None:
+        parser.error('--out-dir needs --observation-dir (checkout observations are kept out of the bundle)')
+    print(json.dumps({'cases': generate(args.out_dir, args.observation_dir)}, sort_keys=True))
     return 0
 
 

@@ -2,6 +2,8 @@
 """SOU-203 controls. Synthetic fixtures are labeled SYNTHETIC and are never native measurements;
 genuine cases read the retained SOU-141 evidence unchanged."""
 import copy
+import csv
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -252,8 +254,14 @@ class Positive(SyntheticCase):
         committed = self.s.write(summary)
         copy_path = self.s.write(None, commit=False, raw=committed.read_bytes().replace(b'\n', b'\r\n'))
         o = NP.normalize('baseline', copy_path, None, None, self.s.git)
-        self.assertEqual(o['input']['custody']['normalization'], 'crlf_to_lf_checkout')
-        self.assertEqual(o['input']['custody']['status'], 'committed_blob')
+        held = o['input']['custody']
+        self.assertEqual(held['read']['normalization'], 'crlf_to_lf_checkout')
+        self.assertEqual(held['read']['sha256'], hashlib.sha256(copy_path.read_bytes()).hexdigest())
+        self.assertEqual(held['status'], 'committed_blob')
+        self.assertEqual(held['original_sha256'], hashlib.sha256(committed.read_bytes()).hexdigest())
+        lf = NP.normalize('baseline', committed, None, None, self.s.git)['input']['custody']
+        self.assertEqual(lf['read']['normalization'], 'none')  # never claimed for bytes that needed none
+        self.assertEqual({k: v for k, v in lf.items() if k != 'read'}, {k: v for k, v in held.items() if k != 'read'})
 
     def test_status_accounting_failed_timed_out_and_not_run(self):
         def fail_one(run, cases):
@@ -1117,6 +1125,166 @@ class CliMalformedTypes(unittest.TestCase):
             self.assertNotIn('Traceback', proc.stderr)
             self.assertEqual(proc.returncode, 2)
             self.assertEqual(json.loads((out / 'comparison.json').read_text())['rejection']['code'], 'unreadable_input')
+
+
+def _bundle():
+    spec = importlib.util.spec_from_file_location('native_performance_evidence',
+                                                  ROOT / 'scripts/native_performance_evidence.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@unittest.skipUnless(NP.Git(ROOT).tree_of('ce4f76d823f9f1b5a7ea1dec97a8ff260a5f94dc'), 'retained sources not in clone')
+class PortableBundle(unittest.TestCase):
+    """P2-1: the committed canonical bundle reproduces from LF (Linux) and CRLF (Windows) checkouts of the same
+    committed inputs, while each checkout's own read observation stays truthful and outside the bundle."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.bundle = _bundle()
+        cls.inputs = sorted({w for words, _ in cls.bundle.CASES.values() for w in words
+                             if w.startswith((cls.bundle.SOU141, cls.bundle.SOU124, cls.bundle.SOU106))})
+
+    def materialize(self, root, eol):
+        """Write every committed input with the requested line endings, as a checkout of that platform would."""
+        written = {}
+        for name in self.inputs:
+            lf = (ROOT / name).read_bytes().replace(b'\r\n', b'\n')
+            data = lf if eol == 'lf' else lf.replace(b'\n', b'\r\n')
+            target = Path(root) / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+            written[name] = data
+        return written
+
+    def test_lf_and_crlf_checkouts_reproduce_the_committed_bundle(self):
+        committed = {p.relative_to(self.bundle.BUNDLE).as_posix(): p.read_bytes()
+                     for p in sorted(self.bundle.BUNDLE.rglob('*')) if p.is_file() and p.name != 'README.md'}
+        self.assertFalse(any(name.endswith(NP.OBSERVATION_FILE) for name in committed))
+        for eol in ('lf', 'crlf'):
+            with self.subTest(eol=eol), tempfile.TemporaryDirectory() as tmp:
+                written = self.materialize(Path(tmp) / 'checkout', eol)
+                self.assertTrue(any(b'\r\n' in d for d in written.values()) == (eol == 'crlf'))
+                self.bundle.generate(Path(tmp) / 'bundle', Path(tmp) / 'observation', Path(tmp) / 'checkout')
+                fresh = {p.relative_to(Path(tmp) / 'bundle').as_posix(): p.read_bytes()
+                         for p in sorted((Path(tmp) / 'bundle').rglob('*')) if p.is_file()}
+                self.assertEqual(sorted(fresh), sorted(committed))
+                self.assertEqual([k for k in fresh if fresh[k] != committed[k]], [])
+                # Truthful local observation: the bytes actually read, normalized only when they were CRLF.
+                seen = 0
+                for path in sorted((Path(tmp) / 'observation').rglob(NP.OBSERVATION_FILE)):
+                    document = json.loads(path.read_text())
+                    self.assertEqual(document['contract'], NP.CHECKOUT_OBSERVATION)
+                    for entry in document['inputs'].values():
+                        for item in (entry, entry.get('manifest')):
+                            if not item:
+                                continue
+                            data = written[item['name']]
+                            self.assertEqual(item['read']['sha256'], hashlib.sha256(data).hexdigest())
+                            self.assertEqual(item['read']['bytes'], len(data))
+                            self.assertEqual(item['read']['normalization'],
+                                             'crlf_to_lf_checkout' if b'\r\n' in data else 'none')
+                            seen += 1
+                self.assertGreater(seen, 10)
+
+    def test_check_passes_from_both_line_ending_checkouts(self):
+        for eol in ('lf', 'crlf'):
+            with self.subTest(eol=eol), tempfile.TemporaryDirectory() as tmp:
+                self.materialize(Path(tmp) / 'checkout', eol)
+                self.assertEqual(self.bundle.check(Path(tmp) / 'checkout'), 0)
+
+    def test_inline_observation_by_default_and_canonical_identity_shared(self):
+        name = self.bundle.SOU141 + 'native-final-ask-series-summary.json'
+        results = {}
+        for eol in ('lf', 'crlf'):
+            with tempfile.TemporaryDirectory() as tmp:
+                data = self.materialize(Path(tmp) / 'checkout', eol)[name]
+                path = Path(tmp) / 'checkout' / name
+                out = Path(tmp) / 'out'
+                proc = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/native_performance.py'),
+                                       '--baseline', str(path), '--candidate', str(path), '--repository', str(ROOT),
+                                       '--out-dir', str(out)], capture_output=True, text=True, timeout=300)
+                self.assertEqual(proc.returncode, 1, proc.stderr)
+                held = json.loads((out / 'comparison.json').read_text())['observations']['baseline']['input']['custody']
+                self.assertEqual(held['read'], {'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data),
+                                                'normalization': 'none' if eol == 'lf' else 'crlf_to_lf_checkout'})
+                results[eol] = {k: v for k, v in held.items() if k != 'read'}
+        self.assertEqual(results['lf'], results['crlf'])
+        self.assertEqual(results['lf']['status'], 'committed_blob')
+        self.assertEqual(results['lf']['git_blob'], NP.Git(ROOT).run('rev-parse', 'HEAD:' + name).decode().strip())
+
+
+@unittest.skipUnless(NP.Git(ROOT).tree_of('41e3f10d6c1dd27c530f17e3086363c0fb8c68f3'), 'SOU-106 source not in clone')
+class CsvFormulaInjection(unittest.TestCase):
+    """P2-2: attacker-influenced text never reaches a CSV cell as an executable spreadsheet formula."""
+
+    PAYLOADS = ['=1+1', '+SUM(A1:A2)', '-2+3', '@SUM(1,1)', '\t=1+1', ' =1+1', '\r=1+1', '＝1+1', "'=1+1",
+                'cmd|calc']
+
+    def test_csv_text_rules(self):
+        self.assertEqual(NP.csv_text('=1+1'), "'=1+1")
+        self.assertEqual(NP.csv_text('  @x'), "'  @x")
+        self.assertEqual(NP.csv_text('\x00x'), "'\x00x")
+        self.assertEqual(NP.csv_text("'x"), "''x")  # exact decoding: drop one leading apostrophe if present
+        self.assertEqual(NP.csv_text('supported_benign_interrupted'), 'supported_benign_interrupted')
+        self.assertEqual(NP.csv_text('cmd|calc'), 'cmd|calc')
+        for value in (-2.5, 0, 1267.792, True, None, ''):
+            self.assertIs(NP.csv_text(value), value)
+
+    def export(self, payloads):
+        value = json.loads((SOU106 / 'attempt-2.json').read_text())
+        failed = [r for r in value['rows'] if r['status'] == 'failed']
+        for row, payload in zip(failed, payloads):
+            row['reason'] = payload
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'attempt-2-copy.json'
+            path.write_bytes(json.dumps(value).encode())
+            out = Path(tmp) / 'out'
+            proc = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/native_performance.py'),
+                                   '--baseline', str(path), '--candidate', str(path), '--repository', str(ROOT),
+                                   '--out-dir', str(out)], capture_output=True, text=True, timeout=300)
+            self.assertNotIn('Traceback', proc.stderr)
+            with (out / 'trials.csv').open(newline='', encoding='utf-8') as stream:
+                trials = list(csv.DictReader(stream))
+            with (out / 'strata.csv').open(newline='', encoding='utf-8') as stream:
+                strata = list(csv.DictReader(stream))
+            result = json.loads((out / 'comparison.json').read_text())
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        return proc.returncode, failed, trials, strata, result, digest
+
+    def test_real_cli_export_of_attempt_2_copy(self):
+        genuine = NP.normalize('baseline', SOU106 / 'attempt-2.json')
+        expected = {t['id']: t for t in genuine['trials']}
+        for start in range(0, len(self.PAYLOADS), 4):
+            payloads = self.PAYLOADS[start:start + 4]
+            with self.subTest(payloads=payloads):
+                code, failed, trials, strata, result, digest = self.export(payloads)
+                self.assertEqual(code, 1)
+                self.assertEqual((result['status'], result['classification']), ('evaluated', 'incomplete'))
+                # JSON keeps the exact source identity of the private copy.
+                self.assertEqual(result['observations']['baseline']['input']['custody']['original_sha256'], digest)
+                rows = {(r['role'], r['trial_id']): r for r in trials}
+                for row, payload in zip(failed, payloads):
+                    cell = rows[('baseline', f"r01/{row['case']}/{row['arm']}")]['reason']
+                    self.assertEqual(cell, NP.csv_text(payload))
+                    self.assertFalse(cell.lstrip(' ').startswith(NP.FORMULA_PREFIXES) or ord(cell[0]) < 32)
+                    self.assertEqual(cell[1:] if cell != payload else cell, payload)  # exact, reversible
+                # Every textual cell is inert; numeric measurements stay numbers.
+                for r in trials:
+                    for key, cell in r.items():
+                        if cell:
+                            self.assertFalse(cell.lstrip(' ').startswith(NP.FORMULA_PREFIXES), (key, cell))
+                    trial = expected[r['trial_id']]
+                    self.assertEqual(r['status'], trial['status'])
+                    for name in ('host_start_ms', 'host_elapsed_ms'):
+                        value = trial['endpoints'][name]
+                        self.assertEqual(r[name], '' if value is None else repr(value))
+                        if value is not None:
+                            self.assertEqual(float(r[name]), value)
+                genuine_strata = NP.strata_csv(NP.compare(genuine, NP.normalize('candidate', SOU106 / 'attempt-2.json')))
+                self.assertEqual([{k: v for k, v in r.items()} for r in strata],
+                                 list(csv.DictReader(NP.io.StringIO(genuine_strata))))
 
 
 if __name__ == '__main__':

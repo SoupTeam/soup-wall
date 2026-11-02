@@ -274,8 +274,11 @@
           "git_blob": "18a7aaf028f99d21492332cc995f7fb28fab0a9f",
           "introduced_by": "5128ee415ff4a6285889c94fb01530ac5c6f301f",
           "method": "local git object store: blob id of the bytes read",
-          "normalization": "crlf_to_lf_checkout",
           "original_sha256": "e7d29d905ba820061a2f12ad327820db16870d3b51ec433000d0ec5598934ecb",
+          "read": {
+            "recorded_separately": "checkout-observation.json",
+            "scope": "checkout-specific; not part of this output"
+          },
           "status": "committed_blob"
         },
         "evidence_sha256": "21aba83f1faf7b010e0e2651d28279f148704db9bb96bbd94e6ba2cb3ae4c63c",
@@ -457,8 +460,11 @@
           "git_blob": "35bb5839ac231789f0c2e4eee5accd5ca289c6c3",
           "introduced_by": "020e2c1fed0a9923a0ece396f895fe4beae9fdd4",
           "method": "local git object store: blob id of the bytes read",
-          "normalization": "crlf_to_lf_checkout",
           "original_sha256": "e11625ecad25734ee4ab6848d6d8cdcc5d25b50ca291e5ce632e4908c662f0c2",
+          "read": {
+            "recorded_separately": "checkout-observation.json",
+            "scope": "checkout-specific; not part of this output"
+          },
           "status": "committed_blob"
         },
         "evidence_sha256": "3065fdacd2c0ea3053fa5709ac5b54e7e0c2e3544a3f4baf7a8957cc2c56bc43",
@@ -468,8 +474,11 @@
             "git_blob": "efa63daa7edbfdf4b4e1a545ae3a9ccc4e7d2b38",
             "introduced_by": "020e2c1fed0a9923a0ece396f895fe4beae9fdd4",
             "method": "local git object store: blob id of the bytes read",
-            "normalization": "crlf_to_lf_checkout",
             "original_sha256": "326de15d02f97c8d0865277ba9372f533c40cd31a0f41ffb6ff6890aaf6fdf75",
+            "read": {
+              "recorded_separately": "checkout-observation.json",
+              "scope": "checkout-specific; not part of this output"
+            },
             "status": "committed_blob"
           },
           "declared_at": "2026-10-26T15:17:19Z",

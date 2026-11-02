@@ -329,8 +329,11 @@
           "git_blob": "bd905dd01fa51eef851d7437e7c1afa1afd59245",
           "introduced_by": "2e78481d0ef528743234d9cd87fa9b0ec886a411",
           "method": "local git object store: blob id of the bytes read",
-          "normalization": "none",
           "original_sha256": "6f3173364ded8d34bd2583fd6d520d5e6712c7ee3e5f1106b75fd317e1478dca",
+          "read": {
+            "recorded_separately": "checkout-observation.json",
+            "scope": "checkout-specific; not part of this output"
+          },
           "status": "committed_blob"
         },
         "evidence_sha256": "14393a4e408ce0b4ddaa332b3009cc2976ea40759581ff32561d033b8e6475a1",
@@ -567,8 +570,11 @@
           "git_blob": "bd905dd01fa51eef851d7437e7c1afa1afd59245",
           "introduced_by": "2e78481d0ef528743234d9cd87fa9b0ec886a411",
           "method": "local git object store: blob id of the bytes read",
-          "normalization": "none",
           "original_sha256": "6f3173364ded8d34bd2583fd6d520d5e6712c7ee3e5f1106b75fd317e1478dca",
+          "read": {
+            "recorded_separately": "checkout-observation.json",
+            "scope": "checkout-specific; not part of this output"
+          },
           "status": "committed_blob"
         },
         "evidence_sha256": "14393a4e408ce0b4ddaa332b3009cc2976ea40759581ff32561d033b8e6475a1",

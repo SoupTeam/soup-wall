@@ -43,6 +43,32 @@ Output files: `comparison.json` (`sw-native-performance-comparison/1`), `report.
 and `trials.csv` (every planned trial of both sides). On rejection only `comparison.json` and
 `report.md` are written, with the reason code.
 
+### Canonical output and checkout observation
+
+Each input's `custody` has two parts:
+
+- **Committed-artifact identity**, the same on every checkout: `status`, `git_blob`, `introduced_by`,
+  `original_sha256` (the committed LF bytes) and `bytes`.
+- **`custody.read`**, what this checkout actually held: the SHA-256 and size of the bytes read, and
+  `normalization`. That is `crlf_to_lf_checkout` only when a CRLF working copy had to be normalized to
+  reach the committed blob, otherwise `none`. A Windows checkout and a Linux checkout of the same
+  commit differ only here.
+
+By default `custody.read` is inline. With `--checkout-observation-out DIR`, the main output keeps only
+the committed-artifact identity. `custody.read` is replaced by a pointer, and the observation is written
+to `DIR/checkout-observation.json` (`sw-native-performance-checkout-observation/1`). That main output is
+canonical: byte-identical from LF and CRLF checkouts. The observation is local and is never committed.
+`--name-root` names inputs relative to a directory other than the repository.
+
+### CSV cells
+
+CSV is for spreadsheets, so every text cell is spreadsheet-inert. A leading apostrophe is added when the
+first non-blank character could start a formula (`=`, `+`, `-`, `@` and their full-width forms), when
+the text starts with a tab, carriage return, line feed or other control character, and when it already
+starts with an apostrophe. Decoding is exact: drop one leading apostrophe if present. Measurement cells
+are written as numbers and are never prefixed. JSON outputs keep the original text, and the source
+bytes stay bound by `original_sha256`.
+
 | Exit | Meaning |
 |---|---|
 | 0 | `compatible` or `stratified-only` |
@@ -57,6 +83,7 @@ Reproduce the committed evidence bundle and the controls:
 
 ```powershell
 python scripts/native_performance_evidence.py --check
+python scripts/native_performance_evidence.py --out-dir <new-dir> --observation-dir <new-private-dir>
 python -m unittest discover -s scripts/tests -p test_native_performance.py -v
 ```
 
@@ -64,7 +91,7 @@ python -m unittest discover -s scripts/tests -p test_native_performance.py -v
 
 | Item | Method | SOU-141 retained evidence |
 |---|---|---|
-| Report custody | The git blob id of the bytes read must be a committed blob reachable from HEAD. A CRLF checkout copy is accepted only when its LF bytes are that blob (recorded as `crlf_to_lf_checkout`). | verified |
+| Report custody | The git blob id of the bytes read must be a committed blob reachable from HEAD. A CRLF checkout copy is accepted only when its LF bytes are that blob (`custody.read.normalization = crlf_to_lf_checkout`). | verified |
 | Source | `source.tree` must equal the commit's tree, and `files_sha256` is recomputed from every committed blob. A mismatch is a rejection. | verified |
 | Workload/harness | SHA-256 of `qualify-pilot-ask.py` and `pilot_ask_latency.py` at the source commit | verified |
 | Binaries | Manifest digests are self-declared. A receipt binds agentfw and git_launcher to the same source. | declared only |
