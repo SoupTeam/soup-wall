@@ -75,6 +75,22 @@ class Links(unittest.TestCase):
             self.assertEqual({k:v for k,v in a.items() if k!='mcp_result_profile'}, {k:v for k,v in b.items() if k!='mcp_result_profile'})
         self.assertEqual(links.PROFILE,next(t['mcp_result_profile'] for t in after['tools'] if t['name']=='read_text_file'))
 
+    def test_qualification_ledger_requires_one_named_case_per_transition(self):
+        import ast
+        path=Path(__file__).resolve().parents[1]/'qualify-filesystem-links.py'
+        spec=importlib.util.spec_from_file_location('links_ledger',path)
+        qualification=importlib.util.module_from_spec(spec);spec.loader.exec_module(qualification)
+        calls=[node for node in ast.walk(ast.parse(path.read_text())) if isinstance(node,ast.Call)
+               and isinstance(node.func,ast.Name) and node.func.id in ('begin','passed')]
+        expected=set(qualification.CASES)
+        self.assertEqual(14,len(expected))
+        for call in calls:
+            self.assertEqual(1,len(call.args),'a transition must name exactly one measured case')
+            self.assertIsInstance(call.args[0],ast.Constant)
+            self.assertIn(call.args[0].value,expected)
+        for action in ('begin','passed'):
+            self.assertEqual(expected,{call.args[0].value for call in calls if call.func.id==action})
+
     def test_bounds_and_no_source_writes(self):
         (self.a/'link').symlink_to('note.txt'); before=(self.a/'note.txt').stat()
         with patch.object(links,'MAX_FILES',0), self.assertRaises(ValueError): links.inventory(self.pairs)

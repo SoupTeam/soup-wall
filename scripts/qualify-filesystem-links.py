@@ -291,7 +291,7 @@ def qualify(args, door, home, env, report, installed):
     begin('source-preservation')
     require(baseline==[q.snapshot(path) for path in (*roots,third,args.project,args.repository)],'filesystem_roots_source_changed')
     passed('source-preservation', selected_and_unselected_unchanged=True)
-    begin('owned-process-cleanup', 'strict-default-refusal', 'link-retarget-refusal', 'outside-access-witness')
+    begin('owned-process-cleanup')
     require(row['process_cleanup']['all_stopped'] and sibling['process_cleanup']['all_stopped'], 'filesystem_roots_cleanup_unverified')
     passed('owned-process-cleanup', all_stopped=True)
     evidence.update(status='passed',source_after=base.source())
