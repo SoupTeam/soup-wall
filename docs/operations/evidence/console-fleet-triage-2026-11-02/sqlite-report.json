@@ -1,0 +1,72 @@
+{
+  "backend": "sqlite",
+  "binaries": {
+    "agentfw": "0bf1f6e150566b2722f3250d81a0524b4388bbcf440cd9cf299f96bd9521ec37",
+    "llm-firewall": "d08ff820fae88db492592980cb6ea4ec29dd9ff79f20f69c375bd72460cd3eff"
+  },
+  "checks": {
+    "agent-api-fetch": true,
+    "agent-api-rejection": true,
+    "agent-credential-401": true,
+    "browser-ack-oldest-sort": true,
+    "browser-counts-match-projection": true,
+    "browser-denominator-and-no-health-claim": true,
+    "browser-filter-rejected": true,
+    "browser-no-recorded-problem-is-not-health": true,
+    "browser-no-writes-url-or-storage": true,
+    "browser-old-acknowledgement-historical": true,
+    "browser-operator-after-restart": true,
+    "browser-owner-after-restart": true,
+    "browser-prefix-all-outcomes": true,
+    "browser-second-page": true,
+    "browser-viewer-after-restart": true,
+    "concurrent-ack-recorded": true,
+    "concurrent-ack-reflected": true,
+    "deep-link-history": true,
+    "deep-link-rollout": true,
+    "invalid-queries-400": true,
+    "narrow-no-horizontal-overflow": true,
+    "no-session-401": true,
+    "post-not-a-mutation": true,
+    "projection-counts": true,
+    "projection-flags": true,
+    "projection-group-links": true,
+    "projection-no-private-fields": true,
+    "projection-unknown-liveness": true,
+    "read-operator": true,
+    "read-owner": true,
+    "read-viewer": true,
+    "stale-page-after-tenant-switch-discarded": true,
+    "tenant-isolation": true,
+    "triage-changed-nothing": true,
+    "unavailable-console-clears": true,
+    "unknown-tenant-404": true
+  },
+  "config_sha256": {
+    "console": "5bd62cc8eaba0d0777bb80ae61615560e8dc73f90ac87230b93b719679e36bb0"
+  },
+  "format": "sw-console-fleet-triage-acceptance/1",
+  "scope": "one disposable private Linux deployment; synthetic tenants and Agent IDs; recorded Console evidence only, not liveness, production, multi-host or runtime attestation",
+  "snapshots": {
+    "counts": {
+      "attention": 38,
+      "complete": true,
+      "counted_agents": 39,
+      "incomplete_history": 1,
+      "matching": 39,
+      "mismatch": 1,
+      "no_ack": 3,
+      "no_history": 32,
+      "no_recorded_problem": 1,
+      "pending": 3,
+      "rejected": 1,
+      "revoked": 1,
+      "scan_limit": 10000,
+      "stale_ack": 1
+    }
+  },
+  "source_commit": "12b1ffffc82d3009c71434f4ae5e6f42cf9674dc",
+  "source_dirty": false,
+  "source_tree": "da6f5286c8db16b57d8ab71c17e733b9385cc7d7",
+  "status": "passed"
+}
