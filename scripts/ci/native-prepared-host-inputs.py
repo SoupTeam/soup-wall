@@ -19,14 +19,14 @@ import sys
 ACCEPTED = '04efdf1d959599238a0a9a3eb42cbe26b3531b74'
 HOST_SHA = 'fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7'
 DOWNLOADS = {
-    'node': ('https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz',
-             '9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37', 'xz'),
+    'node': ('https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz',
+             '1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce', 'xz'),
     'git': ('https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz',
             '233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3', 'xz'),
     'bwrap': ('https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz',
               '0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d', 'xz'),
-    'python': ('https://github.com/astral-sh/python-build-standalone/releases/download/20251014/cpython-3.11.14%2B20251014-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz',
-               '91ab434738647ab45d630aaa02e3808bb516239beeb52f7799c12a12d1557a38', 'gz'),
+    'python': ('https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.11.18%2B20261026-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz',
+               '17c4978a36c496dc53c08899ef8dad1ad2734f6325f08d6033a1e66419e0af26', 'gz'),
 }
 
 

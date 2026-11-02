@@ -221,8 +221,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config ripgrep zlib1g-dev strace
           mkdir -p "$RUNNER_TEMP/sou62-runtime" "$RUNNER_TEMP/sou62-bwrap-source"
-          curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz --output "$RUNNER_TEMP/sou62-node.tar.xz"
-          printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 "$RUNNER_TEMP/sou62-node.tar.xz" | sha256sum --check
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz --output "$RUNNER_TEMP/sou62-node.tar.xz"
+          printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce "$RUNNER_TEMP/sou62-node.tar.xz" | sha256sum --check
           tar --extract --xz --file "$RUNNER_TEMP/sou62-node.tar.xz" --directory "$RUNNER_TEMP/sou62-runtime" --strip-components=1 --no-same-owner --no-same-permissions
           curl --fail --location --retry 3 https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz --output "$RUNNER_TEMP/sou62-bwrap.tar.xz"
           printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d "$RUNNER_TEMP/sou62-bwrap.tar.xz" | sha256sum --check
@@ -1049,9 +1049,9 @@ jobs:
           PY
           }
           mkdir -m 700 "$RUNNER_TEMP/sou111-assets"
-          curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz \
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz \
             --output "$RUNNER_TEMP/sou111-assets/node.tar.xz"
-          printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 \
+          printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce \
             "$RUNNER_TEMP/sou111-assets/node.tar.xz" | sha256sum --check
           curl --fail --location --retry 3 https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz \
             --output "$RUNNER_TEMP/sou111-assets/git.tar.xz"
@@ -2433,8 +2433,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config ripgrep zlib1g-dev strace
           mkdir -p "$RUNNER_TEMP/sou62-runtime" "$RUNNER_TEMP/sou62-bwrap-source"
-          curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz --output "$RUNNER_TEMP/sou62-node.tar.xz"
-          printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 "$RUNNER_TEMP/sou62-node.tar.xz" | sha256sum --check
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz --output "$RUNNER_TEMP/sou62-node.tar.xz"
+          printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce "$RUNNER_TEMP/sou62-node.tar.xz" | sha256sum --check
           tar --extract --xz --file "$RUNNER_TEMP/sou62-node.tar.xz" --directory "$RUNNER_TEMP/sou62-runtime" --strip-components=1 --no-same-owner --no-same-permissions
           curl --fail --location --retry 3 https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz --output "$RUNNER_TEMP/sou62-bwrap.tar.xz"
           printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d "$RUNNER_TEMP/sou62-bwrap.tar.xz" | sha256sum --check
@@ -2617,8 +2617,8 @@ jobs:
           mkdir -m 700 "$task_scratch"
           mkdir -m 700 "$task_scratch"/{home,cargo-home,tmp,host,npm-cache,packages,node,bwrap-source,binaries}
           ln -s "$HOME/.cargo/registry" "$task_scratch/cargo-home/registry"
-          curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz -o "$task_scratch/node.tar.xz"
-          printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 "$task_scratch/node.tar.xz" | sha256sum --check
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz -o "$task_scratch/node.tar.xz"
+          printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce "$task_scratch/node.tar.xz" | sha256sum --check
           tar -xJf "$task_scratch/node.tar.xz" -C "$task_scratch/node" --strip-components=1 --no-same-owner --no-same-permissions
           curl --fail --location --retry 3 https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz -o "$task_scratch/bwrap.tar.xz"
           printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d "$task_scratch/bwrap.tar.xz" | sha256sum --check

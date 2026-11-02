@@ -70,12 +70,12 @@ lockfile integrity and disables install scripts:
 
 ```bash
 curl --fail --location --proto '=https' --tlsv1.2 \
-  https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz \
+  https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz \
   --output "$assets/node.tar.xz"
-printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 \
+printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce \
   "$assets/node.tar.xz" | sha256sum --check
 tar -xJf "$assets/node.tar.xz" -C "$assets"
-export PATH="$assets/node-v22.22.0-linux-x64/bin:/usr/bin:/bin"
+export PATH="$assets/node-v22.23.4-linux-x64/bin:/usr/bin:/bin"
 mkdir -m 700 "$assets/claude"
 cp "$repo"/profiles/mcp/filesystem-readonly-v1/claude-host/package*.json "$assets/claude/"
 npm ci --ignore-scripts --no-audit --no-fund --prefix "$assets/claude"
@@ -105,7 +105,7 @@ python3 -B "$repo/scripts/prepare-installed-pilot.py" "${prep_args[@]}"
 selection="$(field "$assets/prepared-result.json" selection)"
 ```
 
-This prepares original filesystem and Git MCP packages, Python 3.11.14 and
+This prepares original filesystem and Git MCP packages, Python 3.11.18 and
 separate private workspaces. It writes receipts and a selection manifest with
 source and input hashes. Nothing is enforcing yet. Repeating `--prepare` verifies
 and reuses the selected generation; changed bytes fail closed.

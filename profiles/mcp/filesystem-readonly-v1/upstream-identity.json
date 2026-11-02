@@ -24,7 +24,7 @@
     "2024-11-05",
     "2024-10-07"
   ],
-  "packageLockSha256": "98afd2e0fe566a9a9ca626953934c96b23411b8feb619ddeb1cadff341b6d693",
+  "packageLockSha256": "86bd79e9f3b0e4f0e8c164e6634870b8d3f1d03dff7664dc01d29a5284107493",
   "discoveryResultSha256": "67425ee68375ed484c131989ea3adf3f07a91a04540c100fac0ce61f3ba09c37",
   "tools": [
     {
@@ -113,9 +113,9 @@
     },
     {
       "component": "node",
-      "path": "upstream-notices/node-v22.22.0-LICENSE",
-      "sourceUrl": "https://raw.githubusercontent.com/nodejs/node/v22.22.0/LICENSE",
-      "sha256": "e991d81497a85bb24fc6bffae0a3637a6accd6c6bc5ce1f2c5698bd555cf9d49"
+      "path": "upstream-notices/node-v22.23.4-LICENSE",
+      "sourceUrl": "https://raw.githubusercontent.com/nodejs/node/v22.23.4/LICENSE",
+      "sha256": "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4"
     }
   ]
 }

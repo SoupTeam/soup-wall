@@ -101,7 +101,7 @@ identity. No server implementation is copied or rewritten into Agent.
 separately retains the pinned upstream notices outside that tree; the complete
 package tree digest is verified before sandbox execution.
 
-The acceptance runtime downloads official Node.js `22.22.0` and bubblewrap
+The acceptance runtime downloads official Node.js `22.23.4` and bubblewrap
 `0.13.1` archives by SHA-256. Node.js retains its upstream license/third-party
 notices; bubblewrap is a separate LGPL-2.0-or-later executable, built from its
 unmodified official release source. Neither executable is linked into or
@@ -131,7 +131,7 @@ record the complete selected Python graph and its separate upstream licenses;
 the installer preserves package metadata and license files. Discovery bytes are
 behavioral fixtures, not a replacement server implementation.
 
-CPython 3.11.14 uses the pinned Astral python-build-standalone 20251014 original
+CPython 3.11.18 uses the pinned Astral python-build-standalone 20261026 original
 distribution, with Python/third-party distribution notices retained in the
 runtime tree. Git 2.51.2 is a separate GPL-2.0 executable built from its pinned
 official source archive; its COPYING file remains in the build source. The

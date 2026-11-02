@@ -124,7 +124,7 @@ Linux (required; the filesystem CI job runs the same command):
 ```bash
 python3 -B scripts/verify-large-results.py --run \
   --agentfw "$PWD/target/debug/agentfw" \
-  --node /path/to/node-v22.22.0/bin/node --npm /path/to/node-v22.22.0/bin/npm \
+  --node /path/to/node-v22.23.4/bin/node --npm /path/to/node-v22.23.4/bin/npm \
   --bwrap /path/to/bubblewrap-0.13.1/bwrap --strace /usr/bin/strace \
   --claude /path/to/claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude \
   --expected-commit "$(git rev-parse HEAD)" --output /tmp/large-results
@@ -132,7 +132,7 @@ python3 -B scripts/verify-large-results.py --run \
 
 WSL2 (Ubuntu 24.04, from a Linux-filesystem checkout such as `~/soup-wall`, not
 `/mnt/c`): install the same pins as the filesystem CI job (official Node
-22.22.0, bubblewrap 0.13.1 built with `--ro-bind-fd`, `strace`, the pinned
+22.23.4, bubblewrap 0.13.1 built with `--ro-bind-fd`, `strace`, the pinned
 Claude Code host from `profiles/mcp/filesystem-readonly-v1/claude-host`), build
 with `cargo build --locked -p agentfw --bins`, then run the command above.
 The report records `platform.kind` as `wsl2` only when the kernel release is a

@@ -116,7 +116,7 @@ remove an unrelated cgroup as recovery.
 ## Reproducible disposable Linux acceptance
 
 [The dedicated workflow](../../.github/workflows/sou79-resource-budgets.yml) builds
-the exact candidate, checksum-pinned Node v22.22.0 and bubblewrap v0.13.1. The
+the exact candidate, checksum-pinned Node v22.23.4 and bubblewrap v0.13.1. The
 original locked `@modelcontextprotocol/server-filesystem@2026.8.31` package remains
 unchanged for useful reads, concurrent FIFO calls, cancellation and a live peer.
 A separately hashed owned fixture uses the same production selected-profile,

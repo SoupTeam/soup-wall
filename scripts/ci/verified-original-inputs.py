@@ -6,7 +6,7 @@ from pathlib import Path
 
 BASE='3c9cfb08c0f1498676dcc70de131bd2f324dd13b'
 DOWNLOADS={
- 'node':('https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz','9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37'),
+ 'node':('https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz','1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce'),
  'bwrap':('https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz','0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d')}
 
 def sha(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
