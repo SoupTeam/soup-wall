@@ -138,7 +138,8 @@ class Snapshot(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'credential_material'):M.create(self.source,self.dest,self.confirmation())
         self.assertFalse(self.dest.exists());self.assertFalse(list(self.base.glob('.snapshot-*')))
         (self.source/'README.md').write_text('ordinary owned content');self.made()
-        file=self.dest/'workspace'/'README.md';file.chmod(0o600);file.write_text('tampered');file.chmod(0o400)
+        file=self.dest/'workspace'/'README.md';size=file.stat().st_size
+        file.chmod(0o600);file.write_bytes(b'X'*size);file.chmod(0o400)
         with self.assertRaisesRegex(ValueError,'content_changed'):M.load(self.dest)
 
     def test_new_profile_combinations_refuse_before_preparation_effects(self):
