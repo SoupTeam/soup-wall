@@ -47,6 +47,9 @@ class Controls(unittest.TestCase):
             with patch.object(tool.audit, '_open_input', lambda p: open(p, 'rb')):
                 result = tool.compare(tool.load(a), tool.load(b))
             self.assertEqual(result['rows'][0]['state'], 'changed')
+            self.assertTrue(result['historical'])
+            self.assertFalse(result['execution_observed'])
+            self.assertIn('configuration.setup', result['changed_fields'])
             self.assertNotIn('PRIVATE_CANARY', json.dumps(result))
 
     def test_corrupt_artifact(self):
@@ -62,6 +65,52 @@ class Controls(unittest.TestCase):
         for raw in (b'{"x":1,"x":2}', b'{"x":NaN}', b'[' * 100 + b']' * 100):
             with self.assertRaises(ValueError):
                 tool.parse(raw)
+
+    def test_allowlisted_runtime_identity_and_missing_scope_are_projected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            a, b = Path(temp) / 'a', Path(temp) / 'b'
+            self.bundle(a)
+            self.bundle(b, 'pass')
+            for root, component in ((a, 'source-a'), (b, 'source-b')):
+                report = json.loads((root / 'report.json').read_text())
+                report.update({
+                    'source': {'component': component, 'version': '1.2.3'},
+                    'runtime': {'profile': 'safe', 'daemon': 'available'},
+                    'provider': {'transport': 'stdio'},
+                    'storage': {'cleanup': 'verified'},
+                    'failures': [{'code': 'timeout', 'phase': 'admission'}],
+                })
+                raw = json.dumps(report).encode()
+                (root / 'report.json').write_bytes(raw)
+                (root / 'manifest.json').write_text(json.dumps({
+                    'schema': 'sw-agent-doctor-support/1',
+                    'report_schema': 'sw-agent-doctor/1',
+                    'files': [{'name': 'report.json', 'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw)}],
+                }))
+            with patch.object(tool.audit, '_open_input', lambda p: open(p, 'rb')):
+                result = tool.compare(tool.load(a), tool.load(b))
+            names = {row['field'] for row in result['rows']}
+            self.assertIn('source.component', names)
+            self.assertIn('runtime.daemon', names)
+            self.assertIn('provider.transport', names)
+            self.assertIn('storage.cleanup', names)
+            self.assertIn('failures.1.code', names)
+            self.assertIn('current_source', result['unavailable'])
+
+    def test_unsafe_projection_is_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / 'a'
+            self.bundle(root)
+            report = json.loads((root / 'report.json').read_text())
+            report['runtime'] = {'profile': ['not-a-string']}
+            raw = json.dumps(report).encode()
+            (root / 'report.json').write_bytes(raw)
+            manifest = json.loads((root / 'manifest.json').read_text())
+            manifest['files'][0].update(sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw))
+            (root / 'manifest.json').write_text(json.dumps(manifest))
+            with patch.object(tool.audit, '_open_input', lambda p: open(p, 'rb')):
+                with self.assertRaises(ValueError):
+                    tool.load(root)
 
     @unittest.skipUnless(sys.platform == 'linux', 'native Linux private reader control')
     def test_native_private_reader_and_output(self):

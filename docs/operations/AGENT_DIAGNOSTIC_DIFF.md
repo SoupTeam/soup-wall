@@ -12,4 +12,6 @@ The reader accepts only the two fixed JSON filenames; archives are unsupported. 
 
 Missing observations are marked missing. All observations remain historical. No cross-bundle session or call correlation is inferred. Current source, transport and cleanup remain unavailable when this export does not establish them. Review changed checks privately and collect fresh doctor evidence before retrying.
 
+The projection also accepts allowlisted source, runtime, provider and storage metadata, plus bounded failure codes. Values with an unsupported type are refused. The JSON result marks `historical: true`, `execution_observed: false` and lists changed fields separately, so a difference is not presented as a root cause or a readiness decision. A missing scope stays missing instead of being treated as unchanged.
+
 Qualification status: parser/projection tests pass on Windows using a substituted file reader. Native private-file behavior and installed use require the dedicated Linux qualification; these tests do not establish native acceptance.

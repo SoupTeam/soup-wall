@@ -51,6 +51,40 @@ def validate_checks(checks):
             raise ValueError('invalid check digest')
 
 
+def project_scope(report, fields):
+    scopes = {
+        'source': ('component', 'version', 'revision', 'schema'),
+        'runtime': ('profile', 'daemon', 'session', 'classifier'),
+        'provider': ('transport', 'server', 'mode'),
+        'storage': ('cleanup', 'receipt', 'workspace'),
+    }
+    for scope, names in scopes.items():
+        value = report.get(scope)
+        if value is None:
+            continue
+        if not isinstance(value, dict):
+            raise ValueError('invalid ' + scope + ' scope')
+        for name in names:
+            item = value.get(name)
+            if item is not None:
+                if not isinstance(item, str) or not item or len(item) > 256:
+                    raise ValueError('invalid ' + scope + ' field')
+                fields[scope + '.' + name] = item
+    failures = report.get('failures')
+    if failures is not None:
+        if not isinstance(failures, list) or len(failures) > 64:
+            raise ValueError('invalid failure scope')
+        for index, item in enumerate(failures, 1):
+            if not isinstance(item, dict):
+                raise ValueError('invalid failure record')
+            for name in ('code', 'phase'):
+                value = item.get(name)
+                if value is not None and (not isinstance(value, str) or not re.fullmatch('[a-z0-9_-]{1,80}', value)):
+                    raise ValueError('invalid failure field')
+                if value is not None:
+                    fields[f'failures.{index}.{name}'] = value
+
+
 def load(directory):
     directory = Path(os.path.abspath(directory))
     def read(name):
@@ -74,6 +108,7 @@ def load(directory):
     validate_checks(checks)
     seen = set()
     fields = {'configuration.setup': report.get('setup'), 'runtime.protection': report.get('active_host_call_protection')}
+    project_scope(report, fields)
     for check in checks:
         if not isinstance(check, dict):
             raise ValueError('invalid check')
@@ -103,10 +138,12 @@ def compare(left, right):
         state = 'missing' if a is None or b is None else 'unchanged' if a == b else 'changed'
         rows.append({'field': name, 'state': state, 'before_sha256': None if a is None else digest(a),
                      'after_sha256': None if b is None else digest(b)})
+    changed = [row['field'] for row in rows if row['state'] == 'changed']
     return {'schema': 'sw-agent-diagnostic-diff/1', 'evidence': 'historical_selected_exports',
             'integrity': 'manifest_hash_checked_not_external_authentication',
             'correlation': 'none_no_authenticated_cross_bundle_call_binding',
             'unavailable': ['current_source', 'provider_transport', 'storage_cleanup'],
+            'historical': True, 'execution_observed': False, 'changed_fields': changed[:256],
             'rows': rows, 'next_step': 'Review changed checks in the original private bundles. Collect current doctor evidence before retrying through the supported workflow.'}
 
 
