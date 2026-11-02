@@ -290,7 +290,7 @@ class Wheelhouse(unittest.TestCase):
             (package / "python/bin").mkdir(parents=True)
             (package / "python/bin/python3.11").write_bytes(b"never executed")
 
-        for mode in ("bad", "missing", "offline", "download", "explicit-allow"):
+        for mode in ("bad", "missing", "offline", "download", "explicit-allow", "timeout"):
             valid = mode not in ("bad", "missing")
             destination = self.root / ("install-" + mode)
             first = self.source / self.wheels[0]["filename"]
@@ -299,6 +299,16 @@ class Wheelhouse(unittest.TestCase):
                 first.unlink()
             def download(wheel, output, deadline):
                 output.write(self.payloads[wheel["filename"]])
+            def invoke(words, **kwargs):
+                if words[2].endswith("pilot_wheelhouse.py"):
+                    self.assertLessEqual(kwargs["timeout"], 300)
+                    if mode == "timeout":
+                        raise subprocess.TimeoutExpired(words, kwargs["timeout"])
+                    W.prepare_wheelhouse(assets / "wheels.lock.json", assets / "requirements.lock",
+                                         destination / "wheelhouse", allow_download=True)
+                    return subprocess.CompletedProcess(words, 0)
+                self.assertLessEqual(kwargs["timeout"], 300)
+                raise RuntimeError("pip boundary")
             with self.subTest(mode=mode), patch.object(installer, "ASSETS", assets), \
                     patch.object(installer.platform, "system", return_value="Linux"), \
                     patch.object(installer.platform, "machine", return_value="x86_64"), \
@@ -306,16 +316,19 @@ class Wheelhouse(unittest.TestCase):
                     patch.object(installer, "verify_runtime_license_notices"), \
                     patch.object(installer, "extract_python", side_effect=extract), \
                     patch.object(installer.subprocess, "check_output", side_effect=["git version 1.0", "--ro-bind-fd", "Python 3.11.0"]), \
-                    patch.object(installer.subprocess, "run", side_effect=RuntimeError("pip boundary")) as run, \
+                    patch.object(installer.subprocess, "run", side_effect=invoke) as run, \
                     patch.object(W, "download", side_effect=download) as fetch, \
                     patch.object(W.urllib.request, "build_opener", side_effect=AssertionError("network forbidden")):
-                with self.assertRaisesRegex(RuntimeError if valid else ValueError,
-                        "pip boundary" if valid else "missing_or_unreviewed" if mode == "missing" else "size_mismatch"):
+                error = subprocess.TimeoutExpired if mode == "timeout" else RuntimeError if valid else ValueError
+                pattern = "timed out" if mode == "timeout" else "pip boundary" if valid else "missing_or_unreviewed" if mode == "missing" else "size_mismatch"
+                with self.assertRaisesRegex(error, pattern):
                     installer.install(destination, workspace, git, digest, bwrap, launcher,
-                        python_archive=archive, wheelhouse=None if mode == "download" else self.source,
-                        allow_download=mode in ("download", "explicit-allow"))
+                        python_archive=archive, wheelhouse=None if mode in ("download", "timeout") else self.source,
+                        allow_download=mode in ("download", "explicit-allow", "timeout"))
                 self.assertEqual(fetch.call_count, len(self.wheels) if mode == "download" else 0)
-                if not valid:
+                if mode == "timeout":
+                    self.assertEqual(run.call_count, 1)
+                elif not valid:
                     run.assert_not_called()
                 else:
                     words = run.call_args.args[0]

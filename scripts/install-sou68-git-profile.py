@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import time
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -250,10 +251,25 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
            "TMPDIR": str(tmp), "TEMP": str(tmp), "TMP": str(tmp), "LANG": "C.UTF-8"}
     if subprocess.check_output([str(python), "-I", "--version"], env=env, text=True, timeout=10).strip() != "Python " + identity["python"]["version"]:
         raise ValueError("Python version mismatch")
+    deadline = time.monotonic() + 300
+    def remaining_install_time():
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired("verified wheel preparation and pip installation", 300)
+        return remaining
     try:
+        if allow_download and wheelhouse is None:
+            # A child-process timeout also bounds slow status/header reads inside
+            # the stdlib transport, before its response/body checks can run.
+            subprocess.run([sys.executable, "-I", str(ROOT / "scripts/pilot_wheelhouse.py"),
+                            "--manifest", str(ASSETS / "wheels.lock.json"),
+                            "--requirements", str(ASSETS / "requirements.lock"),
+                            "--destination", str(destination / "wheelhouse"), "--allow-download"],
+                           env=utility_environment(), check=True, timeout=remaining_install_time(),
+                           stdout=log, stderr=subprocess.STDOUT if log is not None else None)
         verified_wheels = prepare_wheelhouse(ASSETS / "wheels.lock.json", ASSETS / "requirements.lock",
-            destination / "wheelhouse", source=wheelhouse, allow_download=allow_download and wheelhouse is None)
-        subprocess.run([str(python), *install_arguments(verified_wheels, ASSETS / "requirements.lock")], env=env, check=True, timeout=300,
+            destination / "wheelhouse", source=wheelhouse, allow_download=False)
+        subprocess.run([str(python), *install_arguments(verified_wheels, ASSETS / "requirements.lock")], env=env, check=True, timeout=remaining_install_time(),
                        stdout=log, stderr=subprocess.STDOUT if log is not None else None)
     finally:
         if tmp == (destination / "tmp").resolve():
