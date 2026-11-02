@@ -340,6 +340,143 @@ class Transition(Fixture):
             A.revert_target(ctx, self.front, A.read_journal(self.preparation), G_OLD)
 
 
+@POSIX
+class RecoveryEntrypoint(Transition):
+    """Public `recover`/`inspect` dispatch for a real marker-new/state-old split (reviewer boundary control)."""
+
+    def setUp(self):
+        super().setUp()
+        self.view = {'mode': 'entered', 'installation': 'matches', 'active': 0, 'uncertain': False, 'revision': 3,
+                     'marker_sha256': 'a' * 64, 'inventory_sha256': 'b' * 64}
+        self.front.INSTALLED_HOME = self.root
+        self.front.PROJECT_HOME = self.root
+        self.front.PREP = object()
+        self.front.read_state = lambda prefix: json.loads(self.state_path.read_bytes())
+        self.front.source = lambda: {'dirty': False, 'commit': '1' * 40}
+        self.front.verified_state = lambda prefix: (_ for _ in ()).throw(Exception('selection_not_current'))
+        self.args = types.SimpleNamespace(action='recover', prefix=self.prefix, state_root=self.root)
+        modules = A.modules()
+        self.observed = []
+        paths = {'agentfw': Path('/owned/agentfw'), 'claude': Path('/owned/claude'), 'policy': Path('/owned/policy')}
+        for patcher in (patch.dict(modules, {'runner': types.SimpleNamespace(selected=lambda ns: (selection(), paths, {}))}),
+                        patch.object(modules['pml'], 'selected_binding', return_value={'b': 1}),
+                        patch.object(A, 'require_supported_home'),
+                        patch.object(A, 'observe', side_effect=lambda ctx, exclusive: self.observe(exclusive)),
+                        patch.object(SW, 'output_root')):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def observe(self, exclusive):
+        self.observed.append(('exclusive', exclusive))
+        return contextlib.ExitStack(), None, dict(self.view)
+
+    def split(self):
+        self.crash_at('after_marker')
+        self.assertEqual((self.marker_generation(), self.state_selection()), (G_NEW, self.state['selection']))
+
+    def test_public_recover_rolls_forward_exactly_the_journaled_state(self):
+        self.split()
+        with patch.object(A, 'require_idle') as idle:
+            result = A.operation(self.args, self.front)
+            idle.assert_called_once()
+        self.assertEqual((result['status'], result['actual_generation']), ('completed_by_recovery', G_NEW))
+        self.assertEqual(self.observed, [('exclusive', True)])
+        self.assertEqual(self.state_selection(), str(self.target()['selection_path']))
+        self.assertIsNone(A.read_journal(self.preparation)['pending'])
+        self.assertEqual(A.read_journal(self.preparation)['history'][-1]['outcome'], 'completed_by_recovery')
+
+    def test_public_inspect_reports_the_split_instead_of_refusing_blindly(self):
+        self.split()
+        self.args.action = 'inspect'
+        report = A.operation(self.args, self.front)
+        self.assertEqual((report['status'], report['state'], report['matches_journal']), ('inspected', 'split-pending-recovery', True))
+        self.assertEqual(report['marker_generation'], G_NEW)
+        self.assertNotIn('"after_state":', json.dumps(report))
+        self.assertEqual(self.marker_generation(), G_NEW)
+        self.assertEqual(self.state_selection(), self.state['selection'])
+
+    def test_every_blocker_refuses_before_any_roll_forward(self):
+        self.split()
+        for change, code in (({'mode': 'open'}, 'maintenance_entry_required'), ({'mode': 'uncertain'}, 'maintenance_state_uncertain'),
+                             ({'active': 1}, 'runs_active'), ({'uncertain': True}, 'runs_uncertain'),
+                             ({'installation': 'mismatch'}, 'installation_mismatch')):
+            with self.subTest(code):
+                self.view = {**self.view, **change}
+                with patch.object(A, 'require_idle'), self.assertRaisesRegex(ValueError, code):
+                    A.operation(self.args, self.front)
+                self.assertEqual(self.state_selection(), self.state['selection'])
+                self.assertIsNotNone(A.read_journal(self.preparation)['pending'])
+                self.view = {'mode': 'entered', 'installation': 'matches', 'active': 0, 'uncertain': False}
+
+    def test_a_live_selected_process_refuses_before_any_roll_forward(self):
+        self.split()
+        with patch.object(SW, 'require_inactive', side_effect=ValueError('active_or_uncertain_pilot_run')), \
+                self.assertRaisesRegex(ValueError, 'active_or_uncertain'):
+            A.operation(self.args, self.front)
+        self.assertEqual(self.state_selection(), self.state['selection'])
+        self.assertIsNotNone(A.read_journal(self.preparation)['pending'])
+
+    def test_an_unlocked_gate_is_required_so_an_unenrolled_home_cannot_recover(self):
+        self.split()
+        with patch.object(A, 'observe', side_effect=ValueError('policy_activation_maintenance_entry_required')), \
+                self.assertRaisesRegex(ValueError, 'maintenance_entry_required'):
+            A.operation(self.args, self.front)
+        self.assertEqual(self.state_selection(), self.state['selection'])
+
+    def test_operator_edits_stay_fail_closed_and_build_nothing(self):
+        self.split()
+        for edit in ('state', 'marker'):
+            with self.subTest(edit):
+                held = (self.state_path.read_bytes(), (self.preparation / 'current.json').read_bytes())
+                if edit == 'state':
+                    self.write_state({**self.state, 'status': 'edited'})
+                else:
+                    SW.publish_json(self.preparation, 'current.json', {**self.marker, 'generation': 'c' * 32})
+                with patch.object(A, 'recovery_context', side_effect=AssertionError('built context for a conflict')), \
+                        patch.object(A, 'observe', side_effect=AssertionError('took the gate for a conflict')):
+                    result = A.operation(self.args, self.front)
+                self.assertEqual(result['status'], 'conflicting_operator_edit')
+                self.assertIsNotNone(A.read_journal(self.preparation)['pending'])
+                self.state_path.write_bytes(held[0])
+                (self.preparation / 'current.json').write_bytes(held[1])
+
+    def test_unreadable_marker_is_a_conflict_not_a_repair(self):
+        self.split()
+        (self.preparation / 'current.json').write_bytes(b'garbage')
+        (self.preparation / 'current.json').chmod(0o600)
+        self.assertEqual(A.operation(self.args, self.front)['status'], 'conflicting_operator_edit')
+        self.assertEqual((self.preparation / 'current.json').read_bytes(), b'garbage')
+
+    def test_main_exit_codes_for_the_public_command(self):
+        self.split()
+        front = types.SimpleNamespace(**vars(self.front), PROG='owned', platform_reason=lambda: None)
+        out = io.StringIO()
+        argv = ['recover', '--prefix', str(self.prefix), '--state-root', str(self.root)]
+        with patch.object(A.sys, 'platform', 'linux'), patch.object(A, 'require_idle'), contextlib.redirect_stdout(out):
+            self.assertEqual(A.main(argv, front), 0)
+        self.assertEqual(json.loads(out.getvalue())['status'], 'completed_by_recovery')
+        out = io.StringIO()
+        self.write_state({**self.state, 'status': 'edited'})
+        self.crash_at_new_pending()
+        with patch.object(A.sys, 'platform', 'linux'), contextlib.redirect_stdout(out):
+            self.assertEqual(A.main(argv, front), 2)
+        self.assertEqual(json.loads(out.getvalue())['status'], 'conflicting_operator_edit')
+
+    def crash_at_new_pending(self):
+        journal = A.read_journal(self.preparation)
+        journal['pending'] = {**{k: 'f' * 64 for k in ('before_marker_sha256', 'after_marker_sha256', 'before_state_sha256',
+                                                       'after_state_sha256')}, 'after_state': {}, 'operation': 'activate',
+                              'plan_sha256': '9' * 64, 'previous_generation': G_OLD, 'target_generation': G_NEW}
+        A.write_journal(self.preparation, journal)
+
+    def test_no_pending_intent_reports_a_settled_installation(self):
+        self.publish()
+        modules = A.modules()
+        with patch.object(A, 'context', return_value={**self.ctx(), 'bound': {}}):
+            result = A.operation(self.args, self.front)
+        self.assertEqual(result['status'], 'settled')
+
+
 class Facts(unittest.TestCase):
     def setUp(self):
         self.ctx = {'paths': {'agentfw': Path('/owned/agentfw'), 'policy': Path('/owned/policy')}, 'selection': selection(),

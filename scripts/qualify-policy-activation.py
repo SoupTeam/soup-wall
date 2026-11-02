@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CASES = ('useful-read-under-base', 'candidate-inert', 'preview-inert', 'open-installation-refused', 'live-run-refused',
          'tampered-candidate-refused', 'stale-confirmation-refused', 'killed-staging-keeps-old-generation',
          'concurrent-confirmation', 'activation-observed', 'newly-denied-zero-execution', 'hard-deny-ask-preserved',
-         'revert-fresh-authority', 'owned-cleanup')
+         'interrupted-publication-recovered', 'revert-fresh-authority', 'owned-cleanup')
 
 
 def qualify(args, door, home, env, report, *, guided, receiver, baseline, selection, load):
@@ -304,14 +304,44 @@ def qualify(args, door, home, env, report, *, guided, receiver, baseline, select
             and not (args.output / 'forbidden-effect').exists(), 'activation_hard_refusal_changed')
     finish('hard-deny-ask-preserved', refused_results=3, effects=0)
 
-    begin('revert-fresh-authority')
+    begin('interrupted-publication-recovered')
     enter()
     undo = pa('revert', '--generation', old_generation)
     require(undo['status'] == 'preview' and undo['blockers'] == [], 'activation_revert_preview')
-    reverted = pa('revert', '--generation', old_generation, '--confirm', undo['confirmation_sha256'])
-    require(reverted['status'] == 'reverted' and reverted['generation'] == old_generation
-            and reverted['session_authority_copied'] is False and reverted['active_protection'] == 'not-observed'
-            and reverted['policy_sha256'] == base_policy_sha, 'activation_revert_failed')
+    # A real storage failure on the front-door state write: the marker already selects the old generation while
+    # front-door.json still names the activated one (marker-new / state-old). No process is killed; the syscall fails.
+    interrupt = work / 'revert-interrupt.trace.private'
+    command = [str(args.strace), '-f', '-qq', '-e', 'trace=rename', '-e', 'inject=rename:error=EIO:when=1',
+               '-P', str(args.prefix / 'front-door.json'), '-o', str(interrupt),
+               str(args.agentfw), 'pilot', '--home', str(home), 'policy-activation', 'revert', '--prefix', str(args.prefix),
+               '--state-root', str(args.state_root), '--generation', old_generation, '--confirm', undo['confirmation_sha256']]
+    interrupted = subprocess.run(command, cwd=door.cwd, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=600)
+    require(interrupted.returncode != 0, 'activation_interruption_not_injected')
+    current_marker = json.loads((preparation / 'current.json').read_bytes())
+    state_selection = json.loads((args.prefix / 'front-door.json').read_bytes())['selection']
+    require(current_marker['generation'] == old_generation and state_selection.endswith(new_generation + '/selection.json'),
+            'activation_split_state_not_reproduced')
+    split = pa('inspect')
+    require(split['state'] == 'split-pending-recovery' and split['matches_journal'] is True
+            and split['pending']['operation'] == 'revert', 'activation_split_not_reported')
+    held_trace = work / 'split-run.trace.private'
+    refused = run_cli(door.words('run', '--state-root', args.state_root, '--timeout-seconds', '120', inputs=False),
+                      success=False, trace=held_trace)
+    no_protected_start(held_trace)
+    require(refused.get('executed') is False, 'activation_split_run_not_refused')
+    recovered = pa('recover')
+    require(recovered['status'] == 'completed_by_recovery' and recovered['actual_generation'] == old_generation
+            and recovered['session_authority_copied'] is False and recovered['active_protection'] == 'not-observed', 'activation_recover_failed')
+    healed = pa('inspect')
+    require(healed['pending'] is None and healed['selected_policy_origin'] == 'baseline'
+            and healed['current']['policy_sha256'] == base_policy_sha
+            and [(h['operation'], h['outcome']) for h in healed['history']] == [('activate', 'published'),
+                                                                               ('revert', 'completed_by_recovery')],
+            'activation_recovery_history')
+    finish('interrupted-publication-recovered', split_state='marker-new-state-old', run_refused_zero_start=True,
+           outcome='completed_by_recovery')
+
+    begin('revert-fresh-authority')
     refused = pa('revert', '--generation', 'f' * 32, success=False)
     require(refused['reason'] == 'policy_activation_revert_target_not_previously_confirmed', 'activation_unconfirmed_revert_accepted')
     leave()
@@ -323,9 +353,6 @@ def qualify(args, door, home, env, report, *, guided, receiver, baseline, select
                for c in report['cases'] if c.get('case') in ('activation_base', 'activation_after', 'activation_reverted')
                and c.get('live_status', {}).get('runs')]
     require(len(run_ids) >= 2 and all(a.isdisjoint(b) for i, a in enumerate(run_ids) for b in run_ids[i + 1:]), 'activation_authority_reused')
-    final_status = pa('inspect')
-    require(final_status['selected_policy_origin'] == 'baseline' and final_status['current']['policy_sha256'] == base_policy_sha
-            and [h['operation'] for h in final_status['history']] == ['activate', 'revert'], 'activation_revert_history')
     finish('revert-fresh-authority', fresh_run_ids=True, history='activate,revert')
 
     begin('owned-cleanup')

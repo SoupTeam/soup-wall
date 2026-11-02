@@ -12,7 +12,7 @@ native Linux, never on macOS).
 
 | Check | Result |
 | --- | --- |
-| `test_pilot_policy_activation.py` (new) | 40 passed |
+| `test_pilot_policy_activation.py` (new) | 64 passed, including public `operation`/`main` recovery of a real marker-new/state-old split |
 | Full `scripts/tests` vs. the `main` base | same set of pre-existing macOS/environment failures, none new |
 | `cargo fmt --all --check`, `ci_components.py --check`, `check_docs.py` | clean |
 
@@ -22,11 +22,13 @@ _Results pending: no native run has been recorded for this ledger yet._ Required
 `useful-read-under-base`, `candidate-inert`, `preview-inert`, `open-installation-refused`,
 `live-run-refused`, `tampered-candidate-refused`, `stale-confirmation-refused`,
 `killed-staging-keeps-old-generation`, `concurrent-confirmation`, `activation-observed`,
-`newly-denied-zero-execution`, `hard-deny-ask-preserved`, `revert-fresh-authority`, `owned-cleanup`.
+`newly-denied-zero-execution`, `hard-deny-ask-preserved`, `interrupted-publication-recovered`,
+`revert-fresh-authority`, `owned-cleanup`.
 
 ## Known boundaries
 
 * Activation covers `deny_actions` candidates only; `deny_tools` and destination subsets remain authoring-only.
-* The crash points between journal intent, marker and front-door state are covered by unit controls with an
-  injection seam; natively the kill is delivered during staging (nothing selected, nothing pending).
+* Crash points between journal intent, marker and front-door state are covered by unit controls with an
+  injection seam, including the public `recover` dispatch. Natively, a SIGKILL is delivered during staging and a storage
+  error is injected (strace) into the front-door state write of a revert to reproduce marker-new/state-old.
 * A selected, previewed or recovered state is never observed protection.

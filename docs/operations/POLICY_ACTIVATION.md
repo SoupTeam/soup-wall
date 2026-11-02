@@ -79,6 +79,14 @@ A crash at any point leaves either the valid old generation or an explicit refus
 | both new | `published_before_journal_completion` |
 | anything else (operator edit) | `conflicting_operator_edit`, pending intent kept, exit 2 |
 
+`recover` has its own strictly validated entry: while a pending intent exists, `current.json` and
+`front-door.json` may legitimately disagree, so it does not require them to agree. It first matches both actual
+hashes against the journal's before/after pair (anything else is `conflicting_operator_edit`, with nothing built
+or locked), then builds the context from the generation the marker actually selects (clean source, verified
+generation, installation binding) and takes the same exclusive maintenance gate, run exclusion and selection lock
+as a transition before any roll-forward. `inspect` reports such a split (`split-pending-recovery`) instead of
+refusing blindly; launches and maintenance commands refuse (`selection_not_current`) until it settles.
+
 A kill during staging changes nothing selected and leaves no pending intent; the orphaned staged
 generation is kept for inspection, never swept or adopted. Every refusal is a finite
 `policy_activation_*`, `maintenance_*` or `candidate_*` reason; private paths and policy text are not
@@ -91,7 +99,9 @@ every crash point, concurrent and stale publication, revert targets, candidate f
 The manual `installed_focus: policy-activation` workflow mode runs
 `scripts/qualify-policy-activation.py` through the installed front door outside the checkout: useful
 read under the base, inert candidate and preview, open/never-enrolled and live-run refusals,
-tampered and stale candidates, a SIGKILL during staging, concurrent confirmation, observation of the
+tampered and stale candidates, a SIGKILL during staging, concurrent confirmation, an injected storage
+failure on the front-door state write of a revert (marker-new/state-old) refused for launches and settled by the public
+`recover`, observation of the
 actually selected policy, the same read newly denied with an independent `openat` witness of zero
 server reads, preserved hard Deny/Ask for write/reset/exfiltration, safe revert with disjoint run
 identities and complete owned cleanup. It does not replace TL-owned final Ready qualification.

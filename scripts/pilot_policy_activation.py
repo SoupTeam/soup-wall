@@ -453,8 +453,93 @@ def revert_target(ctx, front, journal, generation):
             'policy_sha256': selection['files']['policy']['sha256'], 'candidate_sha256': None}
 
 
+def split_view(args, front):
+    """Strictly read facts for a marker/state split; nothing is trusted beyond the journal's own hashes."""
+    sw = modules()['sw']
+    preparation = args.prefix / 'preparation'
+    journal = read_journal(preparation)
+    require(journal['pending'] is not None, 'selection_not_current')
+    _, marker_raw, marker = sw.marker(preparation)
+    return journal, marker, sha(marker_raw), sha(front.layout(args.prefix)['state'].read_bytes())
+
+
+def recovery_context(args, front, marker):
+    """Context for the generation the marker actually selects, while front-door state still names the old one.
+
+    This is the only place the marker/state agreement is not required; every other binding (clean source,
+    verified generation, installation, selected programs) is checked exactly as for an activation."""
+    mods = modules()
+    sw, pml = mods['sw'], mods['pml']
+    require(getattr(front, 'INSTALLED_HOME', None) is not None, 'installed_home_required')
+    home, prefix = Path(front.PROJECT_HOME), args.prefix
+    require(prefix.is_absolute() and args.state_root.is_absolute(), 'absolute_prefix_and_state_root_required')
+    require_supported_home(home, prefix)
+    state = front.read_state(prefix)
+    current = front.source()
+    require(state is not None and not current['dirty'] and current['commit'] == state['commit'], 'recovery_source_changed')
+    preparation = prefix / 'preparation'
+    sw.output_root(preparation)
+    selection_path = preparation / 'generations' / marker['generation'] / 'selection.json'
+    chosen = argparse.Namespace(selection=selection_path, expected_commit=state['commit'], ask_wait_seconds=0,
+                                timeout_seconds=180, port=0)
+    selection, paths, profiles = mods['runner'].selected(chosen)
+    require('linked_worktree' not in selection and 'filesystem_roots' not in selection, 'selection_scope_unsupported')
+    state_bound = {**state, 'selection': str(selection_path), 'selection_sha256': marker['selection_sha256']}
+    bound = pml.selected_binding(argparse.Namespace(agent_home=home, maintenance_home=None, state_root=args.state_root,
+                                                    maintenance_coordinator_root=None), state_bound, front.PREP, mods['runner'])
+    return {'home': home, 'prefix': prefix, 'preparation': preparation, 'state': state, 'selection': selection,
+            'selection_path': selection_path, 'paths': paths, 'profiles': profiles, 'marker': marker, 'bound': bound}
+
+
+def recover_operation(args, front):
+    """Public recovery: strict journal match first, then the same gate and run exclusion as a transition."""
+    sw = modules()['sw']
+    preparation = args.prefix / 'preparation'
+    journal = read_journal(preparation)
+    if journal['pending'] is None:
+        ctx = context(args, front)
+        return {**recover_pending(ctx, front, journal), 'active_protection': 'not-observed'}
+    pending = journal['pending']
+    try:
+        _, marker_raw, marker = sw.marker(preparation)
+    except (OSError, ValueError, KeyError, TypeError):
+        return {'status': 'conflicting_operator_edit', 'actual_generation': None, 'active_protection': 'not-observed'}
+    marker_sha, state_sha = sha(marker_raw), sha(front.layout(args.prefix)['state'].read_bytes())
+    if (marker_sha not in (pending['before_marker_sha256'], pending['after_marker_sha256'])
+            or state_sha not in (pending['before_state_sha256'], pending['after_state_sha256'])):
+        # An operator edit is never reconciled, and nothing is built or locked on its account.
+        return {'status': 'conflicting_operator_edit', 'actual_generation': marker['generation'],
+                'active_protection': 'not-observed'}
+    ctx = recovery_context(args, front, marker)
+    stack, _, view = observe(ctx, exclusive=True)
+    with stack:
+        found = blockers(view, empty_journal())
+        require(not found, found[0] if found else 'blocked')
+        require_idle(ctx)
+        return {**recover_pending(ctx, front, journal), 'active_protection': 'not-observed',
+                'session_authority_copied': False}
+
+
+def split_inspect(args, front):
+    journal, marker, marker_sha, state_sha = split_view(args, front)
+    pending = journal['pending']
+    return {'format': FORMAT, 'status': 'inspected', 'executed': False, 'active_protection': 'not-observed',
+            'state': 'split-pending-recovery', 'marker_generation': marker['generation'],
+            'matches_journal': marker_sha in (pending['before_marker_sha256'], pending['after_marker_sha256'])
+            and state_sha in (pending['before_state_sha256'], pending['after_state_sha256']),
+            'pending': record(pending, 'pending'),
+            'action': 'Run `policy-activation recover` for this prefix; launches stay refused until it settles.'}
+
+
 def operation(args, front):
-    ctx = context(args, front)
+    if args.action == 'recover':
+        return recover_operation(args, front)
+    try:
+        ctx = context(args, front)
+    except Exception as error:
+        if args.action == 'inspect' and str(error) == 'selection_not_current':
+            return split_inspect(args, front)
+        raise
     sw = modules()['sw']
     journal = read_journal(ctx['preparation'])
     applying = args.action in ('confirm',) or (args.action == 'revert' and args.confirm is not None)
@@ -462,8 +547,6 @@ def operation(args, front):
     with stack:
         if args.action == 'inspect':
             return inspect_report(ctx, view, journal)
-        if args.action == 'recover':
-            return recover_pending(ctx, front, journal)
         if args.action == 'revert':
             target = revert_target(ctx, front, journal, args.generation)
             plan = build_plan(ctx, view, journal, 'revert', {k: str(v) for k, v in target.items() if k != 'candidate_sha256'})
