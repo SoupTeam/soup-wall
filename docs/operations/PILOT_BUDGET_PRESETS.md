@@ -138,5 +138,6 @@ delegated systemd service: inert preview, two independent presets, refused bound
 undelegated root, stale/concurrent updates, damaged catalog, two simultaneously budgeted
 original-host reads, exact `memory.max`/`pids.max`/`cpu.max`/`memory.swap.max` on each live
 leaf, preset update during a run, stale-profile and unavailable-root zero-start refusals,
-replaced-root refusal and complete owned cleanup. It does not replace TL-owned final Ready
+replaced-root refusal, the unnamed `pilot run --budget-preset` path (exact live limits from the updated preset, and a
+stale-digest zero-start refusal) and complete owned cleanup. It does not replace TL-owned final Ready
 qualification and admission. Failed or incomplete attempts are retained, never rewritten.

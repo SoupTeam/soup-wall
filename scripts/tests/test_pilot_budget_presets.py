@@ -279,7 +279,7 @@ class Validation(unittest.TestCase):
     def test_unsupported_shapes_and_roots_refuse(self):
         for bad in (config(pidsMax=True), config(pidsMax='64'), config(pidsMax=64.0), config(root='/tmp/cgroup'),
                     config(root='/sys/fs/cgroup'), config(root='/sys/fs/cgroup/'), config(root='/sys/fs/cgroup/a/../b'),
-                    config(root='/sys/fs/cgroup/a//b'), config(root='/sys/fs/cgroup/a/'), config(root='/sys/fs/cgroup/Ã©'),
+                    config(root='/sys/fs/cgroup/a//b'), config(root='/sys/fs/cgroup/a/'), config(root='/sys/fs/cgroup/\u00e9'),
                     config(root='/sys/fs/cgroup/a\\b'), config(root='/sys/fs/cgroup/a b'),
                     dict(config(), extra=1), {k: v for k, v in config().items() if k != 'wallMillis'},
                     dict(config(), format='sw-mcp/linux-cgroup-budget/2'), []):

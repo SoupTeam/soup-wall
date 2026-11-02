@@ -18,7 +18,8 @@ import threading
 CASES = ('inert-preview', 'two-independent-presets', 'bounds-refused', 'unverified-delegation-refused',
          'stale-update-refused', 'concurrent-update', 'damaged-store', 'two-budgeted-reads',
          'controller-limit-witness', 'update-during-run', 'stale-profile-zero-start',
-         'unavailable-delegation-zero-start', 'root-replaced-refused', 'owned-cleanup')
+         'unavailable-delegation-zero-start', 'root-replaced-refused', 'unnamed-run-preset',
+         'unnamed-stale-zero-start', 'owned-cleanup')
 LIMITS = {'memoryMaxBytes': 536_870_912, 'pidsMax': 128, 'cpuQuotaMicros': 100_000, 'wallMillis': 120_000}
 
 
@@ -330,6 +331,42 @@ def qualify(args, door, home, env, report, first, installed, receiver):
         replaced = preset(['check', '--name', 'two', '--agentfw', args.agentfw], 2)
         require(replaced['reason'] == 'budget_preset_root_changed', 'budget_replaced_root_accepted')
         finish('root-replaced-refused')
+
+        # The unnamed installed run is a second launch path: it resolves and enforces the same preset.
+        begin('unnamed-run-preset')
+        useful = [('mcp__filesystem__read_text_file', {'path': '/workspace/README.md'}),
+                  ('mcp__git__git_show', {'repo_path': '/workspace', 'revision': 'HEAD'})]
+        current = preset(['check', '--name', 'one', '--agentfw', args.agentfw])
+        live = {}
+
+        def during_unnamed(model):
+            found = leaves(roots[0])
+            require(found, 'budget_unnamed_leaf_missing')
+            for leaf in found:
+                require((leaf / 'memory.max').read_text().strip() == str(LIMITS['memoryMaxBytes'])
+                        and (leaf / 'pids.max').read_text().strip() == '96'
+                        and (leaf / 'cpu.max').read_text().split() == [str(LIMITS['cpuQuotaMicros']), '100000'],
+                        'budget_unnamed_limits_not_exact')
+            live['leaves'] = len(found)
+
+        row, results, _ = guided.run_case(args, door, report, 'budget_unnamed', useful, after_useful=during_unnamed,
+                                          run_flags=['--budget-preset', 'one', '--budget-preset-digest', current['digest']])
+        require(live and row['exit'] == 0 and row['process_cleanup']['all_stopped'] and len(results) == 2
+                and all(not r['is_error'] for r in results.values()) and empty(roots[0]), 'budget_unnamed_run_not_enforced')
+        finish('unnamed-run-preset', leaves=live['leaves'], limits='pids.max=96 from the updated preset', useful_results=2)
+
+        begin('unnamed-stale-zero-start')
+        trace = args.output / 'budget-unnamed-stale.trace.private'
+        words = door.words('run', '--state-root', args.state_root, '--timeout-seconds', '120',
+                           '--budget-preset', 'one', '--budget-preset-digest', '0' * 64, inputs=False)
+        refused = subprocess.run([str(args.strace), '-f', '-qq', '-s', '256', '-e', 'trace=execve,connect', '-o', str(trace), *words],
+                                 cwd=door.cwd, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+        require(refused.returncode != 0, 'budget_unnamed_stale_run_started')
+        outcome = json.loads(refused.stdout.decode().splitlines()[-1])
+        require(outcome.get('executed') is not True and outcome.get('reason') == 'budget_preset_stale', 'budget_unnamed_wrong_refusal')
+        no_selected_start(trace)
+        require(empty(roots[0]), 'budget_unnamed_stale_left_state')
+        finish('unnamed-stale-zero-start', selected_started=0, network_connections=0)
 
         begin('owned-cleanup')
         cleanup = [w.finish() for w in witnesses]

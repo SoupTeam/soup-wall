@@ -50,7 +50,7 @@ Workflow `mcp-real-filesystem.yml`, manual dispatch with `installed_focus: budge
 `bounds-refused`, `unverified-delegation-refused`, `stale-update-refused`, `concurrent-update`,
 `damaged-store`, `two-budgeted-reads`, `controller-limit-witness`, `update-during-run`,
 `stale-profile-zero-start`, `unavailable-delegation-zero-start`, `root-replaced-refused`,
-`owned-cleanup`.
+`unnamed-run-preset`, `unnamed-stale-zero-start`, `owned-cleanup`.
 
 ### Attempt 1 (failed, kept)
 
