@@ -25,4 +25,8 @@ set -C
 python3 -B agent-command-help.py --pilot INSTALL/scripts/pilot.py --sha256 DIGEST completion --shell bash > NEW_COMPLETION_FILE
 ```
 
-Review the file, then source it explicitly in Bash, or place it in a user-selected shell completion directory. No automatic installation or dotfile edit occurs. Zsh requires `compinit`; Fish uses its `complete` builtin. Native shell parsing and the installed Rust binary remain pending qualification. Existing tests cover a synthetic installed Python parser, stale digest and attempted child execution; the accepted pilot parser was also queried locally.
+Review the file, then source it explicitly in Bash, or place it in a user-selected shell completion directory. No automatic installation or dotfile edit occurs. Zsh requires `compinit`; Fish uses its `complete` builtin. Rust catalogs register completion for `agentfw`; Python catalogs register for `pilot`.
+
+Qualification uses Bash 5.x, Zsh 5.9 and Fish 3.7.0 on Ubuntu 24.04. The two additional shells are extracted from hash-pinned Ubuntu packages into a temporary directory; no package setup scripts or dotfiles are changed. Other versions are not qualified. Run `bash scripts/qualify-command-shells.sh` with `AGENTFW_TEST_BINARY` set to the selected built binary. Required shells must be present, so their absence fails qualification rather than silently satisfying acceptance.
+
+The installed Python catalog is queried outside checkout and its generated completion is parsed by all three shells. The installed Rust tree is checked against actual nested help, lifecycle/edit/Ask arguments and missing-binding refusals. Discovery controls reject stale components, process launch, network lookup and file writes. These checks validate discovery and safe parser refusal; they do not claim that help lookup performs an edit, grants approval or exercises a provider.

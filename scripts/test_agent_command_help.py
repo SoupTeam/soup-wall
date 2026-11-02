@@ -37,6 +37,27 @@ class Controls(unittest.TestCase):
                              'preview_unless_confirm_then_lifecycle_mutation')
             self.assertIn('--expected-version', rows[('provider', 'update')]['confirmation_flags'])
             self.assertIn('--apply', rows[('provider', 'update')]['confirmation_flags'])
+            catalog = json.loads(result.stdout)
+            for name in ('bash', 'zsh', 'fish'):
+                shell = shutil.which(name)
+                if not shell or (sys.platform == 'win32' and name == 'bash'):
+                    continue
+                script = reader_completion(catalog, name, [])
+                if name == 'bash':
+                    script += '\nCOMP_WORDS=(pilot provider up); COMP_CWORD=2; _pilot_help_complete; printf "%s\\n" "${COMPREPLY[@]}"\n'
+                    options = ['--noprofile', '--norc']
+                elif name == 'zsh':
+                    script = 'compdef() { :; }; compadd() { print -l -- "$@"; };\n' + script
+                    script += '\nwords=(pilot provider up); CURRENT=3; _pilot_help_complete\n'
+                    options = ['-f']
+                else:
+                    script += "\ncomplete -C 'pilot provider up'\n"
+                    options = ['--no-config']
+                completed = subprocess.run([shell, *options], input=script, cwd=root,
+                                           capture_output=True, text=True, timeout=10)
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertIn('update', completed.stdout)
+                self.assertNotIn('PRIVATE_CANARY', completed.stdout)
             prefix = root / 'absent'
             for command in ([str(entry), 'provider', 'update', '--apply'],
                             [str(entry), 'run'],
@@ -144,6 +165,18 @@ class Controls(unittest.TestCase):
             entry.write_text("import subprocess\nsubprocess.run(['should-not-run'])\n")
             result = subprocess.run([sys.executable, '-B', str(TOOL), '--pilot', str(entry), '--sha256', hashlib.sha256(entry.read_bytes()).hexdigest(), 'list'], capture_output=True)
             self.assertEqual(result.returncode, 2)
+
+    def test_network_and_file_write_during_lookup_are_refused(self):
+        for code in ("import socket; socket.getaddrinfo('example.invalid', 443)",
+                     "open('marker', 'w').write('unexpected')"):
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as temp:
+                entry = Path(temp) / 'pilot.py'
+                entry.write_text(code)
+                result = subprocess.run([sys.executable, '-B', str(TOOL), '--pilot', str(entry),
+                                         '--sha256', hashlib.sha256(entry.read_bytes()).hexdigest(), 'list'],
+                                        cwd=temp, capture_output=True, timeout=10)
+                self.assertEqual(result.returncode, 2)
+                self.assertFalse((Path(temp) / 'marker').exists())
 
     def test_shell_completion_uses_command_context(self):
         data = {

@@ -273,6 +273,7 @@ def rust_catalog_snapshot(path, expected, snapshot):
         if status or len(raw) > 65536:
             raise ValueError('help reader failed or exceeded cap')
         flags, section = [], ''
+        usage = next((line for line in raw.decode('utf-8').splitlines() if line.startswith('Usage:')), '')
         for line in raw.decode('utf-8').splitlines():
             if line and not line[0].isspace():
                 section = line
@@ -282,7 +283,8 @@ def rust_catalog_snapshot(path, expected, snapshot):
                     pending.append(parts + [match[1]])
             elif section == 'Options:':
                 for flag in re.findall(r'(?<!\w)--?[a-zA-Z][a-zA-Z0-9-]*', re.split(r'\s{2,}', line.strip(), maxsplit=1)[0]):
-                    flags.append({'name': flag, 'required': False, 'takes_value': '<' in line, 'type': 'parser_help'})
+                    required = re.search(r'(?<!\S)' + re.escape(flag) + r'(?=\s|$)', usage) is not None
+                    flags.append({'name': flag, 'required': required, 'takes_value': '<' in line, 'type': 'parser_help'})
         rows.append({'command': parts, 'flags': flags, 'effects': effects(parts),
                      'confirmation_flags': [flag['name'] for flag in flags if flag['name'] in
                                             ('--apply', '--confirm', '--yes', '--approve', '--sha256', '--binding')]})
