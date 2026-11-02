@@ -282,6 +282,8 @@ struct Prepared {
     restrictions: Vec<u8>,
     report: Value,
     digest: String,
+    base_policy_sha256: String,
+    added_rules: usize,
 }
 impl Prepared {
     fn prepare(args: &Candidate, validating: bool) -> Result<Self> {
@@ -325,6 +327,7 @@ impl Prepared {
                 "parent_uid":meta.uid(),"parent_gid":meta.gid(),"parent_mode":meta.mode()})
         };
         let pins = current.pins();
+        let base_rules = current.policy.agent_policies.len();
         let old_scope = json!({"tools":current.profile.tools.iter().map(|(n,t)| json!({
             "name_sha256":sha(n.as_bytes()),"action_class":t.action_class})).collect::<Vec<_>>(),
             "destinations_sha256":current.policy.egress_allowlist.iter().map(|h|sha(h.as_bytes())).collect::<Vec<_>>()});
@@ -372,6 +375,11 @@ impl Prepared {
             restrictions: restriction_bytes,
             report,
             digest,
+            base_policy_sha256: pins["policy_sha256"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
+            added_rules: narrowed.agent_policies.len() - base_rules,
         })
     }
     fn recheck(&self) -> Result<()> {
@@ -461,8 +469,14 @@ fn run_inner(command: Command) -> Result<()> {
                 input.recheck()?;
             }
             prepared.recheck()?;
+            // Exact reconstruction from the bundle, current policy and constraints
+            // succeeded: the exported policy is the base rules unchanged, preceded by
+            // Deny-only additions. Activation consumes these facts, never the hash alone.
             json!({"format":FORMAT,"status":"validated_inert","active":false,"executed":false,
-                "candidate_sha256":prepared.digest})
+                "candidate_sha256":prepared.digest,"policy_sha256":sha(&prepared.policy),
+                "base_policy_sha256":prepared.base_policy_sha256,
+                "constraints_sha256":sha(&prepared.restrictions),
+                "added_rules":prepared.added_rules,"restricting_only":true})
         }
     };
     println!("{}", serde_json::to_string(&report)?);

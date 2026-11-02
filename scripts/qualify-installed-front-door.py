@@ -894,6 +894,14 @@ def qualify(args, report):
             require(report["source_after"] == before, "source_changed")
             return
 
+        if args.policy_activation_only:
+            load("policy_activation_qualification", "qualify-policy-activation.py").qualify(
+                args, door, agent_home, env, report, guided=QUAL, receiver=receiver, baseline=baseline,
+                selection=selection, load=load)
+            report["source_after"] = BASE.source()
+            require(report["source_after"] == before, "source_changed")
+            return
+
         if args.provider_ca_only:
             PROVIDER_CA_QUALIFICATION.qualify(
                 args, door, agent_home, env, report, provider_call=provider_call,
@@ -1086,6 +1094,8 @@ def main():
     parser.add_argument("--linked-worktrees-only", action="store_true", help="focused SOU-201 installed linked-worktree qualification")
     parser.add_argument("--filesystem-roots-only", action="store_true", help="focused SOU-202 installed filesystem-root qualification")
     parser.add_argument("--project-presets-only", action="store_true", help="focused installed named-project qualification")
+    parser.add_argument("--policy-activation-only", action="store_true",
+                        help="focused SOU-209 installed deny-only policy activation qualification")
     parser.add_argument("--provider-ca-only", action="store_true",
                         help="focused SOU-195 installed-host HTTPS CA and rotation qualification")
     for name in INPUT_NAMES:
@@ -1119,7 +1129,7 @@ def main():
         report["status"] = "passed"
     except Exception as error:
         detail = str(error)
-        report["error"] = (detail if not (args.provider_ca_only or args.maintenance_only) or
+        report["error"] = (detail if not (args.provider_ca_only or args.maintenance_only or args.policy_activation_only) or
                            re.fullmatch(r"[a-z0-9_:-]{1,160}", detail)
                            else "focused_qualification_failed")[:500]
     finally:

@@ -83,6 +83,10 @@ fn evaluator_diff_create_validate_and_duplicate_refusal_preserve_sources() {
     p.export(&p.digest).unwrap();
     let validated = Prepared::prepare(&f.args, true).unwrap();
     assert_eq!(validated.digest, p.digest);
+    // Activation consumes these reconstruction facts; a matching hash alone is never enough.
+    assert_eq!(validated.base_policy_sha256, sha(&before));
+    assert_eq!(sha(&validated.policy), sha(&p.policy));
+    assert!(validated.added_rules >= 1);
     assert_eq!(fs::read(f.args.out.join("policy.yaml")).unwrap(), p.policy);
     assert!(p.export(&p.digest).is_err());
     assert_eq!(fs::read(&f.args.selection.policy).unwrap(), before);
