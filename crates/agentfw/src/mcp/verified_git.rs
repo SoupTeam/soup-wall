@@ -8,6 +8,41 @@ use super::server_profile::ProfileConfig;
 use anyhow::{ensure, Context};
 use std::ops::Range;
 
+/// Fixed local diagnostic context. Never contains subprocess text or request data.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum FailureStage {
+    Request,
+    Prepare,
+    Spawn,
+    Exchange,
+    Cleanup,
+    Complete,
+    OwnerTask,
+}
+impl FailureStage {
+    pub(crate) fn code(self) -> &'static str {
+        match self {
+            Self::Request => "request",
+            Self::Prepare => "prepare",
+            Self::Spawn => "spawn",
+            Self::Exchange => "exchange",
+            Self::Cleanup => "cleanup",
+            Self::Complete => "complete",
+            Self::OwnerTask => "owner_task",
+        }
+    }
+}
+impl std::fmt::Display for FailureStage {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.code())
+    }
+}
+pub(crate) fn failure_stage(error: &anyhow::Error) -> &'static str {
+    error
+        .downcast_ref::<FailureStage>()
+        .map_or("unknown", |stage| stage.code())
+}
+
 /// Only separately qualified execution routes; selection remains operator opt-in.
 pub(crate) fn supports_profile(format: &str) -> bool {
     matches!(
@@ -351,11 +386,11 @@ mod linux {
         })
     }
     pub(super) async fn run(profile: &ProfileConfig, raw: &[u8]) -> anyhow::Result<Completion> {
-        let call = request(profile, raw)?;
+        let call = request(profile, raw).context(FailureStage::Request)?;
         let permit = ACTIVE
             .clone()
             .try_acquire_owned()
-            .context("verified Git active worker bound")?;
+            .context(FailureStage::Prepare)?;
         let deadline = Instant::now() + EXCHANGE;
         let profile = profile.clone();
         let original = raw.to_vec();
@@ -367,7 +402,7 @@ mod linux {
             let result = owned(&profile, &original, &call, deadline, &mut tx).await;
             let _ = tx.send(result);
         });
-        rx.await.context("verified Git owner task stopped")?
+        rx.await.context(FailureStage::OwnerTask)?
     }
     async fn owned(
         profile: &ProfileConfig,
@@ -377,23 +412,29 @@ mod linux {
         tx: &mut oneshot::Sender<anyhow::Result<Completion>>,
     ) -> anyhow::Result<Completion> {
         ensure!(!tx.is_closed(), "verified Git native caller cancelled");
-        let prepared = server_sandbox::prepare_verified_git(profile)?;
+        let prepared =
+            server_sandbox::prepare_verified_git(profile).context(FailureStage::Prepare)?;
         let snapshot = prepared
             .verified_git_snapshot()
-            .context("verified Git same snapshot missing")?;
-        snapshot.validate()?;
-        snapshot.validate_call(
-            call["params"]["name"]
-                .as_str()
-                .context("verified Git tool missing")?,
-            &call["params"]["arguments"],
-        )?;
-        ensure!(
-            Instant::now() < deadline,
-            "verified Git preparation exceeded exchange deadline"
-        );
+            .context(FailureStage::Prepare)?;
+        snapshot.validate().context(FailureStage::Prepare)?;
+        snapshot
+            .validate_call(
+                call["params"]["name"]
+                    .as_str()
+                    .context("verified Git tool missing")?,
+                &call["params"]["arguments"],
+            )
+            .context(FailureStage::Prepare)?;
+        if Instant::now() >= deadline {
+            return Err(
+                anyhow::anyhow!("verified Git preparation exceeded exchange deadline")
+                    .context(FailureStage::Prepare),
+            );
+        }
         ensure!(!tx.is_closed(), "verified Git native caller cancelled");
-        let (mut process, mut budget, mut owner, pid) = prepared.spawn().await?;
+        let (mut process, mut budget, mut owner, pid) =
+            prepared.spawn().await.context(FailureStage::Spawn)?;
         let mut stderr_task = None;
         let operation = async {
             if let Some(budget) = budget.as_mut() {
@@ -460,21 +501,38 @@ mod linux {
         } else {
             Err(anyhow::anyhow!("verified Git stderr drain missing"))
         };
-        let (reply, raw) = result?;
-        quiesce?;
-        budget_check?;
-        budget_cleanup?;
-        owner_cleanup?;
-        child_cleanup?;
-        stderr_cleanup?;
-        ensure!(
-            Instant::now() <= deadline,
-            "verified Git completed after exchange deadline"
-        );
-        completed_owned_output(profile, call, reply, raw, snapshot)
+        let (reply, raw) = result.context(FailureStage::Exchange)?;
+        quiesce.context(FailureStage::Cleanup)?;
+        budget_check.context(FailureStage::Cleanup)?;
+        budget_cleanup.context(FailureStage::Cleanup)?;
+        owner_cleanup.context(FailureStage::Cleanup)?;
+        child_cleanup.context(FailureStage::Cleanup)?;
+        stderr_cleanup.context(FailureStage::Cleanup)?;
+        if Instant::now() > deadline {
+            return Err(
+                anyhow::anyhow!("verified Git completed after exchange deadline")
+                    .context(FailureStage::Complete),
+            );
+        }
+        completed_owned_output(profile, call, reply, raw, snapshot).context(FailureStage::Complete)
     }
     #[cfg(test)]
     mod tests {
         include!("verified_git_tests.rs");
+    }
+}
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::*;
+
+    #[test]
+    fn diagnostics_export_only_typed_fixed_stage() {
+        let raw = anyhow::anyhow!("private payload and credential");
+        assert_eq!(failure_stage(&raw), "unknown");
+        let wrapped = raw
+            .context(FailureStage::Spawn)
+            .context("private outer detail");
+        assert_eq!(failure_stage(&wrapped), "spawn");
     }
 }

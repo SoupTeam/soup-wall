@@ -1,5 +1,15 @@
 # SOU-157: Draft filesystem separator correction
 
+## Failed mapped qualification and diagnostic correction (2026-11-02)
+
+Independent review [5732860830](https://github.com/SoupTeam/soup-wall/pull/280#pullrequestreview-5732860830) rejected runtime qualification at product source `874526b591399765ab6f102be6ed70745dbccba3`. Run `41398481028` reached g01-a with exact 557-byte original text equality, then private execution failed before a completed receipt. Its artifact `13120452036` was downloaded and independently checked against ZIP SHA-256 `01cbc89401c7a6a4b35e7863533e3f12bb2489ad031a0c7af6276377e8895139`, six unique members and valid CRCs. The retained finite diagnostic identifies `original_execution_failed`, and the old mode record was lost. The seven later cases were unexecuted.
+
+TL's observer-only run `41399634618` identifies HTTP 409 / `native_git_execution_incomplete`. Its artifact `13120903766` and ZIP SHA-256 `402101666f7ac49732e3ffb162be5068bcf1d872a949c0f0994fbe419e81a084` are reported by the independent review. Local download initially failed at artifact-host DNS resolution. The earlier Python 3.10 harness failure `41397503366` is separately attributed to TL's pre-runtime harness.
+
+The consumer now allocates and saves each mode record before execution and retains it in a finally path. A failing mode retains bounded HTTP status/stage/finite codes and the actual cleanup witness. A regression simulates HTTP 409 followed by cleanup and checks the saved failed record, with no fabricated release/completion. Unknown exception details are excluded from retained evidence.
+
+The private Git implementation attaches typed fixed diagnostic context for request, prepare, spawn, exchange, cleanup, complete and owner-task failures. Native audit receives the fixed stage on execution failure. The public refusal continues to use the existing incomplete-execution code. Consumer evidence retains at most eight audited failure stages. The next TL-owned affected qualification can identify which stage fails for g01-a, with the existing five-second deadline and original case/profile/policy. The current evidence establishes no deeper root cause, and all ten original false refusals remain open. Review the diagnostic increment before that run.
+
 ## Mapped Git native consumer (review pending, 2026-11-01)
 
 Preparation review [5728714826](https://github.com/SoupTeam/soup-wall/pull/280#pullrequestreview-5728714826) independently reproduced all eight commit OIDs on Linux and requested the bounded consumer. The existing `verify-sou109-original-git.py` now has an explicit `--sou157-mapped` mode. It selects only this consumer, not the historical synthetic matrix or the filesystem matrix. Existing default behavior is unchanged.

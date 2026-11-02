@@ -17,6 +17,24 @@ import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
+HTTP_CODES = frozenset(('native_git_execution_incomplete', 'native_git_execution_binding',
+    'native_call_unknown_or_spent', 'native_liveness_owner_mismatch', 'native_session_unknown',
+    'native_liveness_expired', 'native_git_execution_profile_changed', 'native_audit_unavailable'))
+
+
+def retain_mode(row, mode, save, operation):
+    record = {'status': 'incomplete', 'mode': mode, 'stage': 'setup', 'http_outcomes': []}
+    row['controls'][mode] = record
+    save()
+    try:
+        operation(record)
+    except Exception as error:
+        record['status'] = 'failed'
+        record['finite_code'] = ('original_execution_failed' if isinstance(error, ValueError)
+                                 and error.args == ('original_execution_failed',) else 'qualification_failed')
+        raise
+    finally:
+        save()
 
 
 def load(name, filename):
@@ -171,10 +189,9 @@ def main(args):
             profile_path.write_bytes(canonical(selected))
             row['selected_profile_sha256'] = sha(profile_path.read_bytes())
             for mode in ('allow', 'ask', 'deny', 'expired') if case['label'] == 'benign' else ('allow',):
-                result = run_daemon(binary, root / mode, repo, selected, profile_path, registry,
-                                    policy, original, original_frame, case, mode, env, witness.DaemonProcessWitness)
-                row['controls'][mode] = result
-                save()
+                retain_mode(row, mode, save, lambda record: run_daemon(
+                    binary, root / mode, repo, selected, profile_path, registry,
+                    policy, original, original_frame, case, mode, env, witness.DaemonProcessWitness, record))
             require(base.snapshot(repo) == before, 'qualification_changed_source')
             row['source_unchanged'] = True
             row['status'] = 'mapped_delivery_controls_passed'
@@ -197,7 +214,7 @@ def main(args):
         save()
 
 
-def run_daemon(binary, root, repo, profile, profile_path, registry, policy, original, original_frame, case, mode, env, witness_type):
+def run_daemon(binary, root, repo, profile, profile_path, registry, policy, original, original_frame, case, mode, env, witness_type, result):
     root.mkdir(mode=0o700)
     env = dict(env, HOME=str(root), USERPROFILE=str(root))
     subprocess.run([str(binary), 'install'], env=env, capture_output=True, check=True, timeout=30)
@@ -232,11 +249,16 @@ def run_daemon(binary, root, repo, profile, profile_path, registry, policy, orig
         with response:
             raw = response.read(1048577)
             require(len(raw) <= 1048576, 'reply_over_cap')
-            return response.code, json.loads(raw)
+            value = json.loads(raw)
+            if len(result['http_outcomes']) < 32:
+                code = value.get('error_code')
+                result['http_outcomes'].append({'http_status': response.code, 'stage': result['stage'],
+                    'finite_code': code if code in HTTP_CODES else ('unclassified_refusal' if response.code != 200 else 'response_received')})
+            return response.code, value
     def event(kind, **fields):
         return http('/native/v1', {'contract_version': 'sw-native/1', 'registry_sha256': rsha,
                                  'session_id': 'sou157', 'event': kind, **fields})
-    result = {'status': 'incomplete', 'mode': mode}
+    result['stage'] = 'daemon_start'
     with (root / 'daemon.private.log').open('xb') as log:
         process = subprocess.Popen([str(binary), 'serve'], env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log)
         witness = witness_type(process.pid)
@@ -288,8 +310,10 @@ def run_daemon(binary, root, repo, profile, profile_path, registry, policy, orig
                 require(admitted.get('release') is True, 'read_not_admitted')
                 body = {'contract_version': 'sw-native-git-execute/1', 'registry_sha256': rsha, 'session_id': 'sou157',
                         'call_id': admitted['call_id'], 'binding_sha256': admitted['binding_sha256']}
+                result['stage'] = 'original_execution'
                 code, value = http('/native/git-execute/v1', body)
                 require(code == 200, 'original_execution_failed')
+                result['stage'] = 'execution_controls'
                 result['execution'] = validate_reply(value, admitted, profile, 10, original, case['label'] == 'benign')
                 require(value['receipt'].get('content_sha256') == sha(original_frame), 'actual_original_frame_mismatch')
                 result['actual_original_frame_matches_reference'] = True
@@ -342,6 +366,7 @@ def run_daemon(binary, root, repo, profile, profile_path, registry, policy, orig
                 require(not any(r.get('event') == 'native_git_execution_reserved' for r in rows), 'refused_control_executed')
             return result
         finally:
+            result['cleanup_started'] = True
             process.terminate()
             forced = False
             try:
@@ -351,6 +376,19 @@ def run_daemon(binary, root, repo, profile, profile_path, registry, policy, orig
                 process.wait(timeout=5)
                 forced = True
             result['cleanup'] = witness.finish()
+            audit_path = root / 'audit.jsonl'
+            if audit_path.exists():
+                try:
+                    diagnostics = []
+                    for line in audit_path.read_text().splitlines():
+                        item = json.loads(line)
+                        if item.get('event') == 'native_git_execution_stage_failed' and len(diagnostics) < 8:
+                            stage = item.get('stage')
+                            diagnostics.append(stage if stage in ('request', 'prepare', 'spawn', 'exchange',
+                                'cleanup', 'complete', 'owner_task', 'unknown') else 'unknown')
+                    result['native_failure_stages'] = diagnostics
+                except (OSError, ValueError):
+                    result['audit_read_status'] = 'unavailable'
             require(not forced and result['cleanup']['all_stopped'], 'owned_cleanup_incomplete')
             if mode == 'allow' and result['status'] == 'passed':
                 require(any(r.get('original_git_server') for r in result['cleanup']['observed']),
