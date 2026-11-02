@@ -1,88 +1,60 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
-
-EXPECTED_RUSTC="1.94.1"
-NODE_VERSION="v22.22.0"
-NODE_TAR="node-${NODE_VERSION}-linux-x64.tar.xz"
-NODE_URL="https://nodejs.org/dist/${NODE_VERSION}/${NODE_TAR}"
-NODE_SHA256="9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37"
-
-KIT_NAME="soup-wall-linux-amd64"
-TARGET_DIR="$(pwd)/target/${KIT_NAME}"
-MANIFEST_FILE="${TARGET_DIR}/manifest.json"
-
-CURRENT_RUSTC=$(rustc --version | awk '{print $2}')
-if [[ "$CURRENT_RUSTC" != "$EXPECTED_RUSTC" ]]; then
-    echo "CRITICAL: Compiler identity drift. Expected $EXPECTED_RUSTC, got $CURRENT_RUSTC"
-    exit 1
-fi
-
-rm -rf "$TARGET_DIR"
-mkdir -p "$TARGET_DIR/bin" "$TARGET_DIR/assets" "$TARGET_DIR/scripts" "$TARGET_DIR/profiles/mcp" "$TARGET_DIR/npm-cache"
-
-cargo build --release --locked --workspace
-
-for binary in agentfw llm-firewall soup-wall-bench; do
-    if [ ! -x "target/release/${binary}" ]; then
-        echo "CRITICAL: Required executable ${binary} is missing!"
-        exit 1
-    fi
-    cp "target/release/${binary}" "$TARGET_DIR/bin/"
+umask 077
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+[[ "$(uname -s)-$(uname -m)" == Linux-x86_64 ]] || { echo 'Linux x86-64 required' >&2; exit 1; }
+# Matches the accepted native pilot build entry point, independently of rustup defaults.
+export RUSTUP_TOOLCHAIN=1.94.1 RUSTUP_AUTO_INSTALL=0
+[[ "$(rustc --version)" == 'rustc 1.94.1 '* ]] || { echo 'Exact native Rust 1.94.1 required' >&2; exit 1; }
+[[ -z "$(git status --porcelain --untracked-files=all)" ]] || { echo 'Clean committed source required' >&2; exit 1; }
+: "${CANDIDATE_BWRAP:?Supply the reviewed bubblewrap 0.13.1 binary}"
+: "${CANDIDATE_BWRAP_SHA256:?Supply its independently recorded SHA-256}"
+echo "$CANDIDATE_BWRAP_SHA256  $CANDIDATE_BWRAP" | sha256sum --check --status
+[[ "$("$CANDIDATE_BWRAP" --version)" == 'bubblewrap 0.13.1' ]] || exit 1
+"$CANDIDATE_BWRAP" --help | grep -q -- --ro-bind-fd
+NODE_TAR=node-v22.22.0-linux-x64.tar.xz
+TARGET_DIR="$ROOT/target/soup-wall-linux-amd64"
+[[ ! -e "$TARGET_DIR" && ! -e "$TARGET_DIR.tar.gz" ]] || { echo 'Candidate output already exists; retain it and choose a fresh checkout' >&2; exit 1; }
+mkdir -p "$TARGET_DIR/bin" "$TARGET_DIR/assets" "$TARGET_DIR/scripts" "$TARGET_DIR/profiles/mcp" "$TARGET_DIR/npm-cache" "$TARGET_DIR/upstream-notices"
+# One affected binary, no all-platform matrix or release publication.
+cargo build --locked -p agentfw --bin agentfw
+cp target/debug/agentfw "$TARGET_DIR/bin/"
+cp "$CANDIDATE_BWRAP" "$TARGET_DIR/bin/bwrap"
+"$TARGET_DIR/bin/agentfw" classifier-package build --classifier rev2 --source "$ROOT" --out "$TARGET_DIR/assets/baseline.classifier"
+while IFS= read -r -d '' path; do
+    mkdir -p "$TARGET_DIR/$(dirname "$path")"
+    cp "$path" "$TARGET_DIR/$path"
+done < <(git ls-files -z rule_baseline)
+for file in install-sou62-filesystem-profile.py pilot_provider.py pilot_filesystem_roots.py; do
+    cp "scripts/$file" "$TARGET_DIR/scripts/"
 done
-
-"$TARGET_DIR/bin/agentfw" classifier-package build --classifier rev2 --source . --out "$TARGET_DIR/assets/baseline.classifier"
-cp -R rule_baseline "$TARGET_DIR/rule_baseline"
-
-curl -sL -o "$TARGET_DIR/$NODE_TAR" "$NODE_URL"
-if ! echo "$NODE_SHA256  $TARGET_DIR/$NODE_TAR" | sha256sum -c -; then
-    echo "CRITICAL: Node archive digest mismatch"
-    exit 1
-fi
-
-BWRAP_SRC="${SOU111_BWRAP:-$(which bwrap)}"
-if [ ! -f "$BWRAP_SRC" ]; then
-    echo "CRITICAL: bwrap not found at $BWRAP_SRC"
-    exit 1
-fi
-cp "$BWRAP_SRC" "$TARGET_DIR/bin/bwrap"
-
-cp scripts/install-sou62-filesystem-profile.py "$TARGET_DIR/scripts/"
-cp -r scripts/pilot_provider* "$TARGET_DIR/scripts/" 2>/dev/null || true
 cp -R profiles/mcp/filesystem-readonly-v1 "$TARGET_DIR/profiles/mcp/"
-cp LICENSE NOTICE README.md "$TARGET_DIR/" 2>/dev/null || true
-
-echo "=> Populating NPM cache (strictly isolated from source tree)..."
-tar -xf "$TARGET_DIR/$NODE_TAR" -C target
-export PATH="$(pwd)/target/node-${NODE_VERSION}-linux-x64/bin:$PATH"
-
-# Use explicit absolute path for the cache to fix the directory traversal mismatch
-(cd "$TARGET_DIR/profiles/mcp/filesystem-readonly-v1" && npm ci --cache "$TARGET_DIR/npm-cache" --prefer-offline && rm -rf node_modules)
-
-SOURCE_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
-CARGO_LOCK_HASH=$(sha256sum Cargo.lock | awk '{print $1}')
-
-cat <<EOF > "$MANIFEST_FILE"
-{
-  "schema_version": 2,
-  "identities": {
-    "compiler": "rustc ${CURRENT_RUSTC}",
-    "source_commit": "${SOURCE_COMMIT}",
-    "cargo_lock_sha256": "${CARGO_LOCK_HASH}"
-  },
-  "files": {
-EOF
-
-find "$TARGET_DIR" -type f ! -name "manifest.json" | sort | while read -r filepath; do
-    rel_path="${filepath#$TARGET_DIR/}"
-    hash_val=$(sha256sum "$filepath" | awk '{print $1}')
-    echo "    \"$rel_path\": \"$hash_val\"," >> "$MANIFEST_FILE"
-done
-
-sed -i '$ s/,$//' "$MANIFEST_FILE"
-cat <<EOF >> "$MANIFEST_FILE"
-  }
-}
-EOF
-
-tar -czf "target/${KIT_NAME}.tar.gz" -C target "${KIT_NAME}"
+cp Cargo.lock rust-toolchain.toml LICENSE NOTICE "$TARGET_DIR/"
+if [[ -n "${CANDIDATE_NODE_ARCHIVE:-}" ]]; then
+    cp "$CANDIDATE_NODE_ARCHIVE" "$TARGET_DIR/$NODE_TAR"
+else
+    curl --fail --location --max-time 300 "https://nodejs.org/dist/v22.22.0/$NODE_TAR" --output "$TARGET_DIR/$NODE_TAR"
+fi
+echo "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37  $TARGET_DIR/$NODE_TAR" | sha256sum --check --status
+# Retain the exact redistributed sandbox license from the pinned source archive.
+if [[ -n "${CANDIDATE_BWRAP_ARCHIVE:-}" ]]; then
+    cp "$CANDIDATE_BWRAP_ARCHIVE" "$TARGET_DIR/assets/bubblewrap-0.13.1.tar.xz"
+else
+    curl --fail --location --max-time 120 https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz --output "$TARGET_DIR/assets/bubblewrap-0.13.1.tar.xz"
+fi
+echo "0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d  $TARGET_DIR/assets/bubblewrap-0.13.1.tar.xz" | sha256sum --check --status
+tar -xOf "$TARGET_DIR/assets/bubblewrap-0.13.1.tar.xz" bubblewrap-0.13.1/COPYING > "$TARGET_DIR/upstream-notices/bubblewrap-COPYING"
+NODE_STAGE=$(mktemp -d -t candidate-node-XXXXXX)
+trap 'rm -rf "$NODE_STAGE"' EXIT
+tar -xf "$TARGET_DIR/$NODE_TAR" -C "$NODE_STAGE"
+export PATH="$NODE_STAGE/node-v22.22.0-linux-x64/bin:$PATH"
+# npm lifecycle scripts and mutable registry audit are never run here.
+(cd "$TARGET_DIR/profiles/mcp/filesystem-readonly-v1" && npm ci --ignore-scripts --no-audit --no-fund --cache "$TARGET_DIR/npm-cache")
+# Include transitive notices with the exact lock graph before removing installed packages.
+python3 scripts/candidate_manifest.py "$TARGET_DIR"
+rm -rf "$TARGET_DIR/profiles/mcp/filesystem-readonly-v1/node_modules"
+python3 scripts/candidate_manifest.py "$TARGET_DIR" --finalize
+tar -czf "$TARGET_DIR.tar.gz" -C "$ROOT/target" soup-wall-linux-amd64
+sha256sum "$TARGET_DIR.tar.gz"
