@@ -105,10 +105,25 @@ def prepare_repositories(output, git, expected_git_sha):
         pair = next(p for p in GEN.corpus.PAIRS if p['id'] == case['pair_id'])
         repo = output / case['case_id']
         GEN.git_repository(SimpleNamespace(git=str(git)), pair, pair[case['label']], 0, repo, env)
+        # The original construction writes core.autocrlf=false for deterministic
+        # commits. The default read-only profile rejects that persistent key.
+        # Remove only this known setup value in our newly owned fixture, before
+        # reference execution and protected snapshots. Commit objects are retained.
+        configuration = repo / '.git/config'
+        configuration_before = configuration.read_bytes()
+        autocrlf = subprocess.check_output([str(git), '-C', str(repo), 'config', '--local',
+                                            '--get-all', 'core.autocrlf'], env=env, timeout=15)
+        require(autocrlf == b'false\n', 'unexpected_fixture_autocrlf')
+        subprocess.run([str(git), '-C', str(repo), 'config', '--local', '--unset-all', 'core.autocrlf'],
+                       env=env, check=True, capture_output=True, timeout=15)
         head = subprocess.check_output([str(git), '-C', str(repo), 'rev-parse', 'HEAD'],
                                        env=env, timeout=15).decode().strip()
         expected = (ROOT / 'eval/sou123/payloads' / (case['case_id'] + '.txt')).read_bytes()
         row = mapped_case(case)
+        row['configuration_normalization'] = {
+            'scope': 'new_owned_fixture_before_reference_and_capture',
+            'removed_key': 'core.autocrlf', 'removed_value': 'false',
+            'before_sha256': sha(configuration_before), 'after_sha256': sha(configuration.read_bytes())}
         row.update(repository=str(repo.resolve()), commit=head,
                    commit_matches_frozen_header=expected.startswith(f'commit {head}\n'.encode()))
         # Retain mismatches instead of rewriting commit headers or payloads.

@@ -379,7 +379,8 @@ pub(crate) async fn handler(
                     .write_native(&json!({
                         "event":"native_git_execution_stage_failed",
                         "call_id":input.call_id,
-                        "stage":crate::mcp::verified_git::failure_stage(&error)
+                        "stage":crate::mcp::verified_git::failure_stage(&error),
+                        "reason":crate::mcp::verified_git::failure_reason(&error)
                     }))
                     .is_err()
                 {

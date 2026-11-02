@@ -380,13 +380,19 @@ def run_daemon(binary, root, repo, profile, profile_path, registry, policy, orig
             if audit_path.exists():
                 try:
                     diagnostics = []
+                    reasons = []
                     for line in audit_path.read_text().splitlines():
                         item = json.loads(line)
                         if item.get('event') == 'native_git_execution_stage_failed' and len(diagnostics) < 8:
                             stage = item.get('stage')
                             diagnostics.append(stage if stage in ('request', 'prepare', 'spawn', 'exchange',
                                 'cleanup', 'complete', 'owner_task', 'unknown') else 'unknown')
+                            reason = item.get('reason')
+                            reasons.append(reason if reason in ('profile_validation', 'repository_configuration',
+                                'snapshot_missing', 'snapshot_capture', 'snapshot_validation', 'call_validation',
+                                'preparation_deadline') else 'unknown')
                     result['native_failure_stages'] = diagnostics
+                    result['native_failure_reasons'] = reasons
                 except (OSError, ValueError):
                     result['audit_read_status'] = 'unavailable'
             require(not forced and result['cleanup']['all_stopped'], 'owned_cleanup_incomplete')

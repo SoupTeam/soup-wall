@@ -1,5 +1,15 @@
 # SOU-157: Draft filesystem separator correction
 
+## Preparation configuration blocker (2026-11-02)
+
+Review [5735396547](https://github.com/SoupTeam/soup-wall/pull/280#pullrequestreview-5735396547) identifies `prepare` as the failing stage at product source `a1f2a9f5b1316c5dec8429178b3f046d5f9ccd86`. Run `41429277748`, artifact `13133229099`, ZIP SHA-256 `a5bbe02f59c45799ba1ef24e11a84833b4373837f65116348cc868be17fe10ec` were downloaded and checked locally for digest, six unique members and CRCs. g01-a retains exact 557-byte reference equality, HTTP 409 and `native_failure_stages=[prepare]`. The cleanup witness has zero descendants and zero remaining processes. Seven subsequent cases are unexecuted.
+
+Source inspection and focused reproduction found a deterministic preparation blocker. `generate_corpus.git_repository` persists `core.autocrlf=false`. The default Git profile's `validate_configuration` rejects that key, and `prepare_linux_command_inner` invokes repository validation before snapshot capture and worker spawn. The Rust regression exercises this configuration through both the configuration validator and the actual repository validator. The rejected repository receives the fixed local reason `repository_configuration`; the bounded configuration succeeds after that setup key is removed.
+
+The mapped fixture preparer removes precisely the generator's known `core.autocrlf=false` entry from each newly owned repository before reference execution and protected snapshots. It first requires the exact expected setup value, retains before/after configuration hashes and records the normalization scope. All eight original commit OIDs still match the frozen headers. The original generator continues to construct its historical fixtures. Protected runtime validation continues to reject this unsupported key.
+
+Private diagnostics additionally distinguish profile validation, snapshot capture/presence/validation, call validation and preparation deadline. Reports retain only the finite reason vocabulary alongside the existing stage. The normalization fixes a reproduced fixture/profile mismatch. Actual protected delivery and possible later-stage failures require the next reviewed affected Linux qualification. The original ten refusals remain measured, with the six residual cases retained as known limits under the current contract.
+
 ## Failed mapped qualification and diagnostic correction (2026-11-02)
 
 Independent review [5732860830](https://github.com/SoupTeam/soup-wall/pull/280#pullrequestreview-5732860830) rejected runtime qualification at product source `874526b591399765ab6f102be6ed70745dbccba3`. Run `41398481028` reached g01-a with exact 557-byte original text equality, then private execution failed before a completed receipt. Its artifact `13120452036` was downloaded and independently checked against ZIP SHA-256 `01cbc89401c7a6a4b35e7863533e3f12bb2489ad031a0c7af6276377e8895139`, six unique members and valid CRCs. The retained finite diagnostic identifies `original_execution_failed`, and the old mode record was lost. The seven later cases were unexecuted.

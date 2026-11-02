@@ -43,6 +43,40 @@ pub(crate) fn failure_stage(error: &anyhow::Error) -> &'static str {
         .map_or("unknown", |stage| stage.code())
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum PreparationReason {
+    Profile,
+    RepositoryConfiguration,
+    SnapshotMissing,
+    SnapshotCapture,
+    SnapshotValidation,
+    CallValidation,
+    Deadline,
+}
+impl PreparationReason {
+    fn code(self) -> &'static str {
+        match self {
+            Self::Profile => "profile_validation",
+            Self::RepositoryConfiguration => "repository_configuration",
+            Self::SnapshotMissing => "snapshot_missing",
+            Self::SnapshotCapture => "snapshot_capture",
+            Self::SnapshotValidation => "snapshot_validation",
+            Self::CallValidation => "call_validation",
+            Self::Deadline => "preparation_deadline",
+        }
+    }
+}
+impl std::fmt::Display for PreparationReason {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.code())
+    }
+}
+pub(crate) fn failure_reason(error: &anyhow::Error) -> &'static str {
+    error
+        .downcast_ref::<PreparationReason>()
+        .map_or("unknown", |reason| reason.code())
+}
+
 /// Only separately qualified execution routes; selection remains operator opt-in.
 pub(crate) fn supports_profile(format: &str) -> bool {
     matches!(
@@ -416,8 +450,12 @@ mod linux {
             server_sandbox::prepare_verified_git(profile).context(FailureStage::Prepare)?;
         let snapshot = prepared
             .verified_git_snapshot()
+            .context(PreparationReason::SnapshotMissing)
             .context(FailureStage::Prepare)?;
-        snapshot.validate().context(FailureStage::Prepare)?;
+        snapshot
+            .validate()
+            .context(PreparationReason::SnapshotValidation)
+            .context(FailureStage::Prepare)?;
         snapshot
             .validate_call(
                 call["params"]["name"]
@@ -425,10 +463,12 @@ mod linux {
                     .context("verified Git tool missing")?,
                 &call["params"]["arguments"],
             )
+            .context(PreparationReason::CallValidation)
             .context(FailureStage::Prepare)?;
         if Instant::now() >= deadline {
             return Err(
                 anyhow::anyhow!("verified Git preparation exceeded exchange deadline")
+                    .context(PreparationReason::Deadline)
                     .context(FailureStage::Prepare),
             );
         }
@@ -534,5 +574,11 @@ mod diagnostic_tests {
             .context(FailureStage::Spawn)
             .context("private outer detail");
         assert_eq!(failure_stage(&wrapped), "spawn");
+        let reason = anyhow::anyhow!("private repository path")
+            .context(PreparationReason::RepositoryConfiguration)
+            .context(FailureStage::Prepare);
+        assert_eq!(failure_stage(&reason), "prepare");
+        assert_eq!(failure_reason(&reason), "repository_configuration");
+        assert_eq!(failure_reason(&wrapped), "unknown");
     }
 }

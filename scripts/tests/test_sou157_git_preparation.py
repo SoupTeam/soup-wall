@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -46,6 +47,15 @@ class MappedGitPreparation(unittest.TestCase):
             self.assertEqual(report['frozen_false_refusals'], 10)
             self.assertTrue(all(r['commit_matches_frozen_header'] for r in report['cases']),
                             json.dumps(report['cases']))
+            for case in report['cases']:
+                normalization = case['configuration_normalization']
+                self.assertEqual(normalization['removed_key'], 'core.autocrlf')
+                self.assertEqual(normalization['removed_value'], 'false')
+                self.assertNotEqual(normalization['before_sha256'], normalization['after_sha256'])
+                value = subprocess.run([str(git), '-C', case['repository'], 'config', '--local',
+                    '--get-all', 'core.autocrlf'], capture_output=True, timeout=15)
+                self.assertEqual(value.returncode, 1)
+                self.assertEqual(value.stdout, b'')
             marker = out / 'keep.txt'
             marker.write_bytes(b'existing data')
             with self.assertRaises(FileExistsError):

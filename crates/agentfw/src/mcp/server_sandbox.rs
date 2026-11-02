@@ -223,7 +223,8 @@ pub(crate) fn prepare_verified_git(
         "verified execution requires a supported Git profile"
     );
     // Validate constructed configs as strictly as operator file configs.
-    ProfileConfig::read(&serde_json::to_vec(profile)?)?;
+    ProfileConfig::read(&serde_json::to_vec(profile)?)
+        .context(super::verified_git::PreparationReason::Profile)?;
     anyhow::ensure!(
         std::env::var_os(crate::pilot_budget::BINDING_ENV).is_none(),
         "verified Git requires an explicit prepared pilot budget API; ambient binding unsupported"
@@ -871,7 +872,8 @@ fn prepare_linux_command_inner(
             super::server_profile::git::object_witness::Snapshot::capture(
                 &workspace_pin,
                 &profile.format,
-            )?,
+            )
+            .context(super::verified_git::PreparationReason::SnapshotCapture)?,
         )
     } else {
         None
