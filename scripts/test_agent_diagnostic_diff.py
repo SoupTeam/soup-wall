@@ -66,51 +66,33 @@ class Controls(unittest.TestCase):
             with self.assertRaises(ValueError):
                 tool.parse(raw)
 
-    def test_allowlisted_runtime_identity_and_missing_scope_are_projected(self):
-        with tempfile.TemporaryDirectory() as temp:
-            a, b = Path(temp) / 'a', Path(temp) / 'b'
-            self.bundle(a)
-            self.bundle(b, 'pass')
-            for root, component in ((a, 'source-a'), (b, 'source-b')):
-                report = json.loads((root / 'report.json').read_text())
-                report.update({
-                    'source': {'component': component, 'version': '1.2.3'},
-                    'runtime': {'profile': 'safe', 'daemon': 'available'},
-                    'provider': {'transport': 'stdio'},
-                    'storage': {'cleanup': 'verified'},
-                    'failures': [{'code': 'timeout', 'phase': 'admission'}],
-                })
-                raw = json.dumps(report).encode()
-                (root / 'report.json').write_bytes(raw)
-                (root / 'manifest.json').write_text(json.dumps({
-                    'schema': 'sw-agent-doctor-support/1',
-                    'report_schema': 'sw-agent-doctor/1',
-                    'files': [{'name': 'report.json', 'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw)}],
-                }))
-            with patch.object(tool.audit, '_open_input', lambda p: open(p, 'rb')):
-                result = tool.compare(tool.load(a), tool.load(b))
-            names = {row['field'] for row in result['rows']}
-            self.assertIn('source.component', names)
-            self.assertIn('runtime.daemon', names)
-            self.assertIn('provider.transport', names)
-            self.assertIn('storage.cleanup', names)
-            self.assertIn('failures.1.code', names)
-            self.assertIn('current_source', result['unavailable'])
+    def test_real_exporter_schema_has_useful_named_checks(self):
+        report = json.loads((Path(__file__).parents[1] / 'docs/operations/evidence/sou74/doctor-sample.json').read_text())
+        fields = {}
+        tool.project_checks(report['checks'], 'checks.', fields)
+        self.assertEqual(fields['checks.authenticated_runtime.reason_code'], 'daemon_unavailable')
+        self.assertEqual(fields['checks.configuration.outcome'], 'ready')
+        changed = dict(fields)
+        changed['checks.configuration.sha256'] = 'a' * 64
+        result = tool.compare({'fields': fields}, {'fields': changed})
+        row = next(row for row in result['rows'] if row['field'] == 'checks.configuration.sha256')
+        self.assertEqual(row['state'], 'missing')
 
-    def test_unsafe_projection_is_refused(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp) / 'a'
-            self.bundle(root)
-            report = json.loads((root / 'report.json').read_text())
-            report['runtime'] = {'profile': ['not-a-string']}
-            raw = json.dumps(report).encode()
-            (root / 'report.json').write_bytes(raw)
-            manifest = json.loads((root / 'manifest.json').read_text())
-            manifest['files'][0].update(sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw))
-            (root / 'manifest.json').write_text(json.dumps(manifest))
-            with patch.object(tool.audit, '_open_input', lambda p: open(p, 'rb')):
-                with self.assertRaises(ValueError):
-                    tool.load(root)
+    def test_pilot_checks_compare_by_identity_not_order(self):
+        checks = [
+            {'id': 'pilot_policy', 'source': 'validated_selected_policy',
+             'outcome': 'ready', 'reason_code': 'selected_policy_identity', 'sha256': 'a' * 64},
+            {'id': 'pilot_runtime', 'source': 'authenticated_status_nonce_and_bearer',
+             'outcome': 'unknown', 'reason_code': 'daemon_unavailable'},
+        ]
+        left, right = {}, {}
+        tool.project_checks(checks, 'pilot.checks.', left)
+        tool.project_checks(list(reversed(checks)), 'pilot.checks.', right)
+        self.assertEqual(left, right)
+        right['pilot.checks.pilot_policy.sha256'] = 'b' * 64
+        result = tool.compare({'fields': left}, {'fields': right})
+        self.assertIn('pilot.checks.pilot_policy.sha256', result['changed_fields'])
+        self.assertNotIn('a' * 64, json.dumps(result))
 
     @unittest.skipUnless(sys.platform == 'linux', 'native Linux private reader control')
     def test_native_private_reader_and_output(self):

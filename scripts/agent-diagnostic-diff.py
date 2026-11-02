@@ -51,38 +51,19 @@ def validate_checks(checks):
             raise ValueError('invalid check digest')
 
 
-def project_scope(report, fields):
-    scopes = {
-        'source': ('component', 'version', 'revision', 'schema'),
-        'runtime': ('profile', 'daemon', 'session', 'classifier'),
-        'provider': ('transport', 'server', 'mode'),
-        'storage': ('cleanup', 'receipt', 'workspace'),
-    }
-    for scope, names in scopes.items():
-        value = report.get(scope)
-        if value is None:
-            continue
-        if not isinstance(value, dict):
-            raise ValueError('invalid ' + scope + ' scope')
-        for name in names:
-            item = value.get(name)
-            if item is not None:
-                if not isinstance(item, str) or not item or len(item) > 256:
-                    raise ValueError('invalid ' + scope + ' field')
-                fields[scope + '.' + name] = item
-    failures = report.get('failures')
-    if failures is not None:
-        if not isinstance(failures, list) or len(failures) > 64:
-            raise ValueError('invalid failure scope')
-        for index, item in enumerate(failures, 1):
-            if not isinstance(item, dict):
-                raise ValueError('invalid failure record')
-            for name in ('code', 'phase'):
-                value = item.get(name)
-                if value is not None and (not isinstance(value, str) or not re.fullmatch('[a-z0-9_-]{1,80}', value)):
-                    raise ValueError('invalid failure field')
-                if value is not None:
-                    fields[f'failures.{index}.{name}'] = value
+
+
+def project_checks(checks, prefix, fields):
+    known = {'configuration', 'installation', 'classifier', 'enforcement', 'registry',
+             'authenticated_runtime', 'lifecycle_identity', 'host_connection', 'active_host_call',
+             'filesystem_profile', 'git_profile', 'filesystem_schema', 'git_schema',
+             'filesystem_package', 'git_package', 'pilot_classifier', 'pilot_config',
+             'pilot_registry', 'pilot_policy', 'pilot_binary', 'pilot_runtime', 'pilot_platform'}
+    validate_checks(checks)
+    for check in checks:
+        name = check['id'] if check['id'] in known else 'other_' + digest(check['id'])
+        for key in ('outcome', 'reason_code', 'sha256', 'source'):
+            fields[prefix + name + '.' + key] = check.get(key)
 
 
 def load(directory):
@@ -106,19 +87,8 @@ def load(directory):
         raise ValueError('invalid observation time')
     checks = report.get('checks')
     validate_checks(checks)
-    seen = set()
     fields = {'configuration.setup': report.get('setup'), 'runtime.protection': report.get('active_host_call_protection')}
-    project_scope(report, fields)
-    for check in checks:
-        if not isinstance(check, dict):
-            raise ValueError('invalid check')
-        name = check.get('id')
-        if not isinstance(name, str) or not re.fullmatch('[a-z0-9_-]{1,80}', name) or name in seen:
-            raise ValueError('invalid or duplicate check identity')
-        seen.add(name)
-        name = hashlib.sha256(name.encode()).hexdigest()
-        for key in ('outcome', 'reason_code', 'sha256', 'source'):
-            fields['checks.' + name + '.' + key] = check.get(key)
+    project_checks(checks, 'checks.', fields)
     pilot = report.get('pilot')
     if pilot is not None:
         if not isinstance(pilot, dict):
@@ -126,8 +96,19 @@ def load(directory):
         validate_checks(pilot.get('checks'))
         if pilot.get('incident') is not None and not isinstance(pilot['incident'], dict):
             raise ValueError('invalid incident scope')
-        for key in ('schema', 'setup', 'asset_trust', 'active_host_call_protection', 'checks', 'incident'):
+        if pilot.get('schema') != 'sw-agent-doctor-pilot/1':
+            raise ValueError('unsupported pilot schema')
+        project_checks(pilot['checks'], 'pilot.checks.', fields)
+        for key in ('schema', 'setup', 'asset_trust', 'active_host_call_protection'):
             fields['pilot.' + key] = pilot.get(key)
+        incident = pilot.get('incident')
+        if incident is not None:
+            for key in ('source', 'completeness', 'boundary', 'reason_code',
+                        'current_instance_binding', 'execution', 'model_consumption'):
+                value = incident.get(key)
+                if not isinstance(value, str) or not re.fullmatch('[a-z0-9_-]{1,128}', value):
+                    raise ValueError('invalid incident field')
+                fields['pilot.incident.' + key] = value
     return {'artifact_sha256': hashlib.sha256(raw).hexdigest(), 'observed_at_ms': report['observed_at_ms'], 'fields': fields}
 
 
