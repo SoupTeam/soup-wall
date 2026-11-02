@@ -67,6 +67,8 @@ class Controls(unittest.TestCase):
             installed.mkdir(mode=0o700)
             binary = installed / 'agentfw'
             shutil.copy2(os.environ['AGENTFW_TEST_BINARY'], binary)
+            for name in ('agent-diagnostic-diff.py', 'agent-audit-report.py'):
+                shutil.copy2(Path(__file__).with_name(name), installed / name)
             home = root / 'profile'
             home.mkdir(mode=0o700)
             config = home / 'config.yaml'
@@ -84,9 +86,14 @@ class Controls(unittest.TestCase):
                         for p in (root / label).iterdir()}
             output = root / 'private'
             output.mkdir(mode=0o700)
-            self.assertEqual(tool.main([str(root / 'before'), str(root / 'after'),
-                                       '--json-out', str(output / 'diff.json'),
-                                       '--markdown-out', str(output / 'diff.md')]), 0)
+            result = subprocess.run([sys.executable, '-B', str(installed / 'agent-diagnostic-diff.py'),
+                                     str(root / 'before'), str(root / 'after'),
+                                     '--json-out', str(output / 'diff.json'),
+                                     '--markdown-out', str(output / 'diff.md')], cwd=root,
+                                    capture_output=True, timeout=20)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads((output / 'diff.json').read_text())
+            self.assertIn('checks.enforcement.reason_code', report['changed_fields'])
             self.assertNotIn('PRIVATE_CANARY', (output / 'diff.json').read_text())
             self.assertEqual(sibling.read_text(), 'PRIVATE_CANARY')
             for path, body in original.items():
