@@ -62,9 +62,12 @@ class Fixture(unittest.TestCase):
                                            write_state=lambda prefix, value: self.write_state(value))
 
     def write_state(self, value):
-        raw = A.state_bytes(value)
-        self.state_path.write_bytes(raw)
-        self.state_path.chmod(0o600)
+        # Same exclusive-temporary-then-replace shape as the front door's own write_state.
+        temporary = self.state_path.with_name(self.state_path.name + '.tmp')
+        with temporary.open('x') as stream:
+            os.fchmod(stream.fileno(), 0o600)
+            stream.write(A.state_bytes(value).decode())
+        os.replace(temporary, self.state_path)
 
     def ctx(self):
         _, raw, marker = SW.marker(self.preparation)
@@ -264,6 +267,46 @@ class Transition(Fixture):
         self.assertEqual(self.state_selection(), str(self.target()['selection_path']))
         self.assertIsNone(A.read_journal(self.preparation)['pending'])
         self.assertEqual(A.read_journal(self.preparation)['history'][-1]['outcome'], 'completed_by_recovery')
+
+    def test_a_leftover_state_temporary_from_a_failed_write_cannot_wedge_recovery(self):
+        self.crash_at('after_marker')
+        leftover = self.state_path.with_name(self.state_path.name + '.tmp')
+        leftover.write_bytes(b'half written state')
+        leftover.chmod(0o600)
+        self.assertEqual(self.recover()['status'], 'completed_by_recovery')
+        self.assertFalse(leftover.exists())
+        self.assertEqual(self.state_selection(), str(self.target()['selection_path']))
+
+    def test_a_stale_temporary_is_swept_before_intent_so_publication_cannot_split(self):
+        leftover = self.state_path.with_name(self.state_path.name + '.tmp')
+        leftover.write_bytes(b'stale')
+        leftover.chmod(0o600)
+        self.publish()
+        self.assertFalse(leftover.exists())
+        self.assertEqual((self.marker_generation(), self.state_selection()), (G_NEW, str(self.target()['selection_path'])))
+
+    def test_an_unsafe_state_temporary_refuses_without_removal_or_intent(self):
+        leftover = self.state_path.with_name(self.state_path.name + '.tmp')
+        outside = self.root / 'outside'
+        outside.write_bytes(b'owned elsewhere')
+        for kind in ('symlink', 'hardlink', 'directory'):
+            with self.subTest(kind):
+                if kind == 'symlink':
+                    leftover.symlink_to(outside)
+                elif kind == 'hardlink':
+                    os.link(outside, leftover)
+                else:
+                    leftover.mkdir()
+                with self.assertRaisesRegex(ValueError, 'state_temporary_unsafe'):
+                    self.publish()
+                self.assertEqual(self.marker_generation(), G_OLD)
+                self.assertFalse((self.preparation / A.JOURNAL).exists())
+                self.assertTrue(leftover.exists() or leftover.is_symlink())
+                if kind == 'directory':
+                    leftover.rmdir()
+                else:
+                    leftover.unlink()
+        self.assertEqual(outside.read_bytes(), b'owned elsewhere')
 
     def test_interrupt_after_state_settles_without_replay(self):
         self.crash_at('after_state')

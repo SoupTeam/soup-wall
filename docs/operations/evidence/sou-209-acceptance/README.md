@@ -29,6 +29,7 @@ _Results pending: no native run has been recorded for this ledger yet._ Required
 
 * Activation covers `deny_actions` candidates only; `deny_tools` and destination subsets remain authoring-only.
 * Crash points between journal intent, marker and front-door state are covered by unit controls with an
-  injection seam, including the public `recover` dispatch. Natively, a SIGKILL is delivered during staging and a storage
-  error is injected (strace) into the front-door state write of a revert to reproduce marker-new/state-old.
+  injection seam, including the public `recover` dispatch. Natively, a SIGKILL is delivered during staging and an OS-enforced
+  storage fault (immutable state file, `chattr`) on the front-door state write of a revert reproduces marker-new/state-old
+  with a stale temporary; the fault is cleared before the public `recover`.
 * A selected, previewed or recovered state is never observed protection.

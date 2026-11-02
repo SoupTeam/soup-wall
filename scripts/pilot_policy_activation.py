@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import stat
 import subprocess
 import sys
 import uuid
@@ -376,6 +377,22 @@ def verified_generation(ctx, front, generation):
 
 
 # ---------------------------------------------------------------- transition
+def clear_stale_state_temporary(front, prefix):
+    """A failed state write leaves `front-door.json.tmp`, and write_state creates it exclusively.
+
+    Called only while holding the selection lock and maintenance gate, so it cannot belong to a live writer.
+    Anything but an owned single-link regular file refuses rather than being removed."""
+    state = front.layout(prefix)['state']
+    leftover = state.with_name(state.name + '.tmp')
+    try:
+        info = leftover.lstat()
+    except FileNotFoundError:
+        return False
+    require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1, 'state_temporary_unsafe')
+    leftover.unlink()
+    return True
+
+
 def state_bytes(value):
     return (json.dumps(value, sort_keys=True, indent=2) + '\n').encode()
 
@@ -403,6 +420,7 @@ def publish(ctx, front, journal, plan, operation, target):
         _, latest_raw, _ = sw.marker(preparation)
         require(sha(latest_raw) == pending['before_marker_sha256']
                 and sha(front.layout(prefix)['state'].read_bytes()) == pending['before_state_sha256'], 'concurrent_selection_change')
+        clear_stale_state_temporary(front, prefix)
         # The generation verified earlier must still be exactly what is about to be selected.
         require(sw.regular(Path(target['selection_path']))[1] and sha(sw.regular(Path(target['selection_path']))[1])
                 == target['selection_sha256'], 'generation_changed_before_publication')
@@ -441,6 +459,7 @@ def recover_pending(ctx, front, journal):
             outcome = 'published_before_journal_completion'
         elif marker_sha == pending['after_marker_sha256'] and state_sha == pending['before_state_sha256']:
             # The selection was published; completing the exactly journaled state is the only roll-forward.
+            clear_stale_state_temporary(front, prefix)
             front.write_state(prefix, pending['after_state'])
             outcome = 'completed_by_recovery'
         if outcome is None:

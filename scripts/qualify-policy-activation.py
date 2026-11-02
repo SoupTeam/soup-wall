@@ -308,20 +308,27 @@ def qualify(args, door, home, env, report, *, guided, receiver, baseline, select
     enter()
     undo = pa('revert', '--generation', old_generation)
     require(undo['status'] == 'preview' and undo['blockers'] == [], 'activation_revert_preview')
-    # A real storage failure on the front-door state write: the marker already selects the old generation while
-    # front-door.json still names the activated one (marker-new / state-old). No process is killed; the syscall fails.
-    interrupt = work / 'revert-interrupt.trace.private'
-    renames = 'rename,renameat,renameat2'
-    command = [str(args.strace), '-f', '-qq', '-e', 'trace=' + renames, '-e', 'inject=' + renames + ':error=EIO:when=1',
-               '-P', str(args.prefix / 'front-door.json'), '-o', str(interrupt),
-               str(args.agentfw), 'pilot', '--home', str(home), 'policy-activation', 'revert', '--prefix', str(args.prefix),
-               '--state-root', str(args.state_root), '--generation', old_generation, '--confirm', undo['confirmation_sha256']]
-    interrupted = subprocess.run(command, cwd=door.cwd, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=600)
+    # A real, OS-enforced storage failure on the front-door state write: with the state file immutable the atomic replace
+    # fails (EPERM) after the marker already selects the old generation, leaving marker-new/state-old and a stale
+    # `front-door.json.tmp`. The fault is cleared before recovery, as an operator would.
+    state_file = args.prefix / 'front-door.json'
+
+    def immutable(flag):
+        done = subprocess.run(['sudo', '-n', 'chattr', flag, str(state_file)], capture_output=True, timeout=60)
+        require(done.returncode == 0, 'activation_storage_fault_unavailable')
+
+    immutable('+i')
+    try:
+        interrupted = subprocess.run([str(args.agentfw), 'pilot', '--home', str(home), 'policy-activation', 'revert',
+                                      '--prefix', str(args.prefix), '--state-root', str(args.state_root),
+                                      '--generation', old_generation, '--confirm', undo['confirmation_sha256']],
+                                     cwd=door.cwd, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=600)
+    finally:
+        immutable('-i')
     if interrupted.returncode == 0:
-        text = interrupt.read_text(errors='replace') if interrupt.exists() else ''
-        evidence['interrupt_trace'] = [line[:200] for line in text.splitlines()[:12]]
         evidence['interrupt_output'] = interrupted.stdout.decode('utf-8', 'replace')[-300:]
     require(interrupted.returncode != 0, 'activation_interruption_not_injected')
+    require((args.prefix / 'front-door.json.tmp').exists(), 'activation_failed_write_left_no_temporary')
     current_marker = json.loads((preparation / 'current.json').read_bytes())
     state_selection = json.loads((args.prefix / 'front-door.json').read_bytes())['selection']
     require(current_marker['generation'] == old_generation and state_selection.endswith(new_generation + '/selection.json'),
@@ -343,8 +350,9 @@ def qualify(args, door, home, env, report, *, guided, receiver, baseline, select
             and [(h['operation'], h['outcome']) for h in healed['history']] == [('activate', 'published'),
                                                                                ('revert', 'completed_by_recovery')],
             'activation_recovery_history')
-    finish('interrupted-publication-recovered', split_state='marker-new-state-old', run_refused_zero_start=True,
-           outcome='completed_by_recovery')
+    require(not (args.prefix / 'front-door.json.tmp').exists(), 'activation_recovery_left_temporary')
+    finish('interrupted-publication-recovered', split_state='marker-new-state-old', fault='immutable-state-file',
+           stale_temporary_swept=True, run_refused_zero_start=True, outcome='completed_by_recovery')
 
     begin('revert-fresh-authority')
     refused = pa('revert', '--generation', 'f' * 32, success=False)

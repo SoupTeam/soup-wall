@@ -84,6 +84,10 @@ A crash at any point leaves either the valid old generation or an explicit refus
 | both new | `published_before_journal_completion` |
 | anything else (operator edit) | `conflicting_operator_edit`, pending intent kept, exit 2 |
 
+A failed state write leaves `front-door.json.tmp`, which `write_state` creates exclusively; under the same locks both
+publication and recovery remove such an owned single-link regular leftover first and refuse anything else
+(`state_temporary_unsafe`), so a leftover can neither cause a split nor wedge recovery.
+
 `recover` has its own strictly validated entry: while a pending intent exists, `current.json` and
 `front-door.json` may legitimately disagree, so it does not require them to agree. It first matches both actual
 hashes against the journal's before/after pair (anything else is `conflicting_operator_edit`, with nothing built
@@ -104,9 +108,9 @@ every crash point, concurrent and stale publication, revert targets, candidate f
 The manual `installed_focus: policy-activation` workflow mode runs
 `scripts/qualify-policy-activation.py` through the installed front door outside the checkout: useful
 read under the base, inert candidate and preview, open/never-enrolled and live-run refusals,
-tampered and stale candidates, a SIGKILL during staging, concurrent confirmation, an injected storage
-failure on the front-door state write of a revert (marker-new/state-old) refused for launches and settled by the public
-`recover`, observation of the
+tampered and stale candidates, a SIGKILL during staging, concurrent confirmation, an OS-enforced storage
+fault (immutable state file) on the front-door state write of a revert (marker-new/state-old, stale temporary left) refused for
+launches and settled by the public `recover`, observation of the
 actually selected policy, the same read newly denied with an independent `openat` witness of zero
 server reads, preserved hard Deny/Ask for write/reset/exfiltration, safe revert with disjoint run
 identities and complete owned cleanup. It does not replace TL-owned final Ready qualification.
