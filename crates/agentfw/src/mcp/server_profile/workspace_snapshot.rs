@@ -148,10 +148,10 @@ mod linux {
             m.ctime_nsec() as u64,
         ]
     }
-    fn bytes(mut file: &File, limit: u64) -> anyhow::Result<Vec<u8>> {
+    fn bytes(file: &File, limit: u64) -> anyhow::Result<Vec<u8>> {
         let before = file.metadata()?;
         let mut raw = Vec::new();
-        file.by_ref().take(limit + 1).read_to_end(&mut raw)?;
+        Read::take(file, limit + 1).read_to_end(&mut raw)?;
         ensure!(
             raw.len() as u64 == before.len()
                 && raw.len() as u64 <= limit
@@ -165,6 +165,8 @@ mod linux {
         directories: Vec<PathBuf>,
         files: Vec<(PathBuf, File)>,
     }
+    // Keep the descriptor, immutable expected tree and observer in one traversal.
+    #[allow(clippy::too_many_arguments)]
     fn walk(
         directory: &File,
         prefix: &Path,
@@ -339,3 +341,118 @@ mod linux {
 }
 #[cfg(target_os = "linux")]
 pub(crate) use linux::View;
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+    use sha2::{Digest, Sha256};
+    use std::{
+        fs,
+        io::Read,
+        os::{fd::AsRawFd, unix::fs::PermissionsExt},
+    };
+    fn sha(raw: &[u8]) -> String {
+        format!("{:x}", Sha256::digest(raw))
+    }
+    fn fixture() -> (tempfile::TempDir, Binding) {
+        let temp = tempfile::tempdir().unwrap();
+        let generation = temp.path().join("snapshot");
+        fs::create_dir(&generation).unwrap();
+        fs::set_permissions(&generation, fs::Permissions::from_mode(0o700)).unwrap();
+        let workspace = generation.join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        fs::write(workspace.join("note.txt"), b"owned captured bytes\n").unwrap();
+        fs::set_permissions(
+            workspace.join("note.txt"),
+            fs::Permissions::from_mode(0o400),
+        )
+        .unwrap();
+        fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
+        fs::write(generation.join("lease"), b"").unwrap();
+        fs::set_permissions(generation.join("lease"), fs::Permissions::from_mode(0o600)).unwrap();
+        let id = |path: &Path| WorkspaceIdentity::from_metadata(&fs::metadata(path).unwrap());
+        let entries = vec![Entry {
+            path: "note.txt".into(),
+            kind: "file".into(),
+            size: 21,
+            sha256: sha(b"owned captured bytes\n"),
+            identity: id(&workspace.join("note.txt")),
+        }];
+        let tree = crate::native::canonical_digest(
+            &serde_json::json!([{"path":"note.txt","kind":"file","size":21,"sha256":sha(b"owned captured bytes\n")} ]),
+        );
+        let receipt = serde_json::json!({"format":FORMAT,"entries":entries,"tree_sha256":tree,"generation_identity":id(&generation),"workspace_identity":id(&workspace)});
+        let raw = serde_json::to_vec(&receipt).unwrap();
+        fs::write(generation.join("receipt.json"), &raw).unwrap();
+        let complete = serde_json::json!({"format":FORMAT,"receipt_sha256":sha(&raw),"generation_identity":id(&generation)});
+        fs::write(
+            generation.join("complete.json"),
+            serde_json::to_vec(&complete).unwrap(),
+        )
+        .unwrap();
+        for name in ["receipt.json", "complete.json"] {
+            fs::set_permissions(generation.join(name), fs::Permissions::from_mode(0o400)).unwrap();
+        }
+        let binding = Binding {
+            format: FORMAT.into(),
+            generation_identity: id(&generation),
+            workspace_identity: id(&workspace),
+            receipt_sha256: sha(&raw),
+            tree_sha256: tree,
+            entries,
+            lease_identity: id(&generation.join("lease")),
+            generation,
+        };
+        (temp, binding)
+    }
+    #[test]
+    fn workspace_snapshot_execution_uses_hash_verified_kernel_sealed_images() {
+        let (_temp, binding) = fixture();
+        let workspace = binding.generation.join("workspace");
+        let view = View::capture(&binding, &workspace).unwrap();
+        let mut command = tokio::process::Command::new("/owned/bwrap");
+        let mut pins = Vec::new();
+        view.mount(&mut command, &mut pins).unwrap();
+        assert_eq!(pins.len(), 1);
+        let seals = unsafe { libc::fcntl(pins[0].as_raw_fd(), libc::F_GET_SEALS) };
+        assert_eq!(
+            seals,
+            libc::F_SEAL_WRITE | libc::F_SEAL_GROW | libc::F_SEAL_SHRINK | libc::F_SEAL_SEAL
+        );
+        assert_eq!(
+            unsafe { libc::pwrite(pins[0].as_raw_fd(), b"x".as_ptr().cast(), 1, 0) },
+            -1
+        );
+        fs::set_permissions(
+            workspace.join("note.txt"),
+            fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+        fs::write(workspace.join("note.txt"), "tampered").unwrap();
+        fs::set_permissions(
+            workspace.join("note.txt"),
+            fs::Permissions::from_mode(0o400),
+        )
+        .unwrap();
+        let mut captured = String::new();
+        std::fs::File::open(format!("/proc/self/fd/{}", pins[0].as_raw_fd()))
+            .unwrap()
+            .read_to_string(&mut captured)
+            .unwrap();
+        assert_eq!(captured, "owned captured bytes\n");
+        assert!(View::capture(&binding, &workspace).is_err());
+    }
+    #[test]
+    fn workspace_snapshot_incomplete_replaced_and_cross_profile_inputs_refuse() {
+        let (_temp, binding) = fixture();
+        let workspace = binding.generation.join("workspace");
+        fs::remove_file(binding.generation.join("complete.json")).unwrap();
+        assert!(View::capture(&binding, &workspace).is_err());
+        let mut changed = binding.clone();
+        changed.entries[0].path = "../outside".into();
+        assert!(changed.validate(&workspace).is_err());
+        changed = binding.clone();
+        changed.workspace_identity.inode += 1;
+        assert!(View::capture(&changed, &workspace).is_err());
+    }
+}

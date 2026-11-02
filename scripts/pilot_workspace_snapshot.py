@@ -28,6 +28,7 @@ MAX_DEPTH=32
 MAX_FILE=8*1024*1024
 MAX_BYTES=32*1024*1024
 RESERVE=16*1024*1024
+PUBLIC_REASONS=frozenset('workspace_snapshot_'+code for code in ('binding_changed','in_use','profile_combination_unsupported','workspace_mismatch','profile_changed','selection_required','selection_differs_use_rebuild','snapshot_object_changed','snapshot_content_changed','snapshot_root_changed','tree_changed','incomplete_generation','lease_changed','private_receipt_required','receipt_changed','generation_changed'))
 # Capturing an installation/session store is never an approved workspace scope.
 FORBIDDEN={'.env','.aws','.ssh','.claude','.codex','credentials.json','auth.json','sessions','grants','approvals',
            'pilot-providers','pilot-projects','pilot-maintenance','front-door.json','selection.json','hook-token',
@@ -100,9 +101,9 @@ class Observer:
             self.libc=ctypes.CDLL(None,use_errno=True)
             fd=self.libc.inotify_init1(os.O_NONBLOCK|os.O_CLOEXEC)
             require(fd>=0,'observer_unavailable');self.fd=fd
-    def watch(self,fd):
+    def watch(self,fd,ancestor=False):
         if self.fd is not None:
-            require(self.libc.inotify_add_watch(self.fd,os.fsencode('/proc/self/fd/'+str(fd)),0x01000fc6)>=0,'observer_unavailable')
+            require(self.libc.inotify_add_watch(self.fd,os.fsencode('/proc/self/fd/'+str(fd)),0x01002c04 if ancestor else 0x01002fce)>=0,'observer_unavailable')
     def check(self):
         if self.fd is not None:
             try: events=os.read(self.fd,65536)
@@ -115,9 +116,14 @@ class Observer:
 class Capture:
     """Retained no-follow source descriptors, including every ancestor in scope."""
     def __init__(self,source):
-        self.source=Path(source);self.nodes=[];self.observer=Observer();self.root=None
+        self.source=Path(source);self.nodes=[];self.ancestors=[];self.observer=Observer();self.root=None
         try:
             self.root=root(self.source);local(self.root)
+            # Retain/watch ancestor objects for temporary move-and-restore,
+            # without watching their unrelated child creation/publication.
+            for parent in self.source.parents:
+                fd=IO.open_directory(parent);self.ancestors.append(fd)
+                self.observer.watch(fd,ancestor=True)
             self.root_identity=identity(os.fstat(self.root));self.total=0
             self.walk(self.root,'',0,mount(self.root))
             self.check()
@@ -166,6 +172,8 @@ class Capture:
         retained={n['fd'] for n in self.nodes}
         if self.root is not None and self.root not in retained: os.close(self.root)
         for fd in retained: os.close(fd)
+        for fd in self.ancestors: os.close(fd)
+        self.ancestors=[]
         self.nodes=[];self.root=None;self.observer.close()
     def __enter__(self):return self
     def __exit__(self,*_):self.close()

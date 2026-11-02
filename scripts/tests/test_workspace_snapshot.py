@@ -88,6 +88,14 @@ class Snapshot(unittest.TestCase):
         M.remove(self.dest,changed['removal_confirmation'])
         self.assertFalse(self.dest.exists());self.assertEqual('source changed after capture',(self.source/'README.md').read_text())
 
+    @unittest.skipUnless(sys.platform=='linux','Linux ancestor observer')
+    def test_temporary_ancestor_move_and_restore_is_sticky(self):
+        container=self.base/'container';container.mkdir(mode=0o700)
+        nested=container/'source';nested.mkdir(mode=0o700);(nested/'note').write_text('owned')
+        with M.Capture(nested) as capture:
+            moved=self.base/'moved-container';container.rename(moved);moved.rename(container)
+            with self.assertRaisesRegex(ValueError,'source_changed_during_capture'):capture.check()
+
     @unittest.skipUnless(sys.platform=='linux','Linux publication')
     def test_exact_confirmation_low_space_and_capture_change_never_publish(self):
         with self.assertRaisesRegex(ValueError,'exact_confirmation'):M.create(self.source,self.dest,'a'*64)

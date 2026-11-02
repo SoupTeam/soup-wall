@@ -755,7 +755,7 @@ def main():
         if args.linux_budget is not None and code in {"native_linux_x86_64_required",
                 "native_ubuntu_required_wsl_is_separate", "ubuntu_24_04_required"}:
             report["resource_budget"]["status"] = "unsupported"
-        report.update(status="failed", reason=code if code in PUBLIC_FAILURE_CODES
+        report.update(status="failed", reason=code if code in PUBLIC_FAILURE_CODES or code in PREP.SNAPSHOTS.PUBLIC_REASONS
                       else "pilot_input_or_runtime_failure")
         if args.maintenance_home is not None and (not report.get("executed") or code.startswith("maintenance_")):
             report["maintenance"] = {"status": "refused-or-uncertain",

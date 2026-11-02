@@ -8,6 +8,7 @@
     pilot.py status --prefix DIR
     pilot.py provider preview|check|create|update|restore|prune|select|remove [options]
     pilot.py configuration inventory|backup|inspect|restore-preview|restore|recover [options]
+    pilot.py snapshot preview|create|inspect|remove [options]
     pilot.py help
 
 This is a front door over the accepted scripts, not a second installer:
@@ -989,6 +990,7 @@ def parser():
     remove.add_argument("--name", required=True)
     remove.add_argument("--apply", action="store_true")
     commands.add_parser("worktree-selection", help="explicitly bind the roots of a linked Git worktree")
+    commands.add_parser("snapshot", help="explicitly preview, capture, inspect and remove private workspace snapshots")
     commands.add_parser("filesystem-roots", help="explicitly bind separately selected read-only root IDs")
     commands.add_parser("project", help="inspect, check and explicitly manage named project presets")
     commands.add_parser("help")

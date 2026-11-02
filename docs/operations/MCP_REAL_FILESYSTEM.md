@@ -438,3 +438,10 @@ apply: the installed pilot proof policy asks before reading a path learned from
 an MCP result. The focused multi-root qualification keeps that explicit Ask
 control, then checks healthy continuation with a separately supplied owned path.
 It does not erase taint or weaken the installed policy to obtain a pass.
+
+## Explicit private snapshots
+
+Use [private workspace snapshots](PRIVATE_WORKSPACE_SNAPSHOTS.md) to deliberately
+freeze one bounded owned directory and select its complete private view through
+the existing single-root preparation path. Status clearly distinguishes captured
+bytes from the current source; capture never activates a run.
