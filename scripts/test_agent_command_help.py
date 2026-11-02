@@ -69,6 +69,23 @@ class Controls(unittest.TestCase):
                 self.assertNotEqual(refusal.returncode, 0)
             self.assertIn('complete -F _pilot_help_complete agentfw',
                           reader_completion(catalog, 'bash', []))
+            for path in (['lifecycle', 'upgrade'], ['edit-session', 'refresh'],
+                         ['edit-session', 'ask', 'approve'], ['pilot-approval', 'approve']):
+                self.assertIn(path, commands)
+                row = next(row for row in catalog['commands'] if row['command'] == path)
+                actual = subprocess.run([str(binary), *path, '--help'], cwd=temp,
+                                        capture_output=True, text=True, timeout=10)
+                self.assertEqual(actual.returncode, 0)
+                for flag in row['flags']:
+                    self.assertIn(flag['name'], actual.stdout)
+                refusal = subprocess.run([str(binary), *path], cwd=temp,
+                                         capture_output=True, timeout=10)
+                self.assertNotEqual(refusal.returncode, 0)
+
+    def test_required_shells_are_present(self):
+        if os.environ.get('AGENTFW_REQUIRE_SHELLS'):
+            for name in ('bash', 'zsh', 'fish'):
+                self.assertIsNotNone(shutil.which(name), name)
 
     def test_verified_python_bytes_survive_path_replacement(self):
         spec = importlib.util.spec_from_file_location('help_reader', TOOL)

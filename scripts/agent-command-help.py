@@ -17,6 +17,19 @@ ALLOWED_READER = None
 
 
 def effects(parts):
+    if parts[:1] == ['edit-session']:
+        if parts[1:] in (['preview'], ['status'], ['inventory'], ['review'], ['ask', 'list']):
+            return 'read_only'
+        if parts[1:] in (['prepare'], ['refresh']):
+            return 'preview_unless_apply_then_private_plan_mutation'
+        if parts[1:] == ['run']:
+            return 'launch_and_provider'
+        if parts[1:2] == ['ask']:
+            return 'exact_run_approval_or_private_argument_inspection'
+    if parts[:1] in (['pilot-approval'], ['native-approval']):
+        return 'exact_request_inspection_or_explicit_authority_decision'
+    if parts[:1] == ['lifecycle']:
+        return 'read_only' if parts[1:] == ['status'] else 'lifecycle_process_or_installation_mutation'
     if parts in (['preview'], ['status'], ['help'], ['provider', 'preview'],
                  ['lifecycle', 'status'], ['update', 'preview'], ['update', 'inspect']):
         return 'read_only'
@@ -272,7 +285,7 @@ def rust_catalog_snapshot(path, expected, snapshot):
                     flags.append({'name': flag, 'required': False, 'takes_value': '<' in line, 'type': 'parser_help'})
         rows.append({'command': parts, 'flags': flags, 'effects': effects(parts),
                      'confirmation_flags': [flag['name'] for flag in flags if flag['name'] in
-                                            ('--apply', '--confirm', '--yes', '--approve', '--sha256')]})
+                                            ('--apply', '--confirm', '--yes', '--approve', '--sha256', '--binding')]})
     return {'schema': 'sw-agent-command-catalog/2', 'program': 'agentfw',
             'component_sha256': expected, 'commands': rows}
 

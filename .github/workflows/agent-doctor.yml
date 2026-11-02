@@ -48,7 +48,7 @@ jobs:
             python3 -B -m unittest scripts.test_agent_diagnostic_diff -v
           fi
           if test -f scripts/test_agent_command_help.py; then
-            python3 -B -m unittest scripts.test_agent_command_help -v
+            bash scripts/qualify-command-shells.sh
           fi
       - name: Warnings denied
         run: cargo clippy --locked -p agentfw --all-targets -- -D warnings
