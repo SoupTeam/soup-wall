@@ -248,7 +248,7 @@ def check_native(path):
     require("not found" not in result.stdout + result.stderr, "native_dependency_missing")
 
 
-def verify_profile(kind, directory, paths, workspace, git_profile=GIT_PROFILES.DEFAULT, *, versioned=False, filesystem_roots=None):
+def verify_profile(kind, directory, paths, workspace, git_profile=GIT_PROFILES.DEFAULT, *, versioned=False, filesystem_roots=None, workspace_snapshot=None):
     inside(directory, directory.parent)
     private_dir(directory)
     receipt = PILOT.strict_json(bounded_file(directory / "installation.json", MAX_JSON).read_bytes())
@@ -256,6 +256,7 @@ def verify_profile(kind, directory, paths, workspace, git_profile=GIT_PROFILES.D
     registry = PILOT.strict_json(bounded_file(directory / "registry.json", MAX_JSON).read_bytes())
     installer, name = (FS, FS_ROOTS.ID if filesystem_roots is not None else "filesystem-readonly-v1") if kind == "filesystem" else (GIT, git_profile)
     if kind == "filesystem":
+        require(profile.get('workspaceSnapshot')==workspace_snapshot,'workspace_snapshot_profile_changed')
         require(profile.get('filesystemRoots') == filesystem_roots, 'filesystem_roots_profile_binding_mismatch')
         if filesystem_roots is not None:
             FS_ROOTS.verify(filesystem_roots, workspace)
@@ -414,11 +415,6 @@ def verify_generation(generation, expected_commit, *, probe_native=True):
                 'workspace_snapshot_profile_combination_unsupported')
         SNAPSHOTS.verify(snapshot)
         require(roots['filesystem']==Path(snapshot['generation'])/'workspace','workspace_snapshot_workspace_mismatch')
-        installed=PILOT.strict_json(bounded_file(generation/'filesystem-profile/profile.json',MAX_JSON).read_bytes())
-        require(installed.get('workspaceSnapshot')==snapshot,'workspace_snapshot_profile_changed')
-    else:
-        installed=PILOT.strict_json(bounded_file(generation/'filesystem-profile/profile.json',MAX_JSON).read_bytes())
-        require('workspaceSnapshot' not in installed,'workspace_snapshot_selection_required')
     fs_roots = selection.get('filesystem_roots')
     if fs_roots is not None:
         require(versioned and 'prepared_workspaces' in selection, 'filesystem_roots_versioned_selection_required')
@@ -428,7 +424,8 @@ def verify_generation(generation, expected_commit, *, probe_native=True):
         outside_workspaces(paths.values(), roots)
     profiles = {
         "filesystem": verify_profile("filesystem", generation / "filesystem-profile", paths,
-                                     roots["filesystem"], versioned=versioned, filesystem_roots=fs_roots),
+                                     roots["filesystem"], versioned=versioned, filesystem_roots=fs_roots,
+                                     **({"workspace_snapshot":snapshot} if snapshot is not None else {})),
         "git": verify_profile("git", generation / "git-profile", paths, roots["git"], git_profile,
                               versioned=versioned),
     }
@@ -690,7 +687,8 @@ def prepare_locked(args, output, requested, linked_binding=None, fs_roots=None, 
             bind_profile_workspace(generation / (kind + "-profile"), identity)
     profiles = {
         "filesystem": verify_profile("filesystem", generation / "filesystem-profile", paths, fs_workspace,
-                                     versioned=True, filesystem_roots=fs_roots),
+                                     versioned=True, filesystem_roots=fs_roots,
+                                     **({"workspace_snapshot":workspace_snapshot} if workspace_snapshot is not None else {})),
         "git": verify_profile("git", generation / "git-profile", paths, git_workspace, git_profile, versioned=True),
     }
     selection = {"format": GIT_PROFILES.SELECTION_V3, "source": PILOT.source(),
