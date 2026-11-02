@@ -452,6 +452,62 @@ async fn triage_counts_are_bounded_and_marked_incomplete() {
     assert!(!p.counts.complete);
     assert_eq!(p.agents.len(), 25);
     assert!(p.next.is_some());
+    // The Agent after the count bound has the only applied acknowledgement.
+    // Counts and pages share the first `limit` Agents by ID, so it is
+    // neither counted nor listed, by prefix or by acknowledgement age.
+    let outside = format!("agent-{limit:05}");
+    let issuer = issuer();
+    db.create_managed_revision(&t, &outside, "r1", "default: deny")
+        .unwrap();
+    db.approve_managed_revision(&t, &outside, "r1").unwrap();
+    let d = db
+        .deploy_managed_revision(&t, &outside, "r1", false, &issuer)
+        .unwrap();
+    ack(&db, &t, &outside, &d, "applied");
+    for q in [
+        TriageQuery {
+            problem: "all".into(),
+            prefix: outside.clone(),
+            ..Default::default()
+        },
+        TriageQuery {
+            problem: "no_recorded_problem".into(),
+            sort: "ack_oldest".into(),
+            ..Default::default()
+        },
+        TriageQuery {
+            problem: "all".into(),
+            sort: "ack_oldest".into(),
+            prefix: "agent-1".into(),
+            limit: 100,
+            ..Default::default()
+        },
+    ] {
+        let p = page(&db, &t, q.clone()).await;
+        assert!(!p.counts.complete);
+        assert!(
+            p.agents.iter().all(|a| a.agent_id != outside),
+            "{q:?} listed an Agent outside the counted universe"
+        );
+        assert!(p.agents.len() as i64 <= p.counts.matching, "{q:?}");
+    }
+    // Paging the whole bounded universe by age yields exactly the counted set.
+    let mut q = TriageQuery {
+        problem: "all".into(),
+        sort: "ack_oldest".into(),
+        limit: 100,
+        ..Default::default()
+    };
+    let mut seen = 0i64;
+    loop {
+        let p = page(&db, &t, q.clone()).await;
+        assert!(p.agents.iter().all(|a| a.agent_id != outside));
+        seen += p.agents.len() as i64;
+        let Some(next) = p.next else { break };
+        q.after = next.after;
+        q.after_ack = next.after_ack;
+    }
+    assert_eq!(seen, limit);
 }
 
 #[tokio::test]

@@ -92,6 +92,7 @@ impl PostgresTenantStore {
                     &q.after,
                     &q.after_ack.unwrap_or(-2),
                     &(i64::from(q.limit) + 1),
+                    &SCAN_LIMIT,
                 ],
             ))
             .await?;

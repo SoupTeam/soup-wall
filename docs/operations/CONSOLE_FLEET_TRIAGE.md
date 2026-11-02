@@ -28,13 +28,19 @@ Agent with no recorded problem is **not** reported as healthy.
 
 Each count reads "N of T", where T is the number of enrolled Agents counted
 in the same server snapshot as the page. The server counts at most 10,000
-Agents per request (by Agent ID); a larger tenant is shown as partial
-("count bound reached; more exist"). The status line says how many matching
-Agents you have seen so far ("Seen 25 of 38 matching").
+Agents per request, the first 10,000 by Agent ID, and pages are drawn from
+that same set: a listed Agent is always one that was counted. A larger tenant
+is shown as partial ("counts and list cover only the first 10,000 Agents by
+ID; later Agents are neither counted nor listed"); its totals are not
+full-fleet totals. The status line says how many matching Agents you have
+seen so far ("Seen 25 of 38 matching"). A page that lists more Agents than
+its own snapshot counts as matching is refused.
 
 Each page is a separate read. If records change between pages (for example
-an Agent acknowledges a deployment), an Agent can repeat or drop out; the
-status line says so and **Refresh triage** starts a new snapshot.
+an Agent acknowledges a deployment), an Agent can repeat or drop out, or more
+Agents can be seen than the latest count; the status line says so, never uses
+the count as a denominator for the extra Agents, and **Refresh triage**
+starts a new snapshot.
 
 ## Filters, sort and paging
 

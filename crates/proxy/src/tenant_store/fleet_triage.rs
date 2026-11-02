@@ -121,7 +121,8 @@ pub struct TriageCounts {
     /// Agents counted in this snapshot (at most `scan_limit`).
     pub counted_agents: i64,
     pub scan_limit: i64,
-    /// False when the tenant has more Agents than `scan_limit`.
+    /// False when the tenant has more Agents than `scan_limit`; then counts
+    /// and pages both cover only the first `scan_limit` Agents by ID.
     pub complete: bool,
     pub attention: i64,
     pub pending: i64,
@@ -229,7 +230,9 @@ pub(super) fn count_sql(d: Dialect, deployments: bool, groups: bool) -> String {
          FROM (SELECT * FROM ({flags}) s ORDER BY agent_id LIMIT $5) t"
     ))
 }
-/// `$5` cursor Agent ID, `$6` cursor applied time (age sort), `$7` limit + 1.
+/// `$5` cursor Agent ID, `$6` cursor applied time (age sort), `$7` limit + 1,
+/// `$8` the count bound. Pages draw from the same first `$8` Agents by ID
+/// as the counts, so a listed Agent is always inside the counted universe.
 pub(super) fn page_sql(d: Dialect, deployments: bool, groups: bool, sort: &str) -> String {
     let flags = flagged(d, deployments, groups);
     let (cursor, order) = if sort == "ack_oldest" {
@@ -244,7 +247,7 @@ pub(super) fn page_sql(d: Dialect, deployments: bool, groups: bool, sort: &str) 
     d.finish(format!(
         "SELECT agent_id,enrolled,revoked,d_seq,d_rev,d_sha,d_act,d_st,d_iss,d_app,a_seq,a_rev,a_sha,a_act,a_st,a_iss,a_app,
            records,group_id,group_count,f_pending,f_rejected,f_mismatch,f_revoked,f_incomplete,f_no_ack,f_stale,f_no_history
-         FROM ({flags}) s WHERE {FILTER} AND {cursor} ORDER BY {order} LIMIT $7"
+         FROM (SELECT * FROM ({flags}) u ORDER BY agent_id LIMIT $8) s WHERE {FILTER} AND {cursor} ORDER BY {order} LIMIT $7"
     ))
 }
 pub(super) const TOTAL_SQL: &str =
@@ -444,7 +447,8 @@ impl TenantStore {
                     q.prefix,
                     q.after,
                     q.after_ack.unwrap_or(-2),
-                    i64::from(q.limit) + 1
+                    i64::from(q.limit) + 1,
+                    SCAN_LIMIT
                 ],
                 sqlite_row,
             )?

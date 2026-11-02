@@ -207,8 +207,8 @@ class FleetTriageBrowserTests(unittest.TestCase):
         self.complete = False
         self.open()
         self.wait_status("Page 1")
-        self.assertIn("Seen 25 of 30 matching among the counted Agents", self.status())
-        self.assertIn("count bound reached", self.page.locator("#triage-summary").inner_text())
+        self.assertIn("Seen 25 of 30 matching among the first 30 Agents by ID", self.status())
+        self.assertIn("later Agents are neither counted nor listed", self.page.locator("#triage-summary").inner_text())
         self.page.locator("#triage-next").click()
         self.wait_status("Page 2")
         self.assertIn("Seen 30 of 30", self.status())
@@ -222,6 +222,32 @@ class FleetTriageBrowserTests(unittest.TestCase):
         self.wait_status("Page 2")
         self.assertIn("1 Agent(s) repeated", self.status())
         self.assertIn("Fewer than counted", self.status())
+
+    def test_listed_agent_outside_the_counted_universe_is_refused(self):
+        # The reviewer's probe: complete=false, matching=0, yet one Agent listed.
+        outside = agent("agent-10000", [])
+        self.plan = [lambda b: b | {"counts": b["counts"] | {"complete": False, "counted_agents": 10000, "matching": 0},
+                                    "agents": [outside]}]
+        self.open()
+        self.wait_status("discarded")
+        self.assertEqual(self.listed(), [])
+        self.assertNotIn("Seen 1 of 0", self.status())
+        for counts in ({"matching": 9, "counted_agents": 8}, {"counted_agents": 10001, "matching": 1}):
+            with self.subTest(counts=counts):
+                self.plan = [lambda b, c=counts: b | {"counts": b["counts"] | c}]
+                self.page.locator("#triage-refresh").click()
+                self.wait_status("discarded")
+
+    def test_more_seen_than_counted_is_never_a_denominator(self):
+        self.agents[TENANT] = [agent(f"edge-{n:02d}", ["no_history"]) for n in range(30)]
+        self.open()
+        self.wait_status("Page 1")
+        self.plan = [lambda b: b | {"counts": b["counts"] | {"matching": 26}}]
+        self.page.locator("#triage-next").click()
+        self.wait_status("Page 2")
+        self.assertIn("Seen 26 of 26 matching", self.status())
+        self.assertIn("4 more seen than the current count", self.status())
+        self.assertNotIn("Seen 30 of 26", self.status())
 
     def test_stale_reply_after_tenant_switch_is_discarded(self):
         self.plan = ["hold"]

@@ -235,6 +235,26 @@ def main():
             check("projection-no-private-fields", all(w not in raw for w in ("token_hash", "policy_yaml", "bundle_json", "signature_hex", "default: deny"))
                   and all(v not in raw for v in private))
             before_state = json.dumps(req("GET", base + "/agents")) + json.dumps(req("GET", base + "/groups/fleet/members"))
+            # A tenant above the count bound: counts and pages share the first
+            # 10,000 Agents by ID; the one after it is neither counted nor listed.
+            large = req("POST", "/admin/v1/tenants", {"name": "Triage Large"})["id"]
+            for n in range(10_000):
+                req("POST", f"/admin/v1/tenants/{large}/agents", {"agent_id": f"agent-{n:05d}"})
+            creds["agent-10000"] = req("POST", f"/admin/v1/tenants/{large}/agents", {"agent_id": "agent-10000"})["token"]
+            private.append(creds["agent-10000"])
+            lbase = f"/admin/v1/tenants/{large}/agents/agent-10000"
+            req("POST", lbase + "/revisions", {"revision": "r1", "policy_yaml": "default: deny\n"})
+            req("POST", lbase + "/revisions/r1/approve", {})
+            check("outside-agent-applied", ack("agent-10000", req("POST", lbase + "/revisions/r1/deploy", {}), "applied")[0] == 204)
+            outside = []
+            for query in ("problem=all&prefix=agent-10000", "problem=no_recorded_problem&sort=ack_oldest",
+                          "problem=all&sort=ack_oldest&prefix=agent-1&limit=100"):
+                body = triage(query, tenant=large)
+                outside.append((body["counts"]["complete"], body["counts"]["counted_agents"], body["counts"]["matching"],
+                                [a["agent_id"] for a in body["agents"] if a["agent_id"] == "agent-10000"]))
+            check("bounded-universe-pages-match-counts", all(c is False and n == 10_000 and listed == [] for c, n, _, listed in outside)
+                  and outside[0][2] == 0)
+            snapshots["bounded_universe"] = [{"complete": c, "counted_agents": n, "matching": m} for c, n, m, _ in outside]
 
             with sync_playwright() as playwright, ExitStack() as browser_stack:
                 browser = playwright.chromium.launch(headless=True)
@@ -350,6 +370,15 @@ def main():
                           and page.locator("#triage-panel button.danger").count() == 0)
                 page.set_viewport_size({"width": 390, "height": 900})
                 check("narrow-no-horizontal-overflow", page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth"))
+                page.set_viewport_size({"width": 1366, "height": 1000})
+                tenant("Triage Large")
+                status("among the first 10000 Agents by ID")
+                check("browser-bounded-universe-wording", "later Agents are neither counted nor listed" in page.locator("#triage-summary").inner_text()
+                      and "Seen 25 of 10000 matching" in page.locator("#triage-status").inner_text())
+                page.locator("#triage-prefix").fill("agent-10000")
+                apply("all")
+                status("Seen 0 of 0")
+                check("browser-outside-agent-not-listed", listed() == [])
                 page.locator("#triage-panel").screenshot(path=str(args.output / f"{args.backend}-triage-narrow.png"))
             report["binaries"] = {p.name: sha(p.read_bytes()) for p in (console_binary, agent_binary)}
             report["config_sha256"] = {"console": sha((console_dir / "firewall.yaml").read_bytes())}

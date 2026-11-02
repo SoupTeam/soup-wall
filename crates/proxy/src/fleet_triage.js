@@ -33,6 +33,9 @@ const fleetTriage = (() => {
   // has a known shape; otherwise nothing from it is shown.
   function valid(data, id) {
     if (data?.contract_version !== CONTRACT || data.tenant_id !== id || !Array.isArray(data.agents) || !counts(data.counts) || !integer(data.observed_at_unix)) return false;
+    // Counts and page come from one snapshot of the same bounded universe:
+    // a page listing more Agents than match is inconsistent and is refused.
+    if (data.agents.length > data.counts.matching || data.counts.matching > data.counts.counted_agents || data.counts.counted_agents > data.counts.scan_limit) return false;
     const ids = new Set();
     return data.agents.every(a => a && a.tenant_id === id && typeof a.agent_id === "string" && ID.test(a.agent_id) && !ids.has(a.agent_id) && ids.add(a.agent_id)
       && Array.isArray(a.problems) && a.problems.every(p => p in LABELS) && integer(a.deployment_records) && integer(a.group_count)
@@ -53,8 +56,9 @@ const fleetTriage = (() => {
       grid.append(b);
     });
     box.append(grid);
-    const scope = c.complete ? `all ${c.counted_agents} enrolled Agents` : `the first ${c.counted_agents} Agents by ID (count bound reached; more exist)`;
-    box.append(make("p", `Counts cover ${scope}, read ${new Date(data.observed_at_unix * 1000).toLocaleString()}. "No recorded problem" is not proof of health: current liveness and active protection are unknown.`,
+    const scope = c.complete ? `Counts and list cover all ${c.counted_agents} enrolled Agents`
+      : `Count bound reached: counts and list cover only the first ${c.counted_agents} Agents by ID; later Agents are neither counted nor listed`;
+    box.append(make("p", `${scope}. Read ${new Date(data.observed_at_unix * 1000).toLocaleString()}. "No recorded problem" is not proof of health: current liveness and active protection are unknown.`,
       c.complete ? "note" : "outcome-other"));
   }
   function rows(data) {
@@ -111,10 +115,11 @@ const fleetTriage = (() => {
       summary(data); rows(data);
       cursor = data.next; $("triage-next").disabled = !cursor; $("triage-first").disabled = pageNumber <= 1;
       const shown = seen.size, c = data.counts;
-      let text = `Page ${pageNumber}: ${data.agents.length} Agent(s). Seen ${shown} of ${c.matching} matching${c.complete ? "" : " among the counted Agents"}.`;
-      if (!cursor && shown < c.matching) text += " Fewer than counted: records changed between pages; refresh for a new snapshot.";
+      let text = `Page ${pageNumber}: ${data.agents.length} Agent(s). Seen ${Math.min(shown, c.matching)} of ${c.matching} matching${c.complete ? "" : ` among the first ${c.counted_agents} Agents by ID`}.`;
+      if (shown > c.matching) text += ` ${shown - c.matching} more seen than the current count: records changed between pages, so the count is not a denominator for them; refresh for a new snapshot.`;
+      else if (!cursor && shown < c.matching) text += " Fewer than counted: records changed between pages; refresh for a new snapshot.";
       if (repeats) text += ` ${repeats} Agent(s) repeated from an earlier page because records changed; each page is a separate read.`;
-      status(text, repeats || (!cursor && shown < c.matching) || !c.complete ? "outcome-other" : "note");
+      status(text, repeats || shown > c.matching || (!cursor && shown < c.matching) || !c.complete ? "outcome-other" : "note");
     } catch (e) {
       if (generation !== epoch || mine !== request_ || id !== tenant) return;
       clear();
