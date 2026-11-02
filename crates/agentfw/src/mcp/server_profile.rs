@@ -15,6 +15,7 @@ use sha2::{Digest, Sha256};
 use super::input::InputSchema;
 
 pub mod filesystem_create;
+pub mod filesystem_links;
 pub mod filesystem_roots;
 pub mod git;
 pub mod git_local_clone;
@@ -50,6 +51,7 @@ pub fn selected(format: Option<&str>) -> bool {
         Some(
             FORMAT
                 | filesystem_roots::FORMAT
+                | filesystem_links::FORMAT
                 | filesystem_create::FORMAT
                 | git::FORMAT
                 | git::LOCAL_REFS_FORMAT
@@ -383,11 +385,19 @@ impl ProfileConfig {
             );
         }
         ensure!(
-            (config.format == filesystem_roots::FORMAT) == config.filesystem_roots.is_some(),
+            (matches!(
+                config.format.as_str(),
+                filesystem_roots::FORMAT | filesystem_links::FORMAT
+            )) == config.filesystem_roots.is_some(),
             "filesystem_roots_profile_binding_mismatch"
         );
         if let Some(binding) = &config.filesystem_roots {
             binding.validate_schema(&config.workspace)?;
+            ensure!(
+                (config.format == filesystem_links::FORMAT)
+                    == (binding.format == filesystem_links::BINDING_FORMAT),
+                "filesystem_links_profile_binding_mismatch"
+            );
             ensure!(
                 config.workspace_identity.as_ref() == Some(&binding.roots[0].identity),
                 "filesystem_roots_workspace_identity_mismatch"
@@ -509,7 +519,10 @@ pub fn original_manifest() -> Value {
 
 pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
     match format {
-        FORMAT | filesystem_roots::FORMAT | filesystem_create::FORMAT => Ok(original_manifest()),
+        FORMAT
+        | filesystem_roots::FORMAT
+        | filesystem_links::FORMAT
+        | filesystem_create::FORMAT => Ok(original_manifest()),
         git::FORMAT
         | git::LOCAL_REFS_FORMAT
         | git::FILE_READS_FORMAT
@@ -523,9 +536,10 @@ pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
 
 pub fn validate_initialization_for(format: &str, value: &Value) -> anyhow::Result<()> {
     match format {
-        FORMAT | filesystem_roots::FORMAT | filesystem_create::FORMAT => {
-            validate_initialization(value)
-        }
+        FORMAT
+        | filesystem_roots::FORMAT
+        | filesystem_links::FORMAT
+        | filesystem_create::FORMAT => validate_initialization(value),
         git::FORMAT
         | git::LOCAL_REFS_FORMAT
         | git::FILE_READS_FORMAT
@@ -542,7 +556,7 @@ pub fn classify_manifest_for(
     value: &Value,
 ) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
     match format {
-        FORMAT | filesystem_roots::FORMAT => classify_manifest(value),
+        FORMAT | filesystem_roots::FORMAT | filesystem_links::FORMAT => classify_manifest(value),
         filesystem_create::FORMAT => filesystem_create::classify_manifest(value),
         git::FORMAT
         | git::linked_worktree::FORMAT

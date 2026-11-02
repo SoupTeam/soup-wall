@@ -438,3 +438,60 @@ apply: the installed pilot proof policy asks before reading a path learned from
 an MCP result. The focused multi-root qualification keeps that explicit Ask
 control, then checks healthy continuation with a separately supplied owned path.
 It does not erase taint or weaken the installed policy to obtain a pass.
+
+## Optional internal file links in selected roots
+
+The independent `sw-mcp/filesystem-multi-root-file-links-readonly/1` profile
+supports relative file links within their own explicitly selected root. The
+strict multi-root profile and ordinary single-root profile retain their existing
+behavior. This capability must be selected explicitly:
+
+```sh
+agentfw pilot --home /private/agent-home filesystem-roots \
+  --root alpha=/owned/project-a --root beta=/owned/project-b \
+  --internal-file-links --output /private/selections/file-links.json --apply
+agentfw pilot --home /private/agent-home preview --prefix /private/pilot \
+  --filesystem-workspace /owned/project-a --git-workspace /owned/git-project \
+  --filesystem-roots-binding /private/selections/file-links.json
+```
+
+Use the same binding for the ordinary explicit `prepare --apply` workflow. The
+preview, installed profile, receipt and selection identify this optional format;
+preparation never activates it. A changed root, link chain or target identity
+requires an explicit new selection. Omit `--internal-file-links` for the strict
+default. Do not reuse an optional binding as a default-profile receipt.
+
+All original tool names, schemas, argument bytes, result inspection and Ask
+rules remain unchanged. Each root, link object, chain and final regular file is
+bound to its filesystem identity. Linux retains the checked descriptors,
+constructs a private read-only directory/link topology, and mounts every regular
+file from its checked descriptor. No source root or common parent directory is
+mounted into that view. Replacing an original link, ancestor or target cannot
+redirect a mounted file. Source contents remain live untrusted data; this
+capability does not promise an immutable content snapshot.
+
+The aggregate bounds are 2–4 roots, 256 regular files, 128 links, 128 directories,
+512 entries, depth 32, eight links per chain and 64 paths per call. Roots must be
+owned, disjoint local ext4, XFS, Btrfs or tmpfs directories. Absolute links,
+directory links, links crossing into another selected root, cycles, missing
+targets, hardlinks, nested mounts, shared-writable entries and other optional
+profile combinations refuse. Absolute internal links are deliberately unsupported
+in this first version; relative links preserve their original bytes. Names and
+link targets must be UTF-8 and names must contain no control characters.
+
+Topology or attribute changes, observer loss/overflow and root replacement
+withdraw the whole running root set. Correct the source and explicitly start a
+fresh run; an existing run never silently adopts a replacement. Ordinary
+unauthorized-path refusals permit useful follow-up reads in an unchanged run.
+Source files and unselected siblings receive no writes. Private runtime state,
+caches and output must remain outside every selected root.
+
+Focused development acceptance uses `mcp-real-filesystem.yml` with
+`installed_focus=filesystem-links`, `native_preparation_only=true`, all other
+flags false and stability off. It retains unsuccessful/incomplete cases, real
+original-server reads through chains and arrays, whole-call refusals, an
+in-flight retarget control, a positively tested independent outside-file
+open/access observer, source/delivery witnesses and owned-process cleanup.
+Native regression tests additionally replace the source after namespace
+construction and read the exact retained descriptor passed to bubblewrap.
+Final shared Ready qualification remains a separate TL-owned step.

@@ -39,6 +39,8 @@ pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap
 pub(crate) fn profile_name(format: &str) -> &'static str {
     if format == super::server_profile::git::linked_worktree::FORMAT {
         "sw-mcp/git-linked-worktree-readonly/linux-bwrap-landlock/1"
+    } else if format == super::server_profile::filesystem_links::FORMAT {
+        "sw-mcp/filesystem-multi-root-file-links-readonly/linux-bwrap/1"
     } else if format == super::server_profile::filesystem_roots::FORMAT {
         "sw-mcp/filesystem-multi-root-readonly/linux-bwrap/1"
     } else if format == super::server_profile::git::FILE_READS_FORMAT {

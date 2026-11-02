@@ -242,7 +242,7 @@ def verify_profile(kind, directory, paths, workspace, git_profile=GIT_PROFILES.D
     receipt = PILOT.strict_json(bounded_file(directory / "installation.json", MAX_JSON).read_bytes())
     profile = PILOT.strict_json(bounded_file(directory / "profile.json", MAX_JSON).read_bytes())
     registry = PILOT.strict_json(bounded_file(directory / "registry.json", MAX_JSON).read_bytes())
-    installer, name = (FS, FS_ROOTS.ID if filesystem_roots is not None else "filesystem-readonly-v1") if kind == "filesystem" else (GIT, git_profile)
+    installer, name = (FS, FS_ROOTS.profile_id(filesystem_roots) if filesystem_roots is not None else "filesystem-readonly-v1") if kind == "filesystem" else (GIT, git_profile)
     if kind == "filesystem":
         require(profile.get('filesystemRoots') == filesystem_roots, 'filesystem_roots_profile_binding_mismatch')
         if filesystem_roots is not None:
@@ -257,7 +257,7 @@ def verify_profile(kind, directory, paths, workspace, git_profile=GIT_PROFILES.D
         asset = bounded_file(directory / f"{label}.{suffix}", MAX_JSON)
         require(FS.sha(asset) == receipt[f"{label}_sha256"],
                 "profile_asset_changed")
-    require(profile.get("format") == ((FS_ROOTS.PROFILE if filesystem_roots is not None else installer.FORMAT) if kind == "filesystem" else
+    require(profile.get("format") == ((FS_ROOTS.profile(filesystem_roots) if filesystem_roots is not None else installer.FORMAT) if kind == "filesystem" else
             GIT_PROFILES.selected(name)[0]), "profile_format_changed")
     require(profile.get("workspace") == str(workspace) and profile.get("bwrapPath") == str(paths["bwrap"])
             and profile.get("bwrapSha256") == FS.sha(paths["bwrap"]), "profile_runtime_changed")
@@ -265,7 +265,7 @@ def verify_profile(kind, directory, paths, workspace, git_profile=GIT_PROFILES.D
             and not (directory / "package").is_symlink(), "profile_package_path_changed")
     require(FS.tree_sha(directory / "package") == profile.get("packageTreeSha256"), "profile_package_changed")
     expected_registry = (installer.registry(json.loads((installer.ASSETS / "upstream-tools-list.json").read_text()),
-                                            **({"filesystem_roots": True} if filesystem_roots is not None else {}))
+                                            **({"filesystem_roots": filesystem_roots} if filesystem_roots is not None else {}))
                          if kind == "filesystem" else GIT_PROFILES.registry(name))
     require(registry == expected_registry
             and registry.get("registry_id") == name, "profile_registry_changed")
@@ -790,7 +790,7 @@ def main():
                           "inputs": {role: {"path": str(getattr(args, role)),
                               "sha256": FS.sha(getattr(args, role)) if getattr(args, role).is_file() else None}
                               for role in PILOT.ROLES if getattr(args, role) is not None},
-                          "profiles": {kind: {"format": (FS_ROOTS.PROFILE if fs_roots is not None else installer.FORMAT) if kind == "filesystem" else
+                          "profiles": {kind: {"format": (FS_ROOTS.profile(fs_roots) if fs_roots is not None else installer.FORMAT) if kind == "filesystem" else
                               git_selection["profile_format"],
                               "upstream_identity_sha256": FS.sha(installer.ASSETS / "upstream-identity.json"),
                               "policy_sha256": FS.sha(installer.ASSETS / "policy.yaml") if kind == "filesystem" else
