@@ -159,8 +159,8 @@ def installed_graphs(generation, graphs):
         metadata = email.message_from_bytes((directory / "METADATA").read_bytes())
         name, version = metadata.get("Name"), metadata.get("Version")
         require(bool(name) and bool(version), "python_distribution_identity_missing")
-        # pip/setuptools bundled with the interpreter are inventoried too. If
-        # they are absent from the selected hashed lock, coverage stays blocking.
+        # Bootstrap packages from the pinned interpreter archive are inventoried
+        # and scanned even when absent from the server's wheel lock.
         py_graph.add(("PyPI", python_name(name), version))
         files = [p for p in directory.rglob("*") if p.is_file() and (
             "license" in p.name.lower() or p.name.lower().startswith(("copying", "notice")))]
@@ -175,7 +175,15 @@ def installed_graphs(generation, graphs):
     # The accepted interpreter archive also redistributes its bootstrap tools.
     # Scan these real installed versions rather than omitting them or adding
     # invented wheel hashes to the strict runtime installer lock.
-    require(all(n.get("license") and n["files"] for n in notices), "runtime_license_notice_incomplete")
+    import license_policy
+    policy = tomllib.loads((ROOT / "policy/license-policy.toml").read_text())
+    for notice in notices:
+        expression = notice.get("license")
+        require(isinstance(expression, str) and notice["files"],
+                "runtime_license_notice_incomplete:" + notice["name"])
+        status, selected, reason = license_policy.judge_spdx(expression, policy)
+        notice["policy"] = {"status": status, "selected": selected, "reason": reason}
+        require(status == "approved", "runtime_license_review_required:" + notice["name"])
     return notices, py_graph
 
 

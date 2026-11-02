@@ -41,7 +41,10 @@ def drain_stdout():
                 break
             responses.put(line)
     finally:
-        responses.put(None)
+        try:
+            responses.put_nowait(None)
+        except queue.Full:
+            pass
 
 threads = [threading.Thread(target=target, daemon=True) for target in (drain_stderr, drain_stdout)]
 for thread in threads:
