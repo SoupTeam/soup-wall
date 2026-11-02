@@ -5,10 +5,12 @@ import ctypes
 import json
 import os
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest import mock
@@ -216,11 +218,12 @@ class LocalPrVerify(unittest.TestCase):
                 "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(15)'], "
                 "stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
                 f"pathlib.Path({str(marker)!r}).write_text(str(p.pid))")
-        status, reason, exit_code, _, _, duration = VERIFY.run_one(
+        status, reason, exit_code, _, _, duration, executed = VERIFY.run_one(
             [sys.executable, "-c", code], self.repo, os.environ.copy(),
             time.monotonic() + 5)
         self.assertTrue(marker.exists())
         self.assertEqual((status, exit_code), ("incomplete", 0))
+        self.assertTrue(executed)
         self.assertIn(reason, ("descendant_after_exit", "descendant_cleanup_unverified"))
         self.assertLess(duration, 5)
         pid = int(marker.read_text())
@@ -249,11 +252,127 @@ class LocalPrVerify(unittest.TestCase):
 
     def test_unverified_cleanup_cannot_turn_zero_exit_into_pass(self):
         with mock.patch.object(VERIFY, "_finish_owned_group", return_value=(False, False)):
-            status, reason, exit_code, _, _, _ = VERIFY.run_one(
+            status, reason, exit_code, _, _, _, executed = VERIFY.run_one(
                 [sys.executable, "-c", "pass"], self.repo, os.environ.copy(),
                 time.monotonic() + 5)
         self.assertEqual((status, reason, exit_code),
                          ("incomplete", "descendant_cleanup_unverified", 0))
+        self.assertTrue(executed)
+
+    def test_unverified_descendant_keeps_private_scratch_and_refuses(self):
+        with mock.patch.object(VERIFY, "run_one", return_value=(
+                "incomplete", "descendant_cleanup_unverified", None, 0, "", .1, True)):
+            report = VERIFY.run(self.repo, self.base, "HEAD")
+        scratch = Path(report["retained_scratch"])
+        try:
+            self.assertEqual(report["reason"], "descendant_cleanup_unverified")
+            self.assertFalse(report["local_checks_passed"])
+            self.assertEqual(report["counts"]["incomplete"], 1)
+            self.assertEqual(report["counts"]["executed"], 1)
+            self.assertTrue((scratch / "source").is_dir())
+        finally:
+            self.git("worktree", "remove", "--force", str(scratch / "source"))
+            shutil.rmtree(scratch)
+
+    @unittest.skipUnless(sys.platform == "linux" and hasattr(os, "pidfd_open"),
+                         "Linux pidfd witness for a new-session descendant")
+    def test_zero_exit_new_session_descendant_is_reaped(self):
+        marker = Path(self.temp.name) / "new-session-child.pid"
+        code = ("import pathlib,subprocess,sys; "
+                "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'], "
+                "start_new_session=True,stdin=subprocess.DEVNULL,"
+                "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
+                f"pathlib.Path({str(marker)!r}).write_text(str(p.pid))")
+        result = []
+        thread = threading.Thread(target=lambda: result.append(VERIFY.run_one(
+            [sys.executable, "-c", code], self.repo, os.environ.copy(),
+            time.monotonic() + 5)))
+        thread.start()
+        pidfd = None
+        try:
+            until = time.monotonic() + 3
+            while not marker.exists() and time.monotonic() < until:
+                time.sleep(.01)
+            self.assertTrue(marker.exists())
+            pidfd = os.pidfd_open(int(marker.read_text()))
+            thread.join(timeout=8)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(result[0][:3], ("incomplete", "descendant_after_exit", 0))
+            try:
+                signal.pidfd_send_signal(pidfd, 0)
+            except ProcessLookupError:
+                pass
+            else:
+                state = Path(f"/proc/{marker.read_text()}/stat")
+                self.assertTrue(state.exists() and state.read_text().split(") ", 1)[1][0] == "Z",
+                                "new-session descendant is still executing")
+        finally:
+            if pidfd is not None:
+                try:
+                    signal.pidfd_send_signal(pidfd, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                os.close(pidfd)
+            thread.join(timeout=8)
+
+    @unittest.skipUnless(sys.platform == "linux" and hasattr(os, "pidfd_open"),
+                         "Linux pidfd witness for deadline cleanup")
+    def test_deadline_reaps_new_session_descendant(self):
+        marker = Path(self.temp.name) / "deadline-child.pid"
+        code = ("import pathlib,subprocess,sys,time; "
+                "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'], "
+                "start_new_session=True,stdin=subprocess.DEVNULL,"
+                "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
+                f"pathlib.Path({str(marker)!r}).write_text(str(p.pid)); time.sleep(30)")
+        result = []
+        thread = threading.Thread(target=lambda: result.append(VERIFY.run_one(
+            [sys.executable, "-c", code], self.repo, os.environ.copy(),
+            time.monotonic() + 1)))
+        thread.start()
+        pidfd = None
+        try:
+            until = time.monotonic() + 3
+            while not marker.exists() and time.monotonic() < until:
+                time.sleep(.01)
+            self.assertTrue(marker.exists())
+            pidfd = os.pidfd_open(int(marker.read_text()))
+            thread.join(timeout=8)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(result[0][0:2], ("incomplete", "deadline"))
+            try:
+                signal.pidfd_send_signal(pidfd, 0)
+            except ProcessLookupError:
+                pass
+            else:
+                state = Path(f"/proc/{marker.read_text()}/stat")
+                self.assertTrue(state.exists() and state.read_text().split(") ", 1)[1][0] == "Z",
+                                "deadline left a new-session child executing")
+        finally:
+            if pidfd is not None:
+                try:
+                    signal.pidfd_send_signal(pidfd, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                os.close(pidfd)
+            thread.join(timeout=8)
+
+    @unittest.skipUnless(sys.platform == "linux", "Linux subreaper report witness")
+    def test_run_report_refuses_new_session_descendant_after_zero_exit(self):
+        marker = Path(self.temp.name) / "report-child.pid"
+        self.write("scripts/check_docs.py", "import pathlib,subprocess,sys\n"
+                   "p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'], "
+                   "start_new_session=True,stdin=subprocess.DEVNULL,"
+                   "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
+                   f"pathlib.Path({str(marker)!r}).write_text(str(p.pid))\n")
+        self.commit("docs checker with surviving new-session child")
+        result, report = self.invoke("run", "--step-seconds", "3")
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(report["counts"]["incomplete"], 1)
+        check = next(item for item in report["checks"] if item["name"] == "docs_links")
+        self.assertEqual((check["status"], check["reason"], check["exit_code"]),
+                         ("incomplete", "descendant_after_exit", 0))
+        self.assertFalse(report["local_checks_passed"])
+        self.assertIsNone(report["retained_scratch"])
 
     @unittest.skipUnless(os.name == "posix", "POSIX process-group witness")
     def test_sigint_reaps_owned_checker_descendants(self):

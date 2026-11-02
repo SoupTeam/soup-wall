@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import re
+import select
 import shutil
 import signal
 import stat
@@ -246,7 +247,9 @@ def inspect(root, base_ref, head_ref):
             "selector_base_sha256": selector_contract,
             "local_checks": [{"name": name, "selected": selected[name],
                               "estimated_cost_seconds": CHECK_COST[name],
-                              "platform": "local" if name not in ("rust_clippy", "rust_test_compile") else "local with pinned Rust and offline dependency cache"}
+                              "platform": ("Windows job or Linux subreaper/pidfd" if name not in
+                                           ("rust_clippy", "rust_test_compile") else
+                                           "Windows job or Linux subreaper/pidfd; pinned Rust and offline dependency cache")}
                              for name in CHECK_ORDER],
             "remote_required": {"status": "not-run", "workflows": remote,
                                 "codeql": impact["codeql"],
@@ -408,9 +411,103 @@ def _finish_owned_group(process, job=None):
     return had_members, not _owned_group_present(process)
 
 
+def _supervise_linux(deadline, argv):
+    """Isolate one checker under a child subreaper; stderr is private protocol."""
+    def report(code, descendants, cleaned, reason, executed):
+        sys.stderr.write(json.dumps({"exit_code": code, "descendants": descendants,
+                                     "cleaned": cleaned, "reason": reason,
+                                     "executed": executed}) + "\n")
+        sys.stderr.flush()
+        return 0 if cleaned else 2
+
+    if (sys.platform != "linux" or not argv or not hasattr(os, "pidfd_open")
+            or not hasattr(signal, "pidfd_send_signal")):
+        return report(None, False, True, "containment_unavailable", False)
+    children_file = Path(f"/proc/self/task/{os.getpid()}/children")
+    try:
+        children_file.read_bytes()
+        descriptor = os.pidfd_open(os.getpid(), 0)
+        os.close(descriptor)
+        libc = ctypes.CDLL(None, use_errno=True)
+        libc.prctl.argtypes = [ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong,
+                              ctypes.c_ulong, ctypes.c_ulong]
+        libc.prctl.restype = ctypes.c_int
+        subreaper_ready = libc.prctl(36, 1, 0, 0, 0) == 0  # PR_SET_CHILD_SUBREAPER
+    except (OSError, AttributeError):
+        subreaper_ready = False
+    if not subreaper_ready:
+        return report(None, False, True, "containment_unavailable", False)
+    try:
+        checker = subprocess.Popen(argv, stdin=subprocess.DEVNULL,
+                                   stdout=None, stderr=subprocess.STDOUT,
+                                   start_new_session=True)
+    except OSError:
+        return report(None, False, True, "executable_unavailable", False)
+
+    def children():
+        raw = children_file.read_bytes()
+        if len(raw) > 16384:
+            raise OSError("child census limit")
+        values = [int(value) for value in raw.split()]
+        if len(values) > 1024:
+            raise OSError("child census limit")
+        return values
+
+    reason = None
+    while checker.poll() is None:
+        if time.monotonic() >= deadline:
+            reason = "deadline"
+            break
+        if select.select([sys.stdin.buffer], [], [], .05)[0] and not os.read(0, 1):
+            reason = "cancelled"
+            break
+
+    descendants = False
+    cleaned = False
+    until = time.monotonic() + 2
+    try:
+        while time.monotonic() < until:
+            owned = children()
+            descendants |= any(pid != checker.pid for pid in owned)
+            if not owned:
+                cleaned = True
+                break
+            for pid in owned:
+                try:
+                    descriptor = os.pidfd_open(pid, 0)
+                except ProcessLookupError:
+                    continue
+                try:
+                    signal.pidfd_send_signal(descriptor, signal.SIGKILL, None, 0)
+                except ProcessLookupError:
+                    pass
+                finally:
+                    os.close(descriptor)
+            try:
+                checker.wait(timeout=.02)
+            except subprocess.TimeoutExpired:
+                pass
+            if checker.returncode is not None:
+                while True:
+                    try:
+                        reaped, _ = os.waitpid(-1, os.WNOHANG)
+                    except ChildProcessError:
+                        break
+                    if not reaped:
+                        break
+            time.sleep(.01)
+        if not cleaned:
+            cleaned = not children()
+    except (OSError, ValueError):
+        reason = "descendant_cleanup_unverified"
+    return report(checker.returncode, descendants, cleaned, reason, True)
+
+
 def run_one(argv, cwd, env, deadline):
     started = time.monotonic()
     job = None
+    supervised = sys.platform == "linux"
+    executed = False
     try:
         if os.name == "nt":
             # The wrapper waits for the gate before starting the real checker.
@@ -432,13 +529,18 @@ def run_one(argv, cwd, env, deadline):
                 _kill_tree(process)
                 if job:
                     job.close()
-                return "unavailable", "owned_job_unavailable", None, 0, "", 0
-        else:
-            process = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
-                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                return "unavailable", "owned_job_unavailable", None, 0, "", 0, False
+            executed = True
+        elif supervised:
+            process = subprocess.Popen([sys.executable, "-B", str(Path(__file__).resolve()),
+                                        "_supervise", str(deadline), *argv],
+                                       cwd=cwd, env=env, stdin=subprocess.PIPE,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        start_new_session=True)
+        else:
+            return "unavailable", "descendant_containment_unavailable", None, 0, "", 0, False
     except OSError:
-        return "unavailable", "executable_unavailable", None, 0, "", 0
+        return "unavailable", "executable_unavailable", None, 0, "", 0, False
     output = bytearray()
     overflow = threading.Event()
 
@@ -467,11 +569,40 @@ def run_one(argv, cwd, env, deadline):
             time.sleep(.05)
     except KeyboardInterrupt:
         reason = "cancelled"
-    # Reap/verify the owned session on every path. A successful leader can
-    # leave a child with closed output pipes, which the collector cannot see.
+    if supervised and reason:
+        process.stdin.close()  # EOF requests bounded descendant cleanup.
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            reason = "descendant_cleanup_unverified"
+    # The Linux helper adopts children across setsid; the outer session and
+    # Windows job still need independent completion checks.
     descendants, cleaned = _finish_owned_group(process, job)
     if job:
         job.close()
+    exit_code = process.returncode
+    if supervised:
+        try:
+            raw = process.stderr.read(4097)
+            if len(raw) > 4096:
+                raise ValueError("supervisor report limit")
+            witness = json.loads(raw)
+            if (type(witness) is not dict or type(witness.get("cleaned")) is not bool
+                    or type(witness.get("descendants")) is not bool
+                    or type(witness.get("executed")) is not bool
+                    or (witness.get("exit_code") is not None
+                        and type(witness["exit_code"]) is not int)):
+                raise ValueError("supervisor report invalid")
+            exit_code = witness["exit_code"]
+            executed = witness["executed"]
+            descendants |= witness["descendants"]
+            cleaned &= witness["cleaned"]
+            reason = reason or witness.get("reason")
+        except (ValueError, OSError):
+            cleaned = False
+        finally:
+            process.stdin.close()
+            process.stderr.close()
     if not cleaned:
         reason = "descendant_cleanup_unverified"
     elif descendants and not reason:
@@ -485,11 +616,13 @@ def run_one(argv, cwd, env, deadline):
         reason = "output_limit"
     excerpt = bytes(output[-MAX_EXCERPT:]).decode("utf-8", "replace")
     duration = round(time.monotonic() - started, 3)
+    if reason in ("containment_unavailable", "executable_unavailable") and exit_code is None and cleaned:
+        return "unavailable", reason, None, len(output), excerpt, duration, False
     if reason:
-        return "incomplete", reason, process.returncode, len(output), excerpt, duration
-    return ("passed" if process.returncode == 0 else "failed",
-            "exit_zero" if process.returncode == 0 else "exit_nonzero",
-            process.returncode, len(output), excerpt, duration)
+        return "incomplete", reason, exit_code, len(output), excerpt, duration, executed
+    return ("passed" if exit_code == 0 else "failed",
+            "exit_zero" if exit_code == 0 else "exit_nonzero",
+            exit_code, len(output), excerpt, duration, executed)
 
 
 def availability(name, status, reason, excerpt):
@@ -574,13 +707,15 @@ def run(root, base_ref, head_ref, *, step_seconds=120, total_seconds=600):
                 results.append({"name": name, "status": "unavailable", "executed": False,
                                 "reason": "python_input_limit", "duration_seconds": 0})
                 continue
-            status, reason, code, size, excerpt, duration = run_one(
+            status, reason, code, size, excerpt, duration, executed = run_one(
                 argv, checkout, environment, min(time.monotonic() + step_seconds, finish_by))
             status, reason = availability(name, status, reason, excerpt)
-            results.append({"name": name, "status": status, "executed": code is not None,
+            results.append({"name": name, "status": status, "executed": executed,
                             "reason": reason, "command": argv, "exit_code": code,
                             "output_bytes_retained": size, "output_excerpt": excerpt,
                             "duration_seconds": duration})
+            if reason == "descendant_cleanup_unverified":
+                raise Refusal(reason)
             if status == "incomplete":
                 cancelled = True
         scratch_after = git(checkout, "status", "--porcelain=v1", "-z", "--untracked-files=all")
@@ -594,22 +729,31 @@ def run(root, base_ref, head_ref, *, step_seconds=120, total_seconds=600):
     except KeyboardInterrupt:
         refusal = "cancelled"
     finally:
-        if attached:
-            try:
-                git(root, "worktree", "remove", "--force", str(checkout), timeout=20)
-            except Refusal:
-                cleanup_failed = True
-        # The directory was made by this invocation and is required to remain
-        # under the system temporary root before recursive cleanup.
-        if scratch.parent.resolve() == Path(tempfile.gettempdir()).resolve() and not scratch.is_symlink():
-            try:
-                shutil.rmtree(scratch)
-            except OSError:
-                cleanup_failed = True
-        else:
+        unverified_descendant = any(item.get("reason") == "descendant_cleanup_unverified"
+                                    for item in results)
+        if unverified_descendant:
+            # A still-running checker may hold this checkout. Keep its private
+            # scratch intact for explicit local recovery instead of deleting
+            # files beneath an unverified process.
             cleanup_failed = True
+        else:
+            if attached:
+                try:
+                    git(root, "worktree", "remove", "--force", str(checkout), timeout=20)
+                except Refusal:
+                    cleanup_failed = True
+            # The directory was made by this invocation and is required to remain
+            # under the system temporary root before recursive cleanup.
+            if scratch.parent.resolve() == Path(tempfile.gettempdir()).resolve() and not scratch.is_symlink():
+                try:
+                    shutil.rmtree(scratch)
+                except OSError:
+                    cleanup_failed = True
+            else:
+                cleanup_failed = True
     if cleanup_failed:
-        refusal = "cleanup_incomplete"
+        refusal = ("descendant_cleanup_unverified" if unverified_descendant else
+                   "cleanup_incomplete")
     for item in planned["local_checks"][len(results):]:
         results.append({"name": item["name"], "status": "not-run", "executed": False,
                         "reason": "source_refused", "duration_seconds": 0})
@@ -622,6 +766,7 @@ def run(root, base_ref, head_ref, *, step_seconds=120, total_seconds=600):
                     "counts": {"selected": sum(item["selected"] for item in planned["local_checks"]),
                                "executed": sum(item.get("executed", False) for item in results), **counts},
                     "duration_seconds": round(time.monotonic() - started, 3),
+                    "retained_scratch": str(scratch) if unverified_descendant else None,
                     "local_checks_passed": refusal is None and
                     counts["failed"] == counts["unavailable"] == counts["not-run"] == counts["incomplete"] == 0,
                     "full_qualification": False, "github_status_posted": False,
@@ -667,4 +812,6 @@ def main():
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 2 and sys.argv[1] == "_supervise":
+        raise SystemExit(_supervise_linux(float(sys.argv[2]), sys.argv[3:]))
     raise SystemExit(main())

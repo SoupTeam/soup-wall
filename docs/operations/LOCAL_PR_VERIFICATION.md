@@ -56,9 +56,14 @@ Checks run sequentially. Each check subprocess has a 1–300 second limit
 (default 120), the selected-check phase a 1–900 second limit (default 600),
 and Git preparation/cleanup have separate finite timeouts. Retained output is capped
 at 64 KiB per check with a 2 KiB excerpt. Cancellation and limits stop the
-owned process group (a gated Windows job object or fresh POSIX session),
-including after a checker exits zero. A surviving child makes the check
-`incomplete`; later checks become `not-run`. Result states are
+owned descendants (a gated Windows job object or an isolated Linux subreaper
+with pidfd cleanup), including children that create a new session and remain
+after a checker exits zero. Other POSIX systems report containment unavailable
+before executing a check. A surviving child makes the check `incomplete`;
+later checks become `not-run`. If descendant cleanup cannot be verified, the
+private scratch checkout is retained and its path is reported for explicit
+local recovery rather than deleting files beneath a possible running child.
+Result states are
 `passed`, `failed`, `skipped`, `unavailable`, `not-run` and `incomplete`, with
 separate selected/executed/pass denominators, commands, exit codes and
 durations. A missing toolchain or timed-out check makes the local result
@@ -72,7 +77,8 @@ The focused process regressions use owned synthetic Git projects, including a
 public Python/docs change, an actual failing syntax check, missing Rust,
 unknown paths, concurrent source mutation, cancellation with a child process,
 early zero exit with a child that closed output, oversized output and a forged
-existing report. These are local verifier
+existing report. A separate Linux pidfd control covers a new-session child
+after early zero exit. These are local verifier
 controls, not observed provider protection or measured CI savings. Exact
 source and measured feedback from the Draft PR are recorded in its description;
 no reduction in hosted runner usage is claimed without paired CI data.
