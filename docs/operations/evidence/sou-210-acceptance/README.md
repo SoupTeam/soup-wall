@@ -2,9 +2,8 @@
 
 Base: accepted `main` `f66a2242` (merge of PR #334). This ledger separates local macOS
 checks, observed native Linux behavior and the final shared merge qualification, which is
-TL-owned. No full Ready matrix was dispatched. The installed qualifier is **new and had not
-run natively when this ledger was written**; the native section below is filled in only
-from retained workflow runs and keeps failed attempts visible.
+TL-owned. No full Ready matrix was dispatched. Only the focused manual mode below was run;
+the native section is filled in from retained workflow runs and keeps failed attempts visible.
 
 ## Local macOS checks (platform-independent logic only)
 
@@ -53,7 +52,42 @@ Workflow `mcp-real-filesystem.yml`, manual dispatch with `installed_focus: budge
 `stale-profile-zero-start`, `unavailable-delegation-zero-start`, `root-replaced-refused`,
 `owned-cleanup`.
 
-_Results pending: no native run has been recorded for this ledger yet._
+### Attempt 1 (failed, kept)
+
+Run `41413543382`, source `0b73b507`. The unit step failed before the installed qualifier
+started: `PreparedRunIntegration` lacked the provider fixture that native Linux requires,
+so `pilot-run.py` stopped at `provider_unavailable` instead of reaching the preset check.
+Test-only defect (the product refusal was unchanged); fixed in `91176ee5`.
+
+### Attempt 2 (passed)
+
+Run `41414791512` (`native-ubuntu-2404` success), exact source
+`91176ee5c77ea0fa732d6a5a99889b88a2088683`, clean tree, installed component, genuine pinned
+hosts, scripted loopback provider and owned synthetic projects, inside a disposable
+`Delegate=cpu memory pids` systemd service. The 50 unit tests, `cargo fmt --all --check`
+and all 14 installed cases passed; the service was confirmed removed.
+
+| Case | Observed |
+| --- | --- |
+| `inert-preview` | strace: 0 selected-program starts, 0 network connects; only the wrapper plus its one validator child; home and roots unchanged |
+| `two-independent-presets` | two presets on two delegated roots; distinct root and config identities; both roots still empty |
+| `bounds-refused` | pids 15, memory 4096, wall 3 600 001 refused as out of range; pids 129 refused under `prepared-pilot-default`; nothing stored |
+| `unverified-delegation-refused` | undelegated root refused (`delegation_unverified`); nothing stored |
+| `stale-update-refused` | stale digest refused; `check` reported `selected-not-validated`, `--probe` `available-not-active`, `witnessed_active` false |
+| `concurrent-update` | two contenders on one digest: exactly one succeeded |
+| `damaged-store` | damaged catalog refused; restored bytes accepted |
+| `two-budgeted-reads` | both budgeted original-host runs completed useful, independent reads |
+| `controller-limit-witness` | live leaves under each root (2 each) read back the exact `memory.max`, `pids.max`, `cpu.max`, `memory.swap.max`; each run's frozen snapshot matched its preset identity |
+| `update-during-run` | update of a busy unchanged root accepted (`busy-root-unchanged`); running leaves kept their original `pids.max`; frozen snapshots unchanged; both runs kept running |
+| `stale-profile-zero-start` | project selection made stale by the update refused; 0 selected starts, 0 connects |
+| `unavailable-delegation-zero-start` | removed delegated root refused at check and run; 0 selected starts, 0 connects |
+| `root-replaced-refused` | recreated root (new inode) refused as `root_changed` |
+| `owned-cleanup` | one run stopped, the sibling continued and finished; all processes stopped, roots empty, sources unchanged, receiver effects 0, no provider canary in catalog or output |
+
+Retained report SHA-256 `7b0483b919c1de03591b539199cb4c9e6786f5e872aee62bafd689ca40bd49fa`,
+log SHA-256 `dfc77271441abc0f9f70680c61f9821ed0657d8eca45dfaa4958ee7f1829b06c`
+(artifact `sou210-installed-budget-presets-41414791512-1`). Raw syscall traces stay private.
+Later commits that change only this ledger are not re-qualified.
 
 ## Known boundaries
 
