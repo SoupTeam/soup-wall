@@ -133,6 +133,16 @@ def discover(path, expected, update_sha256=None):
 
 
 def completion(data, shell, context=None):
+    program = data.get('program', 'pilot')
+    if program not in ('pilot', 'agentfw'):
+        raise ValueError('unsupported completion program')
+    return _completion(data, shell, context).replace('complete -F _pilot_help_complete pilot',
+        'complete -F _pilot_help_complete ' + program).replace('compdef _pilot_help_complete pilot',
+        'compdef _pilot_help_complete ' + program).replace('complete -c pilot ',
+        'complete -c ' + program + ' ').replace('#compdef pilot', '#compdef ' + program)
+
+
+def _completion(data, shell, context=None):
     context = list(context or [])
     if shell not in ('bash', 'zsh', 'fish') or len(data['commands']) > 256:
         raise ValueError('unsupported completion input')
@@ -263,7 +273,8 @@ def rust_catalog_snapshot(path, expected, snapshot):
         rows.append({'command': parts, 'flags': flags, 'effects': effects(parts),
                      'confirmation_flags': [flag['name'] for flag in flags if flag['name'] in
                                             ('--apply', '--confirm', '--yes', '--approve', '--sha256')]})
-    return {'schema': 'sw-agent-command-catalog/2', 'component_sha256': expected, 'commands': rows}
+    return {'schema': 'sw-agent-command-catalog/2', 'program': 'agentfw',
+            'component_sha256': expected, 'commands': rows}
 
 
 def main(argv=None):

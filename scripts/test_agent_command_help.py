@@ -62,6 +62,13 @@ class Controls(unittest.TestCase):
             commands = [row['command'] for row in catalog['commands']]
             self.assertIn(['doctor'], commands)
             self.assertTrue(any('lifecycle' in row for row in commands))
+            for command in ('edit-session', 'pilot-approval', 'native-approval'):
+                self.assertIn([command], commands)
+                refusal = subprocess.run([str(binary), command], cwd=temp,
+                                         capture_output=True, timeout=10)
+                self.assertNotEqual(refusal.returncode, 0)
+            self.assertIn('complete -F _pilot_help_complete agentfw',
+                          reader_completion(catalog, 'bash', []))
 
     def test_verified_python_bytes_survive_path_replacement(self):
         spec = importlib.util.spec_from_file_location('help_reader', TOOL)
