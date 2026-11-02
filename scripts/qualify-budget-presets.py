@@ -349,7 +349,7 @@ def qualify(args, door, home, env, report, first, installed, receiver):
                         'budget_unnamed_limits_not_exact')
             live['leaves'] = len(found)
 
-        row, results, _ = guided.run_case(args, door, report, 'budget_unnamed', useful, after_useful=during_unnamed,
+        row, results, _ = q.run_case(args, door, report, 'budget_unnamed', useful, after_useful=during_unnamed,
                                           run_flags=['--budget-preset', 'one', '--budget-preset-digest', current['digest']])
         require(live and row['exit'] == 0 and row['process_cleanup']['all_stopped'] and len(results) == 2
                 and all(not r['is_error'] for r in results.values()) and empty(roots[0]), 'budget_unnamed_run_not_enforced')
