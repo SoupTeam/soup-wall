@@ -39,6 +39,14 @@ INHERITED = frozenset({'selected_generation_in_use_or_transitioning', 'active_or
 _MODULES = {}
 
 
+class Refusal(ValueError):
+    """A finite reason plus an optional bounded diagnostic from an accepted helper."""
+
+    def __init__(self, reason, detail=None):
+        super().__init__(reason)
+        self.detail = None if detail is None else re.sub(r'[^A-Za-z0-9_:.,/ -]', '?', str(detail))[:300]
+
+
 def require(ok, code):
     if not ok:
         raise ValueError('policy_activation_' + code)
@@ -305,8 +313,9 @@ def stage_words(ctx, front, policy_path):
 
 def stage_generation(ctx, front, policy_path):
     code, value = front.child(stage_words(ctx, front, policy_path), timeout=3600, cwd=front.ROOT)
-    require(code == 0 and value.get('status') == 'staged-not-selected' and ID.fullmatch(str(value.get('generation', '')))
-            and HEX.fullmatch(str(value.get('selection_sha256', ''))), 'staging_refused')
+    if not (code == 0 and value.get('status') == 'staged-not-selected' and ID.fullmatch(str(value.get('generation', '')))
+            and HEX.fullmatch(str(value.get('selection_sha256', '')))):
+        raise Refusal('policy_activation_staging_refused', value.get('reason') or 'exit_' + str(code))
     return value
 
 
@@ -509,6 +518,8 @@ def main(argv, front):
         reason = str(error)
         report['reason'] = (reason if PUBLIC.fullmatch(reason) else
                             'policy_activation_' + reason if reason in INHERITED else 'policy_activation_input_unavailable')
+        if getattr(error, 'detail', None):
+            report['detail'] = error.detail
         report['action'] = 'Inspect the exact inputs and retained journal; repeat the preview. Nothing is retried or repaired automatically.'
         print(json.dumps(report, sort_keys=True))
         return 2

@@ -220,16 +220,27 @@ def qualify(args, door, home, env, report, *, guided, receiver, baseline, select
                '--state-root', str(args.state_root), *map(str, candidate_args), '--confirm', ready['confirmation_sha256']]
     process = subprocess.Popen(command, cwd=door.cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, start_new_session=True)
+    drained = False
     try:
         deadline = time.monotonic() + 300
         while len(generations()) < 2 and time.monotonic() < deadline and process.poll() is None:
             time.sleep(0.05)
-        require(len(generations()) >= 2 and process.poll() is None, 'activation_staging_not_observed')
+        if len(generations()) < 2 or process.poll() is not None:
+            out, _ = process.communicate(timeout=60)
+            drained = True
+            try:
+                early = json.loads(out.decode().splitlines()[-1])
+            except (ValueError, IndexError):
+                early = {}
+            evidence['early_exit'] = {'exit': process.returncode, 'reason': early.get('reason'), 'detail': early.get('detail'),
+                                      'generations': len(generations())}
+            require(False, 'activation_staging_not_observed')
         os.killpg(process.pid, signal.SIGKILL)
     finally:
         if process.poll() is None:
             os.killpg(process.pid, signal.SIGKILL)
-        process.communicate(timeout=60)
+        if not drained:
+            process.communicate(timeout=60)
     require(pointers() == pointers_before and process.returncode != 0, 'activation_killed_staging_changed_selection')
     require(not (preparation / activation.JOURNAL).exists() or json.loads((preparation / activation.JOURNAL).read_bytes())['pending'] is None,
             'activation_kill_left_pending_intent')
