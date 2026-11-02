@@ -16,6 +16,39 @@ spec.loader.exec_module(tool)
 
 
 class Controls(unittest.TestCase):
+    def test_supported_identity_projections_and_missing_scope(self):
+        identities = ('filesystem_profile', 'git_profile', 'filesystem_schema', 'git_schema',
+                      'filesystem_package', 'git_package', 'pilot_classifier', 'pilot_config',
+                      'pilot_registry', 'pilot_policy', 'pilot_binary', 'pilot_runtime')
+        before = [{'id': name, 'source': 'synthetic_accepted_schema', 'outcome': 'ready',
+                   'reason_code': 'identity_verified', 'sha256': 'a' * 64} for name in identities]
+        after = [dict(row, sha256='b' * 64) for row in before]
+        left, right = {}, {}
+        tool.project_checks(before, 'pilot.checks.', left)
+        tool.project_checks(after, 'pilot.checks.', right)
+        result = tool.compare({'fields': left}, {'fields': right})
+        for name in identities:
+            self.assertIn('pilot.checks.' + name + '.sha256', result['changed_fields'])
+        self.assertFalse(result['execution_observed'])
+        self.assertIn('current_source', result['unavailable'])
+        missing = tool.compare({'fields': left}, {'fields': {}})
+        self.assertTrue(all(row['state'] == 'missing' for row in missing['rows']))
+
+    def test_manifest_consistent_missing_scope_is_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / 'bundle'
+            self.bundle(root)
+            report = json.loads((root / 'report.json').read_text())
+            del report['scope']
+            raw = json.dumps(report).encode()
+            (root / 'report.json').write_bytes(raw)
+            manifest = json.loads((root / 'manifest.json').read_text())
+            manifest['files'][0].update(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+            (root / 'manifest.json').write_text(json.dumps(manifest))
+            with patch.object(tool.audit, '_open_input', lambda p: open(p, 'rb')):
+                with self.assertRaises(ValueError):
+                    tool.load(root)
+
     @unittest.skipUnless(sys.platform == 'linux', 'native private reader required')
     def test_offline_scenario_witnesses(self):
         with tempfile.TemporaryDirectory() as temp:

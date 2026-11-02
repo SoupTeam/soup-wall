@@ -128,11 +128,24 @@ def compare(left, right):
             rows[-1]['before_outcome'] = a if a in public else None
             rows[-1]['after_outcome'] = b if b in public else None
     changed = [row['field'] for row in rows if row['state'] == 'changed']
+    domains = {
+        'component': ('installation', 'pilot_binary', 'filesystem_package', 'git_package'),
+        'configuration': ('configuration', 'enforcement', 'pilot_config'),
+        'classifier': ('classifier', 'pilot_classifier'),
+        'profile': ('filesystem_profile', 'git_profile', 'filesystem_schema', 'git_schema'),
+        'policy': ('pilot_policy', 'registry', 'pilot_registry'),
+        'runtime': ('authenticated_runtime', 'lifecycle_identity', 'pilot_runtime'),
+        'integration': ('host_connection', 'active_host_call', 'pilot_platform'),
+    }
+    coverage = {domain: [row['field'] for row in rows if any(
+        '.' + check + '.' in row['field'] for check in checks)]
+        for domain, checks in domains.items()}
     return {'schema': 'sw-agent-diagnostic-diff/1', 'evidence': 'historical_selected_exports',
             'integrity': 'manifest_hash_checked_not_external_authentication',
             'correlation': 'none_no_authenticated_cross_bundle_call_binding',
             'unavailable': ['current_source', 'provider_transport', 'storage_cleanup'],
             'historical': True, 'execution_observed': False, 'changed_fields': changed[:256],
+            'projections': coverage,
             'rows': rows, 'next_step': 'Review changed checks in the original private bundles. Collect current doctor evidence before retrying through the supported workflow.'}
 
 
