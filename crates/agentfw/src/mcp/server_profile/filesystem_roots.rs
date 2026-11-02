@@ -122,7 +122,7 @@ impl Binding {
 }
 
 #[cfg(target_os = "linux")]
-mod linux {
+pub(crate) mod linux {
     use super::*;
     use std::{
         ffi::CString,
@@ -135,7 +135,11 @@ mod linux {
     };
     use tokio::process::Command;
 
-    fn child(parent: &File, name: &std::ffi::OsStr, directory: bool) -> anyhow::Result<File> {
+    pub(crate) fn child(
+        parent: &File,
+        name: &std::ffi::OsStr,
+        directory: bool,
+    ) -> anyhow::Result<File> {
         let name = CString::new(name.as_bytes())?;
         let fd = unsafe {
             libc::openat(
@@ -154,7 +158,7 @@ mod linux {
         Ok(unsafe { File::from_raw_fd(fd) })
     }
 
-    fn owned(file: &File) -> anyhow::Result<()> {
+    pub(crate) fn owned(file: &File) -> anyhow::Result<()> {
         let m = file.metadata()?;
         ensure!(
             m.uid() == unsafe { libc::geteuid() }
@@ -165,7 +169,7 @@ mod linux {
         Ok(())
     }
 
-    fn open(root: &Root) -> anyhow::Result<File> {
+    pub(crate) fn open(root: &Root) -> anyhow::Result<File> {
         let mut file = File::open("/")?;
         for component in root.path.components() {
             match component {
@@ -185,7 +189,7 @@ mod linux {
     // Inotify is a sticky topology witness only on the supported local
     // filesystems. Remote/FUSE/overlay mutations need not produce its events;
     // never treat successful watch registration there as root confinement.
-    fn local_mount(file: &File) -> anyhow::Result<()> {
+    pub(crate) fn local_mount(file: &File) -> anyhow::Result<()> {
         let mut metadata = std::mem::MaybeUninit::<libc::statfs>::uninit();
         ensure!(
             unsafe { libc::fstatfs(file.as_raw_fd(), metadata.as_mut_ptr()) } == 0,
@@ -201,7 +205,7 @@ mod linux {
         Ok(())
     }
 
-    fn mount_id(file: &File) -> anyhow::Result<u64> {
+    pub(crate) fn mount_id(file: &File) -> anyhow::Result<u64> {
         let raw = fs::read_to_string(format!("/proc/self/fdinfo/{}", file.as_raw_fd()))?;
         raw.lines()
             .find_map(|line| line.strip_prefix("mnt_id:").map(str::trim))
@@ -219,14 +223,14 @@ mod linux {
     }
 
     #[derive(Debug)]
-    struct Observer {
+    pub(crate) struct Observer {
         file: File,
         broken: bool,
         directories: usize,
         entries: usize,
     }
     impl Observer {
-        fn new() -> anyhow::Result<Self> {
+        pub(crate) fn new() -> anyhow::Result<Self> {
             let fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
             ensure!(fd >= 0, "filesystem_roots_observer_unavailable");
             Ok(Self {
@@ -236,7 +240,7 @@ mod linux {
                 entries: 0,
             })
         }
-        fn valid(&mut self) -> bool {
+        pub(crate) fn valid(&mut self) -> bool {
             if self.broken {
                 return false;
             }
@@ -262,17 +266,7 @@ mod linux {
                 return false;
             }
         }
-        fn tree(&mut self, directory: &File, mount: u64, depth: usize) -> anyhow::Result<()> {
-            self.directories += 1;
-            ensure!(
-                depth <= 32 && self.directories <= 128,
-                "filesystem_roots_tree_bound"
-            );
-            owned(directory)?;
-            ensure!(
-                mount_id(directory)? == mount,
-                "filesystem_roots_nested_mount_unsupported"
-            );
+        pub(crate) fn watch(&self, directory: &File) -> anyhow::Result<()> {
             let path = CString::new(format!("/proc/self/fd/{}", directory.as_raw_fd()))?;
             let mask = libc::IN_ONLYDIR
                 | libc::IN_ATTRIB
@@ -287,6 +281,20 @@ mod linux {
                 unsafe { libc::inotify_add_watch(self.file.as_raw_fd(), path.as_ptr(), mask) } >= 0,
                 "filesystem_roots_observer_unavailable"
             );
+            Ok(())
+        }
+        fn tree(&mut self, directory: &File, mount: u64, depth: usize) -> anyhow::Result<()> {
+            self.directories += 1;
+            ensure!(
+                depth <= 32 && self.directories <= 128,
+                "filesystem_roots_tree_bound"
+            );
+            owned(directory)?;
+            ensure!(
+                mount_id(directory)? == mount,
+                "filesystem_roots_nested_mount_unsupported"
+            );
+            self.watch(directory)?;
             // Subscribe BEFORE inspecting children, and refuse every link. This
             // covers recursive original tree/search tools as well as path arrays.
             for entry in fs::read_dir(format!("/proc/self/fd/{}", directory.as_raw_fd()))? {

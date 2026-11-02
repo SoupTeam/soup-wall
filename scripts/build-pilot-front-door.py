@@ -61,6 +61,7 @@ SCRIPTS = (
     "scripts/pilot_git_profiles.py",
     "scripts/pilot_linked_worktree.py",
     "scripts/pilot_filesystem_roots.py",
+    "scripts/pilot_workspace_snapshot.py",
     "scripts/pilot_audit.py",
     "scripts/pilot_capacity.py",
     "scripts/pilot_policy.py",

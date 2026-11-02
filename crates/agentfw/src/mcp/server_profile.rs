@@ -23,6 +23,7 @@ mod git_local_clone_tests;
 pub mod git_tracked_symlinks;
 #[cfg(test)]
 mod git_tracked_symlinks_tests;
+pub mod workspace_snapshot;
 
 pub fn git_selected(format: &str) -> bool {
     git::is_profile(format)
@@ -160,6 +161,8 @@ pub struct ProfileConfig {
     pub linked_worktree: Option<git::linked_worktree::Binding>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filesystem_roots: Option<filesystem_roots::Binding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_snapshot: Option<workspace_snapshot::Binding>,
     pub runtime_path: PathBuf,
     pub runtime_sha256: String,
     pub package_root: PathBuf,
@@ -391,6 +394,19 @@ impl ProfileConfig {
             ensure!(
                 config.workspace_identity.as_ref() == Some(&binding.roots[0].identity),
                 "filesystem_roots_workspace_identity_mismatch"
+            );
+        }
+        if let Some(snapshot) = &config.workspace_snapshot {
+            ensure!(
+                config.format == FORMAT
+                    && config.filesystem_roots.is_none()
+                    && config.linked_worktree.is_none(),
+                "workspace_snapshot_profile_combination_unsupported"
+            );
+            snapshot.validate(&config.workspace)?;
+            ensure!(
+                config.workspace_identity.as_ref() == Some(&snapshot.workspace_identity),
+                "workspace_snapshot_root_changed"
             );
         }
         ensure!(config.libraries.len() <= 32, "MCP runtime library limit");

@@ -4437,6 +4437,7 @@ mod input_identity_tests {
             workspace_identity: None,
             linked_worktree: None,
             filesystem_roots: None,
+            workspace_snapshot: None,
             runtime_path: "/never-opened/runtime".into(),
             runtime_sha256: "a".repeat(64),
             package_root: "/never-opened/package".into(),
