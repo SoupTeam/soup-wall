@@ -171,12 +171,12 @@ def verify_directory(path, wheels, *, complete=True):
 
 
 class ReviewedRedirects(urllib.request.HTTPRedirectHandler):
-    max_redirections = 3
-    max_repeats = 1
-
     def redirect_request(self, request, response, code, message, headers, newurl):
-        checked_url(newurl)
-        return super().redirect_request(request, response, code, message, headers, newurl)
+        # The stdlib handler drains redirect bodies before following them.
+        # Reviewed artifact URLs are direct: close without reading any body.
+        if response is not None:
+            response.close()
+        raise ValueError("wheelhouse_redirect_refused")
 
 
 def download(wheel, output, deadline):

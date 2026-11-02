@@ -158,8 +158,24 @@ class Wheelhouse(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     W.ReviewedRedirects().redirect_request(request, None, 302, "Found", {}, url)
         request = W.urllib.request.Request(self.wheels[0]["url"])
-        allowed = W.ReviewedRedirects().redirect_request(request, None, 302, "Found", {}, self.wheels[1]["url"])
-        self.assertEqual(allowed.full_url, self.wheels[1]["url"])
+        with self.assertRaisesRegex(ValueError, "redirect_refused"):
+            W.ReviewedRedirects().redirect_request(request, None, 302, "Found", {}, self.wheels[1]["url"])
+
+    def test_redirect_response_body_is_closed_without_draining(self):
+        class UnboundedBody(io.BytesIO):
+            def read(self, *args, **kwargs):
+                raise AssertionError("redirect body must never be drained")
+        for code in (301, 302, 303, 307, 308):
+            body = UnboundedBody(b"body")
+            headers = Message()
+            headers["Location"] = self.wheels[1]["url"]
+            headers["Transfer-Encoding"] = "chunked"
+            request = W.urllib.request.Request(self.wheels[0]["url"])
+            request.timeout = 1
+            with self.subTest(status=code), self.assertRaisesRegex(ValueError, "redirect_refused"):
+                getattr(W.ReviewedRedirects(), "http_error_" + str(code))(
+                    request, body, code, "Redirect", headers)
+            self.assertTrue(body.closed)
 
     def test_missing_tampered_extra_and_symlink_source_never_fall_back(self):
         first = self.source / self.wheels[0]["filename"]
