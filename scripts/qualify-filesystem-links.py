@@ -168,6 +168,13 @@ def qualify(args, door, home, env, report, installed):
     # The runtime race deliberately mutates this synthetic root. A fresh run
     # below is separately witnessed; its sources must remain unchanged.
     baseline=[q.snapshot(path) for path in (*roots,third,args.project,args.repository)]
+    # Both hosts are stopped here. q.snapshot deliberately opens/hashes the
+    # canary to establish preservation. Attribute that access to this independent
+    # baseline control, then start the next measured host with an empty queue.
+    baseline_opened=observed_access()
+    require(baseline_opened,'filesystem_links_baseline_access_control_missing')
+    evidence['baseline_access_control']={'outside_open_from_owned_hash':True,'hosts_running':False}
+
     begin('useful-original-read-list-search')
     proposals=[
         ('mcp__filesystem__read_text_file',{'path':'/workspace/alpha/chain'}),
