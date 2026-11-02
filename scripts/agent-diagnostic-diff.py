@@ -85,6 +85,10 @@ def load(directory):
         raise ValueError('missing or unsupported diagnostic scope')
     if type(report.get('observed_at_ms')) is not int or report['observed_at_ms'] < 0:
         raise ValueError('invalid observation time')
+    if report.get('setup') not in ('ready', 'failed', 'unknown', 'unsupported'):
+        raise ValueError('invalid setup outcome')
+    if not isinstance(report.get('active_host_call_protection'), str):
+        raise ValueError('invalid protection scope')
     checks = report.get('checks')
     validate_checks(checks)
     fields = {'configuration.setup': report.get('setup'), 'runtime.protection': report.get('active_host_call_protection')}
@@ -119,6 +123,10 @@ def compare(left, right):
         state = 'missing' if a is None or b is None else 'unchanged' if a == b else 'changed'
         rows.append({'field': name, 'state': state, 'before_sha256': None if a is None else digest(a),
                      'after_sha256': None if b is None else digest(b)})
+        if name.endswith('.outcome') or name == 'configuration.setup':
+            public = ('ready', 'failed', 'unknown', 'unsupported')
+            rows[-1]['before_outcome'] = a if a in public else None
+            rows[-1]['after_outcome'] = b if b in public else None
     changed = [row['field'] for row in rows if row['state'] == 'changed']
     return {'schema': 'sw-agent-diagnostic-diff/1', 'evidence': 'historical_selected_exports',
             'integrity': 'manifest_hash_checked_not_external_authentication',

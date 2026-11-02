@@ -16,6 +16,49 @@ spec.loader.exec_module(tool)
 
 
 class Controls(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'linux', 'native private reader required')
+    def test_offline_scenario_witnesses(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            a, b = root / 'a', root / 'b'
+            self.bundle(a)
+            self.bundle(b, 'ready')
+            report = json.loads((b / 'report.json').read_text())
+            report['checks'] = [
+                {'id': 'authenticated_runtime', 'source': 'authenticated_status_nonce_and_bearer',
+                 'outcome': 'unknown', 'reason_code': 'daemon_unavailable'},
+                {'id': 'configuration', 'source': 'private_config_yaml', 'outcome': 'ready',
+                 'reason_code': 'config_valid', 'sha256': 'b' * 64},
+            ]
+            report['session'] = 'UNRELATED_PRIVATE_SESSION'
+            raw = json.dumps(report).encode()
+            (b / 'report.json').write_bytes(raw)
+            manifest = json.loads((b / 'manifest.json').read_text())
+            manifest['files'][0].update(sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw))
+            (b / 'manifest.json').write_text(json.dumps(manifest))
+            output = root / 'private'
+            output.mkdir(mode=0o700)
+            sibling = root / 'sibling'
+            sibling.write_text('PRIVATE_CANARY')
+            originals = {p: p.read_bytes() for folder in (a, b) for p in folder.iterdir()}
+            args = [str(a), str(b), '--json-out', str(output / 'diff.json'),
+                    '--markdown-out', str(output / 'diff.md')]
+            with patch('subprocess.Popen', side_effect=AssertionError('unexpected child')), \
+                 patch('socket.socket', side_effect=AssertionError('unexpected network')):
+                self.assertEqual(tool.main(args), 0)
+                self.assertEqual(tool.main([str(a), str(a), *args[2:]]), 2)
+            result = json.loads((output / 'diff.json').read_text())
+            self.assertEqual(result['correlation'], 'none_no_authenticated_cross_bundle_call_binding')
+            self.assertTrue(result['historical'])
+            self.assertFalse(result['execution_observed'])
+            for name in ('diff.json', 'diff.md'):
+                body = (output / name).read_text()
+                self.assertNotIn('PRIVATE_CANARY', body)
+                self.assertNotIn('UNRELATED_PRIVATE_SESSION', body)
+            for path, body in originals.items():
+                self.assertEqual(path.read_bytes(), body)
+            self.assertEqual(sibling.read_text(), 'PRIVATE_CANARY')
+
     @unittest.skipUnless(os.environ.get('AGENTFW_TEST_BINARY') and sys.platform == 'linux', 'installed Linux exporter required')
     def test_installed_exporter_outside_checkout(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -78,7 +121,7 @@ class Controls(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             a, b = Path(temp) / 'a', Path(temp) / 'b'
             self.bundle(a)
-            self.bundle(b, 'pass')
+            self.bundle(b, 'ready')
             with patch.object(tool.audit, '_open_input', lambda p: open(p, 'rb')):
                 result = tool.compare(tool.load(a), tool.load(b))
             self.assertEqual(result['rows'][0]['state'], 'changed')
@@ -149,7 +192,7 @@ class Controls(unittest.TestCase):
             root = Path(temp)
             a, b = root / 'a', root / 'b'
             self.bundle(a)
-            self.bundle(b, 'pass')
+            self.bundle(b, 'ready')
             output = root / 'private'
             output.mkdir(mode=0o700)
             args = [str(a), str(b), '--json-out', str(output / 'diff.json'), '--markdown-out', str(output / 'diff.md')]
