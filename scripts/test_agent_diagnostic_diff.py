@@ -6,6 +6,8 @@ import tempfile
 import unittest
 import os
 import sys
+import subprocess
+import shutil
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('diff', Path(__file__).with_name('agent-diagnostic-diff.py'))
@@ -14,6 +16,39 @@ spec.loader.exec_module(tool)
 
 
 class Controls(unittest.TestCase):
+    @unittest.skipUnless(os.environ.get('AGENTFW_TEST_BINARY') and sys.platform == 'linux', 'installed Linux exporter required')
+    def test_installed_exporter_outside_checkout(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            installed = root / 'installed'
+            installed.mkdir(mode=0o700)
+            binary = installed / 'agentfw'
+            shutil.copy2(os.environ['AGENTFW_TEST_BINARY'], binary)
+            home = root / 'profile'
+            home.mkdir(mode=0o700)
+            config = home / 'config.yaml'
+            sibling = root / 'sibling'
+            sibling.write_text('PRIVATE_CANARY')
+            for label, enforce in (('before', False), ('after', True)):
+                config.write_text('enforce: ' + str(enforce).lower() + '\n# PRIVATE_CANARY\n')
+                config.chmod(0o600)
+                result = subprocess.run([str(binary), 'doctor', '--home', str(home), '--json',
+                                         '--support-bundle', str(root / label)], cwd=root,
+                                        capture_output=True, timeout=20)
+                self.assertIn(result.returncode, (0, 3), result.stderr)
+                self.assertTrue((root / label / 'manifest.json').is_file())
+            original = {str(p): p.read_bytes() for label in ('before', 'after')
+                        for p in (root / label).iterdir()}
+            output = root / 'private'
+            output.mkdir(mode=0o700)
+            self.assertEqual(tool.main([str(root / 'before'), str(root / 'after'),
+                                       '--json-out', str(output / 'diff.json'),
+                                       '--markdown-out', str(output / 'diff.md')]), 0)
+            self.assertNotIn('PRIVATE_CANARY', (output / 'diff.json').read_text())
+            self.assertEqual(sibling.read_text(), 'PRIVATE_CANARY')
+            for path, body in original.items():
+                self.assertEqual(Path(path).read_bytes(), body)
+
     def test_malformed_pilot_checks_refused(self):
         for checks in (1, None, 'invalid', {}, [1]):
             with self.subTest(checks=checks), tempfile.TemporaryDirectory() as temp:
