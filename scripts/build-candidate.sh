@@ -51,7 +51,9 @@ trap 'rm -rf "$NODE_STAGE"' EXIT
 tar -xf "$TARGET_DIR/$NODE_TAR" -C "$NODE_STAGE"
 export PATH="$NODE_STAGE/node-v22.22.0-linux-x64/bin:$PATH"
 # npm lifecycle scripts and mutable registry audit are never run here.
-(cd "$TARGET_DIR/profiles/mcp/filesystem-readonly-v1" && npm ci --ignore-scripts --no-audit --no-fund --cache "$TARGET_DIR/npm-cache")
+(cd "$TARGET_DIR/profiles/mcp/filesystem-readonly-v1" && npm ci --ignore-scripts --no-audit --no-fund --logs-max=0 --cache "$TARGET_DIR/npm-cache")
+# npm diagnostic logs contain the preparation checkout's absolute path.
+rm -rf "$TARGET_DIR/npm-cache/_logs"
 # Include transitive notices with the exact lock graph before removing installed packages.
 python3 scripts/candidate_manifest.py "$TARGET_DIR"
 rm -rf "$TARGET_DIR/profiles/mcp/filesystem-readonly-v1/node_modules"

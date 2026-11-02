@@ -177,14 +177,17 @@ def installed_graphs(generation, graphs):
     # invented wheel hashes to the strict runtime installer lock.
     import license_policy
     policy = tomllib.loads((ROOT / "policy/license-policy.toml").read_text())
+    errors = []
     for notice in notices:
         expression = notice.get("license")
-        require(isinstance(expression, str) and notice["files"],
-                "runtime_license_notice_incomplete:" + notice["name"])
+        if not isinstance(expression, str) or not notice["files"]:
+            errors.append("runtime_license_notice_incomplete:" + notice["name"])
+            continue
         status, selected, reason = license_policy.judge_spdx(expression, policy)
         notice["policy"] = {"status": status, "selected": selected, "reason": reason}
-        require(status == "approved", "runtime_license_review_required:" + notice["name"])
-    return notices, py_graph
+        if status != "approved":
+            errors.append("runtime_license_review_required:" + notice["name"])
+    return notices, py_graph, errors
 
 
 
@@ -255,7 +258,8 @@ def main(argv=None):
         before = {path: sha(path) for path in graphs}
         report["lock_sha256"] = before
         report["packages"] = {path: sorted(values) for path, values in graphs.items()}
-        report["notices"], python_graph = installed_graphs(args.selection.parent, graphs)
+        report["notices"], python_graph, license_errors = installed_graphs(args.selection.parent, graphs)
+        report["errors"].extend(license_errors)
         python_lock = next(path for path in graphs if path.endswith("requirements.lock"))
         scan_requirements = args.output.parent / (args.output.stem + "-installed-requirements.txt")
         args.output.parent.mkdir(parents=True, exist_ok=True)
