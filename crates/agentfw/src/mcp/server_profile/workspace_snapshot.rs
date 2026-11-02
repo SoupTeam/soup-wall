@@ -329,8 +329,11 @@ mod linux {
             }
             for (path, file) in &self.files {
                 let pin = file.try_clone()?;
+                // Anonymous sealed images use bubblewrap's data primitive,
+                // as in the accepted verified runtime closure. They are byte
+                // sources rather than source-filesystem bind mount objects.
                 command
-                    .arg("--ro-bind-fd")
+                    .args(["--perms", "0400", "--ro-bind-data"])
                     .arg(pin.as_raw_fd().to_string())
                     .arg(Path::new("/workspace").join(path));
                 pins.push(pin);
@@ -415,6 +418,10 @@ mod tests {
         let mut pins = Vec::new();
         view.mount(&mut command, &mut pins).unwrap();
         assert_eq!(pins.len(), 1);
+        let args: Vec<_> = command.as_std().get_args().collect();
+        assert!(args
+            .windows(3)
+            .any(|a| a == ["--perms", "0400", "--ro-bind-data"]));
         let seals = unsafe { libc::fcntl(pins[0].as_raw_fd(), libc::F_GET_SEALS) };
         assert_eq!(
             seals,
@@ -442,6 +449,40 @@ mod tests {
             .unwrap();
         assert_eq!(captured, "owned captured bytes\n");
         assert!(View::capture(&binding, &workspace).is_err());
+    }
+    #[test]
+    fn workspace_snapshot_consumes_python_published_nested_generation() {
+        let temp = tempfile::tempdir().unwrap();
+        let scripts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts");
+        let output = std::process::Command::new("python3")
+            .args(["-I", "-S", "-B", "-c", r#"
+import json,sys
+from pathlib import Path
+sys.path.insert(0,sys.argv[1]);import pilot_workspace_snapshot as m
+root=Path(sys.argv[2]);source=root/'source';source.mkdir(mode=0o700)
+(source/'README.md').write_text('Owned exact captured project bytes.\n')
+(source/'notes').mkdir(mode=0o700);(source/'notes'/'continuation.md').write_text('Owned continuation.\n')
+target=root/'generation';plan=m.preview(source,target)
+print(json.dumps(m.create(source,target,plan['confirmation'])['binding']))
+"#])
+            .arg(scripts).arg(temp.path()).output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let binding: Binding = serde_json::from_slice(&output.stdout).unwrap();
+        let view = View::capture(&binding, &binding.generation.join("workspace")).unwrap();
+        let mut command = tokio::process::Command::new("/owned/bwrap");
+        let mut pins = Vec::new();
+        view.mount(&mut command, &mut pins).unwrap();
+        assert_eq!(pins.len(), 2);
+        for pin in pins {
+            assert_eq!(
+                unsafe { libc::fcntl(pin.as_raw_fd(), libc::F_GET_SEALS) },
+                libc::F_SEAL_WRITE | libc::F_SEAL_GROW | libc::F_SEAL_SHRINK | libc::F_SEAL_SEAL
+            );
+        }
     }
     #[test]
     fn workspace_snapshot_incomplete_replaced_and_cross_profile_inputs_refuse() {

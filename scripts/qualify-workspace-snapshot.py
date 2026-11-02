@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 
@@ -135,12 +136,19 @@ print(json.dumps({'checks':checks,'partial_generations_selectable':False,'existi
         value=cli('remove','--snapshot',generation,'--confirm',inspected['removal_confirmation'],success=False)
         require(value.get('reason')=='workspace_snapshot_in_use' and generation.exists(),'workspace_snapshot_in_use_removal_not_refused')
         removed.append(True)
+    startup_trace=args.output/'snapshot-startup.private.trace'
     row,results,_=q.run_case(selected,target,report,'snapshot',[
         ('mcp__filesystem__read_text_file',{'path':'/workspace/README.md'}),
         ('mcp__filesystem__list_directory',{'path':'/workspace'}),
         ('mcp__filesystem__read_text_file',{'path':str(source/'README.md')}),
-        ('mcp__filesystem__read_text_file',{'path':'/workspace/notes/continuation.md'})],after_useful=in_use)
+        ('mcp__filesystem__read_text_file',{'path':'/workspace/notes/continuation.md'})],after_useful=in_use,provider_trace=startup_trace,diagnostic_writes=True)
     evidence['runtime']={k:row.get(k) for k in ('exit','status','reason','live_status','process_cleanup')}
+    if row['exit']!=0 and startup_trace.exists():
+        with startup_trace.open('rb') as stream: raw=stream.read(32*1024*1024)
+        evidence['startup_diagnostics']=dict(trace_private=True,
+            codes=sorted(set(x.decode() for x in re.findall(rb'(?:workspace_snapshot|filesystem_roots|mcp_owner)_[a-z_]{1,80}',raw))),
+            bind_mount_failed=b"Can't bind-mount" in raw,permission_denied=b'Permission denied' in raw,
+            private_trace_sha256=hashlib.sha256(raw).hexdigest())
     evidence['results']={key:dict(is_error=value['is_error'],content_sha256=hashlib.sha256(json.dumps(value['content']).encode()).hexdigest()) for key,value in results.items()}
     ids=['toolu_front_snapshot_'+str(i) for i in range(4)]
     require(row['exit']==0 and row['live_status'].get('protection')=='observed-live' and set(results)==set(ids),'workspace_snapshot_original_host_incomplete')
