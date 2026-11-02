@@ -1,0 +1,9 @@
+stratum,condition,role,comparability,planned,attempted,excluded_unqualified_run_trials,all_runs_measured,all_runs_failed,all_runs_timed_out,all_runs_incomplete,all_runs_not_run,qualified_run_trials,qualified_measured,qualified_failed,qualified_timed_out,qualified_incomplete,qualified_not_run,runs,primary_endpoint,unit,primary_p50,primary_p95,primary_max
+control/benign,fresh_host_per_arm_os_cache_uncontrolled,baseline,not_comparable,12,12,0,11,1,0,0,0,12,11,1,0,0,0,1,host_start_ms,ms,1422.955,1463.651,1463.651
+control/benign,fresh_host_per_arm_os_cache_uncontrolled,candidate,not_comparable,12,12,0,12,0,0,0,0,12,12,0,0,0,0,1,host_start_ms,ms,1209.017,1267.792,1267.792
+control/refusal,fresh_host_per_arm_os_cache_uncontrolled,baseline,not_comparable,8,8,0,8,0,0,0,0,8,8,0,0,0,0,1,host_start_ms,ms,1412.803,1552.164,1552.164
+control/refusal,fresh_host_per_arm_os_cache_uncontrolled,candidate,not_comparable,8,8,0,8,0,0,0,0,8,8,0,0,0,0,1,host_start_ms,ms,1202.553,1370.944,1370.944
+protected/benign,fresh_host_per_arm_os_cache_uncontrolled,baseline,not_comparable,12,12,0,9,3,0,0,0,12,9,3,0,0,0,1,host_start_ms,ms,5098.693,5794.49,5794.49
+protected/benign,fresh_host_per_arm_os_cache_uncontrolled,candidate,not_comparable,12,12,0,10,2,0,0,0,12,10,2,0,0,0,1,host_start_ms,ms,6830.351,7749.532,7749.532
+protected/refusal,fresh_host_per_arm_os_cache_uncontrolled,baseline,not_comparable,8,8,0,8,0,0,0,0,8,8,0,0,0,0,1,host_start_ms,ms,5088.353,5446.63,5446.63
+protected/refusal,fresh_host_per_arm_os_cache_uncontrolled,candidate,not_comparable,8,8,0,8,0,0,0,0,8,8,0,0,0,0,1,host_start_ms,ms,6789.517,6871.673,6871.673

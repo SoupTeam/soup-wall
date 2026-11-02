@@ -245,6 +245,35 @@ class Run(unittest.TestCase):
         self.assertEqual(argv[:5], ["--run", "--selection", "/private/selection.json", "--expected-commit", COMMIT])
         self.assertEqual(argv[argv.index("--prompt") + 1], "Read notes.")
 
+    def test_named_budget_preset_needs_its_exact_digest_and_travels_with_the_installation_home(self):
+        self.args.agent_home = Path("/private/component")
+        self.args.budget_preset, self.args.budget_preset_digest = "small", "a" * 64
+        code, out, _ = self.run_front_door(
+            "print(json.dumps({'status': 'completed', 'cleanup': 'owned_state_removed', 'argv': sys.argv[1:]}))\n")
+        self.assertEqual(code, 0)
+        argv = json.loads(out)["argv"]
+        self.assertEqual(argv[argv.index("--budget-preset") + 1], "small")
+        self.assertEqual(argv[argv.index("--expected-budget-preset-digest") + 1], "a" * 64)
+        self.assertEqual(argv[argv.index("--budget-preset-home") + 1], "/private/component")
+        self.assertNotIn("--linux-budget", argv)
+        # The installation that owns the maintenance gate also owns the preset catalog.
+        self.args.maintenance_home = Path("/private/owner")
+        _, out, _ = self.run_front_door(
+            "print(json.dumps({'status': 'completed', 'cleanup': 'owned_state_removed', 'argv': sys.argv[1:]}))\n")
+        argv = json.loads(out)["argv"]
+        self.assertEqual(argv[argv.index("--budget-preset-home") + 1], "/private/owner")
+
+    def test_a_name_without_its_digest_or_without_an_installation_never_launches_or_goes_unbudgeted(self):
+        for name, digest, home in (("small", None, Path("/private/component")), (None, "a" * 64, Path("/private/component")),
+                                   ("small", "a" * 64, None)):
+            self.args.budget_preset, self.args.budget_preset_digest, self.args.agent_home = name, digest, home
+            with self.subTest(name=name, digest=digest, home=home), mock.patch.object(M, "verified_state", lambda _: self.state), \
+                    mock.patch.object(M.subprocess, "Popen") as spawn:
+                with self.assertRaises(M.Failure) as caught:
+                    M.run(self.args)
+                self.assertEqual(caught.exception.code, "budget_preset_confirmation_required")
+                spawn.assert_not_called()
+
     def test_exact_nonzero_status_and_operator_hint(self):
         code, out, err = self.run_front_door(
             "print(json.dumps({'status': 'failed', 'reason': 'owned_daemon_not_ready'}))\nsys.exit(1)\n")

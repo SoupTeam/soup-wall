@@ -3,6 +3,7 @@
 from __future__ import annotations
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -85,6 +86,14 @@ def reference(path, profiles, cap=CAP):
         return {'path': str(path), 'sha256': digest(raw)}
     finally:
         os.close(fd)
+
+
+def budgets():
+    """The sibling preset catalog; loaded lazily so unbudgeted projects never depend on it."""
+    spec = importlib.util.spec_from_file_location('project_budget_presets', Path(__file__).with_name('pilot_budget_presets.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def provider_reference(home, name, version, expected, profiles):
@@ -222,7 +231,10 @@ def validate_binding(b):
                 and all(type(root[k]) is int and root[k] >= 0 for k in ('device','inode','uid')), 'binding_invalid')
     for ref in (b['selection'], b['budget']):
         if ref is not None:
-            require(isinstance(ref, dict) and set(ref) == {'path', 'sha256'}
+            # A budget is either an explicit file reference or a digest-bound named preset.
+            named = ref is b['budget'] and isinstance(ref, dict) and set(ref) == {'preset', 'digest'}
+            require(named and NAME.fullmatch(str(ref['preset'])) and HEX.fullmatch(str(ref['digest']))
+                    or isinstance(ref, dict) and set(ref) == {'path', 'sha256'}
                     and Path(ref['path']).is_absolute() and HEX.fullmatch(ref['sha256']), 'binding_invalid')
     require(b['selection'] is not None and isinstance(b['provider'], dict)
             and set(b['provider']) == {'name', 'version', 'sha256'}
@@ -246,9 +258,14 @@ def snapshot(args, front, profiles):
     root_ids = {k: front.PREP.root_identity(p) for k, p in roots.items()}
     selected_ref = reference(args.selection, profiles)
     _, provider = provider_reference(args.agent_home, args.provider_name, args.provider_version, None, profiles)
+    preset = getattr(args, 'budget_preset', None)
+    require(args.linux_budget is None or preset is None, 'budget_selection_conflict')
     budget = None if args.linux_budget is None else reference(args.linux_budget, profiles, 16384)
     if budget is not None:
         require(digest(runner.budget_input(args.linux_budget)) == budget['sha256'], 'budget_changed')
+    if preset is not None:
+        # Stored by exact digest: a later preset update or removal makes this selection stale.
+        budget = budgets().reference(args.agent_home, preset)
     state = {'path': str(args.state_root), 'identity': directory_identity(args.state_root, profiles)}
     for path in (args.agent_home, args.state_root, args.selection.parent):
         require(all(not Path(path).is_relative_to(root) for root in roots.values()), 'state_overlaps_workspace')
@@ -262,13 +279,19 @@ def snapshot(args, front, profiles):
 def binding_args(binding, home):
     return argparse.Namespace(agent_home=home, selection=Path(binding['selection']['path']),
                               provider_name=binding['provider']['name'], provider_version=binding['provider']['version'],
-                              linux_budget=None if binding['budget'] is None else Path(binding['budget']['path']),
+                              linux_budget=None if binding['budget'] is None or 'path' not in binding['budget']
+                              else Path(binding['budget']['path']),
+                              budget_preset=None if binding['budget'] is None or 'preset' not in binding['budget']
+                              else binding['budget']['preset'],
                               state_root=Path(binding['state_root']['path']))
 
 
 def verify(binding, home, front, profiles):
     validate_binding(binding)
     args = binding_args(binding, home)
+    if binding['budget'] is not None and 'preset' in binding['budget']:
+        # Precise refusal first; the run itself resolves the same preset again.
+        budgets().resolve(home, binding['budget']['preset'], binding['budget']['digest'])
     require(snapshot(args, front, profiles) == binding and snapshot(args, front, profiles) == binding, 'inputs_changed')
 
 
@@ -285,7 +308,9 @@ def main(argv, front):
             sub.add_argument('--provider-name', required=True)
             sub.add_argument('--provider-version', required=True)
             sub.add_argument('--state-root', type=Path, required=True)
-            sub.add_argument('--linux-budget', type=Path)
+            selected = sub.add_mutually_exclusive_group()
+            selected.add_argument('--linux-budget', type=Path)
+            selected.add_argument('--budget-preset', help='existing named budget preset; stored by exact digest')
         if action == 'run':
             sub.add_argument('--prompt')
             sub.add_argument('--timeout-seconds', type=int, default=180)
@@ -312,6 +337,7 @@ def main(argv, front):
                 report.update(status='configured-not-running', presets=[{'name': n, 'version': r['version'],
                     'digest': digest(encoded(r)), 'provider':{k:r['binding']['provider'][k]for k in ('name','version')},
                     'selection_sha256':r['binding']['selection']['sha256'],
+                    'budget': None if r['binding']['budget'] is None else {k: v for k, v in r['binding']['budget'].items() if k != 'path'},
                     'workspace_binding_sha256':r['binding']['snapshot_sha256']} for n, r in sorted(records.items())])
             elif writing:
                 record = store.write(args.action, args.name, binding, args.expected_version,
@@ -329,6 +355,8 @@ def main(argv, front):
                 verify(record['binding'], args.agent_home, front, profiles)
                 report.update(status='configured-not-running', digest=digest(encoded(record)), version=record['version'],
                               resource_budget='unbudgeted' if record['binding']['budget'] is None else 'selected-not-validated')
+                if record['binding']['budget'] is not None and 'preset' in record['binding']['budget']:
+                    report['budget_preset'] = dict(record['binding']['budget'])
                 if args.action == 'run':
                     require(args.apply and args.expected_version == digest(encoded(record)), 'run_confirmation_required')
                     b = record['binding']
@@ -343,7 +371,10 @@ def main(argv, front):
                         # is an installed launch path, not a direct preparation script.
                         words += ['--maintenance-home', str(args.agent_home),
                                   '--maintenance-component-home', str(args.agent_home)]
-                    if b['budget'] is not None:
+                    if b['budget'] is not None and 'preset' in b['budget']:
+                        words += ['--budget-preset', b['budget']['preset'], '--expected-budget-preset-digest',
+                                  b['budget']['digest'], '--budget-preset-home', str(args.agent_home)]
+                    elif b['budget'] is not None:
                         words += ['--linux-budget', b['budget']['path'], '--expected-budget-sha256', b['budget']['sha256']]
                     if args.prompt is not None:
                         words += ['--prompt', args.prompt]
@@ -353,7 +384,8 @@ def main(argv, front):
         return 0
     except Exception as error:
         reason = str(error)
-        report['reason'] = reason if re.fullmatch(r'project_[a-z_]{1,80}', reason) else 'project_input_unavailable'
+        report['reason'] = (reason if re.fullmatch(r'project_[a-z_]{1,80}', reason) or reason in budgets().FAILURES
+                            else 'project_input_unavailable')
         report['action'] = 'Inspect the exact inputs and explicitly update the preset; no automatic retry.'
         print(json.dumps(report, sort_keys=True))
         return 2

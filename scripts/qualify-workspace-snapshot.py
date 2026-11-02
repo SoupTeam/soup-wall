@@ -49,6 +49,7 @@ def qualify(args,door,home,env,report,installed):
     # Fault injection executes the SAME installed library from outside checkout;
     # no runner disk filling, source edits or installed-module mutation is used.
     scripts=home/'pilot-front-door/components'/report['component']['component']/'tree/scripts'
+    component_before=q.snapshot(scripts)
     fault=args.output/'fault-controls';fault.mkdir(mode=0o700)
     harness=r'''
 import errno,json,os,sys
@@ -92,12 +93,13 @@ with m.Capture(source) as capture:
     expect('source-root-replaced',capture.check)
 print(json.dumps({'checks':checks,'partial_generations_selectable':False,'existing_winner_preserved':True,'installed_library':True}))
 '''
-    result=subprocess.run([str(args.component_python),'-I','-S','-c',harness,str(scripts),str(fault)],
+    result=subprocess.run([str(args.component_python),'-I','-S','-B','-c',harness,str(scripts),str(fault)],
         cwd=door.cwd,env={},stdin=subprocess.DEVNULL,capture_output=True,timeout=120)
     evidence['fault_driver']=dict(exit=result.returncode,stdout_bytes=len(result.stdout),stderr_sha256=hashlib.sha256(result.stderr).hexdigest())
     require(result.returncode==0 and len(result.stdout)<=16384,'workspace_snapshot_installed_fault_driver_failed')
+    require(q.snapshot(scripts)==component_before,'workspace_snapshot_fault_driver_changed_component')
     controls=json.loads(result.stdout);require(len(controls['checks'])==5 and all(controls['checks'].values()),'workspace_snapshot_incomplete_fault_controls')
-    passed('installed-storage-race-faults',**controls)
+    passed('installed-storage-race-faults',installed_component_unchanged=True,**controls)
     begin('incomplete-generation-refusal')
     complete=(generation/'complete.json').read_bytes();(generation/'complete.json').unlink()
     try:cli('inspect','--snapshot',generation,success=False)
