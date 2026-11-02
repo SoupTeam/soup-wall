@@ -7,11 +7,12 @@ python3 -B agent-command-help.py --pilot INSTALL/scripts/pilot.py --sha256 DIGES
 python3 -B agent-command-help.py --pilot INSTALL/scripts/pilot.py --sha256 DIGEST topic provider update
 python3 -B agent-command-help.py --agentfw INSTALL/bin/agentfw --sha256 DIGEST list
 python3 -B agent-command-help.py --pilot INSTALL/scripts/pilot.py --sha256 DIGEST completion --shell bash
+python3 -B agent-command-help.py --pilot INSTALL/scripts/pilot.py --sha256 DIGEST completion --shell bash --context provider
 ```
 
 Replace DIGEST with the trusted component hash. A changed component is refused. Python flags and required arguments come from argparse; Rust names and flags come from its help output. A maximum of 256 command nodes and eight Rust nesting levels is supported. The existing parser still owns confirmation and execution rules. Discovery never invokes a suggested operation.
 
-Generate completion for `bash`, `zsh` or `fish`. Candidates contain only validated public names and flags. Bash/Zsh completion currently offers the bounded public vocabulary; it does not infer argument values or enumerate local state. Fish uses separate command and option declarations.
+Generate completion for `bash`, `zsh` or `fish`. Candidates contain only validated public names and flags. Bash/Zsh completion currently offers the bounded public vocabulary; it does not infer argument values or enumerate local state. Fish uses separate command and option declarations. Pass `--context` with already typed public command words to limit candidates to a matching command subtree; unknown contexts are refused. No profile, path, run ID, token or prompt value is used for completion.
 
 To save output without overwriting an existing file, use shell noclobber and a new private destination:
 

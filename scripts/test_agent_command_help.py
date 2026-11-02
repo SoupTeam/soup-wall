@@ -65,6 +65,28 @@ class Controls(unittest.TestCase):
             result = subprocess.run([sys.executable, '-B', str(TOOL), '--pilot', str(entry), '--sha256', hashlib.sha256(entry.read_bytes()).hexdigest(), 'list'], capture_output=True)
             self.assertEqual(result.returncode, 2)
 
+    def test_shell_completion_uses_command_context(self):
+        data = {
+            'commands': [
+                {'command': ['provider'], 'flags': [{'name': '--transport', 'required': True, 'takes_value': True, 'type': 'string'}]},
+                {'command': ['provider', 'preview'], 'flags': [{'name': '--json', 'required': False, 'takes_value': False, 'type': 'boolean'}]},
+                {'command': ['status'], 'flags': []},
+            ]
+        }
+        bash = reader_completion(data, 'bash', ['provider'])
+        self.assertIn('preview', bash)
+        self.assertNotIn('status', bash)
+        fish = reader_completion(data, 'fish', ['provider', 'preview'])
+        self.assertIn("-l 'json'", fish)
+        self.assertNotIn("'transport'", fish)
+
+
+def reader_completion(data, shell, context):
+    spec = importlib.util.spec_from_file_location('help_reader_context', TOOL)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.completion(data, shell, context)
+
 
 if __name__ == '__main__':
     unittest.main()

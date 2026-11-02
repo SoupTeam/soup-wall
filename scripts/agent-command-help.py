@@ -80,9 +80,17 @@ def discover(path, expected):
             'outcome_references': sorted(key for key in getattr(module, 'HINTS', {}) if re.fullmatch('[a-z][a-z0-9_]{0,79}', key))[:256], 'commands': rows}
 
 
-def completion(data, shell):
-    words = sorted({word for row in data['commands'] for word in row['command']} |
-                   {flag['name'] for row in data['commands'] for flag in row['flags']})
+def completion(data, shell, context=None):
+    context = list(context or [])
+    selected = []
+    for row in data['commands']:
+        command = row['command']
+        if command[:len(context)] == context:
+            selected.append(row)
+    if not selected:
+        raise ValueError('unknown completion context')
+    words = sorted({word for row in selected for word in row['command'][len(context):]} |
+                   {flag['name'] for row in selected if row['command'] == context for flag in row['flags']})
     joined = ' '.join(words)
     if shell == 'bash':
         return "_pilot_help_complete() { COMPREPLY=( $(compgen -W '" + joined + "' -- \"${COMP_WORDS[COMP_CWORD]}\") ); }\ncomplete -F _pilot_help_complete pilot\n"
@@ -168,6 +176,7 @@ def main(argv=None):
     parser.add_argument('action', choices=('list', 'topic', 'completion'))
     parser.add_argument('topic', nargs='*')
     parser.add_argument('--shell', choices=('bash', 'zsh', 'fish'))
+    parser.add_argument('--context', nargs='*', default=[])
     args = parser.parse_args(argv)
     try:
         if not re.fullmatch('[0-9a-f]{64}', args.sha256):
@@ -178,7 +187,7 @@ def main(argv=None):
         if args.action == 'completion':
             if not args.shell:
                 raise ValueError('shell is required')
-            print(completion(data, args.shell), end='')
+            print(completion(data, args.shell, args.context), end='')
         elif args.action == 'topic':
             rows = [row for row in data['commands'] if row['command'] == args.topic]
             if len(rows) != 1:
