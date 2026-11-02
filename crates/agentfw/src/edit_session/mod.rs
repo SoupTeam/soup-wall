@@ -12,6 +12,8 @@ pub(crate) use profile::Profile;
 #[cfg(target_os = "linux")]
 mod application;
 #[cfg(target_os = "linux")]
+mod batch;
+#[cfg(target_os = "linux")]
 mod control;
 #[cfg(target_os = "linux")]
 mod control_io;
@@ -27,6 +29,10 @@ mod refresh;
 mod review;
 #[cfg(target_os = "linux")]
 mod runtime;
+#[cfg(target_os = "linux")]
+pub(crate) fn removal_inactive(run: &std::path::Path) -> Result<()> {
+    review::removal_inactive(run)
+}
 pub(crate) mod transport;
 
 pub const FORMAT: &str = "sw-installed-edit-session/1";
@@ -55,6 +61,12 @@ enum Action {
     Apply {
         #[command(subcommand)]
         action: application::Action,
+    },
+    /// Guarded finite batch publication and explicit recovery; never MCP authority.
+    #[cfg(target_os = "linux")]
+    Batch {
+        #[command(subcommand)]
+        action: batch::Action,
     },
     /// Review exact completed-run outputs; private content needs explicit consent.
     #[cfg(target_os = "linux")]

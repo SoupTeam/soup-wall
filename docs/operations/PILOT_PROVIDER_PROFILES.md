@@ -20,6 +20,9 @@ agentfw pilot provider create --name local-test \
   --prompt-api-key --apply
 agentfw pilot provider select --name local-test --apply
 agentfw pilot provider preview --name local-test
+agentfw pilot provider check
+agentfw pilot provider check --transport --timeout-seconds 5 --json
+agentfw pilot provider check --transport --proxy-connect --timeout-seconds 5 --json
 agentfw pilot status --prefix "$HOME/soup-wall-pilot"
 agentfw pilot run --prefix "$HOME/soup-wall-pilot"
 agentfw pilot provider update --name local-test \
@@ -35,6 +38,89 @@ agentfw pilot provider prune --name local-test \
 agentfw pilot provider remove --name local-test --apply
 agentfw pilot provider select --environment --apply
 ```
+
+### Check the selected profile before launching Claude (SOU-193)
+
+`agentfw pilot provider check` reads the exact selected profile/version and
+validates its owner-private files, accepted endpoint settings and optional CA
+file. It is local and read-only: no DNS, connection, prompt, credential output,
+profile switch, host launch, API request, model call or tool call. With no
+selected named profile it reports `unavailable`; it does not infer a profile
+from ambient environment variables. Ambient provider values conflicting with
+an explicit selection are refused, as they are for an actual run.
+
+The CA uses the same certificate-only validation and 64-certificate limit as
+the installed run. Private-key blocks and other non-certificate material are
+refused locally before a transport helper starts.
+
+Add `--transport` to opt in to one bounded observation. The helper receives
+only the selected host, port and optional CA certificate bytes through a pipe.
+It resolves the host, connects, and for HTTPS completes certificate and
+hostname verification. It sends **no HTTP request**, API key, bearer token,
+prompt, model name or tool call. HTTP is accepted only for literal loopback,
+following the existing profile rule. No redirect is followed. The total
+deadline is 1–15 seconds (default 5); cancellation stops and reaps the owned
+helper. The selection and CA are rechecked before any result is returned.
+With `--transport` alone, an implicit endpoint or configured
+`HTTP_PROXY`/`HTTPS_PROXY` reports an unsupported route instead of probing a
+different direct route. `NO_PROXY`
+without a proxy does not change the direct route. This command does not prove
+that Claude's own proxy or default trust implementation behaves like the
+observer. Correct an unsupported route explicitly; do not interpret a direct
+probe as proxy success.
+
+The default text output and optional `--json` use finite outcomes:
+
+| Status | Meaning | Exit |
+| --- | --- | ---: |
+| `configuration-valid` | The selected local configuration passed; no network was attempted. | 0 |
+| `transport-observed` | TCP connection or HTTPS TLS verification completed; no provider API call was made. | 0 |
+| `refused` | Invalid, changed or unsafe selected state, or TLS validation failed. | 2 |
+| `unavailable` | No selected profile, unreachable endpoint or unsupported route. | 3 |
+| `incomplete` | Deadline or cancellation ended the observation. | 4 |
+
+Each result names a finite stage and safe next step. It does not emit a raw
+URL, private path, exception text or secret-derived digest. **Credential
+validity, model availability and protected task execution are not verified**
+by either success status. A successful check grants no permission or runtime
+readiness. The focused native installed qualification uses owned loopback and
+private-CA fixtures; it makes no paid or live-provider calls.
+
+### Observe an explicitly selected HTTP CONNECT route (SOU-205)
+
+`agentfw pilot provider check --transport --proxy-connect` observes **only** an
+explicitly selected `HTTPS_PROXY=http://127.0.0.1:PORT` or
+`http://[::1]:PORT` route to an explicit HTTPS `ANTHROPIC_BASE_URL`.
+This retains the accepted profile rule that plain HTTP proxy origins are
+loopback-only. Both flags are required; `--proxy-connect` alone is refused
+locally. The default check remains local-only, and `--transport` without
+`--proxy-connect` still reports a configured proxy as unsupported rather than
+testing a direct connection.
+
+| Selected settings | Observation |
+| --- | --- |
+| Explicit HTTPS endpoint and unauthenticated loopback HTTP `HTTPS_PROXY`, no `HTTP_PROXY` or `NO_PROXY` | CONNECT to the selected proxy origin, then provider TLS and hostname verification through that tunnel |
+| Explicit endpoint without proxy, `--transport` alone | Existing direct DNS/TCP/TLS behavior |
+| HTTP endpoint, implicit endpoint, HTTPS proxy scheme, `HTTP_PROXY`, or proxy with `NO_PROXY` | Unsupported route; no network attempt |
+| Proxy URL with userinfo, malformed authority or unsafe URL | Refused by the existing profile validator before network |
+
+The helper resolves and connects **only the selected proxy origin**. It sends
+one bounded `CONNECT provider-host:port` request with a matching `Host` header
+and no other request headers. It never sends `Proxy-Authorization`, an API key,
+prompt, model name or provider HTTP request. A 407, redirect, other non-200
+status, malformed/oversized response header or indicated response body is
+refused; redirects and direct fallback are never followed. The CONNECT header
+is limited to 8 KiB and the entire helper remains under the 1–15 second
+deadline. The selected CA reader and normal provider hostname verification
+apply to TLS through the tunnel. The selection and CA are rechecked before
+reporting a result.
+
+Finite stages distinguish proxy DNS, proxy connect, tunnel and provider TLS.
+The report does not include a raw URL, private path, response headers,
+certificate or secret-derived hash. A successful tunnel proves only that the
+scripted transport was observed; it does **not** verify the credential, model,
+Claude host routing, protected execution or run permission. Actual host proxy
+routing and authenticated proxy support are outside this command's scope.
 
 The create prompt is hidden. Use `--prompt-auth-token` instead of
 `--prompt-api-key` for a supported bearer token. For an existing explicit
@@ -150,3 +236,47 @@ bounded, canary-free results may be retained publicly; raw exec traces stay
 private and are removed after inspection. A successful run does not claim
 paid-provider operation, external credential correctness or live protection
 outside the observed local session.
+
+## Selected provider CA custody (SOU-195)
+
+For an installed Linux pilot profile that needs a private provider CA, set
+`--ssl-cert-file /absolute/owner-private/ca.pem` on an explicit `provider
+create` or `provider update --apply`, then select that profile. The selected
+source must be a canonical, regular, owner/root-owned, non-writable-by-others
+PEM certificate bundle. The source is read and validated again for every
+explicit `pilot run`. A symlink, hardlink, FIFO, mutation during the read,
+malformed certificate or file beyond the finite limit refuses before the
+provider host starts. A valid replacement between runs supplies the new
+run's trust bytes, even when the named profile still points to the same
+pathname. Preview and profile publication do not make a network request.
+
+Each run snapshots the exact selected CA bytes in a sealed anonymous file
+descriptor. Only its selected Claude host receives a descriptor-backed
+`SSL_CERT_FILE`; children and unrelated helpers do not receive the source
+path or CA descriptor. The ordinary run report contains the CA SHA-256 only,
+never the path, PEM or key. An already running host retains its trust choice
+if the operator replaces the source or explicitly updates the profile. A
+newly launched host reads the new selected source. To roll back trust,
+restore the retained provider profile version or explicitly reselect a known
+CA source and launch a new run. Stop old runs and revoke an old credential
+separately if it must no longer be usable. This binding does not install a
+system trust anchor or make an external endpoint trustworthy by itself.
+
+The focused native Ubuntu 24.04 qualification is an opt-in dispatch of
+`Real filesystem MCP profile` with both `native_preparation_only=true` and
+`provider_ca_only=true`. It builds and installs the current exact-source
+component, uses the genuine selected Claude and original servers outside the
+checkout, and runs two private scripted HTTPS providers with different
+synthetic credentials and CAs. The witness requires authenticated old and
+new requests, continued old-run TLS after source replacement, new-run TLS
+with the replacement CA, a changed source before launch, and zero credential
+delivery for an unrelated certificate or wrong hostname. It also checks
+symlink, hardlink, FIFO, over-limit, malformed and wrong-mode source refusals,
+an explicitly restored successful run, child exec environments and process
+cleanup. The bounded artifact
+`sou195-installed-provider-ca` retains only source/component/input hashes,
+finite status, CA hashes and request/handshake counts. Private test keys,
+PEMs and raw exec traces are deleted. This does not call a live provider or
+claim paid-model effectiveness. The focused manual dispatch keeps its native
+toolchain, prerequisite builds and owned sandbox checks, and skips unrelated
+long pilot qualifiers; ordinary PR and Ready scheduling remain unchanged.

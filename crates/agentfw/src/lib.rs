@@ -7,6 +7,7 @@
 pub mod audit;
 pub mod classifier_runtime;
 pub mod config;
+pub mod configuration_recovery;
 pub mod decision;
 pub mod doctor;
 pub mod edit_session;
@@ -32,6 +33,8 @@ mod pilot_host;
 pub mod pilot_launcher;
 pub mod pilot_observation;
 pub mod pilot_workspaces;
+#[cfg(target_os = "linux")]
+pub mod policy_candidate;
 pub mod policy_transition;
 pub use native::child_authority;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -39,6 +42,8 @@ pub(crate) mod macos_create;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub(crate) mod macos_read;
 pub mod offline_replay;
+#[cfg(target_os = "linux")]
+mod pilot_maintenance;
 pub mod preflight;
 #[cfg(target_os = "linux")]
 mod private_export;
@@ -57,6 +62,7 @@ pub mod service;
 pub mod spans;
 pub mod support_bundle;
 pub mod token;
+pub mod tool_preview;
 #[cfg(windows)]
 pub(crate) mod windows_create;
 #[cfg(windows)]

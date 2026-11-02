@@ -35,6 +35,7 @@ import pilot_capacity as capacity
 from pilot_provider import utility_environment
 import pilot_preparation_lock as coordination
 import pilot_resumable_download as resumable
+import pilot_prerequisite_cache_exchange as exchange
 import pilot_source_identity as SOURCE_IDENTITY
 SOURCES = {
     "git": ("2.51.2", "git-2.51.2",
@@ -835,9 +836,9 @@ def prepare(args):
     missing.extend(f'{item["dependency"]}: install {item["install"]}' for item in dependencies)
     for kind in SOURCES:
         archive = getattr(args, kind + "_archive")
-        if archive is None and not args.allow_download and not (
+        if archive is None and not args.allow_download and not getattr(args, "offline_import_cache", False) and not (
                 kind == "bwrap" and getattr(args, "offline_bwrap_cache", False)):
-            missing.append(f"--{kind}-archive ABSOLUTE_PINNED_ARCHIVE or --allow-download")
+            missing.append(f"--{kind}-archive ABSOLUTE_PINNED_ARCHIVE, --offline-import-cache or --allow-download")
         elif archive is not None and (not archive.is_absolute() or not archive.is_file()):
             missing.append(f"--{kind}-archive must be an existing absolute file")
     if args.output is None:
@@ -901,6 +902,12 @@ def prepare(args):
             supplied = getattr(args, kind + "_archive")
             if supplied:
                 archives[kind] = bounded_archive(supplied, kind)
+            elif getattr(args, "offline_import_cache", False):
+                try:
+                    archives[kind] = exchange.consume(output, generation / (kind + ".tar.xz"),
+                                                       kind, SOURCES, claim)
+                except exchange.Refusal as error:
+                    raise Failure(error.reason, "download") from None
             else:
                 archives[kind], progress = download(kind, generation / (kind + ".tar.xz"),
                     output=output, claim=claim,
@@ -908,6 +915,14 @@ def prepare(args):
                     reset=kind == "bwrap" and getattr(args, "clear_bwrap_cache", False))
                 if progress is not None:
                     download_progress[kind] = progress
+        # Preserve the accepted supplied-archive path unchanged. Only the two
+        # original downloads, already verified by their existing handlers,
+        # become exchangeable cache entries.
+        if args.allow_download and all(getattr(args, kind + "_archive") is None for kind in SOURCES):
+            try:
+                exchange.seed(output, archives, SOURCES, claim)
+            except exchange.Refusal as error:
+                raise Failure(error.reason, "download") from None
         for kind in SOURCES:
             destination = generation / (kind + "-src")
             destination.mkdir(mode=0o700)
@@ -1015,6 +1030,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     capacity.add_arguments(parser)
     parser.add_argument("--prepare", action="store_true")
+    parser.add_argument("--cache-preview", action="store_true",
+                        help="read-only inventory of complete pinned download bytes")
+    parser.add_argument("--cache-export", type=Path, metavar="ABSOLUTE_PRIVATE_BUNDLE",
+                        help="create a private offline bundle from verified pinned downloads")
+    parser.add_argument("--cache-import", type=Path, metavar="ABSOLUTE_PRIVATE_BUNDLE",
+                        help="verify and import both pinned archives into a fresh owned cache")
     parser.add_argument("--rebuild", action="store_true")
     parser.add_argument("--resume", action="store_true",
                         help="explicitly reuse one fully verified frozen Git stage")
@@ -1023,6 +1044,8 @@ def main():
     parser.add_argument("--allow-download", action="store_true")
     parser.add_argument("--offline-bwrap-cache", action="store_true",
                         help="reuse only the whole-digest-verified private bubblewrap archive")
+    parser.add_argument("--offline-import-cache", action="store_true",
+                        help="with --prepare, use both verified imported archives without network")
     parser.add_argument("--clear-bwrap-cache", action="store_true",
                         help="with --prepare --rebuild, explicitly clear only owned bubblewrap download staging")
     parser.add_argument("--output", type=Path)
@@ -1033,13 +1056,24 @@ def main():
     parser.add_argument("--pkg-config-sysroot", type=Path)
     parser.add_argument("--meson-pythonpath", type=Path)
     args = parser.parse_args()
+    operation_count = sum(bool(item) for item in (args.prepare, args.cache_preview,
+                                                  args.cache_export, args.cache_import))
+    if operation_count > 1:
+        parser.error("choose only one of --prepare, --cache-preview, --cache-export or --cache-import")
+    if args.offline_import_cache and (not args.prepare or args.allow_download or
+                                      args.git_archive or args.bwrap_archive or args.offline_bwrap_cache):
+        parser.error("--offline-import-cache requires --prepare and no download or archive override")
+    if (args.cache_preview or args.cache_export or args.cache_import) and (
+            args.allow_download or args.offline_bwrap_cache or args.clear_bwrap_cache or
+            args.git_archive or args.bwrap_archive or args.rebuild or args.resume or args.guard_capacity):
+        parser.error("cache exchange cannot combine with preparation or download options")
     if args.clear_bwrap_cache and (not args.prepare or not args.rebuild or
                                    args.bwrap_archive is not None or not args.allow_download):
         parser.error("--clear-bwrap-cache requires --prepare --rebuild --allow-download and no --bwrap-archive")
     if args.offline_bwrap_cache and (args.allow_download or args.bwrap_archive is not None):
         parser.error("--offline-bwrap-cache requires neither --allow-download nor --bwrap-archive")
     if args.capacity_plan:
-        if args.prepare or args.guard_capacity:
+        if operation_count or args.guard_capacity:
             parser.error("--capacity-plan is read-only; use it without --prepare or --guard-capacity")
         print(json.dumps(capacity.cli_plan("native", args), sort_keys=True))
         return 0
@@ -1047,8 +1081,25 @@ def main():
         parser.error("--guard-capacity requires --prepare")
     try:
         coordination.bounded_wait(args.wait_seconds)
-        require(args.prepare or args.wait_seconds == 0, "wait_requires_prepare")
+        require(args.prepare or args.cache_export or args.cache_import or args.wait_seconds == 0,
+                "wait_requires_mutation")
         require(args.prepare or not args.resume, "resume_requires_prepare")
+        if args.cache_preview or args.cache_export or args.cache_import:
+            require(args.output is not None and args.output.is_absolute(), "absolute_output_required")
+            require(args.expected_commit is not None, "full_expected_commit_required")
+            require(not platform_missing(), "native_ubuntu_2404_required")
+            source_identity(args.expected_commit)
+            if args.cache_preview:
+                print(json.dumps(exchange.preview(args.output, SOURCES), sort_keys=True))
+                return 0
+            output = output_root(args.output) if args.cache_import else private(args.output)
+            with coordination.hold(output, wait_seconds=args.wait_seconds) as claim:
+                if args.cache_export:
+                    result = exchange.export(output, args.cache_export, SOURCES, claim)
+                else:
+                    result = exchange.import_bundle(output, args.cache_import, SOURCES, claim)
+            print(json.dumps(result, sort_keys=True))
+            return 0
         with capacity.checked("native", args):
             print(json.dumps(prepare(args)))
         return 0 if not args.prepare or not platform_missing() else 2
@@ -1060,9 +1111,10 @@ def main():
                           "waited_seconds": error.waited_seconds,
                           "active_protection": False}))
         return 3
-    except (Failure, coordination.Unsafe, OSError, ValueError, KeyError, TypeError, tarfile.TarError,
+    except (Failure, exchange.Refusal, coordination.Unsafe, OSError, ValueError, KeyError, TypeError, tarfile.TarError,
             subprocess.SubprocessError, urllib.error.URLError) as error:
         failure = error if isinstance(error, Failure) else Failure(
+            error.reason if isinstance(error, exchange.Refusal) else
             str(error) if isinstance(error, coordination.Unsafe) else
             type(error).__name__ + "_failed",
             "coordination" if isinstance(error, coordination.Unsafe) else "prepare")

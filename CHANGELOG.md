@@ -4,6 +4,17 @@ Changes to the public Soup Wall source distribution are recorded here. Release a
 
 ## Unreleased
 
+- Added `agentfw tool-preview` (SOU-174): a non-executing, non-authoritative preview
+  of one supplied original tool-call frame through the installed, verified classifier
+  package and the original profile validators. It reports package, interpreter and
+  profile identities, known action labels with partial or full unknown, typed resource
+  summaries and validation reasons, separates reviewed definitions from supplied
+  metadata, redacts raw arguments and secret/path values, treats technical failure as
+  distinct from unknown, and states the missing session context instead of predicting a
+  policy result. Optional private create-new report export (Linux). Qualified against
+  an actual installed package with independent strace, marker and cleanup checks
+  (`scripts/qualify-tool-preview.py`).
+
 - Added accepted original-server profiles to `agentfw onboard` and
   `mcp-connection` (Linux): `--server-profile` selects the installed
   filesystem-readonly-v1 or git-readonly-v1 profile. Preview verifies the profile,

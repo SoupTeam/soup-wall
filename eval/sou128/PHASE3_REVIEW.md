@@ -521,3 +521,17 @@ Result: every other asserted relation is broken by a targeted control, and none 
 - **Labels:** all 89 `pending`. None is promoted, including the 6 new ones.
 - **Unchanged contract gap:** CE-3 is a classifier-only statement about `edit_file`. Whether any profile admits it is out of scope.
 - **Re-cite after #213 merges:** `eval/eval_runner.py` still needs re-citing then (section 9.6).
+
+## 12. Maintainer integration citation refresh — 2026-11-02
+
+The reviewed linked-worktree and filesystem-root profiles add two `None` fields
+to a test-only `ProfileConfig` literal in `admission.rs`. The production strict
+JSON visitor and its behavior are unchanged. Rebuilding with the existing corpus
+builder re-cites exactly four source hashes from `c550d589…da747a` to
+`24e4a501…bad467`; no case, label, relation, payload or expected outcome changes.
+The v0.4 fixture remains byte-identical at SHA-256
+`fc5c920b4103db4792c8aa0a4b06c6ac793392118bd51baded03ed2bed3875f1`.
+The refreshed relations SHA-256 is
+`f83aedee896999613942fef25daa69502b01364bda891b3731c187a0f12e81f5`.
+Source-drift refusal and all frozen-prefix checks remain enabled; this refresh
+grants no label approval or native-boundary claim.

@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use super::ToolProfile;
 
+pub mod linked_worktree;
 pub(crate) mod reference_view;
 pub(crate) mod revision_view;
 pub(crate) mod selected_view;
@@ -36,7 +37,7 @@ pub const MAX_LOCAL_REF_BYTES: usize = 255;
 pub fn is_profile(format: &str) -> bool {
     matches!(
         format,
-        FORMAT | LOCAL_REFS_FORMAT | FILE_READS_FORMAT | SHALLOW_FORMAT
+        FORMAT | LOCAL_REFS_FORMAT | FILE_READS_FORMAT | SHALLOW_FORMAT | linked_worktree::FORMAT
     )
 }
 

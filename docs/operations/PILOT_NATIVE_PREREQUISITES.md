@@ -50,6 +50,69 @@ for bubblewrap setup/compile. The build environment passes only selected tool
 paths and a small fixed set of variables. On timeout or cancellation it stops
 the owned process group.
 
+### Private offline download exchange (SOU-194)
+
+An explicit exchange moves only the two exact source archives above. The
+uncompressed `sw-pilot-prerequisite-download-exchange/1` tar contains exactly
+`manifest.json`, `git.tar.xz` and `bwrap.tar.xz`. The manifest binds each
+version, accepted URL, SHA-256 and byte count. The importer checks the complete
+inventory, member types, sizes, digest and the *current* repository pins before
+publishing a selected cache. This is a source cache, not a built binary, sandbox
+permission, selected runtime or active-protection claim. Compiler, Meson,
+libcap and other native build dependencies remain separate host inputs.
+
+Run these commands as a non-root operator from the same clean, reviewed source
+commit on native Ubuntu 24.04 x86_64. Replace paths with owned private `0700`
+directories outside the checkout. The online preparation uses the existing
+download/build verifier; all other exchange operations require explicit flags.
+
+```sh
+commit="$(git rev-parse HEAD)"
+online="$HOME/private-online-prerequisites"
+fresh="$HOME/private-offline-prerequisites"
+bundle_dir="$HOME/private-transfer"
+mkdir -m 700 "$bundle_dir"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-preview \
+  --output "$online" --expected-commit "$commit"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --allow-download \
+  --output "$online" --expected-commit "$commit"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-export "$bundle_dir/pinned.tar" \
+  --output "$online" --expected-commit "$commit"
+# Transfer pinned.tar through the approved private channel; keep it owner-only.
+python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-import "$bundle_dir/pinned.tar" \
+  --output "$fresh" --expected-commit "$commit"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-preview \
+  --output "$fresh" --expected-commit "$commit"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --offline-import-cache \
+  --output "$fresh" --expected-commit "$commit"
+```
+
+Supply any required `--pkg-config-libdir`, `--pkg-config-sysroot` and
+`--meson-pythonpath` arguments to both preparation calls; the archive exchange
+does not supply them. The export destination must be absent, owner-private and
+outside the cache root. A previous valid import is never overwritten. An owner
+private filesystem must support unnamed `O_TMPFILE` creation and descriptor
+linking: export, direct-cache seed and import selection publish the verified
+inode through a pinned directory descriptor, without a replaceable named
+temporary. An unsupported filesystem refuses the operation. Import rechecks
+all staged member hashes after selecting the cache, and every later consumer
+checks them again. An owner
+interrupted before selection may retry the import: only known, private files
+from its unselected stage are removed under the existing same-root lock;
+unknown or unsafe entries cause refusal. A complete selected import is checked
+again before each offline archive copy. The offline consumer never invokes the
+download path, and a fresh root is required to demonstrate that it consumed
+the import instead of reusing an already prepared generation. Import refuses a
+root with an existing selected preparation. Keep the bundle
+private; it contains source bytes and is not a release artifact.
+
+The focused `cache_exchange_only` manual job in
+[`mcp-real-filesystem.yml`](../../.github/workflows/mcp-real-filesystem.yml)
+uses two private roots outside the checkout, records separate online/exchange/
+offline timings, and executes the offline preparation in a disposable network
+namespace. It retains finite JSON diagnostics for incomplete attempts. The
+normal required CI, CodeQL and trusted admission remain separate gates.
+
 ### Resumable bubblewrap download (SOU-173)
 
 The pinned bubblewrap 0.13.1 archive has an exact 129,472-byte length and the

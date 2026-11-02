@@ -51,6 +51,7 @@ def load(name, filename):
 QUAL = load("installed_front_door_first_use", "qualify-pilot-front-door.py")
 PROVIDER = load("installed_provider_carrier", "pilot_provider.py")
 LAUNCH = load("installed_provider_trace", "qualify-pilot-launcher.py")
+PROVIDER_CA_QUALIFICATION = load("installed_provider_ca_qualification", "pilot_provider_ca_qualification.py")
 BASE = QUAL.BASE
 require = BASE.require
 INPUT_NAMES = tuple(name for name in QUAL.INPUT_NAMES if name != "agent_output")
@@ -242,7 +243,7 @@ def provider_call(args, home, env, canary, words, secret_fd=None, *, trace=None)
     return result.returncode, value
 
 
-def provider_exec_witness(trace, claude, canary, url):
+def provider_exec_witness(trace, claude, canary, url, ca_source=None):
     """Every successful exec is checked; only the one selected host receives the canary."""
     raw = trace.read_bytes()
     require(len(raw) <= 32 * 1024 * 1024, "provider_trace_limit")
@@ -317,13 +318,24 @@ def provider_exec_witness(trace, claude, canary, url):
             host += 1
             require(values.get("ANTHROPIC_API_KEY") == canary
                     and values.get("ANTHROPIC_BASE_URL") == url, "provider_host_values_missing")
+            if ca_source is not None:
+                require(re.fullmatch(r"/proc/self/fd/[0-9]+", values.get("SSL_CERT_FILE", ""))
+                        and values["SSL_CERT_FILE"] != ca_source,
+                        "provider_host_ca_descriptor_missing")
         else:
             others += 1
             require(not any(canary in word or url in word for word in environ),
                     "provider_value_in_unrelated_child")
+            if ca_source is not None:
+                require("SSL_CERT_FILE" not in values and ca_source not in environ,
+                        "provider_ca_in_unrelated_child")
     require(host == 1 and others >= 4, "provider_process_graph_incomplete")
-    return {"selected_host_execs": host, "other_execs_checked": others,
-            "canary_in_other_children": False, "canary_in_argv": False}
+    witness = {"selected_host_execs": host, "other_execs_checked": others,
+               "canary_in_other_children": False, "canary_in_argv": False}
+    if ca_source is not None:
+        witness["ca_source_in_other_children"] = False
+        witness["host_ca_descriptor_bound"] = True
+    return witness
 
 
 def provider_files_witness(args, canary):
@@ -830,6 +842,40 @@ def qualify(args, report):
         selection = Path(first["selection"])
         report["selection_sha256"] = BASE.sha(selection)
 
+        if args.linked_worktrees_only:
+            load("installed_linked_worktrees", "qualify-linked-worktrees.py").qualify(args, door, agent_home, env, report,
+                installed=__import__('types').SimpleNamespace(QUAL=QUAL, BASE=BASE, require=require, load=load))
+            report['source_after'] = BASE.source()
+            require(report['source_after'] == before, 'source_changed')
+            return
+
+        if args.filesystem_roots_only:
+            load("installed_filesystem_roots", "qualify-filesystem-roots.py").qualify(args, door, agent_home, env, report,
+                installed=__import__('types').SimpleNamespace(QUAL=QUAL, BASE=BASE, require=require, load=load))
+            report['source_after'] = BASE.source()
+            require(report['source_after'] == before, 'source_changed')
+            return
+
+        if args.budget_presets_only:
+            import types
+            suite = types.SimpleNamespace(QUAL=QUAL, BASE=BASE, require=require, load=load,
+                                          provider_exec_witness=provider_exec_witness, agent_executions=agent_executions)
+            load('installed_budget_qualification', 'qualify-budget-presets.py').qualify(
+                args, door, agent_home, env, report, selection, suite, receiver)
+            report['source_after'] = BASE.source()
+            require(report['source_after'] == before, 'source_changed')
+            return
+
+        if args.project_presets_only:
+            import types
+            suite = types.SimpleNamespace(QUAL=QUAL, BASE=BASE, require=require, load=load,
+                                          provider_exec_witness=provider_exec_witness, agent_executions=agent_executions)
+            load('installed_project_qualification', 'qualify-project-presets.py').qualify(
+                args, door, agent_home, env, report, selection, suite, receiver)
+            report['source_after'] = BASE.source()
+            require(report['source_after'] == before, 'source_changed')
+            return
+
         # 4. An existing selection prepared by the accepted checkout front door
         #    at the same commit is consumed unchanged by the installed command.
         checkout = QUAL.FrontDoor(args, build_env, home)
@@ -846,6 +892,36 @@ def qualify(args, report):
         code, value, _ = door.call("status", "--state-root", str(args.state_root), inputs=False, timeout=120)
         require(code == 0 and value.get("protection") == "configured-not-running", "status_before_run")
         report["cases"].append({"case": "status-configured", "passed": True, "protection": value["protection"]})
+
+        if args.maintenance_only:
+            maintenance = load("maintenance_qualification", "pilot_maintenance_qualification.py")
+            def sibling(sibling_home):
+                install_component(args, sibling_home, archive, digest, built["component"], env, report)
+                return InstalledDoor(args, env, args.work, sibling_home)
+            maintenance.qualify(args, door, agent_home, env, report, guided=QUAL,
+                install_sibling=sibling, receiver=receiver, baseline=baseline, selection=selection, load=load)
+            report["source_after"] = BASE.source()
+            require(report["source_after"] == before, "source_changed")
+            return
+
+        if args.policy_activation_only:
+            load("policy_activation_qualification", "qualify-policy-activation.py").qualify(
+                args, door, agent_home, env, report, guided=QUAL, receiver=receiver, baseline=baseline,
+                selection=selection, load=load)
+            report["source_after"] = BASE.source()
+            require(report["source_after"] == before, "source_changed")
+            return
+
+        if args.provider_ca_only:
+            PROVIDER_CA_QUALIFICATION.qualify(
+                args, door, agent_home, env, report, provider_call=provider_call,
+                exec_witness=provider_exec_witness, guided=QUAL, provider=PROVIDER, base=BASE)
+            require(QUAL.snapshot(args.project) == baseline["project"]
+                    and QUAL.snapshot(args.repository) == baseline["repository"],
+                    "provider_ca_qualification_changed_project")
+            report["source_after"] = BASE.source()
+            require(report["source_after"] == before, "source_changed")
+            return
 
         # 5. Useful read and history; refused write, reset and send.
         proposals = [("mcp__filesystem__read_text_file", {"path": "/workspace/README.md"}),
@@ -1024,6 +1100,17 @@ def main():
     parser.add_argument("--allow-download", action="store_true")
     parser.add_argument("--provider-profiles", action="store_true",
                         help="opt in to SOU-172 private named provider original-host controls")
+    parser.add_argument("--maintenance-only", action="store_true", help="focused SOU-200 installed launch-exclusion witnesses")
+    parser.add_argument("--linked-worktrees-only", action="store_true", help="focused SOU-201 installed linked-worktree qualification")
+    parser.add_argument("--filesystem-roots-only", action="store_true", help="focused SOU-202 installed filesystem-root qualification")
+    parser.add_argument("--project-presets-only", action="store_true", help="focused installed named-project qualification")
+    parser.add_argument("--policy-activation-only", action="store_true",
+                        help="focused SOU-209 installed deny-only policy activation qualification")
+    parser.add_argument("--budget-presets-only", action="store_true",
+                        help="focused SOU-210 installed named Linux budget-preset qualification")
+    parser.add_argument("--budget-unit", help="disposable delegated systemd service (sou79-RUN-ATTEMPT.service)")
+    parser.add_argument("--provider-ca-only", action="store_true",
+                        help="focused SOU-195 installed-host HTTPS CA and rotation qualification")
     for name in INPUT_NAMES:
         parser.add_argument("--" + name.replace("_", "-"), type=Path)
     args = parser.parse_args()
@@ -1033,6 +1120,8 @@ def main():
               "provider": "owned-scripted-loopback", "live_model_effectiveness": "not_tested"}
     try:
         require(not args.output.exists() and not args.output.is_relative_to(ROOT), "new_output_outside_checkout_required")
+        require(not args.budget_presets_only or re.fullmatch(r"sou79-[0-9]+-[0-9]+\.service", args.budget_unit or ""),
+                "budget_presets_require_disposable_delegated_unit")
         require(args.git is not None, "explicit_git_required_for_owned_fixture_repository")
         require(all(getattr(args, name) is not None for name in ("agentfw", "git_launcher", "sandbox_tests")),
                 "explicit_agent_executables_required")
@@ -1054,11 +1143,27 @@ def main():
         qualify(args, report)
         report["status"] = "passed"
     except Exception as error:
-        report["error"] = str(error)[:500]
+        detail = str(error)
+        report["error"] = (detail if not (args.provider_ca_only or args.maintenance_only or args.policy_activation_only) or
+                           re.fullmatch(r"[a-z0-9_:-]{1,160}", detail)
+                           else "focused_qualification_failed")[:500]
     finally:
         if args.output.exists():
             BASE.write(args.output / "report.json", report)
-    print(json.dumps({"status": report["status"], "cases": len(report["cases"]), "error": report.get("error")}))
+    summary = {"status": report["status"], "cases": len(report["cases"]), "error": report.get("error")}
+    if args.linked_worktrees_only:
+        linked = report.get('linked_worktrees', {})
+        summary['linked_worktrees'] = {k: linked.get(k) for k in ('status', 'active_case', 'last_cli', 'last_runs', 'namespace_probe')}
+    if args.filesystem_roots_only:
+        roots = report.get('filesystem_roots', {})
+        summary['filesystem_roots'] = {k: roots.get(k) for k in ('status', 'active_case', 'last_cli', 'last_run', 'result_boundaries', 'post_run_sources_unchanged', 'processes_stopped', 'collector_failures', 'owned_first_errors', 'sibling_control', 'policy_taint_control')}
+    if args.budget_presets_only:
+        budget = report.get("budget_presets", {})
+        summary["budget_presets"] = {key: budget.get(key) for key in ("status", "active_case", "last_cli")}
+    if args.project_presets_only:
+        project = report.get("project_presets", {})
+        summary["project_presets"] = {key: project.get(key) for key in ("status", "active_case", "last_cli")}
+    print(json.dumps(summary))
     return 0 if report["status"] == "passed" else 1
 
 

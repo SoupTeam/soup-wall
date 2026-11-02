@@ -358,7 +358,7 @@ def _apply_one(parent, output, plan, row, body, verify_durable_archive):
                 validate_remaining(run, audit, files)
                 archive_guard()
                 os.rmdir("audit", dir_fd=run.fd)
-            for key in ("audit-finished.json", "audit-run.json"):
+            for key in (*(("maintenance-owner.json",) if "maintenance-owner.json" in files else ()), "audit-finished.json", "audit-run.json"):
                 validate_remaining(run, None, files, audit_present=False)
                 remove_member(run, key, quarantine, files[key], archive_guard)
                 del files[key]

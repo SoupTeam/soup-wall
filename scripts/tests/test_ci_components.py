@@ -114,7 +114,7 @@ class SharedComponents(unittest.TestCase):
         for job in ("linux-create-file", "linux-installed-edit"):
             body = central["mcp-create-file--" + job]
             self.assertIn("    needs: " + producer, body)
-            self.assertIn("    if: always() && contains(", body)
+            self.assertIn("    if: >-\n      !cancelled() && contains(", body)
             self.assertIn("      SOU166_MODE: shared", body)
             self.assertIn("${{ needs." + producer + ".result }}", body)
             self.assertIn("${{ needs." + producer + ".outputs.artifact_id }}", body)

@@ -18,6 +18,7 @@ ASSETS = "profiles/mcp/git-readonly-v1"
 SELECTION_V2 = "sw-installed-pilot-selection/2"
 SELECTION_V3 = "sw-installed-pilot-selection/3"
 PROFILES = {
+    "git-linked-worktree-readonly-v1": ("sw-mcp/git-linked-worktree-readonly/1", "linked_worktree", None),
     DEFAULT: ("sw-mcp/git-readonly/1", None, None),
     "git-readonly-file-revisions-v1": ("sw-mcp/git-readonly-file-revisions/1", "file_revisions", None),
     "git-readonly-local-refs-v1": ("sw-mcp/git-readonly-local-refs/1", "local_references", None),
@@ -97,6 +98,8 @@ def binding(name=DEFAULT):
         files.extend([identity, "scripts/install-sou107-git-profile.py"])
         if name == "git-tracked-symlinks-readonly-v1":
             files.append("scripts/install-sou150-git-profile.py")
+    if name == "git-linked-worktree-readonly-v1":
+        files += ["scripts/pilot_linked_worktree.py", "profiles/mcp/git-linked-worktree-readonly-v1/contract.json"]
     value = registry(name)
     return {"format": "sw-pilot-git-selection/1", "id": name, "profile_format": format_,
             "execution": "daemon-owned-original" if name in DAEMON_EXECUTION else "original-collector",
@@ -120,6 +123,12 @@ def from_selection(selection):
 
 def install(name, destination, workspace, git, git_sha256, bwrap, launcher, **inputs):
     _, flag, identity = selected(name)
+    if name == "git-linked-worktree-readonly-v1":
+        import pilot_linked_worktree as linked
+        binding = inputs.pop("linked_worktree_binding", None)
+        require(binding is not None, "linked_worktree_binding_required")
+        return load("install-sou68-git-profile.py").install(destination, workspace, git, git_sha256, bwrap, launcher,
+            **inputs, linked_worktree=linked.verify(binding, workspace))
     if identity:
         module = load("install-sou150-git-profile.py" if name == "git-tracked-symlinks-readonly-v1"
                       else "install-sou107-git-profile.py")

@@ -160,7 +160,11 @@ def retained_artifacts(root, values):
 
 def inputs(url, root):
     certificate = root / 'owned-provider-ca-canary.pem'
-    certificate.write_text('Owned unused HTTP-only certificate canary.\n')
+    # The HTTP-only witness still verifies that this selected path never enters
+    # a helper. A real selected CA must now parse before any host executes;
+    # this public test certificate is not evidence of TLS trust behavior.
+    source = Path(__file__).resolve().parents[1] / 'crates/proxy/tests/fixtures/saml/local-idp-cert.pem'
+    certificate.write_bytes(source.read_bytes())
     certificate.chmod(0o600)
     return dict(zip(KEYS, ('sou143-owned-api-91d2', 'sou143-owned-auth-a4b7', url,
         'http://sou143-http-canary@127.0.0.1:9', 'http://sou143-https-canary@127.0.0.1:9',

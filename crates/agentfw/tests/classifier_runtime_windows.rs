@@ -316,15 +316,152 @@ fn process_exists(pid: u32) -> bool {
     alive
 }
 
-fn children_of(pid: u32) -> Vec<u32> {
-    run(powershell()
+/// Retain the actual kernel process object before retiring the worker. A later
+/// OpenProcess(pid) would observe a reused numeric ID rather than this process.
+struct ProcessWitness {
+    pid: u32,
+    handle: std::os::windows::io::OwnedHandle,
+    created_100ns: u64,
+}
+
+impl ProcessWitness {
+    fn open(pid: u32) -> Option<Self> {
+        use std::os::windows::io::FromRawHandle;
+        use windows_sys::Win32::Foundation::{GetLastError, ERROR_INVALID_PARAMETER, FILETIME};
+        use windows_sys::Win32::System::Threading::{
+            GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+        };
+        // SAFETY: open a non-inheritable observation handle with minimal rights.
+        let raw = unsafe {
+            OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+                0,
+                pid,
+            )
+        };
+        if raw.is_null() {
+            // Only an already-gone process is absence; denied/unknown observation fails.
+            assert_eq!(
+                unsafe { GetLastError() },
+                ERROR_INVALID_PARAMETER,
+                "cannot establish process identity for {pid}"
+            );
+            return None;
+        }
+        // SAFETY: OpenProcess transferred this owned handle.
+        let handle = unsafe { std::os::windows::io::OwnedHandle::from_raw_handle(raw.cast()) };
+        let mut created = FILETIME::default();
+        let mut exited = FILETIME::default();
+        let mut kernel = FILETIME::default();
+        let mut user = FILETIME::default();
+        // SAFETY: raw remains owned and all FILETIME outputs are initialized.
+        assert_ne!(
+            unsafe { GetProcessTimes(raw, &mut created, &mut exited, &mut kernel, &mut user) },
+            0,
+            "cannot establish creation time for {pid}"
+        );
+        Some(Self {
+            pid,
+            handle,
+            created_100ns: (u64::from(created.dwHighDateTime) << 32)
+                | u64::from(created.dwLowDateTime),
+        })
+    }
+
+    fn alive(&self) -> bool {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT};
+        use windows_sys::Win32::System::Threading::WaitForSingleObject;
+        // SAFETY: the retained kernel object is observed without reopening a PID.
+        match unsafe { WaitForSingleObject(self.handle.as_raw_handle().cast(), 0) } {
+            WAIT_OBJECT_0 => false,
+            WAIT_TIMEOUT => true,
+            other => panic!("process {} observation failed: {other}", self.pid),
+        }
+    }
+
+    fn from_snapshot(pid: u32, created_100ns: u64, parent_created_100ns: u64) -> Option<Self> {
+        let process = Self::open(pid)?;
+        // CIM datetime has microsecond precision; the native FILETIME has 100 ns precision.
+        // A changed generation means the snapshot process has already exited. A process
+        // older than this worker cannot be its child, even if ParentProcessId was reused.
+        if process.created_100ns / 10 != created_100ns / 10
+            || process.created_100ns < parent_created_100ns
+            || !process.alive()
+        {
+            return None;
+        }
+        Some(process)
+    }
+}
+
+fn children_of(parent: &ProcessWitness) -> Vec<ProcessWitness> {
+    let snapshot = run(powershell()
         .args(["-NoProfile", "-NonInteractive", "-Command"])
         .arg(format!(
-            "Get-CimInstance Win32_Process -Filter 'ParentProcessId={pid}' | ForEach-Object {{ $_.ProcessId }}"
-        )))
-    .lines()
-    .filter_map(|line| line.trim().parse().ok())
-    .collect()
+            "$ErrorActionPreference='Stop'; Get-CimInstance Win32_Process -Filter 'ParentProcessId={}' | ForEach-Object {{ if ($null -eq $_.CreationDate) {{ throw 'process creation time unavailable' }}; '{{0}},{{1}}' -f $_.ProcessId,$_.CreationDate.ToUniversalTime().ToFileTimeUtc() }}",
+            parent.pid
+        )));
+    let mut children = Vec::new();
+    for (index, line) in snapshot
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .enumerate()
+    {
+        assert!(index < 65_536, "process observation exceeds its bound");
+        let (pid, created) = line
+            .trim()
+            .split_once(',')
+            .expect("invalid process snapshot");
+        let pid = pid.parse().expect("invalid process ID");
+        let created = created.parse().expect("invalid process creation time");
+        if let Some(child) = ProcessWitness::from_snapshot(pid, created, parent.created_100ns) {
+            children.push(child);
+        }
+    }
+    children
+}
+
+#[test]
+fn process_observation_pins_generation_and_detects_live_processes() {
+    struct KillOnDrop(std::process::Child);
+    impl Drop for KillOnDrop {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let mut child = KillOnDrop(
+        Command::new(python())
+            .args(["-I", "-c", "import time; time.sleep(30)"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    let pinned = ProcessWitness::open(child.0.id()).unwrap();
+    assert!(pinned.alive(), "a real live process must remain observable");
+    let born = pinned.created_100ns;
+    assert!(ProcessWitness::from_snapshot(pinned.pid, born, 0).is_some());
+    assert!(
+        ProcessWitness::from_snapshot(pinned.pid, born + 10, 0).is_none(),
+        "a different snapshot generation must not identify this live process"
+    );
+    assert!(
+        ProcessWitness::from_snapshot(pinned.pid, born, born + 10).is_none(),
+        "a process older than the current parent is not its child"
+    );
+    child.0.kill().unwrap();
+    child.0.wait().unwrap();
+    assert!(
+        !pinned.alive(),
+        "the same retained process object must be signalled after exit"
+    );
+    assert!(
+        !pinned.alive(),
+        "later observations keep the original handle, not a numeric PID lookup"
+    );
 }
 
 // ------------------------------------------------------------------ package
@@ -800,31 +937,37 @@ fn launcher_process_tree_is_owned_and_cleaned_up_with_the_worker() {
     Store::new(&profile)
         .install(&archive(Which::Frozen), &launcher)
         .unwrap();
-    let worker = PackagedClassifier::from_home(&profile).unwrap();
-    let line = &inputs()[0];
-    worker.classify_raw(line).expect("the worker must answer");
-    let pid = worker.worker_pid().unwrap();
-    // A venv launcher may start the real interpreter as its child; either way every
-    // process of the worker must disappear when the worker is retired.
-    let children = children_of(pid);
-    kill_process(pid);
-    std::thread::sleep(Duration::from_millis(100));
-    assert!(worker.classify_raw(line).is_err());
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while Instant::now() < deadline && children.iter().any(|child| process_exists(*child)) {
-        std::thread::sleep(Duration::from_millis(50));
-    }
-    for child in &children {
+    for trial in 0..3 {
+        let worker = PackagedClassifier::from_home(&profile).unwrap();
+        let line = &inputs()[0];
+        worker.classify_raw(line).expect("the worker must answer");
+        let pid = worker.worker_pid().unwrap();
+        let parent = ProcessWitness::open(pid).expect("the worker is live");
+        // Pin original kernel objects and validate generation before retiring the worker.
+        let children = children_of(&parent);
+        println!(
+            "worker cleanup trial {trial}: worker={pid}, children={}, parent_creation={}",
+            children.len(),
+            parent.created_100ns
+        );
+        kill_process(pid);
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(worker.classify_raw(line).is_err());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline && children.iter().any(ProcessWitness::alive) {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(!parent.alive(), "worker {pid} outlived retirement");
+        for child in &children {
+            assert!(!child.alive(), "descendant {} (creation {}) outlived its worker in trial {trial}; unclean_retirements={}",
+                child.pid, child.created_100ns, worker.unclean_retirements());
+        }
+        assert_eq!(worker.unclean_retirements(), 0);
         assert!(
-            !process_exists(*child),
-            "descendant {child} outlived its worker"
+            worker.classify_raw(line).is_ok(),
+            "a fresh worker replaces it"
         );
     }
-    assert_eq!(worker.unclean_retirements(), 0);
-    assert!(
-        worker.classify_raw(line).is_ok(),
-        "a fresh worker replaces it"
-    );
 }
 
 /// Evidence generator: `cargo test --test classifier_runtime_windows -- --ignored --nocapture latency`.
