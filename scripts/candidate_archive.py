@@ -55,7 +55,9 @@ def extract(archive, destination):
     destination = Path(destination)
     require(not destination.exists(), "new_destination_required")
     with tarfile.open(archive, "r:gz") as tar:
-        members, total = {}, 0
+        members, total, hashes, documents = {}, 0, {}, {}
+        json_paths = {"manifest.json", "npm-inventory.json", PROFILE + "upstream-identity.json",
+                      PROFILE + "package-lock.json"}
         for member in tar:
             name = safe(member.name)
             require(name == ROOT or name.startswith(ROOT + "/"), "archive_root_mismatch")
@@ -65,10 +67,19 @@ def extract(archive, destination):
             total += member.size
             require(total <= MAX_BYTES and len(members) < MAX_ENTRIES, "archive_expansion_limit")
             members[name] = member
+            if member.isfile():
+                relative = name[len(ROOT) + 1:]
+                with tar.extractfile(member) as stream:
+                    if relative in json_paths:
+                        require(member.size <= MAX_MANIFEST, "manifest_size_limit")
+                        documents[relative] = stream.read(MAX_MANIFEST + 1)
+                        hashes[relative] = hashlib.sha256(documents[relative]).hexdigest()
+                    else:
+                        hashes[relative] = hashlib.file_digest(stream, "sha256").hexdigest()
         manifest_name = ROOT + "/manifest.json"
         require(manifest_name in members and members[manifest_name].isfile(), "manifest_missing")
         require(members[manifest_name].size <= MAX_MANIFEST, "manifest_size_limit")
-        manifest = parse(tar.extractfile(members[manifest_name]).read())
+        manifest = parse(documents["manifest.json"])
         require(set(manifest) == {"schema_version", "identities", "files"}
                 and manifest["schema_version"] == 2, "manifest_schema")
         ids, files = manifest["identities"], manifest["files"]
@@ -87,11 +98,10 @@ def extract(archive, destination):
             require(all(str(parent) not in members or members[str(parent)].isdir()
                         for parent in PurePosixPath(name).parents), "file_as_directory")
         for relative, digest in files.items():
-            stream = tar.extractfile(members[ROOT + "/" + relative])
-            require(hashlib.file_digest(stream, "sha256").hexdigest() == digest, "member_digest_mismatch")
+            require(hashes[relative] == digest, "member_digest_mismatch")
         require(files["Cargo.lock"] == ids["cargo_lock_sha256"], "cargo_lock_identity_mismatch")
         require(all(files[path] == digest for path, digest in ARCHIVE_PINS.items()), "pinned_archive_mismatch")
-        identity = parse(tar.extractfile(members[ROOT + "/" + PROFILE + "upstream-identity.json"]).read())
+        identity = parse(documents[PROFILE + "upstream-identity.json"])
         require(identity.get("format") == "sw-mcp/filesystem-readonly-upstream/1", "upstream_identity_schema")
         require(identity.get("packageLockSha256") == files[PROFILE + "package-lock.json"], "npm_lock_identity_mismatch")
         notices = identity.get("upstreamNotices", [])
@@ -99,8 +109,8 @@ def extract(archive, destination):
         for notice in notices:
             path = safe(notice["path"])
             require(path.startswith("upstream-notices/") and files.get(PROFILE + path) == notice.get("sha256"), "notice_identity_mismatch")
-        npm_inventory = parse(tar.extractfile(members[ROOT + "/npm-inventory.json"]).read())
-        lock = parse(tar.extractfile(members[ROOT + "/" + PROFILE + "package-lock.json"]).read())
+        npm_inventory = parse(documents["npm-inventory.json"])
+        lock = parse(documents[PROFILE + "package-lock.json"])
         require(npm_inventory.get("format") == "sw-candidate-npm-inventory/1"
                 and npm_inventory.get("lock_sha256") == files[PROFILE + "package-lock.json"], "npm_inventory_identity")
         npm_rows = npm_inventory.get("packages", [])
