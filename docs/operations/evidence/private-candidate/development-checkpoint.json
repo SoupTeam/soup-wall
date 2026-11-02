@@ -2,19 +2,18 @@
   "format": "sw-private-candidate-development-checkpoint/1",
   "status": "incomplete-not-release-qualification",
   "date": "2026-11-02",
-  "implementation_source": "ffac6bf7f91585b45aa7826a7cba194fe606966d",
+  "implementation_source": "21f1771ffe2e5a388a821051a6825a2196fd7c6d",
   "targeted_controls": {
     "platform": "Windows",
-    "candidate_test_methods": 14,
-    "inventory_test_methods": 15,
-    "status": "passed",
-    "documentation_links": "passed",
+    "command": "python -B -m unittest scripts.tests.test_candidate_archive scripts.tests.test_candidate_evidence scripts.tests.test_validate_candidate scripts.tests.test_runtime_inventory -q",
+    "tests_passed": 55,
+    "documentation_links": "377 files, 1317 links, 0 errors",
     "bash_syntax": "passed"
   },
   "installed_offline_kit": {
     "platform": "WSL2 Ubuntu 24.04 x86_64, unprivileged operator",
-    "source": "2ccbf64a7d3504538f5db1ab79194c143d61036d",
-    "archive_sha256": "dce95d60f633f6bc6a9268c4230e85eb758eaea5619107ff49c39c312ab78221",
+    "source": "21f1771ffe2e5a388a821051a6825a2196fd7c6d",
+    "archive_sha256": "349079d4ff183a43175b1b109512052a1005edf9d0a4ff980a7d7cac94a6cf34",
     "compiler": "rustc 1.94.1 (e408947bf 2026-03-25)",
     "build_profile": "debug",
     "status": "passed-at-recorded-source",
@@ -28,28 +27,143 @@
       "protected unsupported write with independent absent-file witness",
       "result injection refusal correlated with fresh native_call/native_result audit records",
       "broken-path control",
-      "daemon-loss refusal"
+      "daemon-loss refusal",
+      "direct original-server write calibration followed by protected same-path zero effect"
     ]
   },
-  "additional_native_builds": {
-    "source": "2ccbf64a7d3504538f5db1ab79194c143d61036d",
-    "agent_binaries": "built",
-    "agent_library_tests": "compiled-only-not-executed"
+  "python_dependency_update": {
+    "source": "d9a19e4e",
+    "pins": {
+      "certifi": "2026.10.19",
+      "mcp": "1.30.0"
+    },
+    "strategy": "Only two hashed wheel pins and their source identity bindings changed. Strict installers and frozen discovery responses were preserved.",
+    "native_qualification": {
+      "status": "passed",
+      "permitted_reads": 6,
+      "refusals": 12,
+      "overlap_rounds": 16,
+      "checks": [
+        "fresh hashed installation",
+        "original initialize and all 12 tool schemas",
+        "immutable repository and sandbox isolation",
+        "result injection refusal",
+        "cleanup and daemon loss"
+      ]
+    },
+    "independent_review": {
+      "status": "no actionable bypass or regression found",
+      "python_tests_passed": 69
+    },
+    "advisory_scope": "The real OSV response contained no matched advisories for these two installed package versions. This does not establish exploitability of the previous versions or clear interpreter-vendored packages."
   },
+  "native_rust_tests": {
+    "source": "d9a19e4e",
+    "toolchain": "1.94.1",
+    "server_profile": {
+      "passed": 123,
+      "ignored": 4
+    },
+    "server_sandbox": {
+      "passed": 7,
+      "ignored": 7
+    }
+  },
+  "installed_inventory": {
+    "status": "incomplete",
+    "real_scanner_observation_source": "d9a19e4e",
+    "osv_version": "2.7.0",
+    "cargo_audit_version": "0.22.2",
+    "observed_counts": {
+      "cargo_lock_entries": 443,
+      "npm_unique_identities": 101,
+      "python_installed_distributions": 35
+    },
+    "rust_license_gate": {
+      "status": "passed",
+      "packages": 443,
+      "approved": 423,
+      "exact_exceptions": 20,
+      "release_approval": false
+    },
+    "coverage_corrections_source": "21f1771f",
+    "coverage_corrections": [
+      "scan the installed transitive graph without virtual dependency resolution",
+      "normalize only numeric Python release zero padding",
+      "verify pinned clean RustSec database and retain warnings",
+      "use the shipped pinned original-server notice when npm omits its LICENSE"
+    ],
+    "remaining_package_observations": [
+      "Rust zip 9.0.4 advisory match",
+      "Rust paste 1.0.15 and unsafe-libyaml 0.2.11 unmaintained warnings",
+      "npm body-parser 2.3.0, fast-uri 3.1.8, glob 13.0.6 and minimatch 10.2.6 advisory matches",
+      "interpreter bootstrap pip 25.2 and setuptools 80.9.0 advisory matches"
+    ],
+    "remaining_license_review": [
+      "original filesystem server declaration",
+      "BlueOak-1.0.0 npm packages",
+      "certifi MPL-2.0",
+      "gitdb ambiguous BSD metadata",
+      "typing_extensions PSF-2.0"
+    ],
+    "native_reviews": "Git, bubblewrap, Node, host/server Python and selected ELF library advisory/notice reviews remain required.",
+    "qualification_limit": "Counts are observed scanner rows, not latest-source exact-graph clearance. The d9a19e4e response exposed Python version normalization and virtual-resolution mismatches. The corrected final integration did not finish."
+  },
+  "retained_failed_attempts": [
+    {
+      "source": "21f1771f",
+      "status": "profile_package_changed",
+      "reason": "An operator pip check without -B wrote bytecode into the sealed runtime. Verification correctly refused the changed package. A new generation was requested with -B; the refusal was not waived."
+    },
+    {
+      "source": "21f1771f",
+      "status": "environment-blocked",
+      "reason": "The corrected complete preparation/inventory retry stopped producing output after cached Rust builds. Separate WSL process-list commands and a bounded Ubuntu-24.04 termination request also did not complete. No final verified inventory was produced."
+    }
+  ],
+  "historical_kit_runs": [
+    {
+      "platform": "WSL2 Ubuntu 24.04 x86_64, unprivileged operator",
+      "source": "2ccbf64a7d3504538f5db1ab79194c143d61036d",
+      "archive_sha256": "dce95d60f633f6bc6a9268c4230e85eb758eaea5619107ff49c39c312ab78221",
+      "compiler": "rustc 1.94.1 (e408947bf 2026-03-25)",
+      "build_profile": "debug",
+      "status": "passed-at-recorded-source",
+      "checks": [
+        "complete pre-extraction inventory and pinned archive validation",
+        "extracted executable modes",
+        "original filesystem profile install with networking unavailable, 104 npm packages",
+        "unrelated setup-error and malformed-envelope negatives",
+        "fabricated collector marker rejected without fresh daemon records",
+        "useful original-server read",
+        "protected unsupported write with independent absent-file witness",
+        "result injection refusal correlated with fresh native_call/native_result audit records",
+        "broken-path control",
+        "daemon-loss refusal"
+      ]
+    },
+    {
+      "source": "894968941d08d0192fc4749619fd5ede253a87e8",
+      "archive_sha256": "e3fb4a4daac9d236727c111cd7bfac25b56a7cfb909aa1cd6a44a5117738eb51",
+      "status": "passed-at-recorded-source"
+    }
+  ],
   "remaining": [
-    "Replay the latest implementation, including direct original-write calibration and per-attempt evidence reservation, on Linux.",
-    "Prepare the complete two-server pilot from the latest clean source and run its inventory against real scanners and explicit native advisory/notice reviews.",
-    "Complete independent review, Ready qualification, source admission and maintainer merge."
+    "Complete a fresh exact-graph installed inventory at the corrected source after WSL recovery.",
+    "Assess and resolve remaining advisory and notice findings without floating upgrades or policy waivers.",
+    "Obtain maintainer review of new hashed setup inputs; do not advance the accepted-input guard automatically.",
+    "Complete TL-owned Ready qualification, independent admission and merge."
   ],
   "environment_blocker": {
-    "operation": "restart Ubuntu-24.04 for final replay and full installed inventory",
-    "error": "Wsl/Service/CreateInstance/CreateVm/HCS/ERROR_NO_SYSTEM_RESOURCES",
-    "temporary_configuration": "A temporary 4GB WSL memory cap allowed one diagnostic boot; later launches still failed. The temporary configuration file was removed and its original absence restored."
+    "status": "WSL unresponsive during final inventory retry",
+    "temporary_configuration": "Task-only 3GB/2-CPU/1GB-swap configuration was removed after stopping only verified task clients; original absence restored.",
+    "prior_error": "Earlier starts reported HCS ERROR_NO_SYSTEM_RESOURCES. Limited-memory runs subsequently completed the kit and Git qualification. These successes do not clear the later unresponsive retry."
   },
   "claims_excluded": [
-    "latest-source native acceptance",
     "complete installed advisory or license clearance",
     "byte-for-byte compiler reproducibility",
+    "global HTTP/authentication or vendored certificate remediation",
+    "live-model effectiveness",
     "release or publication authority"
   ]
 }
