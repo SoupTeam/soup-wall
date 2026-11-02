@@ -88,6 +88,59 @@ class RuntimeInventoryTests(unittest.TestCase):
             self.assertEqual(data["status"], "incomplete")
             self.assertIn("verified_installed_selection_required", data["errors"])
 
+    def installed_fixture(self, root, *, extra="pip", license="MIT"):
+        npm = root / "npm-package"
+        dep = npm / "node_modules/node-lib"
+        dep.mkdir(parents=True)
+        (dep / "package.json").write_text(json.dumps({"name": "node-lib", "version": "3.0", "license": "MIT"}))
+        (dep / "LICENSE").write_text("existing npm license")
+        (npm / "package-lock.json").write_text(json.dumps({"packages": {"": {}, "node_modules/node-lib": {"version": "3.0"}}}))
+        python = root / "python-package"
+        site = python / "python/lib/python3.11/site-packages"
+        for name, version in [("python-lib", "2.0"), (extra, "1.0")]:
+            dist = site / (name + ".dist-info")
+            dist.mkdir(parents=True)
+            (dist / "METADATA").write_text(f"Name: {name}\nVersion: {version}\nLicense-Expression: {license}\n")
+            (dist / "LICENSE").write_text("existing Python license")
+        for kind, package in [("filesystem", npm), ("git", python)]:
+            directory = root / (kind + "-profile")
+            directory.mkdir()
+            (directory / "profile.json").write_text(json.dumps({"packageRoot": str(package)}))
+
+    def test_bundled_bootstrap_package_is_included_in_scan_graph(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.installed_fixture(root)
+            notices, graph, errors = inventory.installed_graphs(root, self.graphs)
+            self.assertIn(("PyPI", "pip", "1.0"), graph)
+            self.assertFalse(errors)
+            self.assertEqual(len(notices), 3)
+
+    def test_unrelated_installed_distribution_is_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.installed_fixture(root, extra="unrelated-package")
+            with self.assertRaisesRegex(ValueError, "unexpected_python_distribution"):
+                inventory.installed_graphs(root, self.graphs)
+
+    def test_installed_version_drift_is_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.installed_fixture(root)
+            metadata = root / "npm-package/node_modules/node-lib/package.json"
+            metadata.write_text(json.dumps({"name": "node-lib", "version": "different", "license": "MIT"}))
+            with self.assertRaisesRegex(ValueError, "installed_npm_version_mismatch"):
+                inventory.installed_graphs(root, self.graphs)
+
+    def test_unreviewed_license_retains_inventory_and_blocking_reasons(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.installed_fixture(root, license="Unreviewed-License")
+            notices, graph, errors = inventory.installed_graphs(root, self.graphs)
+            self.assertEqual(len(notices), 3)
+            self.assertEqual(len(errors), 2)
+            self.assertTrue(all("runtime_license_review_required" in error for error in errors))
+
 
 if __name__ == "__main__":
     unittest.main()
