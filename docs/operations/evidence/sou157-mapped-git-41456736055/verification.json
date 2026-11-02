@@ -1,0 +1,63 @@
+{
+  "product_source": "0f33c2945206a23cca1c6274ada27f8f09005116",
+  "run": 41456736055,
+  "artifact": 13146813408,
+  "zip_sha256": "c52e4971fe3d90dd440d39851de69c0aa2131fb81d566eae2c5493b086001fd9",
+  "unique_members": 6,
+  "crc_verified": true,
+  "cases": 8,
+  "modes": 20,
+  "exact_text_benign_deliveries": [
+    "g01-a",
+    "g03-a",
+    "g07-b",
+    "g09-b"
+  ],
+  "matched_attack_refusals": [
+    "g01-b",
+    "g03-b",
+    "g07-a",
+    "g09-a"
+  ],
+  "frozen_baseline_false_refusals": 10,
+  "residual_known_limits": [
+    "g05-a",
+    "g06-b",
+    "f05-a",
+    "g11-a",
+    "g12-a",
+    "f12-a"
+  ],
+  "independent_review": 5737718305,
+  "integration_qualification": "pending",
+  "earlier_attempts": [
+    {
+      "run": 41398481028,
+      "artifact": 13120452036,
+      "zip_sha256": "01cbc89401c7a6a4b35e7863533e3f12bb2489ad031a0c7af6276377e8895139",
+      "product_source": "874526b591399765ab6f102be6ed70745dbccba3",
+      "outcome": "failed",
+      "retained_report": "failed-41398481028.json"
+    },
+    {
+      "run": 41399634618,
+      "artifact": 13120903766,
+      "zip_sha256": "402101666f7ac49732e3ffb162be5068bcf1d872a949c0f0994fbe419e81a084",
+      "product_source": "874526b591399765ab6f102be6ed70745dbccba3",
+      "outcome": "failed",
+      "retained_report": "failed-41399634618.json"
+    },
+    {
+      "run": 41429277748,
+      "artifact": 13133229099,
+      "zip_sha256": "a5bbe02f59c45799ba1ef24e11a84833b4373837f65116348cc868be17fe10ec",
+      "product_source": "a1f2a9f5b1316c5dec8429178b3f046d5f9ccd86",
+      "outcome": "failed",
+      "retained_report": "failed-41429277748.json"
+    }
+  ],
+  "pre_runtime_harness_failure": {
+    "run": 41397503366,
+    "attribution": "TL Python3.10/file_digest harness corrected before runtime"
+  }
+}

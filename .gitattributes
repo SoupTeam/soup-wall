@@ -95,3 +95,4 @@ scripts/tests/test_publication_readiness.py text eol=lf
 scripts/benchmarks/pilot-readiness-policies/*.yaml text eol=lf
 scripts/qualify-publication-admission.py text eol=lf
 docs/operations/evidence/publication-admission/** text eol=lf
+docs/operations/evidence/sou157-mapped-git-41456736055/** text eol=lf

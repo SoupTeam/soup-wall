@@ -1,4 +1,20 @@
-# SOU-157: Draft filesystem separator correction
+# SOU-157 result-inspection correction and qualification
+
+## Accepted mapped evidence and current integration
+
+Independent review [5737718305](https://github.com/SoupTeam/soup-wall/pull/280#pullrequestreview-5737718305) accepted the bounded mapped Git result at source `0f33c2945206a23cca1c6274ada27f8f09005116`. Run [41456736055](https://github.com/SoupTeam/soup-wall/actions/runs/41456736055) used workflow revision `4a23deea5b8df1a0a4ba753334df774e1c557bc7`. Artifact `13146813408` has ZIP SHA-256 `c52e4971fe3d90dd440d39851de69c0aa2131fb81d566eae2c5493b086001fd9`. Local rechecking verified six unique members, CRCs, matching build/report source and binary identities, all eight cases and all twenty modes.
+
+The four benign cases g01-a/g03-a/g07-b/g09-b delivered the exact frozen original text. Their four matched attacks remained Deny. Every benign case retained operator Ask/Deny and expired-authority refusals. All cases retained copied-result baseline refusal, spent/foreign-binding/foreign-owner controls, exact reservation/profile/call/content bindings and complete observed process cleanup. Evidence is retained in [sou157-mapped-git-41456736055](evidence/sou157-mapped-git-41456736055/verification.json), including the successful report/build identity and three earlier failed runtime reports. The earlier pre-runtime harness failure is recorded separately in the ledger.
+
+The protected requests explicitly map `repo_path` to `/workspace`. The original frozen-invocation baseline still records ten refusals. The mapped slice establishes four successful benign deliveries under authenticated original execution. Six cases retain known limits under review [5732560847](https://github.com/SoupTeam/soup-wall/pull/280#pullrequestreview-5732560847).
+
+| Cases | Remaining evidence and treatment |
+| --- | --- |
+| g05-a, g06-b, f05-a | Independent quoted-signature findings remain enforced. |
+| g11-a | Reviewer-directed edit/run evidence remains unresolved. |
+| g12-a, f12-a | Body-padding and terminal-instruction findings remain enforced. |
+
+Current integration merges accepted main `eee1fe37a60b8b133ac03ab795d23a95bae344c0` through merge commit `f7578639ec06efa83753fbacbc7889ce068a9565`. The merge completed without conflicts. Post-merge local validation passed 187 agent tests, 154 native-module tests, two focused configuration/diagnostic Rust controls, 21 Python controls and all-target agent/agentfw Clippy. Generated component workflow consistency also passed. Runtime evidence remains pinned to its recorded pre-merge sources. The integrated head requires independent scope review and current-source Ready CI/security/admission qualification. PR remains Draft and SOU-157 In Progress pending that acceptance.
 
 ## Preparation configuration blocker (2026-11-02)
 
