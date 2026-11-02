@@ -132,6 +132,33 @@ class Controls(unittest.TestCase):
             self.assertIn('provider', result.stdout)
             self.assertFalse((Path(temp) / 'marker').exists())
 
+    def test_native_zsh_completion_context(self):
+        shell = shutil.which('zsh')
+        if not shell:
+            self.skipTest('Zsh is unavailable')
+        data = {'commands': [{'command': [], 'flags': []},
+                             {'command': ['provider'], 'flags': []},
+                             {'command': ['provider', 'preview'], 'flags': []}]}
+        script = 'compdef() { :; }; compadd() { print -l -- "$@"; };\n'
+        script += reader_completion(data, 'zsh', [])
+        script += 'words=(pilot provider pre); CURRENT=3; _pilot_help_complete\n'
+        result = subprocess.run([shell, '-f'], input=script, text=True, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('preview', result.stdout)
+
+    def test_native_fish_completion_context(self):
+        shell = shutil.which('fish')
+        if not shell:
+            self.skipTest('Fish is unavailable')
+        data = {'commands': [{'command': [], 'flags': []},
+                             {'command': ['provider'], 'flags': []},
+                             {'command': ['provider', 'preview'], 'flags': []}]}
+        script = reader_completion(data, 'fish', [])
+        script += "complete -C 'pilot provider pre'\n"
+        result = subprocess.run([shell, '--no-config'], input=script, text=True, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('preview', result.stdout)
+
 
 def reader_completion(data, shell, context):
     spec = importlib.util.spec_from_file_location('help_reader_context', TOOL)
