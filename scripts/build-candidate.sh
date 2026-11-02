@@ -20,7 +20,7 @@ TARGET_DIR="$ROOT/target/soup-wall-linux-amd64"
 mkdir -p "$TARGET_DIR/bin" "$TARGET_DIR/assets" "$TARGET_DIR/scripts" "$TARGET_DIR/profiles/mcp" "$TARGET_DIR/npm-cache" "$TARGET_DIR/upstream-notices"
 # One affected binary, no all-platform matrix or release publication.
 cargo build --locked -p agentfw --bin agentfw
-cp target/debug/agentfw "$TARGET_DIR/bin/"
+cp "${CARGO_TARGET_DIR:-$ROOT/target}/debug/agentfw" "$TARGET_DIR/bin/"
 cp "$CANDIDATE_BWRAP" "$TARGET_DIR/bin/bwrap"
 "$TARGET_DIR/bin/agentfw" classifier-package build --classifier rev2 --source "$ROOT" --out "$TARGET_DIR/assets/baseline.classifier"
 while IFS= read -r -d '' path; do
