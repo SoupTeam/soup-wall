@@ -463,6 +463,10 @@ def qualify(a, report):
              updated_component=update_row["component"], restored_component=built["component"],
              coordinated_selection_recovery=coordinated)
         started = begin("remove-preserves-user-data")
+        for name, chosen, _ in fixtures:
+            after_lifecycle = {"files": q.snapshot(chosen.project), "repository": q.snapshot(chosen.repository)}
+            require(after_lifecycle == baselines[name], "lifecycle_changed_user_project")
+            report["projects"][name]["after_lifecycle_sha256"] = digest(after_lifecycle)
         before_remove = {name: {"files": q.snapshot(chosen.project), "repository": q.snapshot(chosen.repository),
                                "preparation": q.snapshot(chosen.prefix)} for name, chosen, _ in fixtures}
         recovery = a.output / "removal-recovery"; recovery.mkdir(mode=0o700)
@@ -530,7 +534,7 @@ def main(argv=None):
         report["remaining_blockers"] = [r["id"] for r in inventory.get("cases", []) if r["status"] != "passed"]
     if a.output.exists():
         save(a.output / "report.json", report)
-    print(json.dumps({key: report.get(key) for key in ("status", "error", "accepted_source", "decision", "clean_user")}))
+    print(json.dumps({key: report.get(key) for key in ("status", "error", "accepted_baseline", "runtime_source", "decision", "clean_user")}))
     return 0 if report["status"] == "passed" else 1
 
 
