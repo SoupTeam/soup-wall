@@ -298,6 +298,11 @@ is NO-GO, including when the relationship of unreadable same-user processes is u
 ## Development verification and handoff
 
 Focused local suites: 112 tests, 101 passed and 11 platform/environment skips.
+CI source-registration controls also cover the manual-only diagnostic job; the
+required native job and shared 47-job inventory remain intact. A broader macOS
+CI-test discovery reproduced seven pre-existing LocalPrVerify containment
+unavailability failures; those Linux/Windows execution controls were unchanged.
+Their complete Linux CI run is checked separately.
 Mandatory native pin checks additionally exercise Linux process refusal and
 maintenance/current-generation controls. Source workflow actionlint, generated
 workflow consistency and local documentation links pass. Local checks do not
