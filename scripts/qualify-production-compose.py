@@ -39,6 +39,16 @@ def require(condition, category):
         raise QualificationError(category)
 
 
+def public_failure(error):
+    if isinstance(error, QualificationError):
+        return str(error)
+    if (error.__class__.__module__ == "production_compose"
+            and error.__class__.__name__ == "ClosureError"):
+        # The gate deliberately exposes only fixed public categories.
+        return "closure_" + str(error)
+    return "qualification_failed"
+
+
 def load_gate():
     spec = importlib.util.spec_from_file_location("production_compose", ROOT / "scripts/production-compose.py")
     module = importlib.util.module_from_spec(spec)
@@ -248,9 +258,9 @@ def qualify(args, report):
                 docker.run(["rm", wrong_id])
                 checks.append("wrong-owned-container-image-refused-without-replacement")
             report["closure"] = gate.execute("check")
-            gate.execute("preflight")
-            gate.execute("migrate")
-            gate.execute("start")
+            for action in ("preflight", "migrate", "start"):
+                report["stage"] = action
+                gate.execute(action)
             checks.append("verified-images-preflight-migrate-and-healthy-start")
             status, _ = request("/admin/v1/tenants")
             require(status == 401, "admin_authentication_not_enforced")
@@ -329,10 +339,8 @@ def main(argv=None):
             try:
                 qualify(args, report)
                 report["status"] = "passed"
-            except QualificationError as error:
-                report["reason"] = str(error)
-            except Exception:
-                report["reason"] = "qualification_failed"
+            except Exception as error:
+                report["reason"] = public_failure(error)
             json.dump(report, output, indent=2)
             output.write("\n")
     except OSError:

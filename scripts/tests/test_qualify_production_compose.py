@@ -76,6 +76,13 @@ class OwnedQualificationTests(unittest.TestCase):
         self.assertTrue(values["LLM_FW_REDIS_URL"].endswith("@redis:6379/0"))
         self.assertNotEqual(values["POSTGRES_PASSWORD"], values["REDIS_PASSWORD"])
 
+    def test_unexpected_failure_text_cannot_enter_report(self):
+        self.assertEqual(qualify.public_failure(ValueError("generated-sensitive-fixture-value")),
+                         "qualification_failed")
+        gate = qualify.load_gate()
+        self.assertEqual(qualify.public_failure(gate.ClosureError("docker_command_failed")),
+                         "closure_docker_command_failed")
+
 
 if __name__ == "__main__":
     unittest.main()
