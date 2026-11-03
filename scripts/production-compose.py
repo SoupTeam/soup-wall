@@ -112,6 +112,7 @@ class ProductionCompose:
             fail("missing_environment_file")
         self.gateway_image = gateway_image
         self.docker = docker or Docker()
+        self.image_defaults = {}
         self.snapshot = {p: bounded_file(self.root / p) for p in (*INPUTS, LOCK, IMPLEMENTATION)}
         self.lock = decode(self.snapshot[LOCK])
         self._validate_lock()
@@ -171,6 +172,10 @@ class ProductionCompose:
             platform = str(actual.get("Os")) + "/" + str(actual.get("Architecture"))
             if actual.get("Id") != row["config_digest"] or platform != self.platform:
                 fail("local_image_identity_or_platform_mismatch")
+            defaults = actual.get("Config", {})
+            if not isinstance(defaults, dict):
+                fail("image_configuration_missing")
+            self.image_defaults[name] = defaults
         self.unchanged()
 
     def _args(self):
@@ -268,9 +273,50 @@ class ProductionCompose:
                     or labels.get("com.docker.compose.service") != name
                     or labels.get("com.docker.compose.oneoff", "false").lower() != "false"):
                 fail("container_identity_or_owner_mismatch")
+            service = self.configuration["services"][name]
+            defaults = self.image_defaults[name]
+            expected_env = self._environment(defaults.get("Env", []))
+            expected_env.update(service.get("environment", {}))
+            if (self._environment(config.get("Env", [])) != expected_env
+                    or config.get("Cmd") != service.get("command", defaults.get("Cmd"))
+                    or config.get("Entrypoint") != service.get("entrypoint", defaults.get("Entrypoint"))
+                    or config.get("User", "") != service.get("user", defaults.get("User", ""))):
+                fail("container_process_or_environment_mismatch")
+            self._verify_container_isolation(name, row)
             if required and (not row.get("State", {}).get("Running")
                     or row.get("State", {}).get("Health", {}).get("Status") != "healthy"):
                 fail("service_not_healthy")
+
+    @staticmethod
+    def _environment(entries):
+        if not isinstance(entries, list) or any(not isinstance(e, str) or "=" not in e for e in entries):
+            fail("invalid_container_environment")
+        parsed = [e.split("=", 1) for e in entries]
+        result = dict(parsed)
+        if len(result) != len(parsed):
+            fail("duplicate_container_environment")
+        return result
+
+    def _verify_container_isolation(self, name, container):
+        host = container.get("HostConfig", {})
+        mounts = container.get("Mounts", [])
+        if name == "firewall":
+            if (host.get("ReadonlyRootfs") is not True or set(host.get("CapDrop", [])) != {"ALL"}
+                    or not {"no-new-privileges", "no-new-privileges:true"}.intersection(host.get("SecurityOpt", []))
+                    or host.get("PortBindings") != {"8080/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8080"}]}):
+                fail("container_runtime_isolation_mismatch")
+            policy_mounts = [m for m in mounts if m.get("Destination") == "/app/firewall.yaml"]
+            if (len(policy_mounts) != 1 or policy_mounts[0].get("Type") != "bind"
+                    or policy_mounts[0].get("RW") is not False
+                    or any(m.get("Destination") not in {"/app/firewall.yaml", "/tmp"} for m in mounts)):
+                fail("container_policy_mount_mismatch")
+        else:
+            destination = "/var/lib/postgresql/data" if name == "postgres" else "/data"
+            expected_name = self.configuration["volumes"][name + "-data"]["name"]
+            if (host.get("PortBindings") or len(mounts) != 1
+                    or mounts[0].get("Type") != "volume" or mounts[0].get("Name") != expected_name
+                    or mounts[0].get("Destination") != destination or mounts[0].get("RW") is not True):
+                fail("container_data_volume_or_port_mismatch")
 
     def dependencies(self):
         self.verify_images()
@@ -313,21 +359,33 @@ def main(argv=None):
     parser.add_argument("--gateway-image-id", required=True)
     parser.add_argument("--output", type=Path, help="new JSON observation file; no secrets")
     args = parser.parse_args(argv)
+    handle = None
     try:
+        # Reserve the destination before any Docker operation. Existing evidence
+        # or an unwritable destination cannot cause a late startup side effect.
+        if args.output:
+            handle = args.output.open("x", encoding="utf-8")
         observation = ProductionCompose(ROOT, args.project, args.env_file,
                                         args.gateway_image_id).execute(args.action)
-        if args.output:
-            # Exclusive creation preserves previous attempts, including failures.
-            with args.output.open("x", encoding="utf-8") as handle:
-                json.dump(observation, handle, indent=2)
-                handle.write("\n")
+        if handle:
+            json.dump(observation, handle, indent=2)
+            handle.write("\n")
         print(json.dumps(observation, sort_keys=True))
         return 0
     except (ClosureError, OSError, KeyError, TypeError, AttributeError, ValueError) as error:
         category = str(error) if isinstance(error, ClosureError) else "invalid_input_or_output"
-        print(json.dumps({"format": "sw-production-compose-observation/1", "status": "refused",
-                          "reason": category}), file=sys.stderr)
+        observation = {"format": "sw-production-compose-observation/1", "status": "refused",
+                       "reason": category}
+        if handle:
+            handle.seek(0)
+            handle.truncate()
+            json.dump(observation, handle, indent=2)
+            handle.write("\n")
+        print(json.dumps(observation), file=sys.stderr)
         return 1
+    finally:
+        if handle:
+            handle.close()
 
 
 if __name__ == "__main__":

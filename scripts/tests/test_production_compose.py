@@ -2,6 +2,7 @@
 """Image/config closure controls; mocks do not claim actual Docker acceptance."""
 
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,7 @@ import shutil
 import tempfile
 import unittest
 from types import SimpleNamespace
+from contextlib import redirect_stderr
 from unittest.mock import patch
 
 
@@ -32,10 +34,13 @@ class FakeDocker:
         self.unhealthy = False
         self.model_override = None
         self.stdin_values = []
+        self.current_model = None
 
     def model(self):
         services = {name: {"image": row["image"], "platform": "linux/" + self.arch,
-                           "pull_policy": "never"} for name, row in self.lock["images"].items()}
+                           "pull_policy": "never", "volumes": [{"type": "volume", "source": name + "-data",
+                               "target": "/var/lib/postgresql/data" if name == "postgres" else "/data"}]}
+                    for name, row in self.lock["images"].items()}
         services["firewall"] = {"image": GATEWAY, "platform": "linux/" + self.arch,
             "pull_policy": "never", "read_only": True, "cap_drop": ["ALL"],
             "security_opt": ["no-new-privileges:true"],
@@ -43,7 +48,8 @@ class FakeDocker:
             "environment": {"TEST_PASSWORD": SECRET},
             "volumes": [{"type": "bind", "read_only": True, "target": "/app/firewall.yaml",
                          "source": str(self.root / "deploy/production.firewall.yaml")}]}
-        model = {"name": "owned-test", "services": services}
+        model = {"name": "owned-test", "services": services,
+                 "volumes": {n + "-data": {"name": "owned-test_" + n + "-data"} for n in ("postgres", "redis")}}
         if self.model_override:
             self.model_override(model)
         return model
@@ -53,23 +59,33 @@ class FakeDocker:
                 self.lock["images"][name]["platforms"]["linux/" + self.arch]["config_digest"])
 
     def add_container(self, name):
+        service = (self.current_model or self.model())["services"][name]
         self.containers[name] = {
             "Id": ("b" if name == "postgres" else "c" if name == "redis" else "d") * 64,
             "Image": self.image(name),
             "Config": {"Image": GATEWAY if name == "firewall" else self.lock["images"][name]["image"],
+                       "Env": [k + "=" + v for k, v in service.get("environment", {}).items()],
+                       "Cmd": None, "Entrypoint": None, "User": "",
                        "Labels": {"com.docker.compose.project": "owned-test",
                                   "com.docker.compose.service": name,
                                   "com.docker.compose.oneoff": "False"}},
-            "State": {"Running": True, "Health": {"Status": "unhealthy" if self.unhealthy else "healthy"}}}
+            "State": {"Running": True, "Health": {"Status": "unhealthy" if self.unhealthy else "healthy"}},
+            "HostConfig": {"ReadonlyRootfs": name == "firewall", "CapDrop": ["ALL"] if name == "firewall" else [],
+                           "SecurityOpt": ["no-new-privileges:true"] if name == "firewall" else [],
+                           "PortBindings": {"8080/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8080"}]} if name == "firewall" else {}},
+            "Mounts": ([{"Type": "bind", "Destination": "/app/firewall.yaml", "RW": False}]
+                       if name == "firewall" else [{"Type": "volume", "Name": "owned-test_" + name + "-data",
+                           "Destination": "/var/lib/postgresql/data" if name == "postgres" else "/data", "RW": True}])}
 
     def run(self, args, *, stdin=None, environment=None, timeout=180):
         self.calls.append(args)
         if stdin is not None:
             self.stdin_values.append(stdin)
+            self.current_model = json.loads(stdin.replace("$$", "$"))
         if args[:2] == ["image", "inspect"]:
             name = next((n for n, row in self.lock["images"].items() if row["image"] == args[2]), "firewall")
             return json.dumps([{"Id": self.wrong_image if name == "postgres" and self.wrong_image else self.image(name),
-                                "Os": "linux", "Architecture": self.arch}])
+                                "Os": "linux", "Architecture": self.arch, "Config": {}}])
         if args[:2] == ["container", "inspect"]:
             return json.dumps([next(row for row in self.containers.values() if row["Id"] == args[2])])
         if args[0] == "version":
@@ -209,6 +225,20 @@ class ProductionComposeControls(unittest.TestCase):
             self.closure().execute("start")
         self.assertEqual(self.docker.mutations(), [])
 
+    def test_existing_correct_image_wrong_environment_refuses(self):
+        self.docker.add_container("postgres")
+        self.docker.containers["postgres"]["Config"]["Env"] = ["UNREVIEWED_VALUE=" + SECRET]
+        with self.assertRaisesRegex(MODULE.ClosureError, "container_process_or_environment_mismatch"):
+            self.closure().execute("start")
+        self.assertEqual(self.docker.mutations(), [])
+
+    def test_existing_correct_image_wrong_volume_refuses(self):
+        self.docker.add_container("redis")
+        self.docker.containers["redis"]["Mounts"][0]["Name"] = "somebody-elses-data"
+        with self.assertRaisesRegex(MODULE.ClosureError, "container_data_volume_or_port_mismatch"):
+            self.closure().execute("start")
+        self.assertEqual(self.docker.mutations(), [])
+
     def test_dependency_health_failure_never_starts_gateway(self):
         self.docker.unhealthy = True
         with self.assertRaisesRegex(MODULE.ClosureError, "service_not_healthy"):
@@ -256,6 +286,16 @@ class ProductionComposeControls(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.ClosureError, "source_inputs_changed"):
             closure.execute("start")
         self.assertEqual(self.docker.mutations(), [])
+
+    def test_existing_output_refuses_without_constructing_docker_gate(self):
+        existing = self.root / "previous-result.json"
+        existing.write_text("previous attempt")
+        args = ["start", "--project", "owned-test", "--env-file", str(self.env_file),
+                "--gateway-image-id", GATEWAY, "--output", str(existing)]
+        with patch.object(MODULE, "ProductionCompose") as gate, redirect_stderr(io.StringIO()):
+            self.assertEqual(MODULE.main(args), 1)
+        gate.assert_not_called()
+        self.assertEqual(existing.read_text(), "previous attempt")
 
 
 if __name__ == "__main__":
