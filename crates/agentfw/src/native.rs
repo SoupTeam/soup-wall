@@ -19,6 +19,7 @@ use soup_wall_agent::{ActionClass, AgentEvent, EventKind, Outcome, Provenance, T
 use crate::config::NativeCfg;
 use crate::handlers::Shared;
 
+pub mod analysis_purpose;
 pub mod approval;
 pub mod child_authority;
 pub mod continuity;

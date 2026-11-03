@@ -146,6 +146,45 @@ cargo test --locked -p agentfw --lib native::execution::tests
 
 ## Reproduce
 
+### November 4 inert operator contract
+
+Following reviews 5756731817 and 5757316087, `analysis_purpose.rs` introduces
+`sw-analysis-purpose/1` with separate key-derivation and signature domains. The
+typed HMAC covers quarantine ID, exact response SHA-256/length, native instance,
+host generation, consumer identity/lifecycle, session epoch, source grant digest,
+invocation binding, policy generation, issue/expiry times and single-use ID.
+Unknown fields, forged claims, mismatched expected bindings, invalid time,
+contract and missing consumer fail verification. Expected claims supplied by a
+caller are not runtime evidence. Verification is deliberately repeatable and
+does not constitute single-use admission.
+
+`agentfw analysis-purpose --quarantine-id <id>` is a distinct operator
+operation beside ChildAuthority. It reuses existing native-token access and
+derives a separate key. It ALWAYS refuses with
+`analysis_purpose_consumer_identity_and_drain_unsupported`; no token is minted,
+no daemon request is sent, and no response is handed off. Signing exists only in
+test fixtures. CLI input accepts a selector, not asserted hashes or recipient
+identities. Existing child-authority/Ask formats and result parsers are unchanged.
+
+Exact missing boundary: `execution::SessionContext` identifies host/server channel
+and original runtime process, with a withdrawn flag and liveness checks; it does
+not authenticate the receiving model process/lifecycle or attest cancellation of
+all its effects. A future daemon-owned quarantine must select those identities
+from trusted state, retain full source/taint, and atomically spend a grant plus
+withdraw/drain before handoff. A boolean supplied by the CLI cannot prove drain.
+No production quarantine constructor, mint endpoint or release API is exposed.
+Parent transfer/restart tombstones and all-route cancellation remain unimplemented.
+
+Five deterministic grant tests include each binding field's tampering and mismatch,
+wrong key/domain, expiry/future time, unknown fields, signed wrong version/missing
+consumer, nonce tampering and repeated refusal. Benign and malicious contents use
+the same purpose/capability context; both remain unsupported, not an attack score.
+
+```sh
+cargo test --locked -p agentfw --lib analysis_purpose
+cargo check --locked -p agentfw --bin agentfw
+```
+
 ```sh
 cargo build --locked -p agentfw --example result_inspection_corpus
 python scripts/diagnose-result-refusals.py --adapter target/debug/examples/result_inspection_corpus --output-dir /tmp/sou218-baseline-new
