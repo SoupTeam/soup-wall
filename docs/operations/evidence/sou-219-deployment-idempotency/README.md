@@ -31,6 +31,16 @@ accepted fixture. Local checks: `inspect_sqlite` accepts a real database created
 key row; `scripts/tests/test_console_recovery.py` passes (8 tests need `age`, which is not installed locally, and are skipped).
 The encrypted backup/restore demos themselves have not been run locally; the re-dispatched workflow is the evidence.
 
+## Focused CI result on PostgreSQL 16 (workflow_dispatch, no full matrix)
+
+`managed-group-rollout.yml`, run `41712688294`, exact source `a52ab1914e107b0e1097a1943d4e46037101c30e`, **passed**: the SQLite
+regressions including `managed_deployment_idempotency`; the existing PostgreSQL fault/concurrency controls; the new step
+`Run individual deployment idempotency controls over HTTP on PostgreSQL`; and both existing real-Agent demos with encrypted
+SQLite and PostgreSQL recovery (which exercise the updated recovery inventory). The earlier run `41711423094` (source
+`8420894d`) failed only the SQLite recovery step for the inventory reason above and is kept, not relabelled. The local
+PostgreSQL 14 caveat below therefore no longer limits the PostgreSQL claim for this source; this is not a full Ready CI,
+CodeQL or admission result. Later commits that change only this ledger are not re-qualified.
+
 ## Explicit skip and caveat: PostgreSQL
 
 The local database was PostgreSQL **14.17** (no newer server installed, host left unchanged).
