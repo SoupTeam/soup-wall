@@ -81,11 +81,68 @@ Proposed next component, subject to explicit architecture/signature review:
    runtime. Missing/foreign/stale purpose retains baseline. TL owns dispatch,
    independent grading and final readiness.
 
-This proposal is not implemented or enabled. It needs a concrete decision on
+This proposal is not enabled in production. It needs a concrete decision on
 whether the existing product can supply such a trusted purpose/consumer boundary,
 and which signature interpretation (if any) is permitted under it. Adding another
 regex or trusting a `do not follow` string cannot establish that boundary. If
 it is out of scope, these six cases stay refused; this document is not a fix.
+
+## Executable contract checkpoint after TL review
+
+`native/purpose_prototype.rs` is compiled only with `cfg(test)`, including its
+two admission guards. It is not a production issuer, endpoint, or delivery path.
+The fixture supplies an authority digest explicitly; this is NOT evidence of
+operator authentication. The experiment consumes the existing affine
+`OriginalResult` using the existing runtime/call validator and call ledger.
+It binds the native instance, session epoch, grant digest, host, invocation
+binding, exact consumed response metadata/hash and deadline. An attempted consume
+spends the call even on mismatch. No wire flag or copied receipt issues a purpose.
+
+After a successful consume, the test build records a bounded, sticky host
+restriction under the existing session lock, clears pending calls and tool/resource
+grants for that host, and rejects native inspection and hook admission for it.
+Parent/child/sibling hook identities do not escape the host restriction.
+Session cleanup remains possible; ending/re-registering the same host does not
+restore authority. No expiration-based restoration is permitted. A separately
+authorized action would require a new admission design; no such exception exists
+in this experiment. No result is delivered to a model and no verdict is changed.
+
+The runnable controls use the same purpose and capabilities for an ordinary note
+and an instruction to execute/exfiltrate. Both lose subsequent admission. The
+shell/write/network/delegation rows submit requests to the admission boundary;
+they do NOT launch those tools or prove OS isolation. Substituted content,
+foreign session, changed epoch/grant, expired call and repeated consumption fail.
+An unarmed ordinary read remains a positive control. Existing result tests cover
+custody, formatter correction, taint and independent policy floors.
+
+### Missing production interfaces and review decision
+
+1. An authenticated operator/control API must establish purpose and consumer
+   identity, bound to the existing signed grant and exact invocation/response.
+   The current grant and custody structures identify authority and source, but
+   have no authenticated consumption-purpose operation. The fixture cannot fill
+   that gap. No new launcher, IPC endpoint or trust root is introduced here.
+2. All consumers and effect paths must remain in that authority domain. The
+   experiment gates only native/hook routes for an already-known host. It does
+   not confine an external consumer, an unmediated shell/network connection,
+   in-flight operations, a copied answer in another host, or daemon restart.
+   These are unresolved boundaries, not claimed protections.
+3. Atomic withdrawal must precede delivery and include already-admitted/in-flight
+   work. Production needs lifecycle/audit handling and retained context/taint
+   across parent and consumer transfers; clearing grants alone is insufficient.
+4. Even complete effect confinement would not prove that the model ignored an
+   instruction, that its answer is unpoisoned, or that an external recipient will
+   not act on it. Secret/PII and Deny/Ask/Escalate remain independent. This is not
+   an attack-Deny score, safe-consumption claim or six-case correction.
+
+Requested review: accept/reject the exact binding and sticky whole-host withdrawal
+contract, then identify the existing authenticated operator entry point and
+consumer lifecycle that can satisfy items 1-3 before a production implementation.
+Signature/Allow changes and any native witness require separate review.
+
+```sh
+cargo test --locked -p agentfw --lib native::execution::tests
+```
 
 ## Reproduce
 

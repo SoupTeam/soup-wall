@@ -24,9 +24,12 @@ pub mod child_authority;
 pub mod continuity;
 pub mod execution;
 mod invocation;
+// SOU-218 executable contract experiment. No shipped endpoint or release path.
 pub mod liveness;
 pub mod pilot_cleanup;
 pub mod pilot_stop;
+#[cfg(test)]
+mod purpose_prototype;
 pub mod resource;
 pub mod resource_approval;
 mod timing;
@@ -478,6 +481,8 @@ impl Session {
 
 #[derive(Default)]
 pub(crate) struct Sessions {
+    #[cfg(test)]
+    analysis_hosts: BTreeSet<String>,
     pub(crate) entries: BTreeMap<String, Session>,
     // Bounded tombstones prevent a completed scoped host from silently reverting
     // to unsigned hooks. Reaching the cap refuses new host IDs until restart.
@@ -944,6 +949,10 @@ impl NativeState {
         proof: Option<&str>,
         call: Option<(&str, &Value)>,
     ) -> Result<(String, Option<String>, Option<String>), &'static str> {
+        #[cfg(test)]
+        if sessions.analysis_hosts.contains(session_id) {
+            return Err("analysis_purpose_effects_withheld");
+        }
         let Some(proof) = proof else {
             if sessions.scoped_hosts.contains(session_id)
                 || agent_id.is_some()
@@ -2121,6 +2130,8 @@ fn inspect_bound_measured(
         .lock()
         .map_err(|_| "native_state_unavailable")?;
     timing.session_wait_us = started.elapsed().as_micros();
+    #[cfg(test)]
+    purpose_prototype::guard(&state, &request)?;
     let wait = Instant::now();
     let mut firewall = st
         .firewall
