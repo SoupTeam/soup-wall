@@ -133,7 +133,7 @@ def cleanup_owned(docker, project, compose_args, frozen):
     # Cleanup uses the already verified in-memory configuration, even when a
     # source drift prevents the startup gate from accepting further commands.
     safe_project_containers(docker, project)
-    docker.run([*compose_args, "down", "--volumes", "--timeout", "10"], stdin=frozen)
+    docker.run([*compose_args, "down", "--volumes", "--remove-orphans", "--timeout", "10"], stdin=frozen)
     require(not safe_project_containers(docker, project), "owned_container_cleanup_incomplete")
 
 
@@ -209,6 +209,7 @@ def qualify(args, report):
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
             handle.write("".join(f"{key}={value}\n" for key, value in values.items()))
         project = "soup-compose-qual-" + secrets.token_hex(8)
+        report["project"] = project
         gate = module.ProductionCompose(ROOT, project, env_file, args.gateway_image_id, docker)
         # Prove a real locally missing image is refused before any project starts.
         absent = "sha256:" + secrets.token_hex(32)
@@ -233,6 +234,7 @@ def qualify(args, report):
                                        "--label", "com.docker.compose.project=" + project,
                                        "--label", "com.docker.compose.service=postgres",
                                        "--label", "com.docker.compose.oneoff=False",
+                                       "--label", "com.docker.compose.config-hash=owned-wrong-image-control",
                                        "--entrypoint", "/bin/true", args.gateway_image_id]).strip()
                 refused = False
                 try:
@@ -298,7 +300,8 @@ def qualify(args, report):
                 try:
                     cleanup_owned(docker, project, gate._args(), cleanup_config)
                     report["owned_stack_cleanup"] = "passed"
-                except (module.ClosureError, QualificationError):
+                except (module.ClosureError, QualificationError) as error:
+                    report["cleanup_reason"] = str(error)
                     raise QualificationError("owned_stack_cleanup_failed") from None
         # Never retain even generated fixture credentials in an observation.
         serialized = json.dumps(report)

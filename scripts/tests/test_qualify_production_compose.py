@@ -67,7 +67,7 @@ class OwnedQualificationTests(unittest.TestCase):
         docker = Docker()
         arguments = ["compose", "--project-name", PROJECT, "-f", "-"]
         qualify.cleanup_owned(docker, PROJECT, arguments, "frozen")
-        self.assertIn((arguments + ["down", "--volumes", "--timeout", "10"], "frozen"), docker.commands)
+        self.assertIn((arguments + ["down", "--volumes", "--remove-orphans", "--timeout", "10"], "frozen"), docker.commands)
         self.assertTrue(docker.removed)
 
     def test_fixture_urls_use_only_disposable_internal_services(self):
