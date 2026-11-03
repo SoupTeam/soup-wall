@@ -17,6 +17,7 @@ use crate::mcp::admission::{AdmissionCfg, InvocationClassifier};
 use crate::mcp::server_profile::ProfileConfig;
 use crate::mcp::verified_closure::Runtime;
 
+mod formatter;
 pub mod transport;
 
 pub const FORMAT: &str = "sw-mcp/verified-original-execution/1";
@@ -60,6 +61,10 @@ fn failure_code(error: &anyhow::Error) -> &'static str {
         "verified_execution_process_unverified",
         "verified_execution_profile_changed",
         "verified_execution_withdrawn",
+        "verified_execution_receipt_mismatch",
+        "verified_execution_native_result_refused",
+        "verified_execution_result_mismatch",
+        "verified_execution_response_mismatch",
     ];
     for cause in error.chain() {
         let message = cause.to_string();
@@ -368,6 +373,8 @@ impl SessionContext {
             call_id: call_id.into(),
             binding: binding.into(),
             request_sha256: super::hash(raw),
+            formatter_args: (call.tool == "read_multiple_files")
+                .then(|| request["params"]["arguments"].clone()),
             host_id: call.host_call_id.clone().expect("checked host ID"),
             deadline: call.expires,
         })
@@ -401,6 +408,7 @@ pub(crate) struct Dispatch {
     call_id: String,
     binding: String,
     request_sha256: String,
+    formatter_args: Option<Value>,
     host_id: Value,
     deadline: std::time::Instant,
 }
@@ -410,6 +418,59 @@ pub(crate) struct OriginalResult {
     dispatch: Dispatch,
     result_sha256: String,
     result_bytes: usize,
+    formatter_shadow: Option<formatter::Attribution>,
+}
+
+/// Not serializable or constructible from a copied receipt. Exists only after
+/// all original response/call/session/runtime bindings have been consumed.
+pub(super) struct Consumed {
+    metadata: Metadata,
+}
+impl Consumed {
+    pub(super) fn metadata(&self) -> Metadata {
+        self.metadata.clone()
+    }
+    /// The only native production caller of the trusted formatter correction.
+    /// This value cannot be deserialized or obtained from public diagnostics.
+    pub(super) fn inspect_formatter(
+        &self,
+        firewall: &mut soup_wall_agent::AgentFirewall,
+        event: &soup_wall_agent::AgentEvent,
+        evidence: &soup_wall_core::detectors::injection::McpResultEvidence,
+        block: usize,
+        blocks: usize,
+    ) -> (
+        soup_wall_agent::Outcome,
+        Option<soup_wall_agent::engine::PolicyShadow>,
+    ) {
+        let soup_wall_agent::EventKind::ToolResult { content, .. } = &event.kind else {
+            return firewall.preview_mcp_result_shadow(event, evidence, block, None);
+        };
+        match self.formatter_spans(content, block, blocks) {
+            Some(spans) => {
+                firewall.preview_verified_filesystem_result(event, evidence, block, spans)
+            }
+            None => firewall.preview_mcp_result_shadow(event, evidence, block, None),
+        }
+    }
+
+    pub(super) fn formatter_spans(
+        &self,
+        text: &str,
+        block: usize,
+        blocks: usize,
+    ) -> Option<&[std::ops::Range<usize>]> {
+        let attribution = self.metadata.formatter_shadow.as_ref()?;
+        // The selected original envelope emits these two identical channels.
+        if blocks != 2
+            || block >= 2
+            || text.len() != attribution.complete_text_bytes
+            || super::hash(text.as_bytes()) != attribution.text_sha256
+        {
+            return None;
+        }
+        Some(&attribution.separator_spans)
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -446,6 +507,9 @@ pub struct Metadata {
     pub original_result_bytes: usize,
     /// Reserved narrow producer extension: SOU-156 has no producer in this PR.
     pub domain_witness: Option<GitObjectWitness>,
+    /// Diagnostic only; never an input to inspection or a release predicate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub formatter_shadow: Option<formatter::Attribution>,
 }
 
 impl Dispatch {
@@ -457,6 +521,11 @@ impl Dispatch {
             "verified_execution_response_mismatch"
         );
         Ok(OriginalResult {
+            formatter_shadow: self.formatter_args.as_ref().and_then(|args| {
+                std::str::from_utf8(bytes)
+                    .ok()
+                    .and_then(|raw| formatter::derive(args, raw))
+            }),
             dispatch: self,
             result_sha256: super::hash(bytes),
             result_bytes: bytes.len(),
@@ -481,6 +550,7 @@ impl OriginalResult {
             original_result_sha256: self.result_sha256.clone(),
             original_result_bytes: self.result_bytes,
             domain_witness: None,
+            formatter_shadow: self.formatter_shadow.clone(),
         }
     }
 
@@ -491,7 +561,7 @@ impl OriginalResult {
         request: &super::Request,
         call: &super::Call,
         now: std::time::Instant,
-    ) -> Result<Metadata, &'static str> {
+    ) -> Result<Consumed, &'static str> {
         let d = &self.dispatch;
         d.context
             .check()
@@ -528,7 +598,12 @@ impl OriginalResult {
         {
             return Err("verified_execution_result_mismatch");
         }
-        Ok(self.metadata())
+        // Metadata was frozen with the private original response, before the
+        // collector records its expected receipt. Keep that exact equality;
+        // adding fields here would close the transport as receipt_mismatch.
+        Ok(Consumed {
+            metadata: self.metadata(),
+        })
     }
 
     pub(crate) async fn inspect(

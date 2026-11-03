@@ -1,0 +1,73 @@
+{
+  "format": "sou155-native-execution/1",
+  "phase": "original-transport",
+  "status": "failed",
+  "source_commit": "1fde15fcfe832ab5cb85f9fef1ee9148d995a5cf",
+  "model_calls": 0,
+  "cases": [
+    {
+      "case": "actual-original-useful-read",
+      "status": "passed",
+      "execution": {
+        "catalogue_sha256": "04ca0fd0b4a48352c37e3cd15ca9cdf90a0b918cab57cb296a5454d1614822ce",
+        "channel_generation_sha256": "7efb4b78499e5f421c514aa33b0428e6f8548571aecebf3749811bf5e39c7de8",
+        "closure_sha256": "eda7de4ab83e9dcc31917f159aa165151dc37b53de389f1a3c32fa684e164a79",
+        "contract": "sw-mcp/verified-original-execution/1",
+        "daemon_instance_id": "Pa2lQAYwzZC1DNA9_OVZFcFV1lzYVGYMhs-dRMkrhcQ",
+        "domain_witness": null,
+        "invocation_sha256": "8a7b47028395f3a9e17ff4f4f047cc7cb48896c656fe581256f37c388934598f",
+        "native_call_id": "e5VYR5T11qjs59ycX7Yyf2kIhaXLJiN3m8aclbqSvOY",
+        "original_result_bytes": 188,
+        "original_result_sha256": "c935a9af3dc9e520572bc7745ae5c8654d1a564ef094c702d3823382890a7299",
+        "process_generation_sha256": "9b85c170882ae00726088d3e799aedd8bb853102a6ae6bdd5626c5f0c1406eba",
+        "session_epoch_sha256": "0f3020027fa9966043a3359ae5d5bb0f21894694174364cab445a78a0823d518"
+      }
+    }
+  ],
+  "acceptance_pass": false,
+  "startup_diagnostics": [],
+  "diagnostic_codes": [
+    "mcp_budget_enforced",
+    "mcp_owner_active",
+    "mcp_owner_cleanup_verified",
+    "mcp_owner_stop_requested",
+    "verified_execution_incomplete",
+    "verified_execution_session_failed"
+  ],
+  "collector_exit_codes": [
+    1
+  ],
+  "failure_stack": [
+    {
+      "source": "scripts/ci/native-verified-execution.py",
+      "function": "main",
+      "line": 208
+    },
+    {
+      "source": "scripts/ci/formatter-shadow-controls.py",
+      "function": "exercise",
+      "line": 69
+    },
+    {
+      "source": "scripts/verify-sou62-real-mcp.py",
+      "function": "exchange",
+      "line": 220
+    },
+    {
+      "source": "scripts/verify-sou62-real-mcp.py",
+      "function": "receive",
+      "line": 208
+    },
+    {
+      "source": "scripts/verify-sou62-real-mcp.py",
+      "function": "require",
+      "line": 83
+    }
+  ],
+  "failure_location": {
+    "function": "require",
+    "line": 83
+  },
+  "reason": "ValueError",
+  "owned_root_empty_final": true
+}
