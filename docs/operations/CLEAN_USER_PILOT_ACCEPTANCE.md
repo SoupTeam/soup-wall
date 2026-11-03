@@ -7,13 +7,22 @@ Python checks. This report will retain both fresh ordinary-user runs, including
 failed and incomplete observations. The checkpoint is November 4 and delivery
 deadline is November 5, 2026.
 
-The product is accepted source
-`9a3c5b38e56ebc6ebbeedfda98805f6a327cb371`, not the newer measurement-driver
-commit. The existing native prerequisite and Agent builders run from a separate
-clean checkout of that source. Their receipt binds the tracked source, reviewed
-compiler inputs and each selected binary. The front-door component is built
-from the same accepted checkout. Driver, product, binary, profile, policy,
-selection and original child-report identities remain separate.
+The accepted baseline is `9a3c5b38e56ebc6ebbeedfda98805f6a327cb371`. The first clean-user attempts
+use that exact product. Inspection also reproduced an installed update defect:
+the native entry prepends `--agent-home`, but the update router only recognized
+`update` as argv[0], so its dedicated options fell through to an ordinary parser
+and were rejected before update preview. Reproduce on the accepted source with
+`python3 -B scripts/pilot.py --agent-home /private/owned-home update inspect
+--prefix /private/owned-coordinator` (one command). This read-only failure does
+not require a model or installation.
+
+Product candidate `75875f16dfbc19503feb22fe6871116cf6bd7618` fixes only that routing behavior
+and adds a cause-specific regression. It is an **author candidate awaiting
+review**, not a newly accepted main. Final fresh runs pin this source in a
+separate clean checkout. Their existing native builders and component builder
+bind that exact source and binary set; the newer measurement-driver SHA remains
+separate. Driver, product, binary, profile, policy, selection and original
+child-report identities are recorded independently.
 
 Supported measurement path: native Ubuntu 24.04 x86_64, ordinary non-root user
 with no effective capabilities, CPython 3.12 and the current pinned original
@@ -34,11 +43,11 @@ A successful run cannot establish unassisted stock-host installation.
 
 From a clean measurement-driver checkout, use the existing
 [installed producer](PILOT_INSTALLED_FRONT_DOOR.md). Supply inputs emitted by the
-accepted native builders and retain the original build receipt:
+pinned native builders and retain the original build receipt:
 
 ```sh
 python3 -B scripts/qualify-installed-front-door.py --run --clean-user-only \
-  --runtime-source /absolute/accepted-source \
+  --runtime-source /absolute/pinned-product-source \
   --source-build-receipt /private/agent-build/generations/ID/receipt.json \
   --expected-commit FULL_MEASUREMENT_DRIVER_COMMIT \
   --output /private/new-clean-user-result \

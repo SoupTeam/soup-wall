@@ -3,7 +3,7 @@
 """SOU-216 workload for the existing installed-front-door producer.
 
 Only the measurement driver is new. Installation, preparation, host execution,
-Ask, walkthrough and component recovery use the selected accepted source.
+Ask, walkthrough and component recovery use the selected pinned product source.
 """
 from __future__ import annotations
 import argparse
@@ -21,7 +21,8 @@ import time
 
 sys.dont_write_bytecode = True
 DRIVER = Path(__file__).resolve().parents[1]
-ACCEPTED = "9a3c5b38e56ebc6ebbeedfda98805f6a327cb371"
+BASELINE = "9a3c5b38e56ebc6ebbeedfda98805f6a327cb371"
+PRODUCT = "75875f16dfbc19503feb22fe6871116cf6bd7618"
 ROLES = ("git", "bwrap", "agentfw", "git_launcher", "sandbox_tests", "agent_output",
          "node", "npm", "node_archive", "claude", "python", "python_archive",
          "npm_cache", "wheelhouse")
@@ -192,7 +193,7 @@ def coordinated_update(a, env, archive, built, fixture, installed, q, report):
     controller = a.output / "coordinator"
     paths, candidates = [], []
     for label, prefix in (("a", chosen.prefix), ("b", second.prefix)):
-        value = update.make_inventory(prefix, archive, built["archive_sha256"], ACCEPTED, "accepted-" + label)
+        value = update.make_inventory(prefix, archive, built["archive_sha256"], PRODUCT, "accepted-" + label)
         path = a.output / ("update-" + label + ".private.json")
         save(path, value)
         paths.append(path); candidates.append(value)
@@ -242,19 +243,19 @@ def qualify(a, report):
             "native_ubuntu_24_04_required")
     require("microsoft" not in platform.release().lower(), "wsl_is_separate")
     driver_identity = source(DRIVER, a.expected_commit)
-    runtime_identity = source(a.runtime_source, ACCEPTED)
+    runtime_identity = source(a.runtime_source, PRODUCT)
     require(not a.output.exists() and a.output.is_absolute()
             and not a.output.is_relative_to(DRIVER) and not a.output.is_relative_to(a.runtime_source),
             "new_external_output_required")
     os.umask(0o077)
     a.output.mkdir(mode=0o700)
     report.update(driver_source=driver_identity, source_before=runtime_identity,
-                  accepted_source=ACCEPTED, scope="two-new-projects-one-clean-user-environment",
+                  accepted_baseline=BASELINE, runtime_source=PRODUCT, runtime_review_status="author candidate; not merge approval", scope="two-new-projects-one-clean-user-environment",
                   full_product_acceptance="not_established", novice_human_evidence="not_measured",
                   live_model_effectiveness="not_tested", paid_api_calls=0,
                   useful_latency_threshold="unapproved; observations only",
                   fixture_sha256=digest(PROJECTS))
-    # No product module is imported before the accepted source is checked.
+    # No product module is imported before the pinned product source is checked.
     sys.path.insert(0, str(a.runtime_source / "scripts"))
     installed = load(a.runtime_source, "sou216_accepted_installed", "qualify-installed-front-door.py")
     q = installed.QUAL
@@ -280,14 +281,14 @@ def qualify(a, report):
             "explicit_pinned_inputs_required")
     receipt = json.loads(a.source_build_receipt.read_bytes())
     require(receipt.get("format") == "sw-native-pilot-agent-source-build/1"
-            and receipt.get("source", {}).get("commit") == ACCEPTED, "accepted_build_receipt_required")
+            and receipt.get("source", {}).get("commit") == PRODUCT, "accepted_build_receipt_required")
     for role in ("agentfw", "git_launcher", "sandbox_tests"):
         require(receipt["binaries"][role]["sha256"] == sha(getattr(a, role)), "accepted_binary_receipt_mismatch")
     report["source_build_receipt_sha256"] = sha(a.source_build_receipt)
     report["build_source"] = receipt["source"]
     report["compiler_inputs"] = receipt["tools"]
     report["native_source_build_seconds"] = receipt["build_seconds"]
-    a.expected_commit = ACCEPTED
+    a.expected_commit = PRODUCT
     a.agent_output = None
     home = a.output / "user-home"; home.mkdir(mode=0o700)
     a.agent_home = a.output / "agent-home"; a.agent_home.mkdir(mode=0o700)
@@ -316,14 +317,16 @@ def qualify(a, report):
         rows[name]["started_at_ms"] = time.time_ns() // 1_000_000
         report["clean_user"]["active_case"] = name
         save(a.output / "report.json", report)
+        print(json.dumps({"case": name, "status": "started"}), flush=True)
         return time.monotonic()
     def done(name, start, **facts):
         rows[name].update(status="passed", elapsed_ms=round((time.monotonic() - start) * 1000, 3), **facts)
         save(a.output / "report.json", report)
+        print(json.dumps({"case": name, "status": "passed", "elapsed_ms": rows[name]["elapsed_ms"]}), flush=True)
     started = begin("component-install")
     archive = a.output / "component.tar"
     built = installed.build(a.runtime_source, archive, env)
-    require(built["commit"] == ACCEPTED, "accepted_component_identity_mismatch")
+    require(built["commit"] == PRODUCT, "accepted_component_identity_mismatch")
     a.component_python = a.component_python.resolve(strict=True)
     installed.install_component(a, a.agent_home, archive, built["archive_sha256"], built["component"], env, report)
     code, verified, _ = installed.component(a, a.agent_home, None, None, "verify", env=env)
@@ -415,7 +418,7 @@ def qualify(a, report):
         selection = Path(prepared["selection"])
         report["walkthrough_selection_sha256"] = sha(selection)
         process = subprocess.run([str(a.component_python), "-I", "-B", str(a.runtime_source / "scripts/pilot-demo.py"),
-            "--run", "--selection", str(selection), "--expected-commit", ACCEPTED,
+            "--run", "--selection", str(selection), "--expected-commit", PRODUCT,
             "--strace", str(a.strace), "--output", str(a.output / "walkthrough")],
             cwd=a.work, env=env, capture_output=True, timeout=1800)
         demo = json.loads((a.output / "walkthrough/report.json").read_bytes())
@@ -468,6 +471,7 @@ def qualify(a, report):
         for prefix in [chosen.prefix for _, chosen, _ in fixtures] + [a.prefix, update_prefix]:
             words += ["--prefix", prefix]
         preview = operator(a, env, "pilot-removal", "preview", *words)
+        report["removal_preview"] = {key: preview.get(key) for key in ("status", "blockers", "confirmation_sha256")}
         require(preview.get("executed") is False and preview.get("confirmation_sha256") and not journal.exists(),
                 "removal_preview_failed")
         removed = operator(a, env, "pilot-removal", "apply", *words,
@@ -488,7 +492,7 @@ def qualify(a, report):
         done("remove-preserves-user-data", started, user_files_preserved=True, selections_preserved=True)
     finally:
         receiver.close()
-    report["source_after"] = source(a.runtime_source, ACCEPTED)
+    report["source_after"] = source(a.runtime_source, PRODUCT)
     require(report["source_after"] == report["source_before"], "accepted_source_changed")
     require(source(DRIVER, driver_identity["commit"]) == driver_identity, "driver_source_changed")
     report["clean_user"]["status"] = "passed" if all(row["status"] == "passed" for row in rows.values()) else "failed"
@@ -519,6 +523,11 @@ def main(argv=None):
     except Exception as error:
         report.update(status="failed", decision="NO-GO", error=(
             str(error) if re.fullmatch(r"[a-z0-9_][a-z0-9_:=.-]{0,240}", str(error)) else type(error).__name__))
+        inventory = report.get("clean_user", {})
+        for row in inventory.get("cases", []):
+            if row["id"] == inventory.get("active_case") and row["status"] == "incomplete" and row["attempted"]:
+                row.update(status="failed", reason=report["error"])
+        report["remaining_blockers"] = [r["id"] for r in inventory.get("cases", []) if r["status"] != "passed"]
     if a.output.exists():
         save(a.output / "report.json", report)
     print(json.dumps({key: report.get(key) for key in ("status", "error", "accepted_source", "decision", "clean_user")}))

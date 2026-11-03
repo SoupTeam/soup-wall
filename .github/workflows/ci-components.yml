@@ -2329,7 +2329,7 @@ jobs:
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: python3 -B scripts/ci_bwrap_userns.py check
-      - name: Pin accepted SOU-216 product independently of the measurement driver
+      - name: Pin SOU-216 product candidate independently of the measurement driver
         if: github.event.inputs.installed_focus == 'clean-user'
         shell: bash
         env:
@@ -2351,11 +2351,11 @@ jobs:
           runtime="$RUNNER_TEMP/sou216-accepted-source"
           test ! -e "$runtime"
           git clone --quiet --no-hardlinks --no-checkout "$GITHUB_WORKSPACE" "$runtime"
-          git -C "$runtime" checkout --quiet --detach 9a3c5b38e56ebc6ebbeedfda98805f6a327cb371
-          test "$(git -C "$runtime" rev-parse HEAD)" = 9a3c5b38e56ebc6ebbeedfda98805f6a327cb371
+          git -C "$runtime" checkout --quiet --detach 75875f16dfbc19503feb22fe6871116cf6bd7618
+          test "$(git -C "$runtime" rev-parse HEAD)" = 75875f16dfbc19503feb22fe6871116cf6bd7618
           test -z "$(git -C "$runtime" status --porcelain)"
           printf 'SOU216_RUNTIME_SOURCE=%s\n' "$runtime" >> "$GITHUB_ENV"
-      - name: Build accepted selected runtimes without global installation
+      - name: Build pinned selected runtimes without global installation
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
           PILOT_CONCURRENT_PREPARATION: ${{ github.event.inputs.preparation_concurrency }}
@@ -3319,7 +3319,7 @@ jobs:
             ${{ runner.temp }}/installed-linked-worktrees.log
           if-no-files-found: warn
           retention-days: 30
-      - name: Qualify accepted installed pilot in a clean ordinary-user environment
+      - name: Qualify pinned installed pilot in a clean ordinary-user environment
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'clean-user' && github.event.inputs.native_preparation_only == 'true'
         shell: bash
         run: |
