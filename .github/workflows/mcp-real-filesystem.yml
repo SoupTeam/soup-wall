@@ -1713,7 +1713,38 @@ jobs:
           python3 -B scripts/qualify-private-edit-self-test.py --run \
             --agentfw "$SOU119_AGENTFW" --selection "$selection" --python /usr/bin/python3.12 \
             --output "$RUNNER_TEMP/private-edit-self-test"
-          cargo test --locked -p agentfw --lib self_test::tests
+          /usr/bin/time -f '%e %U %S' -o "$RUNNER_TEMP/private-edit-self-test/verify.time" \
+            python3 -B scripts/build-native-pilot-inputs.py --verify-existing \
+            --output "$RUNNER_TEMP/sou119-agent-build" \
+            --expected-commit "$(git rev-parse HEAD)" \
+            > "$RUNNER_TEMP/private-edit-self-test/verified-source-build.json"
+          python3 -B - <<'PY'
+          import json, os
+          from pathlib import Path
+          asset = Path(os.environ['RUNNER_TEMP'])
+          verified = json.loads((asset / 'private-edit-self-test/verified-source-build.json').read_text())
+          first = json.loads((asset / 'sou111-assets/source-first.json').read_text())
+          assert verified['status'] == 'verified-reuse'
+          assert verified['sandbox_tests'] == first['sandbox_tests'] == os.environ['SOU119_SANDBOX_TESTS']
+          assert verified['receipt'] == first['receipt']
+          PY
+          if [[ "${{ github.event.inputs.private_edit_self_test_only }}" == true ]]; then
+            /usr/bin/time -f '%e %U %S' -o "$RUNNER_TEMP/private-edit-self-test/reused.time" \
+              "$SOU119_SANDBOX_TESTS" self_test::tests | tee "$RUNNER_TEMP/private-edit-self-test/reused.log"
+            mkdir -m 700 "$RUNNER_TEMP/sou217-cold-cargo-home" "$RUNNER_TEMP/sou217-cold-target"
+            CARGO_HOME="$RUNNER_TEMP/sou217-cold-cargo-home" \
+              CARGO_TARGET_DIR="$RUNNER_TEMP/sou217-cold-target" \
+              RUSTUP_TOOLCHAIN=1.94.1 RUSTUP_AUTO_INSTALL=0 \
+              /usr/bin/time -f '%e %U %S' -o "$RUNNER_TEMP/private-edit-self-test/cold.time" \
+              cargo test --locked -p agentfw --lib self_test::tests \
+              2>&1 | tee "$RUNNER_TEMP/private-edit-self-test/cold.log"
+            python3 -B scripts/ci/compare-native-pilot-lib-tests.py \
+              --records "$RUNNER_TEMP/private-edit-self-test" \
+              --expected-commit "$(git rev-parse HEAD)" \
+              > "$RUNNER_TEMP/private-edit-self-test/reuse-comparison.json"
+          else
+            "$SOU119_SANDBOX_TESTS" self_test::tests
+          fi
           cargo clippy --locked -p agentfw --all-targets -- -D warnings
           cargo fmt --all --check
       - name: Qualify installed declarative configuration backup and restore
@@ -2442,6 +2473,8 @@ jobs:
           path: |
             ${{ runner.temp }}/private-edit-self-test/qualification.json
             ${{ runner.temp }}/private-edit-self-test/run/report.json
+            ${{ runner.temp }}/private-edit-self-test/verified-source-build.json
+            ${{ runner.temp }}/private-edit-self-test/reuse-comparison.json
             ${{ runner.temp }}/sou151-capacity/**
             ${{ runner.temp }}/sou164-update/qualification/qualification.json
             ${{ runner.temp }}/sou164-update/fixtures/inputs.json

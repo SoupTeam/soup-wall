@@ -378,6 +378,13 @@ class PreparedQualificationCoverage(unittest.TestCase):
                 self.assertTrue(enabled(private, **context))
                 self.assertTrue(enabled(private))
                 self.assertIn("scripts/qualify-private-edit-self-test.py", private)
+                self.assertIn("--verify-existing", private)
+                self.assertIn('"$SOU119_SANDBOX_TESTS" self_test::tests', private)
+                self.assertIn('if [[ "${{ github.event.inputs.private_edit_self_test_only }}" == true ]]; then', private)
+                self.assertIn('cargo test --locked -p agentfw --lib self_test::tests', private)
+                self.assertIn('else\n            "$SOU119_SANDBOX_TESTS" self_test::tests\n          fi', private)
+                self.assertIn("cargo clippy --locked -p agentfw --all-targets", private)
+                self.assertIn("cargo fmt --all --check", private)
 
     def test_storage_faults_are_explicit_manual_evidence_with_separate_output(self):
         for name, text in self.workflows():
