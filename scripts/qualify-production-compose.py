@@ -167,7 +167,9 @@ def shell(gate, service, program):
 def postgres_program(sql):
     # SQL is an application-owned constant/hex witness, never a CLI argument.
     require("'" not in sql and "\n" not in sql, "unsafe_fixture_sql")
-    return ('PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -w '
+    # The application uses the Compose network. Loopback can have a separate
+    # initdb trust rule and would not test the application's password boundary.
+    return ('PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -w '
             '-U "$POSTGRES_USER" -d "$POSTGRES_DB" -qAt -v ON_ERROR_STOP=1 -c \'' + sql + "'")
 
 
@@ -273,7 +275,7 @@ def qualify(args, report):
             checks.append("admin-refusal-and-authenticated-postgres-mutation")
             marker = secrets.token_hex(16)
             with gate.freeze():
-                wrong_password = ('if PGPASSWORD=owned-invalid-password psql -h 127.0.0.1 -w '
+                wrong_password = ('if PGPASSWORD=owned-invalid-password psql -h postgres -w '
                                   '-U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "SELECT 1" '
                                   '> /dev/null 2>&1; then exit 19; fi; ')
                 require(shell(gate, "postgres", wrong_password + postgres_program("SELECT 1")) == "1",

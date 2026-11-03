@@ -76,6 +76,12 @@ class OwnedQualificationTests(unittest.TestCase):
         self.assertTrue(values["LLM_FW_REDIS_URL"].endswith("@redis:6379/0"))
         self.assertNotEqual(values["POSTGRES_PASSWORD"], values["REDIS_PASSWORD"])
 
+    def test_postgres_witness_uses_application_network_authentication(self):
+        program = qualify.postgres_program("SELECT 1")
+        self.assertIn("psql -h postgres -w", program)
+        self.assertNotIn("127.0.0.1", program)
+        self.assertIn('PGPASSWORD="$POSTGRES_PASSWORD"', program)
+
     def test_unexpected_failure_text_cannot_enter_report(self):
         self.assertEqual(qualify.public_failure(ValueError("generated-sensitive-fixture-value")),
                          "qualification_failed")
