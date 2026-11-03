@@ -420,7 +420,7 @@
       "discovery_sha256": "67425ee68375ed484c131989ea3adf3f07a91a04540c100fac0ce61f3ba09c37",
       "file_name": "upstream-tools-list.json",
       "format": "mcp/tools-list-response",
-      "operator_label_untrusted": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@b385e7506ab2",
+      "operator_label_untrusted": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248",
       "raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
       "tool_count": 14
     },

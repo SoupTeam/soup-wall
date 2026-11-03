@@ -5,7 +5,7 @@ NOTICE: This analyzer accepts nothing. It does not approve or install a schema, 
 
 before: file upstream-tools-list.json raw_sha256 d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954 (21676 bytes, 14 tools, mcp/tools-list-response)
         discovery_sha256 67425ee68375ed484c131989ea3adf3f07a91a04540c100fac0ce61f3ba09c37
-        operator label (untrusted): "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@b385e7506ab2"
+        operator label (untrusted): "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248"
 after : file fs-malicious-metadata.json raw_sha256 6f583e5f10a0cc3af88700d3b2b86062f6b5bea49886d18bfb9fc7ab200048b4 (21235 bytes, 14 tools, mcp/tools-list-response)
         discovery_sha256 c4e8751db4ac49c2d1d01b88db7b585c5efc5aee933f9330d62f5fdfa80e5698
         operator label (untrusted): "SYNTHETIC fs-malicious-metadata.json"

@@ -2,22 +2,24 @@
   "format": "sw-evidence/sou204-schema-upgrade-demo/1",
   "observation_kind": "concrete local runs of the built analyzer (Windows host)",
   "source": {
-    "base_revision": "b385e7506ab26896637f348e3180e52d1fc6d423",
-    "head": "b385e7506ab26896637f348e3180e52d1fc6d423",
-    "head_is_base": true,
+    "original_task_base": "b385e7506ab26896637f348e3180e52d1fc6d423",
+    "integration_baseline": "7f973f0b82480090e3de51111a90f550ea6a0d57",
+    "changes_measured_against": "7f973f0b82480090e3de51111a90f550ea6a0d57",
+    "head": "0615e27642176550294cbaeac1b23709f17a6a71",
+    "head_contains_integration_baseline": true,
     "working_tree": "uncommitted changes on top of head",
     "binding": "changed_files_git_blob is authoritative; working_tree_sha256 depends on checkout line endings (core.autocrlf) and is informational",
     "changed_files_git_blob": {
-      ".gitattributes": "8af9f87efbc8a2c82919c4ca551d68eb7a9adf9f",
+      ".gitattributes": "fdf779621353672388bfd0678c390f203b53b0a1",
       "CHANGELOG.md": "cc4315681e95306ea2ef6438b44cfc4326cb16f3",
-      "crates/agentfw/src/main.rs": "0d109c89bd6e95a4025a1581f8ff1ad482ca12cb",
+      "crates/agentfw/src/main.rs": "0987508a6b3ce72d3d48766719226f7cbbacc23f",
       "crates/agentfw/src/mcp/mod.rs": "b9e4918922873d558e0dfdf9f0f39ccc7e2f143b",
       "crates/agentfw/src/mcp/profile_author.rs": "ba556b361906670d8f7aca5b08bc57b909e0d5ca",
       "crates/agentfw/src/mcp/schema_upgrade.rs": "2fcbe01f4ba60a4320b83669f16c2aec2329d406",
       "crates/agentfw/src/mcp/schema_upgrade/examples.rs": "c48b2203b40aa4f3dfdabc74f1c39acc555495ee",
       "crates/agentfw/src/mcp/schema_upgrade/render.rs": "08f1bacc21386bef1f7cbe8f5ebebc944ec89c01",
       "crates/agentfw/src/mcp/schema_upgrade/tests.rs": "c84430fec0d6d31e143ae92e09f4c18bde0d3a28",
-      "crates/agentfw/tests/fixtures/schema_upgrade/MANIFEST.json": "b3c66e788017eec4442463e1a199e48c2a6fb7de",
+      "crates/agentfw/tests/fixtures/schema_upgrade/MANIFEST.json": "36a2cda13e3f15148734ab8b0b9ed8bf7bb3c03e",
       "crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json": "6898b92f71d7ff53dba90d0f779f3ba9b4384a3f",
       "crates/agentfw/tests/fixtures/schema_upgrade/fs-control-current.registry.json": "0b86a2841f212768762d50cff7900e74793440df",
       "crates/agentfw/tests/fixtures/schema_upgrade/fs-control-proposed.registry.json": "c9fdd7532b822895c3567f26591b94ec0c739abb",
@@ -44,24 +46,24 @@
       "crates/agentfw/tests/fixtures/schema_upgrade/invalid-nan.json": "98e07f392202c99762f5d56f1e730ac180dda0b2",
       "crates/agentfw/tests/fixtures/schema_upgrade/invalid-paginated.json": "f6723930d96635acc5961b8e0a0da779c7cf89b3",
       "crates/agentfw/tests/mcp_schema_upgrade_cli.rs": "3243ee5be152c9d3be2908fbe7eaa903682ba68f",
-      "docs/README.md": "90d53733dacaaa5fc1b67e9f68c75e1791af9278",
-      "docs/operations/MCP_SCHEMA_UPGRADE_REVIEW.md": "cb930489c87867adb88f27fa36dd62fe66c18fe9",
-      "scripts/schema-upgrade-demo.py": "bc39c91c1dd5c811ad732ed54a146eebb9c92fd1",
-      "scripts/schema-upgrade-fixtures.py": "cab70664405b7286e6d941f1f2673e72230b8c28",
+      "docs/README.md": "30dbba44c0ea836dd9415648555feb82bfadd98d",
+      "docs/operations/MCP_SCHEMA_UPGRADE_REVIEW.md": "631f02c5c9a85e7f79944489640926ebf2b4bd6f",
+      "scripts/schema-upgrade-demo.py": "0d6e39d16f4e2f3f2646faf9e25ab43aa0c4f8b7",
+      "scripts/schema-upgrade-fixtures.py": "b5c380282d3c66dee6ea933c185bc21578db9d1a",
       "scripts/schema-upgrade-trace-windows.py": "02801baf4870b20f498e9abda6a892af3617102b"
     },
-    "changed_files_manifest_sha256": "b0d8c6496ef9e79adfd78bf8f57e6ae37ba6b9721df6fde28d4c7519209c31d6",
+    "changed_files_manifest_sha256": "323e0d923b59a82c8737dc51c21be066f07616d3f0f9435779293a170e5e2c2c",
     "working_tree_sha256": {
-      ".gitattributes": "691fe8c3e080f0245a01828430b8285b4a31769b0ec1a65b62c64153c594db87",
+      ".gitattributes": "f326b98ef748dcc879f0dbac8d915cd0cead4c9d61a4a21a38b2f1aaf0d62e91",
       "CHANGELOG.md": "b1409c3343d2668d175b32f145d415dd392e87db58f2eab74e70a4cc88007291",
-      "crates/agentfw/src/main.rs": "b26b286473283839d108a72142b218019166165e317904b9e880c65af26abe7d",
+      "crates/agentfw/src/main.rs": "73af0ecee2a555a7d6c8d2e6e53d83f898f678c6a0181713d447f37ea976c156",
       "crates/agentfw/src/mcp/mod.rs": "32131d3488af0e23f57360cfc722124d34a2c94ebbc153844888fed4c5b0de7d",
       "crates/agentfw/src/mcp/profile_author.rs": "7cc2f91e1067e751c99a5d66febd4bd78e64fcc306a548b3bfe415009d92822c",
       "crates/agentfw/src/mcp/schema_upgrade.rs": "664eb501105eac4625a65e0d5dc0fd2dd121428c6b3153b29d623d15d5905f88",
       "crates/agentfw/src/mcp/schema_upgrade/examples.rs": "f148e3f74209328b265823557a3506e0a419dedbc96bc182db1a551d6fa00a9e",
       "crates/agentfw/src/mcp/schema_upgrade/render.rs": "0828eb6cf784e90ceabc5050b241c4a8377a2406b9c50a0dc47998d3362ddb4a",
       "crates/agentfw/src/mcp/schema_upgrade/tests.rs": "1fee7788ad13a993992fc28c967e2a16846e5ea150bfd6d70b3529d83425e0bc",
-      "crates/agentfw/tests/fixtures/schema_upgrade/MANIFEST.json": "58d4b9c5bed62474e710bcdea144b5d6392c38cb06fefdd1ad0c8fc09caa4526",
+      "crates/agentfw/tests/fixtures/schema_upgrade/MANIFEST.json": "ffa7bad355d2fcc7874fa6c6e579b9e755c664a93b7583b2a3577e3a2132bd83",
       "crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
       "crates/agentfw/tests/fixtures/schema_upgrade/fs-control-current.registry.json": "d87b555162420a4e8625682c912065e55c0a0c16fe87b381b3e003554d66e57f",
       "crates/agentfw/tests/fixtures/schema_upgrade/fs-control-proposed.registry.json": "8cb5a56b434e4033c1dbb4d669c234fc525eedaee3442779ee0956b6b9a3d74d",
@@ -88,151 +90,223 @@
       "crates/agentfw/tests/fixtures/schema_upgrade/invalid-nan.json": "4a99d3f44f114523cfb4523f417d55f8fb0bdbebe7d353db79126993af98a5f7",
       "crates/agentfw/tests/fixtures/schema_upgrade/invalid-paginated.json": "b565cb5bc4028a4ca9ed57f6440161f022abc81cb0389784d6536925ffd1614a",
       "crates/agentfw/tests/mcp_schema_upgrade_cli.rs": "5d7c08853910a30eb221ca348bd73766b40559d2a2a6d1bde23b49602a4ce931",
-      "docs/README.md": "733ea763b3eb4a53cbac39ed6089a9e2b4ee4e3b43e459a25d25dbdf0265eb98",
-      "docs/operations/MCP_SCHEMA_UPGRADE_REVIEW.md": "c46fcb2a123db8e7bbdff93cd071bae610fbd4af188a866a0c3ee392d59a8dca",
-      "scripts/schema-upgrade-demo.py": "58b0a4e815779dee1aebddd02fb7b267fa0c0a6b4896c87f251405c3a5636cc6",
-      "scripts/schema-upgrade-fixtures.py": "5cb2bf0e1449b8257a482fb8248b660d7028c0d3787a0bcc981e479199ffea7d",
+      "docs/README.md": "7104d32113dca43f3e5b373095be8a829fc820f5cd1916885cc82cf9c53f4ff5",
+      "docs/operations/MCP_SCHEMA_UPGRADE_REVIEW.md": "9094ccac03ae5354cfed5c586391086e4cf863a91ad25441874d659165967f9f",
+      "scripts/schema-upgrade-demo.py": "818215d8a950be89f3eb0111962bdeeb91b213378170521ac660ab7840a8b7a8",
+      "scripts/schema-upgrade-fixtures.py": "66a6774c6751ae8c78ef43f4ce1bf77e7f038b586be7becbaf0cad8d5281f99e",
       "scripts/schema-upgrade-trace-windows.py": "a632a733af820feb5e1222370fb9ef473936f1404451d3ad145b8a300da8c3c9"
     },
     "excluded_from_binding": "docs/operations/evidence/sou-204-schema-upgrade-2026-11-03/ (this evidence; avoids circular self-hash)"
   },
   "accepted_dependencies": {
-    "anchored_by": "b385e7506ab26896637f348e3180e52d1fc6d423",
+    "anchored_by": "7f973f0b82480090e3de51111a90f550ea6a0d57",
+    "original_task_base": "b385e7506ab26896637f348e3180e52d1fc6d423",
     "all_unchanged": true,
+    "upstream_changes_since_original_base": [
+      "crates/agentfw/src/mcp/admission.rs",
+      "crates/agentfw/src/mcp/server_profile.rs",
+      "crates/agentfw/src/native.rs",
+      "scripts/install-sou62-filesystem-profile.py",
+      "scripts/install-sou68-git-profile.py",
+      "scripts/pilot_filesystem_roots.py"
+    ],
     "files": {
       "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json": {
-        "base_blob": "8a9fef3931bf42bed94c43b2be1567081547d2a7",
+        "integration_baseline_blob": "8a9fef3931bf42bed94c43b2be1567081547d2a7",
         "working_tree_blob": "8a9fef3931bf42bed94c43b2be1567081547d2a7",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "8a9fef3931bf42bed94c43b2be1567081547d2a7",
+        "upstream_change_since_original_base": false
       },
       "profiles/mcp/filesystem-readonly-v1/upstream-identity.json": {
-        "base_blob": "517a1344bbef5bf087a3f4a32974573d1bab5e70",
+        "integration_baseline_blob": "517a1344bbef5bf087a3f4a32974573d1bab5e70",
         "working_tree_blob": "517a1344bbef5bf087a3f4a32974573d1bab5e70",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "517a1344bbef5bf087a3f4a32974573d1bab5e70",
+        "upstream_change_since_original_base": false
       },
       "profiles/mcp/filesystem-readonly-v1/upstream-notices/node-v22.22.0-LICENSE": {
-        "base_blob": "bed41c4c05b51a3b26600191449664cb5041fffb",
+        "integration_baseline_blob": "bed41c4c05b51a3b26600191449664cb5041fffb",
         "working_tree_blob": "bed41c4c05b51a3b26600191449664cb5041fffb",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "bed41c4c05b51a3b26600191449664cb5041fffb",
+        "upstream_change_since_original_base": false
       },
       "profiles/mcp/filesystem-readonly-v1/upstream-notices/servers-a40bc270-LICENSE": {
-        "base_blob": "4a93985763241755401a10678395303de4e720ba",
+        "integration_baseline_blob": "4a93985763241755401a10678395303de4e720ba",
         "working_tree_blob": "4a93985763241755401a10678395303de4e720ba",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "4a93985763241755401a10678395303de4e720ba",
+        "upstream_change_since_original_base": false
       },
       "profiles/mcp/filesystem-readonly-v1/upstream-notices/typescript-sdk-ff07b001-LICENSE": {
-        "base_blob": "3d48435454b105021b4f777c11b6b07d8d2ffea3",
+        "integration_baseline_blob": "3d48435454b105021b4f777c11b6b07d8d2ffea3",
         "working_tree_blob": "3d48435454b105021b4f777c11b6b07d8d2ffea3",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "3d48435454b105021b4f777c11b6b07d8d2ffea3",
+        "upstream_change_since_original_base": false
       },
       "profiles/mcp/git-readonly-v1/upstream-tools-list.json": {
-        "base_blob": "ec5b3ab4a156de70a65c2c123fbf565375ff49be",
+        "integration_baseline_blob": "ec5b3ab4a156de70a65c2c123fbf565375ff49be",
         "working_tree_blob": "ec5b3ab4a156de70a65c2c123fbf565375ff49be",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "ec5b3ab4a156de70a65c2c123fbf565375ff49be",
+        "upstream_change_since_original_base": false
       },
       "profiles/mcp/git-readonly-v1/upstream-identity.json": {
-        "base_blob": "c96324390f1fea7f17f5ea19ddd27c9fce3e9289",
+        "integration_baseline_blob": "c96324390f1fea7f17f5ea19ddd27c9fce3e9289",
         "working_tree_blob": "c96324390f1fea7f17f5ea19ddd27c9fce3e9289",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "c96324390f1fea7f17f5ea19ddd27c9fce3e9289",
+        "upstream_change_since_original_base": false
       },
       "profiles/mcp/git-readonly-v1/upstream-initialize.json": {
-        "base_blob": "6743e0984eb3fb3d866a2c8bb91003aca54fde44",
+        "integration_baseline_blob": "6743e0984eb3fb3d866a2c8bb91003aca54fde44",
         "working_tree_blob": "6743e0984eb3fb3d866a2c8bb91003aca54fde44",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "6743e0984eb3fb3d866a2c8bb91003aca54fde44",
+        "upstream_change_since_original_base": false
       },
       "profiles/mcp/git-readonly-v1/requirements.lock": {
-        "base_blob": "f89b228b69283fb5ddca329612298d31a7df886b",
+        "integration_baseline_blob": "f89b228b69283fb5ddca329612298d31a7df886b",
         "working_tree_blob": "f89b228b69283fb5ddca329612298d31a7df886b",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "f89b228b69283fb5ddca329612298d31a7df886b",
+        "upstream_change_since_original_base": false
       },
       "profiles/mcp/operator-authoring-v1/discovery.json": {
-        "base_blob": "f605c0cd32b548c24abba650660f4e03e114737b",
+        "integration_baseline_blob": "f605c0cd32b548c24abba650660f4e03e114737b",
         "working_tree_blob": "f605c0cd32b548c24abba650660f4e03e114737b",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "f605c0cd32b548c24abba650660f4e03e114737b",
+        "upstream_change_since_original_base": false
       },
       "profiles/mcp/operator-authoring-v1/declarations.json": {
-        "base_blob": "055dd8adc0e19d3d0b51d20a221328cf89be3094",
+        "integration_baseline_blob": "055dd8adc0e19d3d0b51d20a221328cf89be3094",
         "working_tree_blob": "055dd8adc0e19d3d0b51d20a221328cf89be3094",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "055dd8adc0e19d3d0b51d20a221328cf89be3094",
+        "upstream_change_since_original_base": false
       },
       "profiles/pilot/linux-readonly-v1/manifest.json": {
-        "base_blob": "44b0b090c7cdbc2b000cc8a01b7513f76391f9ec",
+        "integration_baseline_blob": "44b0b090c7cdbc2b000cc8a01b7513f76391f9ec",
         "working_tree_blob": "44b0b090c7cdbc2b000cc8a01b7513f76391f9ec",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "44b0b090c7cdbc2b000cc8a01b7513f76391f9ec",
+        "upstream_change_since_original_base": false
       },
       "scripts/install-sou62-filesystem-profile.py": {
-        "base_blob": "7e1d44ab1df78d3aee5cc23f16db4c438f52c7c2",
-        "working_tree_blob": "7e1d44ab1df78d3aee5cc23f16db4c438f52c7c2",
-        "unchanged": true
+        "integration_baseline_blob": "593c454f78223a6a4ea5045059a0d4eb2fdf167f",
+        "working_tree_blob": "593c454f78223a6a4ea5045059a0d4eb2fdf167f",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "7e1d44ab1df78d3aee5cc23f16db4c438f52c7c2",
+        "upstream_change_since_original_base": true
       },
       "scripts/install-sou68-git-profile.py": {
-        "base_blob": "52e67a45e9f562817d14ce33ac9128512513b64d",
-        "working_tree_blob": "52e67a45e9f562817d14ce33ac9128512513b64d",
-        "unchanged": true
+        "integration_baseline_blob": "68ac85108f2cc5ff98b6e4cc674923d62ff7564f",
+        "working_tree_blob": "68ac85108f2cc5ff98b6e4cc674923d62ff7564f",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "52e67a45e9f562817d14ce33ac9128512513b64d",
+        "upstream_change_since_original_base": true
       },
       "scripts/pilot_provider.py": {
-        "base_blob": "d46a6402c0273e79de5ab8c010eecc11a2e4045a",
+        "integration_baseline_blob": "d46a6402c0273e79de5ab8c010eecc11a2e4045a",
         "working_tree_blob": "d46a6402c0273e79de5ab8c010eecc11a2e4045a",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "d46a6402c0273e79de5ab8c010eecc11a2e4045a",
+        "upstream_change_since_original_base": false
+      },
+      "scripts/pilot_filesystem_roots.py": {
+        "integration_baseline_blob": "0c2afbe6a8a9e82b59fa4830c3317f921a0376be",
+        "working_tree_blob": "0c2afbe6a8a9e82b59fa4830c3317f921a0376be",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": null,
+        "upstream_change_since_original_base": true
       },
       "crates/agentfw/src/mcp/input.rs": {
-        "base_blob": "52e5d37668e6113b46e712173609bdce47dc1a7c",
+        "integration_baseline_blob": "52e5d37668e6113b46e712173609bdce47dc1a7c",
         "working_tree_blob": "52e5d37668e6113b46e712173609bdce47dc1a7c",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "52e5d37668e6113b46e712173609bdce47dc1a7c",
+        "upstream_change_since_original_base": false
       },
       "crates/agentfw/src/mcp/admission.rs": {
-        "base_blob": "6fb6ef131bb2d62db6313b8c3018322ea4495521",
-        "working_tree_blob": "6fb6ef131bb2d62db6313b8c3018322ea4495521",
-        "unchanged": true
+        "integration_baseline_blob": "5e3ee5a47fe53916e057f03cf796078bf4110492",
+        "working_tree_blob": "5e3ee5a47fe53916e057f03cf796078bf4110492",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "6fb6ef131bb2d62db6313b8c3018322ea4495521",
+        "upstream_change_since_original_base": true
       },
       "crates/agentfw/src/mcp/server_profile.rs": {
-        "base_blob": "e0c9ccb58b2bb2fe4194d7f9175dbdbca742cf78",
-        "working_tree_blob": "e0c9ccb58b2bb2fe4194d7f9175dbdbca742cf78",
-        "unchanged": true
+        "integration_baseline_blob": "89895008e3f5fa9dde79a202f6718b8acbfb1346",
+        "working_tree_blob": "89895008e3f5fa9dde79a202f6718b8acbfb1346",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "e0c9ccb58b2bb2fe4194d7f9175dbdbca742cf78",
+        "upstream_change_since_original_base": true
       },
       "crates/agentfw/src/mcp/manifest.rs": {
-        "base_blob": "a994716e040eaaee429e66443eb62f85244e3b0f",
+        "integration_baseline_blob": "a994716e040eaaee429e66443eb62f85244e3b0f",
         "working_tree_blob": "a994716e040eaaee429e66443eb62f85244e3b0f",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "a994716e040eaaee429e66443eb62f85244e3b0f",
+        "upstream_change_since_original_base": false
       },
       "crates/agentfw/src/native.rs": {
-        "base_blob": "37adac6d6ebc8bcd9d590236be8f605830123366",
-        "working_tree_blob": "37adac6d6ebc8bcd9d590236be8f605830123366",
-        "unchanged": true
+        "integration_baseline_blob": "4eca10b89681771e136f89fe8ad2e94f48a46b54",
+        "working_tree_blob": "4eca10b89681771e136f89fe8ad2e94f48a46b54",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "37adac6d6ebc8bcd9d590236be8f605830123366",
+        "upstream_change_since_original_base": true
       },
       "crates/agentfw/src/config.rs": {
-        "base_blob": "143f8d9caae304f74762c86a21f59aba2ad3e2c2",
+        "integration_baseline_blob": "143f8d9caae304f74762c86a21f59aba2ad3e2c2",
         "working_tree_blob": "143f8d9caae304f74762c86a21f59aba2ad3e2c2",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "143f8d9caae304f74762c86a21f59aba2ad3e2c2",
+        "upstream_change_since_original_base": false
       },
       "crates/agentfw/Cargo.toml": {
-        "base_blob": "bb1a879849e91239689b7d3534934c4d53896062",
+        "integration_baseline_blob": "bb1a879849e91239689b7d3534934c4d53896062",
         "working_tree_blob": "bb1a879849e91239689b7d3534934c4d53896062",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "bb1a879849e91239689b7d3534934c4d53896062",
+        "upstream_change_since_original_base": false
       },
       "Cargo.toml": {
-        "base_blob": "104ca7db7dba5b4ff1c37b13a401c942b4cd3ef5",
+        "integration_baseline_blob": "104ca7db7dba5b4ff1c37b13a401c942b4cd3ef5",
         "working_tree_blob": "104ca7db7dba5b4ff1c37b13a401c942b4cd3ef5",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "104ca7db7dba5b4ff1c37b13a401c942b4cd3ef5",
+        "upstream_change_since_original_base": false
       },
       "Cargo.lock": {
-        "base_blob": "033c49f9570dba2b90928736e2c67bcb83f71878",
+        "integration_baseline_blob": "033c49f9570dba2b90928736e2c67bcb83f71878",
         "working_tree_blob": "033c49f9570dba2b90928736e2c67bcb83f71878",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "033c49f9570dba2b90928736e2c67bcb83f71878",
+        "upstream_change_since_original_base": false
       },
       "rust-toolchain.toml": {
-        "base_blob": "246cb22c30a5f6e0e105643c35477995aff1da6f",
+        "integration_baseline_blob": "246cb22c30a5f6e0e105643c35477995aff1da6f",
         "working_tree_blob": "246cb22c30a5f6e0e105643c35477995aff1da6f",
-        "unchanged": true
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "246cb22c30a5f6e0e105643c35477995aff1da6f",
+        "upstream_change_since_original_base": false
       }
     },
     "reproduced_registry_provenance": [
       {
         "fixture": "filesystem-readonly-v1.registry.json",
         "installer": "scripts/install-sou62-filesystem-profile.py",
-        "parameters": {},
-        "installer_git_blob": "7e1d44ab1df78d3aee5cc23f16db4c438f52c7c2",
-        "installer_matches_base_blob": true,
+        "parameters": {
+          "filesystem_roots": false
+        },
+        "installer_git_blob": "593c454f78223a6a4ea5045059a0d4eb2fdf167f",
+        "installer_imports": {
+          "scripts/pilot_provider.py": "d46a6402c0273e79de5ab8c010eecc11a2e4045a",
+          "scripts/pilot_filesystem_roots.py": "0c2afbe6a8a9e82b59fa4830c3317f921a0376be"
+        },
+        "installer_and_imports_match_integration_baseline": true,
         "provenance_status": "reproduced from the accepted installer function; NOT an observed installed operator registry"
       },
       {
@@ -241,17 +315,23 @@
         "parameters": {
           "local_references": false,
           "file_revisions": false,
-          "shallow_repository": false
+          "shallow_repository": false,
+          "linked_worktree": false
         },
-        "installer_git_blob": "52e67a45e9f562817d14ce33ac9128512513b64d",
-        "installer_matches_base_blob": true,
+        "installer_git_blob": "68ac85108f2cc5ff98b6e4cc674923d62ff7564f",
+        "installer_imports": {
+          "scripts/pilot_provider.py": "d46a6402c0273e79de5ab8c010eecc11a2e4045a",
+          "scripts/install-sou62-filesystem-profile.py": "593c454f78223a6a4ea5045059a0d4eb2fdf167f",
+          "scripts/pilot_filesystem_roots.py": "0c2afbe6a8a9e82b59fa4830c3317f921a0376be"
+        },
+        "installer_and_imports_match_integration_baseline": true,
         "provenance_status": "reproduced from the accepted installer function; NOT an observed installed operator registry"
       }
     ]
   },
   "binary": {
     "path": "target/debug/agentfw.exe",
-    "sha256": "53932b344f22bcaa666480e0e7e20f3dd071486ab8afa2842dab5a46b6991f92"
+    "sha256": "c529715d89f9e97ab4404849b31a08240cb3fcc90f778a8c93da9b2f57d9f0ab"
   },
   "isolation": {
     "HOME_and_USERPROFILE": "fresh empty temporary directory",
@@ -263,8 +343,8 @@
     "before": {
       "profiles/mcp": {
         "exists": true,
-        "files": 27,
-        "sha256": "82a7d35df83b4ff3789212e4f9f5b9a7dbb2ed8c158e3ed8283a3436bf6193bb"
+        "files": 30,
+        "sha256": "e991a62268d67b4cd55a0464f3288afc0b9f6be09c885c52b21ff22a4a5e0abc"
       },
       "profiles/pilot": {
         "exists": true,
@@ -282,7 +362,7 @@
       "crates/agentfw/tests/fixtures/schema_upgrade": {
         "exists": true,
         "files": 26,
-        "sha256": "a2f6319dc7384c3840c7fef655002fce8c3eb3da4278980314ffd0e28798765e"
+        "sha256": "232f11ce4e22e716993df3e5f03152c8b757ba85f32c118f8c2c3b5182fd53d5"
       },
       "~/.agentfw (real Agent home)": {
         "exists": false
@@ -291,8 +371,8 @@
     "after": {
       "profiles/mcp": {
         "exists": true,
-        "files": 27,
-        "sha256": "82a7d35df83b4ff3789212e4f9f5b9a7dbb2ed8c158e3ed8283a3436bf6193bb"
+        "files": 30,
+        "sha256": "e991a62268d67b4cd55a0464f3288afc0b9f6be09c885c52b21ff22a4a5e0abc"
       },
       "profiles/pilot": {
         "exists": true,
@@ -310,7 +390,7 @@
       "crates/agentfw/tests/fixtures/schema_upgrade": {
         "exists": true,
         "files": 26,
-        "sha256": "a2f6319dc7384c3840c7fef655002fce8c3eb3da4278980314ffd0e28798765e"
+        "sha256": "232f11ce4e22e716993df3e5f03152c8b757ba85f32c118f8c2c3b5182fd53d5"
       },
       "~/.agentfw (real Agent home)": {
         "exists": false
@@ -414,7 +494,7 @@
     {
       "id": "fs-keys-reordered",
       "label": "SYNTHETIC: every JSON object's keys reversed; content unchanged",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-keys-reordered.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC fs-keys-reordered.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-keys-reordered.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-keys-reordered.json --out <new dir>",
       "expect_exit": 5,
       "expect": {
         "exit": 5,
@@ -426,8 +506,8 @@
       "stderr": "",
       "output_sha256": {
         "findings.csv": "c8ee8786b4261a6977992cadf26d1930376b0b8fa6dd04fbc5718a6cfb354275",
-        "report.json": "5527993364791e4c23a658c35fb52d8793fd3ef50cf6f50329d08bbc3e946928",
-        "report.txt": "6901d4f55a4820b0f054055160da210d207f67ef74566a0ba99f4cebf863824f",
+        "report.json": "d50eba24a71f199153de8d49d1b89ee919405f0deb5c9e1f0d1968c0d68987b4",
+        "report.txt": "da2a28c60b510d5fb29922d4b6f06bb7234f9c6f33849e64b9348e9dab6b68cb",
         "review-pack.json": "3cab9fca293b6858a113a8660939ddd3c9689b89227eca9cb04bab4a0d856de1",
         "REVIEW_GUIDE.md": "c23ab929b89fb9a98b5c1f533a436d162b826ad5da6c3ebb9bad284571ff7da8"
       },
@@ -463,7 +543,7 @@
     {
       "id": "fs-tools-reordered",
       "label": "SYNTHETIC: tools list reversed and object keys reversed",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-tools-reordered.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC fs-tools-reordered.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-tools-reordered.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-tools-reordered.json --out <new dir>",
       "expect_exit": 5,
       "expect": {
         "exit": 5,
@@ -478,8 +558,8 @@
       "stderr": "",
       "output_sha256": {
         "findings.csv": "14d3c8e01da66cf06100b48931878a64c5da8604aabd6fcb2eb8521a4931b704",
-        "report.json": "7cb9a5948867d72a7662e2b9bbaefcc438922a9aa613f5845bef30609c980e82",
-        "report.txt": "ddb202ba3efee0c0fae933952697301f3bd73f0db5ff472409ae1975a5bbdef2",
+        "report.json": "f43a87b4486c81371b5e3263ca0b844b0e4b55a6d15279c94d007eee46126828",
+        "report.txt": "880452b6d24624c2b61fe7cd8f16a2341c47f096461c4e1efdcb8c087de640cf",
         "review-pack.json": "0bbdee776af9cdc9a869f4b66a21252f109ea727c1385914f14e600bd6b24d47",
         "REVIEW_GUIDE.md": "193412971a008dc6c7c6b9f08eba373fd79504680eac096735ff7ab4dab27d43"
       },
@@ -515,7 +595,7 @@
     {
       "id": "fs-metadata-inert",
       "label": "SYNTHETIC: descriptions/title wording changed (tool and schema level)",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-metadata-inert.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC fs-metadata-inert.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-metadata-inert.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-metadata-inert.json --out <new dir>",
       "expect_exit": 5,
       "expect": {
         "exit": 5,
@@ -531,8 +611,8 @@
       "stderr": "",
       "output_sha256": {
         "findings.csv": "27d96bbd50a7e541b6b0f534195e5388f697b54709b8ecbc177f63d95fb4ae6b",
-        "report.json": "14dcd7ccb5ba9964284e19ca0cb7f746634ee02701f7a0e49b3f720cfe2de2d7",
-        "report.txt": "02fe8078d5fbb65d02c88a2fdf395d7d08115d6b6aeb0ca856b816200886dbce",
+        "report.json": "273b3d4e5032a011bdf223c31b0a5dd24906797b08fc831cd6b50923cdb01f1a",
+        "report.txt": "2705c83d912070cd95733604b385b25e95e337db7c33f12121b2a611a966f357",
         "review-pack.json": "54e2efda8f5897ce0902858115eab9b8b61a89cad47d60f3a8eb2915ff4bd6fb",
         "REVIEW_GUIDE.md": "e7bfb7e5213f622ebf014574cce5ba360f2a505be132c64e7e6f4baa06d1dc02"
       },
@@ -572,7 +652,7 @@
     {
       "id": "fs-malicious-metadata",
       "label": "SYNTHETIC: injection text, bidi/control characters, spreadsheet formulas and a false read-only hint on write_file",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-malicious-metadata.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC fs-malicious-metadata.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-malicious-metadata.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-malicious-metadata.json --out <new dir>",
       "expect_exit": 5,
       "expect": {
         "exit": 5,
@@ -588,8 +668,8 @@
       "stderr": "",
       "output_sha256": {
         "findings.csv": "9c246dba29a136e2582b3fe5d2e725e8898df9e2a6f665a430e0c600154814a1",
-        "report.json": "4bd2c29ee645a5d5c36fd651d65693693262bebba0250207d9c04b7ea1f5adb3",
-        "report.txt": "65bf4bffddfd1998074f12413621abf0d1f491cbd1d241cf6d3d5f599787a702",
+        "report.json": "13bf38e645893287b163aa39bb5d5cd9ff145d7cd90aa2abc7c12f91a22c3e15",
+        "report.txt": "eee695ebd384e47f129c1df6f2abcd28cfb3ab2c54b4a3c068a5435000cda0d7",
         "review-pack.json": "4ade5b101153a252b5147c47e1cf5ad77a4427b9c5d1bbb566aea8f09691c111",
         "REVIEW_GUIDE.md": "1104af35f8ba71bc2d1ed648172e4c8dc01c7e348881e58554ba63a94ef46af5"
       },
@@ -628,7 +708,7 @@
     {
       "id": "fs-tools-added-removed",
       "label": "SYNTHETIC: get_file_info removed; delete_file added with a read-only claim",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-tools-added-removed.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC fs-tools-added-removed.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-tools-added-removed.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-tools-added-removed.json --out <new dir>",
       "expect_exit": 5,
       "expect": {
         "exit": 5,
@@ -644,8 +724,8 @@
       "stderr": "",
       "output_sha256": {
         "findings.csv": "ff3786558cec0634ac19e75ef8af19319e89921883c133ce24c7491c8ccfbdbb",
-        "report.json": "ce001edb5935ae38fbb8f5a9fa18c9418c2341bb4a34731fb8a7bb4cede230f7",
-        "report.txt": "af09038d28151353c6ea9c46d94f681cbc87c83086c755bfb0b2515ffe6abddb",
+        "report.json": "ef917b59afc01457af33f3b1f398150a4a0dc206fdc7eba17097612ec497ff62",
+        "report.txt": "bfa5c8df7007d389605b9158a3e8553825c3c878149f928f7afe0aaecc9ab801",
         "review-pack.json": "cab88b5d913465c47bf721e14a248868c8c8a6a826345119b4e3b8b53060973e",
         "REVIEW_GUIDE.md": "c6358dbb521f1df4e508461d0f39704d32eb1336faed04ab570028c0d2ff1b4f"
       },
@@ -683,7 +763,7 @@
     {
       "id": "fs-required-default-type-enum",
       "label": "SYNTHETIC: read_text_file path removed; search_files excludePatterns required; sortBy enum size->mtime and default; directory_tree default; read_file head nullable, tail number->string",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-required-default-type-enum.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC fs-required-default-type-enum.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-required-default-type-enum.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-required-default-type-enum.json --out <new dir>",
       "expect_exit": 5,
       "expect": {
         "exit": 5,
@@ -704,8 +784,8 @@
       "stderr": "",
       "output_sha256": {
         "findings.csv": "c5016dd1bb5828b5f7c4807048de9f5d3028f271aef9a7da77fca95638b15dc4",
-        "report.json": "cf5b304098692ea256e5b04529495b9b12ca90aee00dc0a546962b31ef249286",
-        "report.txt": "3b9c2d3243b335565dcfa5be2f71194947990ae56955b1e552b22cad4ee5fdfb",
+        "report.json": "a4e942134362c97c78ee4d73233772aef475e413298947642af6550bd5ebafd9",
+        "report.txt": "d88746e3f05195fb7bd2a8385078f5bd25f9f4a82d1e8e843c18307f9bcee877",
         "review-pack.json": "3414934577375d2218c3a8a297d44a1f9ec501f083ac46b4e97081662115a5e4",
         "REVIEW_GUIDE.md": "4804d42d37a249f3198db034703fbfb4bafd80b4aef548850b8b50a7080cb756"
       },
@@ -747,7 +827,7 @@
     {
       "id": "fs-nested-array",
       "label": "SYNTHETIC: edit_file edits[].mode added, oldText maxLength; read_multiple_files paths minItems/maxItems/items.minLength",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-nested-array.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC fs-nested-array.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-nested-array.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-nested-array.json --out <new dir>",
       "expect_exit": 5,
       "expect": {
         "exit": 5,
@@ -763,8 +843,8 @@
       "stderr": "",
       "output_sha256": {
         "findings.csv": "48ea4a710bd4b171b1ebfcec922b52dd711caf8dd017bb9648f5a1c2f0944deb",
-        "report.json": "9adde794288adb543fa0fdfd2b64a80f1c57a8abad3bc53ed34674877949da40",
-        "report.txt": "de334fedc2242d4f8b4052eff4188ec020f6f7d94a33d6d345b2fcc58acf4e2d",
+        "report.json": "2f1e6fa73c15cb04f8fcb7e7ed4533aeeaf11c3ce1649e93776a637edc83848f",
+        "report.txt": "6e8e4b8e0e33a51cac8395ad141f027201a01a391085c1201c37b4acbd4ea8cb",
         "review-pack.json": "f9931fb4b1cee152eea85dd0a3e529e9d0627890747e3503459c6bec0c41f96f",
         "REVIEW_GUIDE.md": "260e81c29d8cefa5746f63ebfce10fa6f82436ccc213d3cff68a9e11a3873506"
       },
@@ -803,7 +883,7 @@
     {
       "id": "fs-result-capability",
       "label": "SYNTHETIC: read_text_file output gains encoding; list_allowed_directories outputSchema removed; read_file execution.taskSupport changed",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-result-capability.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC fs-result-capability.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-result-capability.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-result-capability.json --out <new dir>",
       "expect_exit": 5,
       "expect": {
         "exit": 5,
@@ -820,8 +900,8 @@
       "stderr": "",
       "output_sha256": {
         "findings.csv": "3ea587d9a52dfbf63c06810aff8b64aed86a7df5c3fc4114a2927edd51cc3bea",
-        "report.json": "ff051f7841401a3fe1a870fc285be1af00fdc3a217747ac8f10c104f30b4f89c",
-        "report.txt": "5bb86b7898409c0722c930caa308edfe154b815ef5a0d80c8953dd6ed1d6508b",
+        "report.json": "94d20eb9b0d46a397163ca29331b00697927c7e21e95ff83e210f0f676ba7a36",
+        "report.txt": "cd581535880f133865cd398ed939b4df9925c1fc2d85963b8c63f938db473154",
         "review-pack.json": "4b50e776545c916bfcabe5e7e13202b9d6b48af65328d4b98981443c82a8e4ad",
         "REVIEW_GUIDE.md": "836011e7d9ae2fb801ab74451dabbea27f3d25826e9fca59b6c24a504ba1f641"
       },
@@ -861,7 +941,7 @@
     {
       "id": "fs-destination-controls",
       "label": "SYNTHETIC: move_file destination string->array; nested options.notify.destination added; list_directory path gains unsupported format",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-destination-controls.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC fs-destination-controls.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-destination-controls.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-destination-controls.json --out <new dir>",
       "expect_exit": 5,
       "expect": {
         "exit": 5,
@@ -878,8 +958,8 @@
       "stderr": "",
       "output_sha256": {
         "findings.csv": "464f072bc88d26a8117a946292761b3441e2ef57202d8c730a16c92f2cac444c",
-        "report.json": "40d0614d80cd80575d6410bb0456cac79966722afb62ceec88d68bea22cc1d40",
-        "report.txt": "08371a202350096c0f6838a56e12f1051021d81afaaaa07f2e14019e42aceca5",
+        "report.json": "afaa8387311b4b4d8f0a3be7398ca712c6ca826dc3fe88cdb7233a5739f134ae",
+        "report.txt": "4e9f484eacea411485bce9a5785539fae7a9daa6272fbe1e56c97e835138a14d",
         "review-pack.json": "570dee357d9e451226c135dd09fd6ad83524e9805ac309f1846c43aaa47c7f3d",
         "REVIEW_GUIDE.md": "ef586fe49beb7c29b4de353cee9b3dcabb005cc9c13906887914e0f9409584e0"
       },
@@ -918,7 +998,7 @@
     {
       "id": "fs-unsupported",
       "label": "SYNTHETIC: format, oneOf, remote $ref, recursive $defs and an unknown tool member",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-unsupported.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC fs-unsupported.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-unsupported.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-unsupported.json --out <new dir>",
       "expect_exit": 5,
       "expect": {
         "exit": 5,
@@ -934,8 +1014,8 @@
       "stderr": "",
       "output_sha256": {
         "findings.csv": "45e2e2872a2dda1603bc2ad4cea187afdf9e59dbc4f2f613393450a7d1aedfa3",
-        "report.json": "1ba1f6cfc761fd8c996ae2524582cd2fe9c4d15aecd667dd92cbc9956cea22e2",
-        "report.txt": "23aa5c5b3e2cbcd4bf2843e16a8c84897df4c156f2605cf538c23911347d4e6b",
+        "report.json": "fb8c4bcffa643bc95777c35bd7369c74fbe4397b6a8d776aff8099fc673f8761",
+        "report.txt": "410add9d4405091bb1ede8735b7d0cf62bee769805d43df5bcd23aa2cc37faba",
         "review-pack.json": "f101e4ec0e5589393a2293dcbe8c0409da616557e65d8e4abbe7a1d1ad909b05",
         "REVIEW_GUIDE.md": "bffca6206a481fcf45d2a91121bd6a36066bd4efbeb752a7085ff0985460a48d"
       },
@@ -975,7 +1055,7 @@
     {
       "id": "git-metadata-inert",
       "label": "SYNTHETIC: git_status description and repo_path title changed",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/git-metadata-inert.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC git-metadata-inert.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/git-metadata-inert.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC git-metadata-inert.json --out <new dir>",
       "expect_exit": 5,
       "expect": {
         "exit": 5,
@@ -987,8 +1067,8 @@
       "stderr": "",
       "output_sha256": {
         "findings.csv": "de1c150b66e3dd593f67d39beea4c5f6f9ad732b7bf78e02ec373a07e5fe284b",
-        "report.json": "d1d3c7ead6ed2e120491662fe143bd41ab82a9b74a1b90fdc9f2eea5f5eeca1d",
-        "report.txt": "ca54b0cf97cd98940f6d8129ff1a76d4bd7523d917ed222e846734b9396bba1d",
+        "report.json": "e1b2ab5b19054292069dce01288ee89cd73d86112f4a0122a12c59ef77897ba5",
+        "report.txt": "bfd2660b7484c6115df40eb81ddf66d76f2414835f900424b671759833b3d537",
         "review-pack.json": "9dfa18166a1eea4305f1faca7d6a8d76ab09821ee9dca4c76642e63dfbb8f51c",
         "REVIEW_GUIDE.md": "1bc22bc0f88d7c4137020230adfe8ca5ced0059e986ada279f21695e65bf56e7"
       },
@@ -1026,7 +1106,7 @@
     {
       "id": "git-semantic",
       "label": "SYNTHETIC: git_log default 10->1000; git_diff context_lines integer->string; git_show revision optional; git_add minItems 0; git_branch enum; git_commit false read-only hint; git_reset removed; git_push added",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/git-semantic.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC git-semantic.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/git-semantic.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC git-semantic.json --out <new dir>",
       "expect_exit": 5,
       "expect": {
         "exit": 5,
@@ -1048,8 +1128,8 @@
       "stderr": "",
       "output_sha256": {
         "findings.csv": "84bc59368cf6163c646760674d8a9371cc472f006124ab71a12356d6deb9c3e0",
-        "report.json": "8ec9de2cfb29a5f1ffa60880a3da9f56a7ed17ed31d4c545dafc39c5e8bf6fa5",
-        "report.txt": "6d96667b1e145b37660202bae8c19ca74180075a43693b42fdd6ff0528a8836c",
+        "report.json": "909f7bb75ff4f6f5a821efe2aaccb9b07ccd2e7855681a66101864d49347d8af",
+        "report.txt": "5142ff9873dbe88442401ebe5231a619513bf01741d43629abf1879109c1a409",
         "review-pack.json": "643faa702504bffb92f84a41f7347e905aef6934d94b2b81f184a3a54aaeee89",
         "REVIEW_GUIDE.md": "dceba7ee73895a63eb0a4003d9058041e9c4cf6518b29fbfda883dba9dd80c59"
       },
@@ -1093,7 +1173,7 @@
     {
       "id": "git-extreme-bound",
       "label": "SYNTHETIC: git_status repo_path maxLength = u64::MAX",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/git-extreme-bound.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC git-extreme-bound.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/git-extreme-bound.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC git-extreme-bound.json --out <new dir>",
       "expect_exit": 5,
       "expect": {
         "exit": 5,
@@ -1109,8 +1189,8 @@
       "stderr": "",
       "output_sha256": {
         "findings.csv": "e6dcca58839e221d4aa2517dabbdb3c2a457bdddb51eb0c589f01c9fda34000a",
-        "report.json": "8410e72490af6db03ecbed64caaa63a8b68c43bafb84a0c0bf8d3cc87774e69e",
-        "report.txt": "c624e324fc477ee2407e009fb39a96201628d4ebd1b4744e3366a4a26dea5a13",
+        "report.json": "77483616ad5c589be110865bb839b7b39b67c2f142c4adadd250b3974f669db6",
+        "report.txt": "13ba9e1a857d7822a04965556b3b4de2af4a7aa3f2d0dda1a4d6f1321cb7551f",
         "review-pack.json": "39605e2b54ac00b28f272baa947dffeb1d0bdfd45dc6afd51ff9a7812ab887a3",
         "REVIEW_GUIDE.md": "01474d51f66d52c3c1ec87b7bc828c8411a905f80591947c73c1b49193296be5"
       },
@@ -1148,7 +1228,7 @@
     {
       "id": "git-recursive-ref",
       "label": "SYNTHETIC: self-recursive $defs/$ref in git_status",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/git-recursive-ref.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC git-recursive-ref.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/git-recursive-ref.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC git-recursive-ref.json --out <new dir>",
       "expect_exit": 5,
       "expect": {
         "exit": 5,
@@ -1160,8 +1240,8 @@
       "stderr": "",
       "output_sha256": {
         "findings.csv": "0ffcc189c50bcca52fcd6f5867d5d0fbe567be65fa954fbe236a53e72b03d443",
-        "report.json": "c53c0b40a4a54eb7b0b299ca49fe9df1b57680fdaf656c0da86b7921db44829f",
-        "report.txt": "21e188c8d638a9d907ca2b32d68d5865bfe46498e0dcde57fa9eb26b04406d53",
+        "report.json": "e035b887bd44f78072002135b04601dd7b387451aabb61b7639b942178b88c47",
+        "report.txt": "b53eb7911dbb86b5fa8f4108ba81b4b07a745f9374e4808fe4ecb5b7f8b12f73",
         "review-pack.json": "30d5b921d381061ae7d9642c562e45219d7255293090a72c197501e6f2cf4e52",
         "REVIEW_GUIDE.md": "2ff75bbf323ad290086423da7c917a20c7235368bc67c0949529ba8b97e486a5"
       },
@@ -1199,7 +1279,7 @@
     {
       "id": "invalid-duplicate-key",
       "label": "SYNTHETIC: duplicate object member inserted textually",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-duplicate-key.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC invalid-duplicate-key.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-duplicate-key.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC invalid-duplicate-key.json --out <new dir>",
       "expect_exit": 2,
       "expect": {
         "exit": 2,
@@ -1216,7 +1296,7 @@
     {
       "id": "invalid-duplicate-tool",
       "label": "SYNTHETIC: git_status listed twice",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-duplicate-tool.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC invalid-duplicate-tool.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-duplicate-tool.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC invalid-duplicate-tool.json --out <new dir>",
       "expect_exit": 2,
       "expect": {
         "exit": 2,
@@ -1233,7 +1313,7 @@
     {
       "id": "invalid-nan",
       "label": "SYNTHETIC: non-JSON constant NaN",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-nan.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC invalid-nan.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-nan.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC invalid-nan.json --out <new dir>",
       "expect_exit": 2,
       "expect": {
         "exit": 2,
@@ -1250,7 +1330,7 @@
     {
       "id": "invalid-paginated",
       "label": "SYNTHETIC: result.nextCursor present",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-paginated.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC invalid-paginated.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-paginated.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC invalid-paginated.json --out <new dir>",
       "expect_exit": 2,
       "expect": {
         "exit": 2,
@@ -1267,7 +1347,7 @@
     {
       "id": "invalid-deep",
       "label": "SYNTHETIC: inputSchema nested 40 objects deep",
-      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-deep.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@b385e7506ab2 --after-label SYNTHETIC invalid-deep.json --out <new dir>",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-deep.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC invalid-deep.json --out <new dir>",
       "expect_exit": 2,
       "expect": {
         "exit": 2,
