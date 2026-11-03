@@ -246,6 +246,20 @@ def validate_binding(b):
             and all(type(i) is int and i >= 0 for i in b['state_root']['identity']), 'binding_invalid')
 
 
+def scope_conformance(binding, front):
+    """Report-only: a named project is a conditional operator control, not a scope selection, so a selection outside
+    the frozen v1 scope is labelled and never silently counted as v1."""
+    scope = getattr(front, 'SCOPE', None)
+    if scope is None:
+        return 'unavailable'
+    try:
+        document, _ = front.scope_document()
+        selection = front.PREP.PILOT.strict_json(Path(binding['selection']['path']).read_bytes())
+        return scope.conformance(document, selection, front.scope_kit())['state']
+    except Exception:
+        return 'unavailable'
+
+
 def snapshot(args, front, profiles):
     runner = front.load('project_accepted_runner', 'pilot-run.py')
     source = front.source()
@@ -357,6 +371,7 @@ def main(argv, front):
                               resource_budget='unbudgeted' if record['binding']['budget'] is None else 'selected-not-validated')
                 if record['binding']['budget'] is not None and 'preset' in record['binding']['budget']:
                     report['budget_preset'] = dict(record['binding']['budget'])
+                report['scope_conformance'] = scope_conformance(record['binding'], front)
                 if args.action == 'run':
                     require(args.apply and args.expected_version == digest(encoded(record)), 'run_confirmation_required')
                     b = record['binding']

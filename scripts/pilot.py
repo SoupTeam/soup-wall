@@ -59,6 +59,13 @@ PROFILE_FAILURE_CODES = frozenset({"provider_home_invalid", "provider_home_chang
     "provider_version_required", "provider_version_stale", "provider_version_missing", "provider_version_in_use",
     "provider_version_limit", "provider_index_invalid", "provider_update_no_changes"})
 HINTS = {
+    "scope_unknown": "Only the `linux-v1` scope exists. Omit --scope or use --scope linux-v1.",
+    "scope_not_selected": "This prefix was not prepared with --scope linux-v1. Prepare a new prefix with --scope linux-v1; a prefix never changes scope silently.",
+    "scope_excludes_capability": "The selected linux-v1 scope excludes an option you supplied (see the preview's scope.refused). Remove it, or prepare a separate prefix without --scope.",
+    "scope_selection_nonconforming": "The prepared selection is outside the linux-v1 scope (see status scope.reasons). Prepare again with --apply --rebuild inside the scope.",
+    "scope_document_changed": "The linux-v1 scope descriptor differs from the one this prefix selected. Review the change, then prepare again with --apply --rebuild.",
+    "scope_document_invalid": "The linux-v1 scope descriptor is missing or malformed. Use the reviewed commit.",
+    "scope_binding_changed": "A policy, classifier, registry, profile or pin no longer matches the linux-v1 scope. Use the reviewed commit; nothing was started.",
     "budget_preset_confirmation_required": "Name the preset and its exact digest from `budget-preset inspect`; the run never picks a newer version or runs unbudgeted.",
     "not_prepared": "No prepared selection under this prefix. Run `pilot.py preview`, then `pilot.py prepare --apply`.",
     "front_door_state_invalid": "The front-door record is unreadable or changed. Prepare again with --apply.",
@@ -107,6 +114,7 @@ def provider_preflight():
 
 PREP = load("front_door_preparation", "prepare-installed-pilot.py")
 SOURCE_IDENTITY = load("front_door_source_identity", "pilot_source_identity.py")
+SCOPE = load("front_door_scope", "pilot_scope.py")
 # Inside a component verified by `agentfw pilot` there is no Git
 # checkout: the identity is the recorded clean commit of the component.
 INSTALLED = SOURCE_IDENTITY.installed(ROOT) is not None
@@ -222,6 +230,89 @@ def recorded_inputs(args, state):
     return inputs
 
 
+def scope_kit():
+    return SCOPE.kit_from(PREP, CLAUDE_VERSION)
+
+
+def scope_document():
+    """The reviewed descriptor with every binding recomputed; refusal is finite and precedes any execution."""
+    try:
+        return SCOPE.load(ROOT, scope_kit())
+    except SCOPE.Refusal as error:
+        raise Failure(str(error)[:80], "scope") from None
+    except (OSError, ValueError, KeyError, TypeError):
+        raise Failure("scope_document_invalid", "scope") from None
+
+
+def requested_scope(args, state):
+    value = getattr(args, "scope", None) or ((state or {}).get("scope") or {}).get("id")
+    require(value in (None, SCOPE.ID), "scope_unknown", "scope")
+    return value
+
+
+def scope_report(args, state, inputs):
+    """Preview facts. An unselected scope only informs; a selected scope later refuses excluded options."""
+    requested = requested_scope(args, state)
+    try:
+        document, digest_value = scope_document()
+    except Failure as failure:
+        if requested is not None:
+            raise
+        return {"id": SCOPE.ID, "selected": False, "available": False, "reason": failure.code,
+                "instruction": HINTS.get(failure.code, "")}
+    excluded = SCOPE.requested_exclusions(document, git_profile=args.git_profile, inputs=inputs)
+    return {"id": document["id"], "selected": requested is not None, "available": True,
+            "document_sha256": digest_value, "enforcement": document["enforcement"]["mode"],
+            "acceptance": document["acceptance"],
+            "refused": [{"id": row["id"], "option": row["option"], "reason": row["reason"]} for row in excluded]
+            if requested is not None else [],
+            "outside_scope_if_selected": [row["id"] for row in excluded] if requested is None else [],
+            "instruction": ("linux-v1 selected: excluded options and any nonconforming selection refuse before execution"
+                            if requested is not None else
+                            "No scope selected; nothing is claimed. Add --scope linux-v1 to select the frozen v1 pilot scope.")}
+
+
+def scope_gate(state, asserted):
+    """Before any run: the recorded scope, its descriptor and the selection must all still conform."""
+    recorded = state.get("scope")
+    if asserted is not None:
+        require(asserted == SCOPE.ID, "scope_unknown", "scope")
+        require(isinstance(recorded, dict) and recorded.get("id") == asserted, "scope_not_selected", "scope")
+    if recorded is None:
+        return None
+    require(isinstance(recorded, dict) and set(recorded) == {"id", "document_sha256"}, "scope_document_changed", "scope")
+    document, digest_value = scope_document()
+    require(recorded == {"id": document["id"], "document_sha256": digest_value}, "scope_document_changed", "scope")
+    selection = PREP.PILOT.strict_json(Path(state["selection"]).read_bytes())
+    result = SCOPE.conformance(document, selection, scope_kit())
+    require(result["state"] == "conforming", "scope_selection_nonconforming", "scope")
+    return recorded
+
+
+def scope_status(state, selection_state, protection):
+    """Distinguish enforce, unavailable, not-running and unqualified without claiming more than was observed."""
+    recorded = (state or {}).get("scope")
+    result = {"id": SCOPE.ID, "selected": recorded is not None,
+              "mode": {"observed-live": "enforce", "configured-not-running": "not-running", "unavailable": "unavailable",
+                       "unknown": "unavailable", "not-configured": "not-configured"}[protection],
+              "shadow": "outside v1: never selected and never reported as protection",
+              "qualification": "unqualified: this scope claims no exact-source acceptance"}
+    if recorded is None:
+        return {**result, "state": "unselected",
+                "instruction": "No scope selected. Prepare a new prefix with --scope linux-v1 to select the frozen v1 pilot scope."}
+    if selection_state != "configured":
+        return {**result, "state": "not-evaluated", "reasons": ["selection_" + selection_state]}
+    try:
+        document, digest_value = scope_document()
+    except Failure as failure:
+        return {**result, "state": "unavailable", "reasons": [failure.code]}
+    if recorded != {"id": document["id"], "document_sha256": digest_value}:
+        return {**result, "state": "document-changed", "reasons": ["scope_document_changed"]}
+    selection = PREP.PILOT.strict_json(Path(state["selection"]).read_bytes())
+    found = SCOPE.conformance(document, selection, scope_kit())
+    return {**result, "state": found["state"], "document_sha256": digest_value, "reasons": found["reasons"]}
+
+
 def describe(path, kind="file"):
     if path is None:
         return None
@@ -315,6 +406,7 @@ def plan(args):
     args.git_profile = getattr(args, "git_profile", None) or (state or {}).get(
         "git_profile", PREP.GIT_PROFILES.DEFAULT)
     report["git_selection"] = PREP.GIT_PROFILES.binding(args.git_profile)
+    report["scope"] = scope_report(args, state, inputs)
     if 'filesystem_roots_binding' in inputs:
         binding = PREP.FS_ROOTS.load(inputs['filesystem_roots_binding'], inputs.get('filesystem_workspace'))
         PREP.FS_ROOTS.outside([prefix, *[path for role,path in inputs.items()
@@ -387,6 +479,8 @@ def plan(args):
                   stages=stages, recorded_selection=state and state.get("selection"),
                   downloads_allowed_on_apply=bool(args.allow_download))
     report["missing"] = [item for row in stages for item in row.get("missing", []) if item]
+    report["missing"].extend("remove --" + row["option"].replace("_", "-") + " (excluded from the linux-v1 scope: " + row["reason"] + ")"
+                             for row in report["scope"]["refused"])
     if reason:
         report["missing"].insert(0, "run on native Ubuntu 24.04 x86_64 as a non-root user")
     if current["dirty"]:
@@ -405,6 +499,9 @@ def plan(args):
 def prepare(args):
     report = plan(args)
     report.update(command="prepare", executed=True, steps=[])
+    # Excluded capabilities refuse before any directory, download, build or selection step.
+    scope = report.get("scope") or {"selected": False, "refused": []}
+    require(not scope["refused"], "scope_excludes_capability", "scope")
     require(not report["missing"], "missing_inputs")
     prefix = args.prefix
     paths = layout(prefix)
@@ -468,6 +565,14 @@ def prepare(args):
               "allow_download": bool(args.allow_download),
               "git_profile": args.git_profile,
               "inputs": {name: str(path) for name, path in inputs.items()}}
+    if scope["selected"]:
+        # Defense in depth: the prepared (or reused) selection must itself be inside the scope before it is recorded.
+        document, digest_value = scope_document()
+        found = SCOPE.conformance(document, PREP.PILOT.strict_json(selection.read_bytes()), scope_kit())
+        if found["state"] != "conforming":
+            raise Failure("scope_selection_nonconforming", "scope", ",".join(found["reasons"]))
+        record["scope"] = {"id": document["id"], "document_sha256": digest_value}
+        scope.update(state="conforming", document_sha256=digest_value)
     write_state(prefix, record)
     report.update(status=value["status"], selection=str(selection),
                   next=PROG + " run --prefix " + str(prefix) + " (protection starts only then)")
@@ -548,6 +653,7 @@ def verified_state(prefix):
 def run(args):
     """Delegate to the accepted entry point; exact status and signals are kept."""
     state = verified_state(args.prefix)
+    scope_gate(state, getattr(args, "scope", None))
     words = [sys.executable, *PYTHON_FLAGS, str(RUNNER), "--run", "--selection", state["selection"],
              "--expected-commit", state["commit"], "--timeout-seconds", str(args.timeout_seconds),
              "--ask-wait-seconds", str(args.ask_wait_seconds), "--port", str(args.port)]
@@ -773,6 +879,7 @@ def status(args):
     reason = platform_reason()
     report["platform"] = {"supported": reason is None, "reason": reason}
     expected = None
+    state = None
     try:
         state = verified_state(args.prefix)
         code, value = child(["scripts/pilot-run.py", "--selection", state["selection"],
@@ -798,6 +905,7 @@ def status(args):
                          "configured-not-running": "a verified selection exists; nothing is protected until `run`",
                          "unavailable": "a run or selection exists but cannot protect now (see selection and runs)",
                          "unknown": "state could not be read safely", "not-configured": "nothing prepared"}[report["protection"]]
+    report["scope"] = scope_status(state, report["selection"]["state"], report["protection"])
     if sys.platform.startswith("linux"):
         try:
             with provider_profiles().Store(getattr(args, "agent_home", None) or Path.home() / ".agentfw") as provider:
@@ -883,6 +991,11 @@ def human(report):
         lines.append("Platform: " + ("supported" if platform["supported"] else "NOT supported (" + str(platform["reason"]) + ")"))
         lines.append("Source: " + report["source"]["commit"] + (" (dirty)" if report["source"]["dirty"] else " (clean)"))
         lines.append("Git profile: " + report["git_selection"]["id"] + " (configured capability; runtime use is separate)")
+        scope = report.get("scope")
+        if scope:
+            lines.append("Scope: " + ("linux-v1 selected" if scope["selected"] else "none selected") + " - " + scope["instruction"])
+            for row in scope["refused"]:
+                lines.append("  refused by scope: --" + row["option"].replace("_", "-") + " (" + row["reason"] + ")")
         lines.append("Prefix: " + report["prefix"]["path"] + (" (exists)" if report["prefix"]["exists"] else " (will be created)"))
         workspaces = report["workspaces"]
         lines.append("Roots: " + ("generated demo workspaces" if workspaces["mode"] == "generated-demo" else
@@ -902,6 +1015,10 @@ def human(report):
         lines.append("Protection: " + report["protection"] + " (" + report["meaning"] + ")")
         lines.append("Selection: " + report["selection"]["state"] + (": " + report["selection"].get("hint", "")
                      if report["selection"]["state"] != "configured" else ""))
+        scope = report.get("scope")
+        if scope:
+            lines.append("Scope " + scope["id"] + ": " + scope["state"] + "; mode " + scope["mode"] + "; shadow " + scope["shadow"]
+                         + "; " + scope["qualification"] + (" (" + ", ".join(scope.get("reasons", [])) + ")" if scope.get("reasons") else ""))
         for row in report["runs"]:
             lines.append("  run " + row["run_directory"] + ": " + str(row.get("protection")))
             for run_id in row.get("run_ids", []):
@@ -925,6 +1042,8 @@ def parser():
     inputs.add_argument("--allow-download", action="store_true", help="prepare may download pinned public inputs")
     inputs.add_argument("--git-profile", action=PREP.GIT_PROFILES.SingleProfile,
                         help="exactly one reviewed Git registry id; default git-readonly-v1")
+    inputs.add_argument("--scope", choices=(SCOPE.ID,),
+                        help="select the frozen v1 pilot scope: excluded options and nonconforming selections refuse before execution")
     for name in EXECUTABLE_INPUTS + FILE_INPUTS + DIR_INPUTS:
         inputs.add_argument("--" + name.replace("_", "-"), type=Path)
     for name in ("preview", "prepare"):
@@ -933,6 +1052,7 @@ def parser():
             command.add_argument("--apply", action="store_true", help="perform the planned preparation")
             command.add_argument("--rebuild", action="store_true", help="prepare a new generation; keep the old one")
     command = commands.add_parser("run", parents=[shared])
+    command.add_argument("--scope", choices=(SCOPE.ID,), help="assert that this prefix was prepared with the frozen v1 scope")
     command.add_argument("--prompt")
     command.add_argument("--timeout-seconds", type=int, default=180)
     command.add_argument("--ask-wait-seconds", type=int, default=0)
@@ -1115,7 +1235,7 @@ def main(argv=None):
                     value = getattr(args, field, None)
                     if value is not None: words += ["--" + field, value]
             for name in ("prompt", "timeout_seconds", "ask_wait_seconds", "state_root", "port",
-                         "budget_preset", "budget_preset_digest"):
+                         "budget_preset", "budget_preset_digest", "scope"):
                 value = getattr(args, name, None)
                 if value is not None:
                     words += ["--" + name.replace("_", "-"), str(value)]

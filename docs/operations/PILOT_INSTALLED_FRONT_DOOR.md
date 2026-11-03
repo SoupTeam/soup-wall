@@ -71,6 +71,13 @@ bubblewrap preparation, Node, Claude Code and the selection step work as in the
 checkout. A component install, `verify` or a file hash never reports
 protection; only `agentfw pilot status` reports it, with the same meanings.
 
+## Frozen v1 scope
+
+`agentfw pilot preview|prepare|run|status` accept `--scope linux-v1` exactly as the checkout command does; see the
+[v1 scope](PILOT_V1_SCOPE.md). The descriptor and its helper are part of the verified component, so the same bindings
+are recomputed from the installed files, and a component whose descriptor differs from a prefix's recorded scope
+refuses before any launch.
+
 ## Named project presets
 
 `agentfw pilot project` keeps up to 16 explicit operator shortcuts under the
