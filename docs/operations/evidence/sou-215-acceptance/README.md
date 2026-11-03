@@ -30,7 +30,7 @@ the installed-pilot report does not contain (its cases cover reads, refused untr
 recovery, daemon loss and bad-input controls). That gap was closed by adding the existing first-use demo to the same focus,
 not by changing any case or limit.
 
-### Attempt 2 (passed)
+### Attempt 2 (passed, superseded by the final source below)
 
 Run `41631180107`, exact source `e3d629869c0cb048c778005470f62a3fe1485c5a`, clean tree:
 
@@ -50,6 +50,25 @@ scope driver `d2fd6b990198c6fc124a287cac9df39928fd87fd6d59350d0849fbadea879f2d`,
 `cef286c82e3899c5d09b587a9891851a0f4fd8c563255f69ee0207333b1abaad`, demo
 `cc19ea1ce7a4c679457fe739034a2c5977fef8bd002787e12871769a82276def` (artifact `sou215-pilot-scope-41631180107-1`).
 Later commits that change only this ledger are not re-qualified.
+
+### Final source `5359eab0` (passed)
+
+After the demo was added, an adversarial review of the change found that a missing or malformed selection file made `scope_gate`
+and `scope_status` raise an uncaught error. `5359eab0` turns that into the finite refusal `scope_selection_nonconforming` (status state
+`unavailable`) with a regression control. Because `scripts/pilot.py` changed, the whole focus was run again on the final source.
+
+Run `41634306559`, exact source `5359eab0`, clean tree, all three commands passed:
+
+| Command | Result | Report SHA-256 |
+| --- | --- | --- |
+| `qualify-installed-front-door.py --run --pilot-scope-only` | passed (16 of 16: standard installed cases plus the 8 scope cases) | `a6cfaee46c81f4811a4d5819510c52b69f14b08da8bc247a19722dd43f87ca1e` |
+| `qualify-installed-pilot.py --run` on the scope-selected generation | passed (12 of 12) | `073e6042422137e3c5b54386b687c36f1ba0198a0b577b6d7882c769d3931465` |
+| `pilot-demo.py --run` on the same generation | passed (12 of 12, including `ask`, `daemon-loss`, `host-crash`, `timeout`) | `a456fc8e2bb7efb02d9ba4d7ab01c4f08b12a850b3d663614c591b537e5cb5a6` |
+
+Log SHA-256 values: scope driver `e8544cf870bd6245d780c84251a543a69cf71a378d16032a212a9efb41295ce1`, installed pilot
+`a4e544819e40f9740f6d487b113d037cb3486cbd01e0c920fe8c471532354c0d`, demo
+`3923b3609ab13af7f81233185d732ee5d8ff0d3c2c813f61f5f3a793c8a4096a` (artifact `sou215-pilot-scope-41634306559-1`).
+The earlier attempts above describe earlier sources and are not relabelled. Later commits that change only this ledger are not re-qualified.
 
 ## Known boundaries
 
