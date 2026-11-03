@@ -18,15 +18,38 @@ refusal logic.
 
 ## Native Linux (installed front door)
 
-_Results pending: no native run has been recorded for this ledger yet._ Required cases of the installed driver's
-`--pilot-scope-only` mode: the standard `component-install`, `preview-zero-effect`, `prepare-and-reuse`,
-`existing-selection-status`, `status-configured`, `useful` (useful filesystem read and Git history, refused
-write/reset/send with independent witnesses and live `observed-live` status with `scope.mode: enforce`), `status-after-run`
-and `cancel` cases run on the scope-selected prefix, plus `scope-selected-through-preview-and-prepare`, `excluded-option-preview`,
-`standard-cases-ran-under-scope`, `excluded-capability-refused`, `tampered-scope-refused`, `unselected-claims-nothing`,
-`status-never-claims-more` and `owned-cleanup`. The existing `qualify-installed-pilot.py --run` command and the first-use demo
-`pilot-demo.py --run` then run on the generation prepared by the scope-selected prefix for daemon loss, refused effects and
-cleanup (installed pilot) and the explicit single-use Ask control, timeout and daemon-loss recovery (demo).
+Workflow `mcp-real-filesystem.yml`, manual dispatch with `installed_focus: pilot-scope` and `native_preparation_only`, on a
+native Ubuntu 24.04 x86_64 runner outside the checkout with the pinned original servers, genuine Claude Code 2.1.251 and the
+owned scripted loopback provider (no model account or paid call).
+
+### Attempt 1 (kept)
+
+Run `41629304663`, source `184e3a10`: the scope driver (16 of 16: the 8 standard installed cases plus the 8 scope cases) and the
+existing `qualify-installed-pilot.py --run` (12 of 12) passed. The task also requires the explicit single-use Ask control, which
+the installed-pilot report does not contain (its cases cover reads, refused untrusted input, parallel cancellation, collector
+recovery, daemon loss and bad-input controls). That gap was closed by adding the existing first-use demo to the same focus,
+not by changing any case or limit.
+
+### Attempt 2 (passed)
+
+Run `41631180107`, exact source `e3d629869c0cb048c778005470f62a3fe1485c5a`, clean tree:
+
+| Command | Result | Report SHA-256 |
+| --- | --- | --- |
+| `qualify-installed-front-door.py --run --pilot-scope-only` | passed: standard `component-install`, `preview-zero-effect`, `prepare-and-reuse`, `existing-selection-status`, `status-configured`, `useful`, `status-after-run`, `cancel` and all 8 scope cases | `e05505b8a5fecfabfeaf017cfc8566d306503c695cf47390784e5ad0a912fa3f` |
+| `qualify-installed-pilot.py --run` on the scope-selected generation | passed (12 cases: exact installed inputs, sandbox positive, witness calibration, read and history, inspect and diff, untrusted-input refusal, independent conversation, parallel cancellation, collector recovery, daemon fresh conversation, bad-input controls, final cleanup) | `a567b667d2e30f604fecf4166f47397fc93b4d4f30c63eba88466ef13cd0d876` |
+| `pilot-demo.py --run` on the same generation | passed (12 cases: plan, occupied-port, stale-source, changed-selection, provider-unavailable, useful-refusal, **ask**, default, cancel, **daemon-loss**, host-crash, timeout) | `7df839b6cbea2542709636843b4aaf25cf430d5b4df9963c44c8317f15508180` |
+
+Scope cases, all `passed`: `scope-selected-through-preview-and-prepare` (recorded descriptor identity, preview selected with no
+refusals and no effects), `excluded-option-preview`, `standard-cases-ran-under-scope` (live status during the useful and cancel
+runs reported `scope.state: conforming`, `scope.mode: enforce` and `unqualified`; 2 useful and 3 refused results),
+`excluded-capability-refused` (`scope_excludes_capability`, 0 selected-program starts, 0 network connections, prefix and recorded
+state byte-identical), `tampered-scope-refused` (status `document-changed`; run refused with `scope_document_changed` and zero
+starts; state restored), `unselected-claims-nothing`, `status-never-claims-more`, `owned-cleanup`. Log SHA-256 values:
+scope driver `d2fd6b990198c6fc124a287cac9df39928fd87fd6d59350d0849fbadea879f2d`, installed pilot
+`cef286c82e3899c5d09b587a9891851a0f4fd8c563255f69ee0207333b1abaad`, demo
+`cc19ea1ce7a4c679457fe739034a2c5977fef8bd002787e12871769a82276def` (artifact `sou215-pilot-scope-41631180107-1`).
+Later commits that change only this ledger are not re-qualified.
 
 ## Known boundaries
 
