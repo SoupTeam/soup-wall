@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 
@@ -53,6 +54,61 @@ def bounded_file(path):
         fail("input_too_large")
     # Git may check text out with CRLF. The lock binds canonical LF bytes.
     return data.replace(b"\r\n", b"\n")
+
+
+def public_policy_snapshot(path, data):
+    """Make only verified, nonsecret policy bytes readable by the container UID.
+
+    Existing owner-only snapshots are repaired through their verified descriptor.
+    Symlinks, reparse points, hardlinks and special files are never chmod targets.
+    """
+    flags = getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    created = False
+    try:
+        try:
+            descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL | flags, 0o644)
+            created = True
+        except FileExistsError:
+            descriptor = os.open(path, os.O_RDONLY | flags)
+    except OSError:
+        fail("unsafe_policy_snapshot")
+    with os.fdopen(descriptor, "r+b" if created else "rb") as handle:
+        opened = os.fstat(handle.fileno())
+        named = path.lstat()
+        reparse = getattr(named, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+        if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1
+                or stat.S_ISLNK(named.st_mode) or reparse
+                or (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
+                or (os.name == "posix" and opened.st_uid != os.geteuid())):
+            fail("unsafe_policy_snapshot")
+        if created:
+            handle.write(data)
+            handle.flush()
+            handle.seek(0)
+        if handle.read(MAX_BYTES + 1).replace(b"\r\n", b"\n") != data:
+            fail("staged_policy_changed")
+        # Policy is public source material, unlike the protected environment
+        # file. UID65532 must be able to read a Linux host bind mount.
+        if os.name == "posix":
+            os.fchmod(handle.fileno(), 0o644)
+        final = path.lstat()
+        if (opened.st_dev, opened.st_ino) != (final.st_dev, final.st_ino):
+            fail("unsafe_policy_snapshot")
+
+
+def same_mount_source(actual, expected):
+    if not isinstance(actual, str) or expected is None:
+        return False
+    expected = str(expected)
+    if os.name == "nt":
+        # Docker Desktop preserves the full Windows path with forward slashes.
+        # Normalize separators and drive-letter case only, never a path suffix
+        # or Linux filename case.
+        actual, expected = actual.replace("\\", "/"), expected.replace("\\", "/")
+        if not re.match(r"[A-Za-z]:/", actual) or not re.match(r"[A-Za-z]:/", expected):
+            return False
+        actual, expected = actual[0].lower() + actual[1:], expected[0].lower() + expected[1:]
+    return actual == expected
 
 
 def no_duplicates(pairs):
@@ -249,7 +305,8 @@ class ProductionCompose:
             if (service.get("image") != row["reference"]
                     or service.get("platform") != self.platform
                     or service.get("pull_policy") != "never" or "build" in service
-                    or service.get("profiles") or service.get("container_name")):
+                    or service.get("profiles") or service.get("container_name")
+                    or service.get("privileged") or service.get("cap_add")):
                 fail("compose_image_or_execution_override")
         firewall = model["services"]["firewall"]
         ports = firewall.get("ports", [])
@@ -288,10 +345,7 @@ class ProductionCompose:
                 fail("unsafe_policy_staging_path")
         staging.mkdir(parents=True, exist_ok=True)
         policy = staging / (sha256(self.snapshot["deploy/production.firewall.yaml"]) + ".yaml")
-        if not policy.exists():
-            descriptor = os.open(policy, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(self.snapshot["deploy/production.firewall.yaml"])
+        public_policy_snapshot(policy, self.snapshot["deploy/production.firewall.yaml"])
         self.policy_snapshot = policy
         self.unchanged()
         model["services"]["firewall"]["volumes"][0]["source"] = str(policy)
@@ -359,6 +413,8 @@ class ProductionCompose:
     def _verify_container_isolation(self, name, container):
         host = container.get("HostConfig", {})
         mounts = container.get("Mounts", [])
+        if host.get("Privileged") or host.get("CapAdd"):
+            fail("container_runtime_isolation_mismatch")
         if name == "firewall":
             if (host.get("ReadonlyRootfs") is not True or set(host.get("CapDrop", [])) != {"ALL"}
                     or not {"no-new-privileges", "no-new-privileges:true"}.intersection(host.get("SecurityOpt", []))
@@ -367,6 +423,7 @@ class ProductionCompose:
             policy_mounts = [m for m in mounts if m.get("Destination") == "/app/firewall.yaml"]
             if (len(policy_mounts) != 1 or policy_mounts[0].get("Type") != "bind"
                     or policy_mounts[0].get("RW") is not False
+                    or not same_mount_source(policy_mounts[0].get("Source"), self.policy_snapshot)
                     or any(m.get("Destination") not in {"/app/firewall.yaml", "/tmp"} for m in mounts)):
                 fail("container_policy_mount_mismatch")
         else:

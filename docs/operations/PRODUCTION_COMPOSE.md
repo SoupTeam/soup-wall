@@ -73,6 +73,10 @@ the pinned dependencies before invoking the existing one-shot migration.
 `--no-deps`, then checks every actual container's image ID, project/service
 ownership, process/environment configuration, data-volume identity, isolation
 and health. Secret values are compared in memory and never included in reports.
+The actual Gateway bind source must equal the verified policy snapshot's full
+path. Windows Desktop drive/separator notation is normalized; an equal basename
+under another directory is insufficient. Added capabilities or privileged mode
+are refused even when the all-capabilities drop setting is also present.
 No Gateway startup follows a wrong/missing image,
 unsupported architecture, changed source/configuration or failed dependency
 verification.
@@ -95,6 +99,11 @@ The nonsecret mounted policy is retained under ignored
 its container exists: a container restart needs the same host bind source. Each
 invocation checks its bytes and the original source inputs. Earlier snapshots
 are retained for an explicit rollback; they are not automatically deleted.
+On POSIX hosts this public, nonsecret policy is mode0644 so the container's
+UID65532 can read it. An earlier0600 snapshot is repaired only through an owned,
+regular, single-link descriptor whose bytes match the reviewed public policy;
+symlinks, hardlinks, special files and unmatched content are refused. Deployment
+environment files remain protected and are never changed by that repair.
 
 Reports contain selected image IDs, daemon platform and canonical-LF source
 configuration/lock digests. They exclude credential values, resolved URLs,

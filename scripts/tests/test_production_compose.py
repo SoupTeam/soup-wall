@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -85,7 +86,8 @@ class FakeDocker:
             "HostConfig": {"ReadonlyRootfs": name == "firewall", "CapDrop": ["ALL"] if name == "firewall" else [],
                            "SecurityOpt": ["no-new-privileges:true"] if name == "firewall" else [],
                            "PortBindings": {"8080/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8080"}]} if name == "firewall" else {}},
-            "Mounts": ([{"Type": "bind", "Destination": "/app/firewall.yaml", "RW": False}]
+            "Mounts": ([{"Type": "bind", "Destination": "/app/firewall.yaml", "RW": False,
+                         "Source": service["volumes"][0]["source"].replace("\\", "/")}]
                        if name == "firewall" else [{"Type": "volume", "Name": "owned-test_" + name + "-data",
                            "Destination": "/var/lib/postgresql/data" if name == "postgres" else "/data", "RW": True}])}
         if self.modern:
@@ -392,6 +394,90 @@ class ProductionComposeControls(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.ClosureError, "local_manifest_identity"):
             self.closure().execute("start")
         self.assertEqual(self.docker.mutations(), [])
+
+    def test_wrong_policy_bind_source_refuses_before_start(self):
+        self.docker.add_container("firewall")
+        expected_name = MODULE.sha256((self.root / "deploy/production.firewall.yaml").read_bytes().replace(b"\r\n", b"\n")) + ".yaml"
+        self.docker.containers["firewall"]["Mounts"][0]["Source"] = str(self.root / "other" / expected_name)
+        with self.assertRaisesRegex(MODULE.ClosureError, "container_policy_mount_mismatch"):
+            self.closure().execute("start")
+        self.assertEqual(self.docker.mutations(), [])
+
+    def test_added_capability_or_privileged_mode_refuses_even_with_all_dropped(self):
+        for name in ("firewall", "postgres", "redis"):
+            for field, value in (("CapAdd", ["SYS_ADMIN"]), ("Privileged", True)):
+                with self.subTest(name=name, field=field):
+                    self.docker.containers.clear()
+                    self.docker.add_container(name)
+                    self.docker.containers[name]["HostConfig"][field] = value
+                    with self.assertRaisesRegex(MODULE.ClosureError, "container_runtime_isolation_mismatch"):
+                        self.closure().execute("start")
+                    self.assertEqual(self.docker.mutations(), [])
+
+    def test_rendered_privileged_or_added_capability_refuses_before_start(self):
+        for field, value in (("cap_add", ["SYS_ADMIN"]), ("privileged", True)):
+            with self.subTest(field=field):
+                self.docker.model_override = lambda m: m["services"]["firewall"].update({field: value})
+                with self.assertRaisesRegex(MODULE.ClosureError, "compose_image_or_execution_override"):
+                    self.closure().execute("start")
+                self.assertEqual(self.docker.mutations(), [])
+
+    @unittest.skipUnless(os.name == "posix", "POSIX mode semantics")
+    def test_policy_is_container_readable_under_private_process_umask(self):
+        previous = os.umask(0o077)
+        try:
+            closure = self.closure()
+            closure.execute("check")
+        finally:
+            os.umask(previous)
+        self.assertEqual(stat.S_IMODE(closure.policy_snapshot.stat().st_mode), 0o644)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX mode semantics")
+    def test_existing_0600_policy_snapshot_is_repaired(self):
+        closure = self.closure()
+        closure.execute("check")
+        closure.policy_snapshot.chmod(0o600)
+        self.closure().execute("check")
+        self.assertEqual(stat.S_IMODE(closure.policy_snapshot.stat().st_mode), 0o644)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX link and chmod semantics")
+    def test_policy_symlink_never_changes_external_target_mode(self):
+        target = self.root / "external-policy.yaml"
+        target.write_bytes(b"same verified policy bytes")
+        target.chmod(0o600)
+        link = self.root / "snapshot.yaml"
+        link.symlink_to(target)
+        with self.assertRaises(MODULE.ClosureError):
+            MODULE.public_policy_snapshot(link, b"same verified policy bytes")
+        self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX link and chmod semantics")
+    def test_policy_hardlink_never_changes_shared_target_mode(self):
+        target = self.root / "external-policy.yaml"
+        target.write_bytes(b"same verified policy bytes")
+        target.chmod(0o600)
+        link = self.root / "snapshot.yaml"
+        os.link(target, link)
+        with self.assertRaisesRegex(MODULE.ClosureError, "unsafe_policy_snapshot"):
+            MODULE.public_policy_snapshot(link, b"same verified policy bytes")
+        self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX FIFO semantics")
+    def test_policy_fifo_refuses_without_blocking_or_chmod(self):
+        fifo = self.root / "snapshot.yaml"
+        os.mkfifo(fifo, 0o600)
+        with self.assertRaisesRegex(MODULE.ClosureError, "unsafe_policy_snapshot"):
+            MODULE.public_policy_snapshot(fifo, b"policy")
+        self.assertEqual(stat.S_IMODE(fifo.stat().st_mode), 0o600)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX chmod semantics")
+    def test_unmatched_policy_bytes_are_never_made_public(self):
+        path = self.root / "unmatched-snapshot.yaml"
+        path.write_bytes(b"unmatched private bytes")
+        path.chmod(0o600)
+        with self.assertRaisesRegex(MODULE.ClosureError, "staged_policy_changed"):
+            MODULE.public_policy_snapshot(path, b"expected public policy bytes")
+        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
 
 
 if __name__ == "__main__":
