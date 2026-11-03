@@ -31,10 +31,14 @@ FS = "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json"
 GIT = "profiles/mcp/git-readonly-v1/upstream-tools-list.json"
 # Accepted raw pins: filesystem in profiles/pilot/linux-readonly-v1/manifest.json,
 # Git in profiles/mcp/git-readonly-v1/upstream-identity.json.
-# Revision whose installer functions and snapshots the reproduced registries
-# are asserted to come from. schema-upgrade-demo.py verifies, with read-only
-# git, that every input file below is byte-identical to this revision.
-ACCEPTED_BASE = "b385e7506ab26896637f348e3180e52d1fc6d423"
+# ORIGINAL_TASK_BASE is the accepted main SOU-204 started from (historical).
+# INTEGRATION_BASE is the pinned main revision merged into the branch; the
+# reproduced registries come from the installer functions at that revision.
+# schema-upgrade-demo.py verifies, with read-only git, that every input below
+# is byte-identical to INTEGRATION_BASE and records upstream changes since the
+# original task base.
+ORIGINAL_TASK_BASE = "b385e7506ab26896637f348e3180e52d1fc6d423"
+INTEGRATION_BASE = "7f973f0b82480090e3de51111a90f550ea6a0d57"
 FS_INSTALLER = "scripts/install-sou62-filesystem-profile.py"
 GIT_INSTALLER = "scripts/install-sou68-git-profile.py"
 PINS = {
@@ -312,13 +316,20 @@ def build():
 
     fs_installer = load_module("sou62_installer", FS_INSTALLER)
     git_installer = load_module("sou68_installer", GIT_INSTALLER)
-    git_parameters = {"local_references": False, "file_revisions": False, "shallow_repository": False}
+    # Every capability parameter is passed explicitly at its default.
+    fs_parameters = {"filesystem_roots": False}
+    git_parameters = {"local_references": False, "file_revisions": False, "shallow_repository": False,
+                      "linked_worktree": False}
+    # Modules the installers execute at import time (registry() depends on them).
+    fs_imports = ["scripts/pilot_provider.py", "scripts/pilot_filesystem_roots.py"]
+    git_imports = ["scripts/pilot_provider.py", FS_INSTALLER, "scripts/pilot_filesystem_roots.py"]
     registries = {
-        "filesystem-readonly-v1.registry.json": (fs_installer.registry(fs), FS, FS_INSTALLER, {}),
+        "filesystem-readonly-v1.registry.json": (fs_installer.registry(fs, **fs_parameters), FS, FS_INSTALLER,
+                                                 fs_parameters, fs_imports),
         "git-readonly-v1.registry.json": (git_installer.registry(git, **git_parameters), GIT,
-                                          GIT_INSTALLER, git_parameters),
+                                          GIT_INSTALLER, git_parameters, git_imports),
     }
-    for name, (value, base, installer, parameters) in registries.items():
+    for name, (value, base, installer, parameters, imports) in registries.items():
         data = dump(value)
         files[name] = data
         entries.append({
@@ -326,8 +337,9 @@ def build():
             "provenance_status": "reproduced from the accepted installer function; NOT an observed "
                                  "installed operator registry",
             "baseline": base, "baseline_raw_sha256": PINS[base],
-            "accepted_base_revision": ACCEPTED_BASE,
+            "original_task_base": ORIGINAL_TASK_BASE, "integration_baseline": INTEGRATION_BASE,
             "installer": installer, "installer_git_blob": git_blob(ROOT / installer),
+            "installer_imports": {path: git_blob(ROOT / path) for path in imports},
             "function": "registry", "parameters": parameters,
             "serialization": "json.dumps(indent=2, ensure_ascii=False) + newline, as installer private_json",
             "fixture_raw_sha256": sha(data)})

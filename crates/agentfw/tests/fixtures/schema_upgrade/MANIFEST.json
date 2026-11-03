@@ -313,11 +313,18 @@
       "provenance_status": "reproduced from the accepted installer function; NOT an observed installed operator registry",
       "baseline": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
       "baseline_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
-      "accepted_base_revision": "b385e7506ab26896637f348e3180e52d1fc6d423",
+      "original_task_base": "b385e7506ab26896637f348e3180e52d1fc6d423",
+      "integration_baseline": "7f973f0b82480090e3de51111a90f550ea6a0d57",
       "installer": "scripts/install-sou62-filesystem-profile.py",
-      "installer_git_blob": "7e1d44ab1df78d3aee5cc23f16db4c438f52c7c2",
+      "installer_git_blob": "593c454f78223a6a4ea5045059a0d4eb2fdf167f",
+      "installer_imports": {
+        "scripts/pilot_provider.py": "d46a6402c0273e79de5ab8c010eecc11a2e4045a",
+        "scripts/pilot_filesystem_roots.py": "0c2afbe6a8a9e82b59fa4830c3317f921a0376be"
+      },
       "function": "registry",
-      "parameters": {},
+      "parameters": {
+        "filesystem_roots": false
+      },
       "serialization": "json.dumps(indent=2, ensure_ascii=False) + newline, as installer private_json",
       "fixture_raw_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7"
     },
@@ -328,14 +335,21 @@
       "provenance_status": "reproduced from the accepted installer function; NOT an observed installed operator registry",
       "baseline": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
       "baseline_raw_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
-      "accepted_base_revision": "b385e7506ab26896637f348e3180e52d1fc6d423",
+      "original_task_base": "b385e7506ab26896637f348e3180e52d1fc6d423",
+      "integration_baseline": "7f973f0b82480090e3de51111a90f550ea6a0d57",
       "installer": "scripts/install-sou68-git-profile.py",
-      "installer_git_blob": "52e67a45e9f562817d14ce33ac9128512513b64d",
+      "installer_git_blob": "68ac85108f2cc5ff98b6e4cc674923d62ff7564f",
+      "installer_imports": {
+        "scripts/pilot_provider.py": "d46a6402c0273e79de5ab8c010eecc11a2e4045a",
+        "scripts/install-sou62-filesystem-profile.py": "593c454f78223a6a4ea5045059a0d4eb2fdf167f",
+        "scripts/pilot_filesystem_roots.py": "0c2afbe6a8a9e82b59fa4830c3317f921a0376be"
+      },
       "function": "registry",
       "parameters": {
         "local_references": false,
         "file_revisions": false,
-        "shallow_repository": false
+        "shallow_repository": false,
+        "linked_worktree": false
       },
       "serialization": "json.dumps(indent=2, ensure_ascii=False) + newline, as installer private_json",
       "fixture_raw_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385"

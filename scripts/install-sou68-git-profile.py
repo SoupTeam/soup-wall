@@ -85,11 +85,11 @@ def dependencies(executables, package):
     return [{"path": path, "sha256": sha(path)} for path in sorted(paths)]
 
 
-def registry(manifest, *, local_references=False, file_revisions=False, shallow_repository=False):
-    if sum((local_references, file_revisions, shallow_repository)) > 1:
+def registry(manifest, *, local_references=False, file_revisions=False, shallow_repository=False, linked_worktree=False):
+    if sum((local_references, file_revisions, shallow_repository, bool(linked_worktree))) > 1:
         raise ValueError("combined Git capabilities are not qualified")
-    selected_format = FILE_READS_FORMAT if file_revisions else SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT
-    registry_id = "git-readonly-file-revisions-v1" if file_revisions else "git-readonly-shallow-v1" if shallow_repository else "git-readonly-local-refs-v1" if local_references else "git-readonly-v1"
+    selected_format = "sw-mcp/git-linked-worktree-readonly/1" if linked_worktree else FILE_READS_FORMAT if file_revisions else SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT
+    registry_id = "git-linked-worktree-readonly-v1" if linked_worktree else "git-readonly-file-revisions-v1" if file_revisions else "git-readonly-shallow-v1" if shallow_repository else "git-readonly-local-refs-v1" if local_references else "git-readonly-v1"
     return {"contract_version": "sw-native/1", "registry_id": registry_id, "tools": [
         {"name": tool["name"],
          "schema_sha256": hashlib.sha256(filesystem.canonical(tool["inputSchema"])).hexdigest(),
@@ -101,8 +101,8 @@ def registry(manifest, *, local_references=False, file_revisions=False, shallow_
 
 def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
             *, static_git=False, python_archive=None, wheelhouse=None, allow_download=True, log=None,
-            local_references=False, file_revisions=False, shallow_repository=False):
-    if sum((local_references, file_revisions, shallow_repository)) > 1:
+            local_references=False, file_revisions=False, shallow_repository=False, linked_worktree=None):
+    if sum((local_references, file_revisions, shallow_repository, bool(linked_worktree))) > 1:
         raise ValueError("combined Git capabilities are not qualified")
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise ValueError("Git profile requires Linux x86-64; no isolation fallback")
@@ -110,7 +110,10 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     destination = Path(destination).absolute()
     if destination.exists() or destination.is_symlink() or destination.is_relative_to(workspace):
         raise ValueError("destination must be new and outside the repository")
-    if not (workspace / ".git").is_dir() or workspace == Path("/"):
+    if linked_worktree is not None:
+        import pilot_linked_worktree as linked
+        linked.verify(linked_worktree, workspace)
+    elif not (workspace / ".git").is_dir() or workspace == Path("/"):
         raise ValueError("standalone synthetic non-bare repository required")
     if not re.fullmatch(r"[0-9a-f]{64}", git_sha256) or sha(git) != git_sha256:
         raise ValueError("supplied Git binary digest mismatch")
@@ -121,7 +124,7 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     bwrap_help = subprocess.check_output([str(bwrap), "--help"], text=True, timeout=10, env=utility_environment())
     if "--ro-bind-fd" not in bwrap_help:
         raise ValueError("bubblewrap --ro-bind-fd is required")
-    if (local_references or file_revisions or shallow_repository) and "--ro-bind-data" not in bwrap_help:
+    if (local_references or file_revisions or shallow_repository or linked_worktree is not None) and "--ro-bind-data" not in bwrap_help:
         raise ValueError("local references require bubblewrap --ro-bind-data")
     for name, expected in identity["files"].items():
         if Path(name).name != name or sha(ASSETS / name) != expected:
@@ -174,16 +177,18 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     # Default v1 dependency discovery and all v1 CLI behavior remain unchanged.
     elf_files = [python, git_launcher] if static_git else [python, git, git_launcher]
     elf_files.extend(path for path in (package / "python/lib").rglob("*.so") if path.is_file())
-    profile = {"format": FILE_READS_FORMAT if file_revisions else SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT,
+    profile = {"format": "sw-mcp/git-linked-worktree-readonly/1" if linked_worktree is not None else FILE_READS_FORMAT if file_revisions else SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT,
                "workspace": str(workspace), "runtimePath": str(python),
                "runtimeSha256": sha(python), "packageRoot": str(package), "packageTreeSha256": tree_sha(package),
                "bwrapPath": str(bwrap), "bwrapSha256": sha(bwrap),
                "git": {"path": str(git), "sha256": git_sha256},
                "gitLauncher": {"path": str(git_launcher), "sha256": sha(git_launcher)},
                "libraries": dependencies(elf_files, package)}
+    if linked_worktree is not None:
+        profile.update(linkedWorktree=linked_worktree, workspaceIdentity=linked_worktree["workspace"]["identity"])
     private_json(destination / "profile.json", profile)
     manifest = json.loads((ASSETS / "upstream-tools-list.json").read_text())
-    private_json(destination / "registry.json", registry(manifest, local_references=local_references, file_revisions=file_revisions, shallow_repository=shallow_repository))
+    private_json(destination / "registry.json", registry(manifest, local_references=local_references, file_revisions=file_revisions, shallow_repository=shallow_repository, linked_worktree=linked_worktree is not None))
     shutil.copyfile(ASSETS / "policy.yaml", destination / "policy.yaml")
     os.chmod(destination / "policy.yaml", 0o600)
     shutil.copytree(ASSETS / "upstream-notices", destination / "upstream-notices")

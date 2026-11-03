@@ -267,10 +267,17 @@ mutation and the expected outcome.
 `filesystem-readonly-v1.registry.json` and `git-readonly-v1.registry.json` are
 **reproduced**, not observed: they are the output of the accepted installer
 functions `registry(manifest, …)` on the accepted snapshots, serialized as the
-installers write them. Their MANIFEST entries record the installer path and
-SHA-256, the explicit call parameters and the asserted accepted base revision.
-The demonstration verifies those installers are byte-identical to the base
-blobs. **No committed file holds an installed filesystem/Git operator
+installers write them. Their MANIFEST entries record:
+
+- the installer path and its line-ending-normalized git blob id;
+- the git blob ids of the modules each installer executes on import;
+- the explicit call parameters, with every capability flag at its default;
+- the original task base and the integration baseline, which is the main
+  revision the branch was last integrated with.
+
+The demonstration verifies the installers and their imports against the
+integration baseline. It also records which dependencies changed upstream since
+the original task base. **No committed file holds an installed filesystem/Git operator
 registry**: the installer generates it into the operator's private profile at
 install time. The `fs-control-*` registries are labelled synthetic controls.
 

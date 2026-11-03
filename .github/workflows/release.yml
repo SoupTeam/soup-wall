@@ -28,6 +28,10 @@ on:
         description: "External JSON acceptance record (required if promote_run_id is set)"
         required: false
         type: string
+      operator_approval:
+        description: "Separate operator approval JSON binding the reviewed readiness index and candidate"
+        required: false
+        type: string
 
 env:
   TAG: ${{ inputs.tag || github.ref_name }}
@@ -284,7 +288,7 @@ jobs:
       - name: Log Promotion Instructions
         run: |
           echo "Candidate successfully prepared and frozen!"
-          echo "To promote and publish, dispatch this workflow using promote_run_id=${{ github.run_id }} and provide the acceptance_record."
+          echo "Promotion requires the reviewed readiness bundle, acceptance_record and separate operator_approval for promote_run_id=${{ github.run_id }}."
 
   promote:
     name: Promote & Publish
@@ -313,16 +317,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACCEPTANCE_RECORD: ${{ inputs.acceptance_record }}
+          OPERATOR_APPROVAL: ${{ inputs.operator_approval }}
+          PROMOTE_RUN_ID: ${{ inputs.promote_run_id }}
         run: |
           set -euo pipefail
-          
-          if [ -z "$ACCEPTANCE_RECORD" ]; then
-             echo "CRITICAL: No acceptance record provided."
+          umask 077
+
+          if [ -z "$ACCEPTANCE_RECORD" ] || [ -z "$OPERATOR_APPROVAL" ]; then
+             echo "CRITICAL: Acceptance record and separate operator approval are required."
              exit 1
           fi
-          
-          echo "$ACCEPTANCE_RECORD" > external-acceptance.json
-          
+
+          printf '%s\n' "$ACCEPTANCE_RECORD" > external-acceptance-input.json
+          printf '%s\n' "$OPERATOR_APPROVAL" > operator-approval.json
+          # Parse bounded JSON with duplicate-key/type checks before any API ID is used.
+          python3 scripts/validate_candidate.py record-metadata external-acceptance-input.json > external-acceptance.json
+
           EXPECTED_RUN_ID=$(jq -r '.run_id // empty' external-acceptance.json)
           EXPECTED_ARTIFACT_ID=$(jq -r '.artifact_id // empty' external-acceptance.json)
           EXPECTED_ARTIFACT_DIGEST=$(jq -r '.artifact_digest // empty' external-acceptance.json)
@@ -339,7 +349,7 @@ jobs:
              echo "CRITICAL: Acceptance record must contain 'artifact_digest'."
              exit 1
           fi
-          if [ "$EXPECTED_RUN_ID" != "${{ inputs.promote_run_id }}" ]; then
+          if [ "$EXPECTED_RUN_ID" != "$PROMOTE_RUN_ID" ]; then
              echo "CRITICAL: Target promote_run_id does not match approved run_id."
              exit 1
           fi
@@ -386,14 +396,50 @@ jobs:
           echo "$EXPECTED_ARTIFACT_DIGEST  package.zip" > archive.sha256
           sha256sum --strict -c archive.sha256
           
-          mkdir dist
-          unzip package.zip -d dist/
+          python3 scripts/validate_candidate.py extract package.zip dist --sha256 "$EXPECTED_ARTIFACT_DIGEST"
 
-      - name: SOU-26 Product Evidence Gate
+          READINESS_ARTIFACT_ID=$(jq -r '.readiness.artifact_id' external-acceptance.json)
+          READINESS_ARCHIVE_SHA256=$(jq -r '.readiness.archive_sha256' external-acceptance.json)
+          # The external record pins an exact artifact in this repository, never a URL.
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${READINESS_ARTIFACT_ID}/zip" > readiness.zip
+          python3 scripts/validate_candidate.py extract readiness.zip readiness-bundle --sha256 "$READINESS_ARCHIVE_SHA256" --readiness
+
+      - name: Prepare write-boundary revalidation
         shell: bash
         run: |
+          set -euo pipefail
+          # Fixed local helper; every write boundary refreshes GitHub custody,
+          # then runs the offline verifier again over the actual retained bytes.
+          cat > promotion-admission.sh <<'SH'
+          #!/bin/bash
+          set -euo pipefail
+          test "$#" -eq 1
+          EXPECTED_SHA="$1"
+          cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+          python3 scripts/validate_candidate.py record-metadata external-acceptance.json > refreshed-record.json
+          RUN_ID=$(jq -r '.run_id' refreshed-record.json)
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" > refreshed-run.json
+          ATTEMPT=$(jq -er '.run_attempt | tostring | select(test("^[1-9][0-9]*$"))' refreshed-run.json)
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${ATTEMPT}/jobs" > refreshed-jobs.json
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts" > refreshed-artifacts.json
+          PREPARE_STATUS=$(jq -r '.jobs[] | select(.name == "Prepare & Freeze Candidate") | .conclusion // "missing"' refreshed-jobs.json)
+          ARTIFACT_ID=$(jq -r '.artifacts[] | select(.name == "candidate-package" and .expired == false) | .id' refreshed-artifacts.json)
+          jq --arg run_id "$RUN_ID" --arg job "$PREPARE_STATUS" --arg artifact "$ARTIFACT_ID" \
+            '{run_id:$run_id, run_attempt:(.run_attempt|tostring), workflow_path:.path,
+              event:.event, repository:.repository.full_name, prepare_job_status:$job,
+              artifact_id:$artifact, status:.status, conclusion:.conclusion,
+              head_sha:.head_sha, head_branch:.head_branch}' refreshed-run.json > api-context.json
           cd dist
-          ../scripts/validate_candidate.sh ../external-acceptance.json candidate-manifest.json "${TAG}" "${{ steps.ref.outputs.sha }}" ../api-context.json full
+          exec ../scripts/validate_candidate.sh ../external-acceptance.json candidate-manifest.json "$TAG" "$EXPECTED_SHA" ../api-context.json full ../readiness-bundle/readiness-index.json ../readiness-bundle ../operator-approval.json ..
+          SH
+
+      - name: Verify source-bound readiness and external operator approval
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash promotion-admission.sh "${{ steps.ref.outputs.sha }}"
 
       - name: Enforce Artifact Bytes Binding (P1)
         id: files
@@ -410,17 +456,25 @@ jobs:
           echo "SUCCESS: Actual file bytes perfectly match the approved manifest."
       
       - name: Load and Push Container
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
+          set -euo pipefail
+          bash promotion-admission.sh "${{ steps.ref.outputs.sha }}"
           IMAGE_NAME="ghcr.io/${GITHUB_REPOSITORY,,}"
           
           echo "Verifying OCI archive integrity via skopeo (dry-run evidence)..."
           skopeo inspect oci-archive:dist/soup-wall-image.tar
           
           if [ "${{ env.DRY_RUN }}" != "true" ]; then
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            skopeo copy --all oci-archive:dist/soup-wall-image.tar docker://$IMAGE_NAME:${TAG}
+            bash promotion-admission.sh "${{ steps.ref.outputs.sha }}"
+            printf '%s\n' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+            bash promotion-admission.sh "${{ steps.ref.outputs.sha }}"
+            skopeo copy --all oci-archive:dist/soup-wall-image.tar "docker://$IMAGE_NAME:${TAG}"
             if [[ "${TAG}" != *-* ]]; then
-              skopeo copy --all oci-archive:dist/soup-wall-image.tar docker://$IMAGE_NAME:latest
+              bash promotion-admission.sh "${{ steps.ref.outputs.sha }}"
+              skopeo copy --all oci-archive:dist/soup-wall-image.tar "docker://$IMAGE_NAME:latest"
             fi
           else
             echo "DRY_RUN is true. Successfully evaluated container, skipping registry push."
@@ -431,14 +485,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
+          set -euo pipefail
           cd dist
+          bash ../promotion-admission.sh "${{ steps.ref.outputs.sha }}"
           VALIDATED="${{ steps.files.outputs.validated_files }}"
           echo "Approved artifacts to publish: $VALIDATED"
           
           if [ "${{ env.DRY_RUN }}" != "true" ]; then
             if gh release view "${TAG}" >/dev/null 2>&1; then
+              bash ../promotion-admission.sh "${{ steps.ref.outputs.sha }}"
               gh release upload "${TAG}" $VALIDATED --clobber
             else
+              bash ../promotion-admission.sh "${{ steps.ref.outputs.sha }}"
               gh release create "${TAG}" $VALIDATED --title "${TAG}" --generate-notes --verify-tag
             fi
           else

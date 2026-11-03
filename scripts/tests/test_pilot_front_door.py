@@ -25,6 +25,28 @@ spec.loader.exec_module(M)
 COMMIT = "a" * 40
 
 
+class ConfigurationDispatch(unittest.TestCase):
+    def test_installed_component_home_reaches_dedicated_configuration_parser(self):
+        helper = mock.Mock()
+        helper.main.return_value = 0
+        with mock.patch.object(M, "load", return_value=helper) as loading, \
+             mock.patch.object(M, "parser") as ordinary:
+            self.assertEqual(M.main(["--agent-home", "/private/component", "configuration",
+                                     "restore-preview", "--destination", "/private/new"]), 0)
+        loading.assert_called_once_with("front_door_configuration_backup", "pilot_configuration_backup.py")
+        helper.main.assert_called_once_with(["--agent-home", "/private/component", "restore-preview",
+                                             "--destination", "/private/new"])
+        ordinary.assert_not_called()
+
+    def test_checkout_configuration_route_does_not_enter_prepare_or_run(self):
+        helper = mock.Mock()
+        helper.main.return_value = 4
+        with mock.patch.object(M, "load", return_value=helper), mock.patch.object(M, "parser") as ordinary:
+            self.assertEqual(M.main(["configuration", "inspect", "--archive", "/private/backup.tar"]), 4)
+        helper.main.assert_called_once_with(["inspect", "--archive", "/private/backup.tar"])
+        ordinary.assert_not_called()
+
+
 @unittest.skipUnless(sys.platform.startswith("linux"), "native toolchain qualification uses Linux")
 class QualificationToolchain(unittest.TestCase):
     def test_private_home_keeps_existing_default_toolchain(self):
@@ -222,6 +244,35 @@ class Run(unittest.TestCase):
         argv = json.loads(out)["argv"]
         self.assertEqual(argv[:5], ["--run", "--selection", "/private/selection.json", "--expected-commit", COMMIT])
         self.assertEqual(argv[argv.index("--prompt") + 1], "Read notes.")
+
+    def test_named_budget_preset_needs_its_exact_digest_and_travels_with_the_installation_home(self):
+        self.args.agent_home = Path("/private/component")
+        self.args.budget_preset, self.args.budget_preset_digest = "small", "a" * 64
+        code, out, _ = self.run_front_door(
+            "print(json.dumps({'status': 'completed', 'cleanup': 'owned_state_removed', 'argv': sys.argv[1:]}))\n")
+        self.assertEqual(code, 0)
+        argv = json.loads(out)["argv"]
+        self.assertEqual(argv[argv.index("--budget-preset") + 1], "small")
+        self.assertEqual(argv[argv.index("--expected-budget-preset-digest") + 1], "a" * 64)
+        self.assertEqual(argv[argv.index("--budget-preset-home") + 1], "/private/component")
+        self.assertNotIn("--linux-budget", argv)
+        # The installation that owns the maintenance gate also owns the preset catalog.
+        self.args.maintenance_home = Path("/private/owner")
+        _, out, _ = self.run_front_door(
+            "print(json.dumps({'status': 'completed', 'cleanup': 'owned_state_removed', 'argv': sys.argv[1:]}))\n")
+        argv = json.loads(out)["argv"]
+        self.assertEqual(argv[argv.index("--budget-preset-home") + 1], "/private/owner")
+
+    def test_a_name_without_its_digest_or_without_an_installation_never_launches_or_goes_unbudgeted(self):
+        for name, digest, home in (("small", None, Path("/private/component")), (None, "a" * 64, Path("/private/component")),
+                                   ("small", "a" * 64, None)):
+            self.args.budget_preset, self.args.budget_preset_digest, self.args.agent_home = name, digest, home
+            with self.subTest(name=name, digest=digest, home=home), mock.patch.object(M, "verified_state", lambda _: self.state), \
+                    mock.patch.object(M.subprocess, "Popen") as spawn:
+                with self.assertRaises(M.Failure) as caught:
+                    M.run(self.args)
+                self.assertEqual(caught.exception.code, "budget_preset_confirmation_required")
+                spawn.assert_not_called()
 
     def test_exact_nonzero_status_and_operator_hint(self):
         code, out, err = self.run_front_door(

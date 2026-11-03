@@ -74,6 +74,11 @@ pub(super) struct FileIdentity {
     mtime: (i64, i64),
     ctime: (i64, i64),
 }
+impl FileIdentity {
+    pub fn object_identity(&self) -> (u64, u64) {
+        (self.device, self.inode)
+    }
+}
 impl From<&Metadata> for FileIdentity {
     fn from(m: &Metadata) -> Self {
         Self {
@@ -130,6 +135,31 @@ pub(super) struct SelectedOutput {
     index: usize,
 }
 
+/// Narrow read-only lifecycle check for installed component removal. It reuses
+/// the completed-run, owner/host inactivity and cleanup-receipt checks; it does
+/// not issue an edit, cleanup or publication grant.
+pub(crate) fn removal_inactive(run: &Path) -> Result<()> {
+    let mut budget = Budget::new();
+    let selection = linux::select(run, &mut budget).map_err(anyhow::Error::msg)?;
+    let expected = audit::sha(&selection.profile_bytes);
+    drop(selection);
+    let args = Args {
+        run: run.into(),
+        sha256: expected,
+        show: vec![],
+        baseline: vec![],
+        diff: vec![],
+        diff_baseline: vec![],
+        consent_baseline_content: false,
+        consent_private_content: false,
+        export: None,
+        include: vec![],
+        expect_observation: None,
+    };
+    let observation = observe(&args, &mut budget)?;
+    recheck(&args, &observation, &mut budget)
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub(super) struct OutputBinding {
@@ -175,6 +205,20 @@ impl SelectedOutput {
         };
         selected.content()?;
         Ok(selected)
+    }
+
+    /// Select another already-observed output while retaining the same completed
+    /// run and output-directory lock. This adds no publication authority.
+    pub fn select_name(&mut self, name: &str) -> Result<()> {
+        self.index = self
+            .reviewed
+            .observation
+            .outputs
+            .iter()
+            .position(|o| o.name == name)
+            .context("edit_apply_output_not_declared")?;
+        self.content()?;
+        Ok(())
     }
 
     pub fn profile(&self) -> &Profile {

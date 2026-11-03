@@ -218,7 +218,7 @@ Network namespaces alone would not stop a host Unix socket in the workspace;
 seccomp additionally refuses socket/connect/send operations and io_uring setup.
 Read-only mounts do not themselves block FIFO/device IPC writes. The selected
 filter also denies write-intent `open`/`openat`, `openat2`, `creat` and device
-`ioctl` operations. Only `FIONBIO` on stdio descriptors 0–2 is allowed so the
+`ioctl` operations. Only `FIONBIO` on stdio descriptors 0â€“2 is allowed so the
 pinned Node/libuv runtime can make its transport pipes nonblocking; this grants
 no filesystem write access. Ordinary read-only directory and FIFO reads remain supported. The mandatory
 probe calibrates a host FIFO receiver and verifies that the child cannot open
@@ -342,3 +342,163 @@ failed cleanup or a missing actual host are failures; there is no skip or
 unsandboxed fallback. The workflow retains incomplete reports as well as logs.
 A support claim requires a passing combined report for the exact candidate;
 adding the procedure is not itself runtime acceptance.
+
+## Explicit multi-root profile
+
+`filesystem-multi-root-readonly-v1` (`sw-mcp/filesystem-multi-root-readonly/1`)
+is a separate opt-in profile for two to four existing directories. It uses the
+same pinned original server, schemas, dependency lock, classifier and policy.
+The single-root default remains a separate installation. Git linked worktrees
+are not required.
+
+Select stable lowercase IDs explicitly. Each ID maps to `/workspace/<ID>` inside
+the original server; host paths and relative paths are refused by this profile.
+The common parent and any unselected sibling are never mounted. IDs are sorted,
+unique and case-sensitive, with syntax `[a-z][a-z0-9_-]{0,31}`. Every declared
+scope is `read-only`; changing the set requires a new manifest and generation.
+
+```sh
+# The parent of this new manifest must already be private and owned (0700).
+agentfw pilot --home /absolute/agent-home filesystem-roots \
+  --root alpha=/absolute/project-alpha --root beta=/absolute/project-beta \
+  --output /absolute/private/roots.json
+# Preview above writes nothing. Repeat with --apply to create a fresh 0600 file.
+agentfw pilot --home /absolute/agent-home filesystem-roots \
+  --root alpha=/absolute/project-alpha --root beta=/absolute/project-beta \
+  --output /absolute/private/roots.json --apply
+```
+
+Use the [installed front door](PILOT_INSTALLED_FRONT_DOOR.md) with its explicit
+pinned runtime inputs. Add `--filesystem-roots-binding /absolute/private/roots.json`,
+`--filesystem-workspace /absolute/project-alpha` (the first sorted ID), and the
+separately selected ordinary `--git-workspace /absolute/reviewed-repository` to
+`preview` and `prepare --apply`. Keep the prefix, manifest, caches, runtimes,
+archives and run-state directory outside every selected root. Preparation is
+configuration, not observed protection. `status` becomes `observed-live` only
+when that exact selection's enforcing daemon and protected host are witnessed.
+
+Each root's canonical path, device/inode/owner and declared scope are retained
+in the manifest, profile, receipt and versioned prepared selection. Native
+startup independently opens every component without following links, pins all
+root descriptors and mounts each root read-only at its own ID. Before admission,
+after approval and before result delivery, the adapter rechecks that same set.
+Topology changes permanently withdraw the live set; restoring a directory does
+not revive its authority. File contents remain mutable, untrusted input and
+still pass existing result inspection.
+
+| Original selected tools | Complete resource extraction |
+| --- | --- |
+| `read_file`, `read_text_file`, `get_file_info` | Required `path`, including its explicit root ID |
+| `list_directory`, `list_directory_with_sizes` | Required `path`; `sortBy` defaults to `name` and grants no resource |
+| `directory_tree` | Required `path`; default `excludePatterns: []` only filters that root |
+| `search_files` | Required `path`; `pattern` and default `excludePatterns: []` are literal filters, never root selectors |
+| `read_multiple_files` | Every member of required `paths`, at most 64; any invalid member refuses the entire call before execution |
+| `list_allowed_directories` | Empty arguments bind the complete selected set; no ambient default directory |
+| Writes, edits, directory creation, moves, media reads | Remain unsupported; neither `path` nor `source`/`destination` can grant execution |
+
+Argument bytes are not rewritten. Existing input-schema and line/byte limits,
+classification, independent admission and original result delivery remain in
+force. Missing paths and ordinary file/directory type errors can reach the
+original server and retain its errors. A native root/custody refusal is a
+correlated `-32602`, with no partially released first resource; a later valid
+call remains possible unless the root set itself was withdrawn. In particular,
+`/workspace` is not a selected resource, and a symlink from one selected root
+to another cannot silently change a call's root binding.
+
+Support is native Ubuntu 24.04 x86-64 with the existing descriptor-consuming
+bubblewrap boundary. Topology observation requires local ext4, XFS, Btrfs or tmpfs; remote, FUSE,
+overlay and other filesystems refuse even if watch registration succeeds.
+All entries must be owned, readable, regular files or
+directories without shared write. Symlinks, hardlinked files, special files,
+nested mounts, duplicate/aliased/overlapping roots, replacement, missing roots
+and mutable topology refuse conservatively. The complete set is bounded to
+32768 entries, 128 directories and depth 32. WSL, Windows and macOS execution
+are not qualified by this opt-in profile. Existing classifier refusals (such
+as `directory_tree`) and result false positives are unchanged and must be
+reported separately from execution or root-binding failures.
+
+To update, explicitly create a new manifest and use `prepare --apply --rebuild`
+(or a new prefix). Retain the previous prefix and manifest for rollback; select
+that prefix explicitly and verify `status` before starting a fresh run. A stale
+manifest, changed scope, substituted profile or old single-root receipt cannot
+adopt extra roots. Do not edit a selected profile or reuse a live withdrawn set.
+
+Focused qualification uses `mcp-real-filesystem.yml` with exactly
+`installed_focus=filesystem-roots`, `native_preparation_only=true`, stability off and
+all other optional modes off/empty. It runs native binding regressions, builds
+an exact-source installed component outside the checkout, and exercises owned
+read/list/search, both-root arrays, whole-call refusals, an unselected canary,
+single-root sibling behavior, unchanged sources and process cleanup through
+the pinned original servers and genuine host with a local scripted provider.
+The fixed case inventory retains failed attempts. It is not a shared Ready,
+security or final admission cycle; those remain TL-owned.
+
+The selected roots do not grant policy approval. Existing provenance rules still
+apply: the installed pilot proof policy asks before reading a path learned from
+an MCP result. The focused multi-root qualification keeps that explicit Ask
+control, then checks healthy continuation with a separately supplied owned path.
+It does not erase taint or weaken the installed policy to obtain a pass.
+
+## Explicit private snapshots
+
+Use [private workspace snapshots](PRIVATE_WORKSPACE_SNAPSHOTS.md) to deliberately
+freeze one bounded owned directory and select its complete private view through
+the existing single-root preparation path. Status clearly distinguishes captured
+bytes from the current source; capture never activates a run.
+
+## Optional internal file links in selected roots
+
+The independent `sw-mcp/filesystem-multi-root-file-links-readonly/1` profile
+supports relative file links within their own explicitly selected root. The
+strict multi-root profile and ordinary single-root profile retain their existing
+behavior. This capability must be selected explicitly:
+
+```sh
+agentfw pilot --home /private/agent-home filesystem-roots \
+  --root alpha=/owned/project-a --root beta=/owned/project-b \
+  --internal-file-links --output /private/selections/file-links.json --apply
+agentfw pilot --home /private/agent-home preview --prefix /private/pilot \
+  --filesystem-workspace /owned/project-a --git-workspace /owned/git-project \
+  --filesystem-roots-binding /private/selections/file-links.json
+```
+
+Use the same binding for the ordinary explicit `prepare --apply` workflow. The
+preview, installed profile, receipt and selection identify this optional format;
+preparation never activates it. A changed root, link chain or target identity
+requires an explicit new selection. Omit `--internal-file-links` for the strict
+default. Do not reuse an optional binding as a default-profile receipt.
+
+All original tool names, schemas, argument bytes, result inspection and Ask
+rules remain unchanged. Each root, link object, chain and final regular file is
+bound to its filesystem identity. Linux retains the checked descriptors,
+constructs a private read-only directory/link topology, and mounts every regular
+file from its checked descriptor. No source root or common parent directory is
+mounted into that view. Replacing an original link, ancestor or target cannot
+redirect a mounted file. Source contents remain live untrusted data; this
+capability does not promise an immutable content snapshot.
+
+The aggregate bounds are 2â€“4 roots, 256 regular files, 128 links, 128 directories,
+512 entries, depth 32, eight links per chain and 64 paths per call. Roots must be
+owned, disjoint local ext4, XFS, Btrfs or tmpfs directories. Absolute links,
+directory links, links crossing into another selected root, cycles, missing
+targets, hardlinks, nested mounts, shared-writable entries and other optional
+profile combinations refuse. Absolute internal links are deliberately unsupported
+in this first version; relative links preserve their original bytes. Names and
+link targets must be UTF-8 and names must contain no control characters.
+
+Topology or attribute changes, observer loss/overflow and root replacement
+withdraw the whole running root set. Correct the source and explicitly start a
+fresh run; an existing run never silently adopts a replacement. Ordinary
+unauthorized-path refusals permit useful follow-up reads in an unchanged run.
+Source files and unselected siblings receive no writes. Private runtime state,
+caches and output must remain outside every selected root.
+
+Focused development acceptance uses `mcp-real-filesystem.yml` with
+`installed_focus=filesystem-links`, `native_preparation_only=true`, all other
+flags false and stability off. It retains unsuccessful/incomplete cases, real
+original-server reads through chains and arrays, whole-call refusals, an
+in-flight retarget control, a positively tested independent outside-file
+open/access observer, source/delivery witnesses and owned-process cleanup.
+Native regression tests additionally replace the source after namespace
+construction and read the exact retained descriptor passed to bubblewrap.
+Final shared Ready qualification remains a separate TL-owned step.

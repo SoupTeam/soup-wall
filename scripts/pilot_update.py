@@ -755,23 +755,26 @@ def recover(root, confirmation):
             "protection": "not_observed", "authority": "fresh_run_required"}
 
 
-def selected_command(root, args):
+def selected_command(root, args, owner_home=None, coordinator=None):
     with Directory(root) as directory, directory.lock(exclusive=False):
         journal = read_journal(directory)
         require(not journal or journal.get("phase") == "complete", "recover_pending_update")
         binding = state(root)["current"]
         require(binding is not None, "no_coordinated_generation")
         verified = verify_binding(root, binding)
-        require(args and args[0] in ("run", "status"), "coordinated_run_or_status_required")
+        require(args and args[0] in ("run", "status", "maintenance"), "coordinated_run_or_status_required")
         require(not any(word == "--prefix" or word.startswith("--prefix=") for word in args[1:]),
                 "coordinated_prefix_override_refused")
         env = environment(verified["home"])
         if args[0] == "run":
             provider = load_helper("update_provider", ROOT, "pilot_provider.py")
             env.update(provider.selected(os.environ))
+        scope = (["--maintenance-home", str(owner_home), "--maintenance-coordinator-root", str(coordinator)]
+                 if owner_home is not None else [])
         try:
-            result = subprocess.run([str(verified["binary"]), "pilot", "--home", str(verified["home"]),
-                                     args[0], "--prefix", verified["inventory"]["prefix"], *args[1:]],
+            result = subprocess.run([str(verified["binary"]), "pilot", "--home", str(verified["home"]), *scope,
+                                     *([args[0], args[1], "--prefix", verified["inventory"]["prefix"], *args[2:]] if args[0] == "maintenance" else
+                                       [args[0], "--prefix", verified["inventory"]["prefix"], *args[1:]])],
                                     cwd=Path.home(), env=env, timeout=3700)
         except subprocess.TimeoutExpired:
             raise DispatchInterrupted("coordinated_dispatch_timeout") from None

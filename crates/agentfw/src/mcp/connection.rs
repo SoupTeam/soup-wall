@@ -1536,6 +1536,28 @@ pub(crate) mod linux {
             }
         }
 
+        fn run_fixture_executable(path: &Path) -> std::io::Result<std::process::ExitStatus> {
+            // A concurrent test's fork may briefly inherit a writable copy fd.
+            // Retry only Linux ETXTBSY, finitely, inside this test-only helper.
+            // Persistent writers and every other launch error remain failures.
+            for attempt in 0..10 {
+                let result = std::process::Command::new(path)
+                    .arg("-i")
+                    .arg("/usr/bin/true")
+                    .status();
+                if result
+                    .as_ref()
+                    .is_err_and(|error| error.raw_os_error() == Some(26))
+                    && attempt < 9
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                } else {
+                    return result;
+                }
+            }
+            unreachable!("the final attempt always returns")
+        }
+
         fn trusted_fixture_executable(dir: &Path) -> PathBuf {
             // The host's /usr/bin/env may be a coreutils multi-call binary with
             // many hard links. Use a private, single-link copy as the test agent.
@@ -1543,13 +1565,21 @@ pub(crate) mod linux {
             std::fs::copy("/usr/bin/env", &path).unwrap();
             std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
             assert!(executable(&path).is_ok());
-            assert!(std::process::Command::new(&path)
-                .arg("-i")
-                .arg("/usr/bin/true")
-                .status()
-                .unwrap()
-                .success());
+            assert!(run_fixture_executable(&path).unwrap().success());
             path
+        }
+
+        #[test]
+        fn fixture_execution_still_refuses_a_persistent_writer() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = trusted_fixture_executable(dir.path());
+            let writer = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+            assert_eq!(
+                run_fixture_executable(&path).unwrap_err().raw_os_error(),
+                Some(26)
+            );
+            drop(writer);
+            assert!(run_fixture_executable(&path).unwrap().success());
         }
 
         #[test]

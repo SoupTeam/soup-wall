@@ -30,15 +30,20 @@ ROOT = Path(__file__).resolve().parents[1]
 FIX = "crates/agentfw/tests/fixtures/schema_upgrade"
 FS = "profiles/mcp/filesystem-readonly-v1"
 GIT = "profiles/mcp/git-readonly-v1"
-BASE = "b385e7506ab26896637f348e3180e52d1fc6d423"
+# Historical: the accepted main SOU-204 started from.
+ORIGINAL_BASE = "b385e7506ab26896637f348e3180e52d1fc6d423"
+# The pinned main revision merged into the branch. SOU-204's own changes are
+# measured against it, and unchanged dependencies are anchored to it.
+INTEGRATION_BASE = "7f973f0b82480090e3de51111a90f550ea6a0d57"
 KEEP_REPORTS = {
     "fs-identical", "git-identical", "fs-metadata-inert", "fs-malicious-metadata",
     "fs-required-default-type-enum", "fs-destination-controls-declared", "fs-unsupported",
     "git-semantic", "git-recursive-ref", "operator-authoring-declarations", "snapshot-only-git-semantic",
     "declaration-only-drift", "extreme-bound-before-snapshot-only",
 }
-# Unchanged inputs the analyzer, fixtures or demo depend on. Each must be
-# byte-identical to its blob at BASE; the base revision anchors them.
+# Inputs the analyzer, fixtures or demo depend on but SOU-204 does not change.
+# Each must be byte-identical to its blob at INTEGRATION_BASE; upstream changes
+# since ORIGINAL_BASE are recorded per file rather than hidden.
 ACCEPTED_DEPENDENCIES = [
     "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
     "profiles/mcp/filesystem-readonly-v1/upstream-identity.json",
@@ -55,6 +60,7 @@ ACCEPTED_DEPENDENCIES = [
     "scripts/install-sou62-filesystem-profile.py",
     "scripts/install-sou68-git-profile.py",
     "scripts/pilot_provider.py",
+    "scripts/pilot_filesystem_roots.py",
     "crates/agentfw/src/mcp/input.rs",
     "crates/agentfw/src/mcp/admission.rs",
     "crates/agentfw/src/mcp/server_profile.rs",
@@ -98,32 +104,43 @@ def git(*args: str) -> str:
 def accepted_dependencies() -> dict:
     rows, ok = {}, True
     for path in ACCEPTED_DEPENDENCIES:
-        base_blob = git("rev-parse", f"{BASE}:{path}").strip()
+        integration_blob = git("rev-parse", f"{INTEGRATION_BASE}:{path}").strip()
         working_blob = git("hash-object", f"--path={path}", path).strip()
-        unchanged = base_blob == working_blob and \
-            subprocess.run(["git", "diff", "--quiet", BASE, "--", path], cwd=ROOT).returncode == 0
+        unchanged = integration_blob == working_blob and \
+            subprocess.run(["git", "diff", "--quiet", INTEGRATION_BASE, "--", path], cwd=ROOT).returncode == 0
+        original = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{ORIGINAL_BASE}:{path}"],
+                                  cwd=ROOT, capture_output=True, text=True).stdout.strip() or None
         ok = ok and unchanged
-        rows[path] = {"base_blob": base_blob, "working_tree_blob": working_blob, "unchanged": unchanged}
+        rows[path] = {"integration_baseline_blob": integration_blob, "working_tree_blob": working_blob,
+                      "unchanged_vs_integration_baseline": unchanged, "original_base_blob": original,
+                      "upstream_change_since_original_base": original != integration_blob}
     manifest = json.loads((ROOT / "crates/agentfw/tests/fixtures/schema_upgrade/MANIFEST.json").read_text(encoding="utf-8"))
     registry_checks = []
     for entry in manifest["fixtures"]:
         if entry["kind"] != "reproduced_installer_registry":
             continue
-        base_blob = git("rev-parse", f"{BASE}:{entry['installer']}").strip()
-        good = entry["accepted_base_revision"] == BASE and base_blob == entry["installer_git_blob"]
+        installer_blob = git("rev-parse", f"{INTEGRATION_BASE}:{entry['installer']}").strip()
+        imports_ok = all(git("rev-parse", f"{INTEGRATION_BASE}:{path}").strip() == blob
+                         for path, blob in entry["installer_imports"].items())
+        good = (entry["integration_baseline"] == INTEGRATION_BASE
+                and entry["original_task_base"] == ORIGINAL_BASE
+                and installer_blob == entry["installer_git_blob"] and imports_ok)
         ok = ok and good
         registry_checks.append({"fixture": entry["fixture"], "installer": entry["installer"],
                                 "parameters": entry["parameters"],
                                 "installer_git_blob": entry["installer_git_blob"],
-                                "installer_matches_base_blob": good,
+                                "installer_imports": entry["installer_imports"],
+                                "installer_and_imports_match_integration_baseline": good,
                                 "provenance_status": entry["provenance_status"]})
-    return {"anchored_by": BASE, "all_unchanged": ok, "files": rows,
+    upstream = sorted(p for p, r in rows.items() if r["upstream_change_since_original_base"])
+    return {"anchored_by": INTEGRATION_BASE, "original_task_base": ORIGINAL_BASE, "all_unchanged": ok,
+            "upstream_changes_since_original_base": upstream, "files": rows,
             "reproduced_registry_provenance": registry_checks}
 
 
 def source_state(evidence: Path) -> dict:
     head = git("rev-parse", "HEAD").strip()
-    changed = set(git("diff", "--name-only", BASE).split())
+    changed = set(git("diff", "--name-only", INTEGRATION_BASE).split())
     changed |= set(git("ls-files", "--others", "--exclude-standard").split())
     excluded = evidence.resolve().relative_to(ROOT.resolve()).as_posix()
     blobs, raw = {}, {}
@@ -136,7 +153,11 @@ def source_state(evidence: Path) -> dict:
         blobs[name] = git("hash-object", f"--path={name}", name).strip()
         raw[name] = sha_file(ROOT / name)
     combined = sha_bytes("".join(f"{k}\0{v}\n" for k, v in blobs.items()).encode())
-    return {"base_revision": BASE, "head": head, "head_is_base": head == BASE,
+    contains = subprocess.run(["git", "merge-base", "--is-ancestor", INTEGRATION_BASE, "HEAD"],
+                              cwd=ROOT).returncode == 0
+    return {"original_task_base": ORIGINAL_BASE, "integration_baseline": INTEGRATION_BASE,
+            "changes_measured_against": INTEGRATION_BASE, "head": head,
+            "head_contains_integration_baseline": contains,
             "working_tree": "uncommitted changes on top of head" if blobs else "clean",
             "binding": "changed_files_git_blob is authoritative; working_tree_sha256 depends on "
                        "checkout line endings (core.autocrlf) and is informational",
@@ -166,7 +187,7 @@ def scenarios(tmp: Path) -> list[dict]:
                     "args": ["--before", f"{base}/upstream-tools-list.json", "--after", f"{FIX}/{entry['fixture']}",
                              "--before-identity", f"{base}/upstream-identity.json",
                              "--registry", f"{FIX}/{registry}.registry.json",
-                             "--before-label", f"{base}/upstream-tools-list.json@{BASE[:12]}",
+                             "--before-label", f"{base}/upstream-tools-list.json@{INTEGRATION_BASE[:12]}",
                              "--after-label", f"SYNTHETIC {entry['fixture']}"],
                     "expect_exit": entry["expect"]["exit"],
                     "expect": entry["expect"]})
