@@ -3350,6 +3350,12 @@ jobs:
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --allow-download \
             2>&1 | tee "$RUNNER_TEMP/sou216-clean-user.log"
+      - name: Retain private process provenance after the installed-host attempt
+        if: always() && github.event.inputs.installed_focus == 'clean-user'
+        shell: bash
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: python3 -I -B scripts/ci_pilot_user_session.py --after-cleanup
       - name: Retain original clean-user outcomes including failed and incomplete attempts
         if: always() && github.event.inputs.installed_focus == 'clean-user'
         uses: actions/upload-artifact@v7
@@ -3358,6 +3364,8 @@ jobs:
           path: |
             ${{ runner.temp }}/sou216-user-session/report.json
             ${{ runner.temp }}/sou216-user-session/private-provenance.cms
+            ${{ runner.temp }}/sou216-user-session-after-cleanup/report.json
+            ${{ runner.temp }}/sou216-user-session-after-cleanup/private-provenance.cms
             ${{ runner.temp }}/sou216-clean-user/report.json
             ${{ runner.temp }}/sou216-clean-user/*/expected.private.json
             ${{ runner.temp }}/sou216-clean-user/walkthrough/report.json

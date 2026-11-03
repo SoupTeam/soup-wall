@@ -224,16 +224,20 @@ def quiesce(report, private):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--quiesce', action='store_true')
+    operation = parser.add_mutually_exclusive_group()
+    operation.add_argument('--quiesce', action='store_true')
+    operation.add_argument('--after-cleanup', action='store_true', help='read-only snapshot after the installed-host attempt')
     args = parser.parse_args()
     report = {'diagnostic': 'SOU-216 owned CI user-session preparation', 'authorization': False,
-        'installed_host_executed': False, 'native_removal_guard_changed': False, 'status': 'failed'}
+        'installed_host_executed': None if args.after_cleanup else False,
+        'phase': 'after installed-host attempt' if args.after_cleanup else 'before installed-host attempt',
+        'native_removal_guard_changed': False, 'status': 'failed'}
     private = {}
     directory = None
     try:
         load('sou216_ci_guard', 'ci_bwrap_userns.py').guard()
         os.umask(0o077)
-        directory = Path(os.environ['RUNNER_TEMP']) / 'sou216-user-session'
+        directory = Path(os.environ['RUNNER_TEMP']) / ('sou216-user-session-after-cleanup' if args.after_cleanup else 'sou216-user-session')
         directory.mkdir(mode=0o700)
         report.update(driver_source=H.source(ROOT, H.git(ROOT, 'rev-parse', 'HEAD')),
             boot_identity_sha256=H.sha('/proc/sys/kernel/random/boot_id'), context_before=context())
@@ -244,6 +248,7 @@ def main():
         else:
             report['after'] = H.process_observation()
             require(not args.quiesce or not report['after']['unavailable'], 'session_visibility_unavailable')
+            require(not args.after_cleanup or not report['after']['unavailable'], 'post_cleanup_process_visibility_unavailable')
             report['status'] = 'observed' if not args.quiesce else 'already-visible'
         private['after'] = kernel_snapshot()
     except Exception as error:

@@ -87,3 +87,12 @@ class UserExitBoundary(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'session_root_exit_forbidden'):
                     m.control(*words)
             run.assert_not_called()
+
+
+class ReadOnlyPostCleanup(unittest.TestCase):
+    def test_post_cleanup_cannot_enable_quiescence(self):
+        with mock.patch.object(m,'load') as load, mock.patch.object(sys,'argv',
+                ['ci_pilot_user_session.py','--after-cleanup','--quiesce']), \
+                mock.patch('sys.stderr', new_callable=io.StringIO):
+            with self.assertRaises(SystemExit): m.main()
+            load.assert_not_called()
