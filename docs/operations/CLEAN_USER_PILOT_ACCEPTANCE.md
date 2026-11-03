@@ -90,9 +90,16 @@ redemption, replay rejection and independent effects. Its two-case correctness
 scope is not the full fifteen-case Ask inventory or performance acceptance.
 Original child reports retain their formats and hashes.
 
-The same installed component then exercises an identity-only synthetic update,
-stale-selection refusal, rollback and removal. New project bytes, Git state,
-prepared selections and synthetic user files must survive. No classifier,
+The current `agentfw pilot update` controller selects two independently prepared
+generations of the same accepted product/binary set, with a useful original read
+before update, after update and after rollback. This measures coordinated
+selection recovery, not a binary-version upgrade. An additional identity-only
+synthetic component update checks stale-selection refusal and component rollback.
+Removal uses built-in `agentfw pilot-removal preview/apply/status`, explicit
+confirmation/consent and the retained recovery journal/acknowledgement. Its exact
+receipt-owned component scope retains Agent executables, prepared generations,
+coordinator state, audit/history and recovery records by design. New project
+bytes, Git state, prepared selections and synthetic user files must survive. No classifier,
 result-inspection or original Git implementation is changed here. Failures in
 those owned areas retain exact task/tool/result hashes and reproduce against the
 fixed accepted source for SOU-97/157/177.
@@ -114,3 +121,16 @@ GO can cover only the exact measured, preprovisioned read-only path. Any failed
 or incomplete required observation is NO-GO for this scope. Scripted-provider
 results are not live-model attack efficacy, novice-human evidence, WSL evidence,
 license/advisory clearance, public release or full-product acceptance.
+
+## Preserved initial attempts
+
+Runs [571](https://github.com/SoupTeam/soup-wall/actions/runs/41645623208) and
+[572](https://github.com/SoupTeam/soup-wall/actions/runs/41646339891) used driver
+`fdfd0a85f69b52ea48c3c064c475df54234f6723`. They failed at the first denied-call
+observer after the catalog project's four useful tasks succeeded. Later cases
+remain incomplete, not skipped successes. Run 571 retained artifact digest
+`d03af541caae27de1bc958be8b9229a9c9cb75d7d1c627b5576b972e3991781a`.
+The initial diagnostic capture used a 2048-byte strace string cap; the next driver
+uses the accepted full argument-string bound and preserves finite observer
+refusal codes. A regression rejects abbreviated installed collector arguments.
+No product policy/classifier was relaxed. Final measured outcomes remain pending.

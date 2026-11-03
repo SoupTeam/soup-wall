@@ -166,6 +166,74 @@ def project(args, name, root, env, installed):
     return chosen, door, expected, proposals
 
 
+def operator(a, env, *words):
+    result = subprocess.run([str(a.agentfw), *map(str, words)], cwd=a.work, env=env,
+                            stdin=subprocess.DEVNULL, capture_output=True, timeout=600)
+    require(len(result.stdout) <= 512 * 1024, "operator_report_bound")
+    value = json.loads(result.stdout)
+    reason = value.get("reason", "unknown")
+    require(result.returncode == 0, "operator_refused:" + str(reason))
+    return value
+
+
+def coordinated_update(a, env, archive, built, fixture, installed, q, report):
+    """Exercise the current coordinated controller with two accepted selections.
+
+    Both generations deliberately retain the one reviewed product source and
+    binary set. This is selection-generation recovery, not a version upgrade.
+    """
+    chosen, first_door = fixture
+    second = argparse.Namespace(**vars(chosen))
+    second.prefix = a.output / "update-preparation"
+    second_door = installed.InstalledDoor(second, env, a.work, a.agent_home)
+    code, prepared, _ = second_door.call("prepare", "--apply", timeout=3600)
+    require(code == 0 and prepared.get("status") == "prepared-not-active", "update_prepare_failed")
+    update = load(a.runtime_source, "sou216_accepted_update", "pilot_update.py")
+    controller = a.output / "coordinator"
+    paths, candidates = [], []
+    for label, prefix in (("a", chosen.prefix), ("b", second.prefix)):
+        value = update.make_inventory(prefix, archive, built["archive_sha256"], ACCEPTED, "accepted-" + label)
+        path = a.output / ("update-" + label + ".private.json")
+        save(path, value)
+        paths.append(path); candidates.append(value)
+    door_args = argparse.Namespace(**vars(chosen)); door_args.prefix = controller
+    door = installed.InstalledDoor(door_args, env, a.work, a.agent_home)
+    observations = []
+    def change(action, path=None):
+        words = ["pilot", "--home", a.agent_home, "update", action, "--prefix", controller]
+        if path is not None: words += ["--inventory", path]
+        preview = operator(a, env, *words)
+        if action == "preview":
+            require(preview.get("writes") is False, "update_preview_wrote_state")
+            return preview
+        return preview
+    for label, path in zip(("installed-a", "updated-b"), paths):
+        preview = change("preview", path)
+        result = operator(a, env, "pilot", "--home", a.agent_home, "update", "apply",
+                          "--prefix", controller, "--inventory", path, "--confirm", preview["plan_sha256"])
+        require(result.get("status") == "selected", "coordinated_update_not_selected")
+        row, values, _ = q.run_case(door_args, door, report, label,
+            [("mcp__filesystem__read_text_file", {"path": "/workspace/" + PROJECTS["catalog-service"]["read"]})])
+        value = values.get("toolu_front_" + label + "_0")
+        original = load(a.runtime_source, "sou216_update_original", "qualify-installed-pilot.py")
+        verify_utility(row, value, {"text": PROJECTS["catalog-service"]["files"][PROJECTS["catalog-service"]["read"]]},
+                       "filesystem", original.host_text)
+        observations.append(update.state(controller))
+    require(observations[1]["current"] != observations[0]["current"]
+            and observations[1]["previous"] == observations[0]["current"], "coordinated_generation_unchanged")
+    preview = change("rollback")
+    result = operator(a, env, "pilot", "--home", a.agent_home, "update", "rollback",
+                      "--prefix", controller, "--confirm", preview["plan_sha256"])
+    require(update.state(controller)["current"] == observations[0]["current"], "coordinated_rollback_failed")
+    row, values, _ = q.run_case(door_args, door, report, "rolled-back-a",
+        [("mcp__filesystem__read_text_file", {"path": "/workspace/" + PROJECTS["catalog-service"]["read"]})])
+    verify_utility(row, values.get("toolu_front_rolled-back-a_0"),
+        {"text": PROJECTS["catalog-service"]["files"][PROJECTS["catalog-service"]["read"]]}, "filesystem", original.host_text)
+    return {"scope": "actual coordinated selection-generation update and rollback; one accepted binary/source set",
+            "selection_sha256": [v["selection"]["sha256"] for v in candidates],
+            "states": observations + [update.state(controller)], "useful_runs": 3}, second.prefix
+
+
 def qualify(a, report):
     require(platform.system() == "Linux" and platform.machine() == "x86_64" and os.geteuid() != 0,
             "ordinary_native_linux_user_required")
@@ -292,7 +360,7 @@ def qualify(a, report):
                 started = begin(label)
                 trace = a.output / (name + "-" + task + ".trace.private")
                 row, results, _ = q.run_case(chosen, door, report, name + "-" + task, [proposals[task]],
-                                             provider_trace=trace, diagnostic_writes=True)
+                                             provider_trace=trace, trace_events="execve,execveat,write,writev")
                 require(row["process_cleanup"]["all_stopped"], "developer_task_cleanup_unconfirmed")
                 value = results.get("toolu_front_" + name + "-" + task + "_0")
                 try:
@@ -323,7 +391,7 @@ def qualify(a, report):
                 ("mcp__filesystem__read_text_file", {"path": "/workspace/" + PROJECTS[name]["read"]})]
             trace = root / "denied.trace.private"
             row, results, _ = q.run_case(chosen, door, report, name + "-denied", proposals,
-                                         provider_trace=trace, diagnostic_writes=True)
+                                         provider_trace=trace, trace_events="execve,execveat,write,writev")
             require(row["exit"] == 0 and row["process_cleanup"]["all_stopped"], "denied_case_runtime_or_cleanup_failed")
             ids = ["toolu_front_" + name + "-denied_" + str(i) for i in range(4)]
             require(set(results) == set(ids) and all(results[i]["is_error"] for i in ids[:3]), "denied_result_missing")
@@ -376,6 +444,9 @@ def qualify(a, report):
         done("ask-once-replay", started, original_report_sha256=sha(a.output / "ask/qualification.json"),
              scope="existing two-profile approval correctness smoke, not the full 15-case inventory")
         started = begin("update-rollback")
+        coordinated, update_prefix = coordinated_update(a, env, archive, built,
+            (fixtures[0][1], fixtures[0][2]), installed, q, report)
+        report["coordinated_update"] = coordinated
         update, update_row = installed.update_candidate(a, env)
         code, installed_update, _ = installed.component(a, a.agent_home, update, update_row["archive_sha256"], "install", env=env)
         require(code == 0 and installed_update.get("previous") == built["component"], "component_update_failed")
@@ -386,12 +457,29 @@ def qualify(a, report):
         code, status, _ = fixtures[0][2].call("status", "--state-root", str(a.state_root), inputs=False, timeout=120)
         require(code == 0 and status.get("protection") == "configured-not-running", "rollback_status_failed")
         done("update-rollback", started, update_source="synthetic identity-only component control",
-             updated_component=update_row["component"], restored_component=built["component"])
+             updated_component=update_row["component"], restored_component=built["component"],
+             coordinated_selection_recovery=coordinated)
         started = begin("remove-preserves-user-data")
         before_remove = {name: {"files": q.snapshot(chosen.project), "repository": q.snapshot(chosen.repository),
                                "preparation": q.snapshot(chosen.prefix)} for name, chosen, _ in fixtures}
-        code, _, _ = installed.component(a, a.agent_home, None, None, "remove", "--all", env=env)
-        require(code == 0 and not (a.agent_home / "pilot-front-door").exists(), "component_removal_failed")
+        recovery = a.output / "removal-recovery"; recovery.mkdir(mode=0o700)
+        journal = recovery / "journal"
+        words = ["--home", a.agent_home, "--state", a.state_root, "--journal", journal]
+        for prefix in [chosen.prefix for _, chosen, _ in fixtures] + [a.prefix, update_prefix]:
+            words += ["--prefix", prefix]
+        preview = operator(a, env, "pilot-removal", "preview", *words)
+        require(preview.get("executed") is False and preview.get("confirmation_sha256") and not journal.exists(),
+                "removal_preview_failed")
+        removed = operator(a, env, "pilot-removal", "apply", *words,
+            "--confirm", preview["confirmation_sha256"], "--consent-remove", "--exclusive-maintenance")
+        require(removed.get("status") == "removed" and removed.get("success_ack")
+                and not (a.agent_home / "pilot-front-door").exists(), "pilot_removal_failed")
+        status = operator(a, env, "pilot-removal", "status", "--journal", journal,
+            "--expect-plan", preview["confirmation_sha256"], "--success-ack", removed["success_ack"])
+        require(status.get("status") == "removed", "removal_retained_status_failed")
+        report["removal"] = {"command": "agentfw pilot-removal preview/apply/status",
+            "status": status["status"], "confirmation_sha256": preview["confirmation_sha256"],
+            "journal_retained": journal.exists(), "success_ack_sha256": digest(removed["success_ack"])}
         require((a.agent_home / "unrelated-user-file").read_text() == "Owned Agent user data must survive.\n",
                 "component_removal_changed_user_state")
         require(before_remove == {name: {"files": q.snapshot(chosen.project), "repository": q.snapshot(chosen.repository),
@@ -430,7 +518,7 @@ def main(argv=None):
         qualify(a, report)
     except Exception as error:
         report.update(status="failed", decision="NO-GO", error=(
-            str(error) if re.fullmatch(r"[a-z0-9_]{1,120}", str(error)) else type(error).__name__))
+            str(error) if re.fullmatch(r"[a-z0-9_][a-z0-9_:=.-]{0,240}", str(error)) else type(error).__name__))
     if a.output.exists():
         save(a.output / "report.json", report)
     print(json.dumps({key: report.get(key) for key in ("status", "error", "accepted_source", "decision", "clean_user")}))

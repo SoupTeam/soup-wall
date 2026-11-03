@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The new workload must not grade missing/error/partial original replies as useful."""
 import importlib.util
+import json
 import subprocess
 import tempfile
 import unittest
@@ -65,3 +66,23 @@ class UtilityEvidence(unittest.TestCase):
             self.assertIn(project["read"], project["files"])
             self.assertIn(project["change"], project["files"])
         self.assertEqual(m.digest(m.PROJECTS), before)
+
+
+class DispatchCapture(unittest.TestCase):
+    def test_long_installed_collector_argument_needs_complete_capture(self):
+        witness = m.load(SCRIPT.parents[1], "clean_user_dispatch_test", "qualify-pilot-launcher.py")
+        binary = Path("/owned/agentfw")
+        rows = []
+        for pid, server in ((101, "filesystem"), (102, "git")):
+            # Real installed paths and MCP configuration can exceed a small
+            # diagnostic string cap. Never grade an abbreviated exec/write.
+            argv = [str(binary), "mcp", "--id", server, "--owned-configuration", "x" * 4096]
+            rows.append(f'{pid} execve("{binary}", {json.dumps(argv)}, 0x0) = 0')
+            frame = json.dumps({"jsonrpc": "2.0", "id": pid, "method": "tools/list"}) + "\n"
+            rows.append(f'{pid} write(9, {json.dumps(frame)}, {len(frame)}) = {len(frame)}')
+        observed = witness.collector_dispatches("\n".join(rows), binary, strict=False)
+        self.assertEqual(observed["discoveries"], 2)
+        incomplete = rows.copy()
+        incomplete[0] = incomplete[0].replace(json.dumps("x" * 4096), '"xxx"...')
+        with self.assertRaises((ValueError, SyntaxError)):
+            witness.collector_dispatches("\n".join(incomplete), binary, strict=False)

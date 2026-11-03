@@ -2045,6 +2045,7 @@ jobs:
           name: sou216-clean-user-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/sou216-clean-user/report.json
+            ${{ runner.temp }}/sou216-clean-user/*/expected.private.json
             ${{ runner.temp }}/sou216-clean-user/walkthrough/report.json
             ${{ runner.temp }}/sou216-clean-user/ask/qualification.json
             ${{ runner.temp }}/sou216-clean-user.log
