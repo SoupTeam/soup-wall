@@ -46,7 +46,7 @@ A confirmation never starts a second rollout.
 
 **Compatibility.** `POST .../rollout` without `confirmation_id` is unchanged: it starts, resumes or returns the existing rollout
 exactly as documented above, with no `confirmation` object in the response. The Console always uses the guarded form. A caller
-that wants the guarantee must send the confirmation; the server does not infer it. PostgreSQL migration 30 adds
+that wants the guarantee must send the confirmation; the server does not infer it. PostgreSQL migration 29 adds
 `managed_group_start_confirmations`; SQLite creates it on first use. Individual (single-Agent) deployment is not changed.
 
 A group cannot be deleted during `pilot`, `standard`, `paused` or `rolling_back`. Live membership changes do not change the persisted rollout inventory or its ACK routing. Failed/rolled-back plans remain inspectable; terminal `advance` and retry behavior never allocate another deployment.

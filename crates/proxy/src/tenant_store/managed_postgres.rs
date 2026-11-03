@@ -141,7 +141,7 @@ impl PostgresTenantStore {
         // SOU-220: bounded, expiring confirmations for an authoritative group start preview.
         if self
             .bounded(tx.query_opt(
-                "SELECT version FROM llm_firewall_schema_migrations WHERE version=30",
+                "SELECT version FROM llm_firewall_schema_migrations WHERE version=29",
                 &[],
             ))
             .await?
@@ -160,7 +160,7 @@ impl PostgresTenantStore {
                     FOREIGN KEY(tenant_id,group_id) REFERENCES managed_agent_groups(tenant_id,group_id) ON DELETE CASCADE);"
             )).await?;
             self.bounded(tx.execute(
-                "INSERT INTO llm_firewall_schema_migrations(version,applied_at_unix) VALUES(30,$1)",
+                "INSERT INTO llm_firewall_schema_migrations(version,applied_at_unix) VALUES(29,$1)",
                 &[&now_unix()],
             ))
             .await?;

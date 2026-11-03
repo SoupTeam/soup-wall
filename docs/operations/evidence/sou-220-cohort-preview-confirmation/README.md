@@ -19,6 +19,21 @@ admission and merge are lead-owned.
 | `scripts/tests/test_console_enrollment_browser.py`, same runner | 2 subtests fail (`displayed_installer ... refuses_unsafe_targets`, exit 64 != 0); **identical on the unmodified base**, a Linux installer exercised on macOS; not caused by this change |
 | `python3 scripts/ci_components.py --check`, `python3 scripts/check_docs.py` | clean |
 
+## Console recovery inventory (found by the first focused CI run)
+
+The first focused run (`41711567465`, source `fd5d58ed`) passed this PR's SQLite and PostgreSQL controls but failed the
+existing step `Four real Agents with encrypted SQLite recovery`: the versioned recovery inventory
+(`scripts/fixtures/console_recovery_inventory_v1.json`) is a strict allowlist of tables, DDL digests and PostgreSQL
+migrations 1 through N, and `managed_group_start_confirmations` was not in it. Following the SOU-55 precedent, the next
+commit adds the table to the SQLite and PostgreSQL inventory and raises the accepted schema version from 28 to 29 in
+`console_recovery.py`, its acceptance driver, unit test and `CONSOLE_RECOVERY.md`. The fixture entries were generated from
+live catalogs (SQLite's own DDL digest; the recovery tool's `logical_schema()` on a database migrated by this branch), and
+the generator refuses to write unless every pre-existing entry is identical to the accepted fixture. The migration number
+was also changed from 30 to 29 so this branch is self-consistent on `main`. **Integration note:** SOU-219 (PR #350)
+independently takes migration 29 and the same inventory fields; whichever merges second must renumber to 30 and merge the
+two fixture additions. The encrypted backup/restore demos have not been run locally (`age` is not installed); the
+re-dispatched workflow is the evidence.
+
 ## Explicit skips and caveats
 
 * **PostgreSQL 16 not observed by the author.** The local server was PostgreSQL 14.17. The existing migration contains the
