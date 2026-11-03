@@ -46,13 +46,13 @@ the configured provider and can incur charges. See [self-hosting](SELF_HOSTING.m
 
 ## Offline guides and separately required assets
 
-The [product README](../README.md) and its linked operator-guide closure are
-included. Local images and heading links work after extraction. The canonical
+The [product README](../README.md), [canonical guide index](README.md), and
+the public operator guides are included. Local images and heading links work
+after extraction. The canonical
 sources remain editable in the source repository; only deterministic link
 adaptation and an archive-context note are applied to their archive copies.
-The source documentation index is redirected to this smaller operator index.
-Development, benchmark, historical evidence and implementation references use
-online URLs pinned to the exact source commit. Those references, external
+CI, benchmark, historical evidence and implementation references use online
+URLs pinned to the exact source commit. Those references, external
 vendor documentation and badges require a network.
 
 Examples that invoke Cargo, `target/release/`, Python under `scripts/`, Compose
@@ -108,6 +108,8 @@ The explicit input list and canonical LF Markdown/SVG text hashes live in
 reviewed `python3 scripts/release_docs.py refresh-manifest` update; this changes
 hashes and classified references only, never adds new bundled documents.
 Missing or stale hashes fail the staging check.
+The contract's digest uses canonical parsed JSON, so clean LF and CRLF
+checkouts verify the same inventory.
 The checker rejects undeclared omissions, changed hashes, unsafe archive paths,
 links, duplicates, case collisions, missing assets and broken local anchors.
 It neither downloads dependencies nor creates a release, tag or registry push.

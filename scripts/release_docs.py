@@ -48,6 +48,11 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def contract_digest(contract):
+    """Bind contract content independently of clean-checkout text EOL style."""
+    return digest(json.dumps(contract, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+
 def load_json(data):
     def pairs(items):
         result = {}
@@ -192,8 +197,6 @@ def render(root, name, data, bundled, online, tracked, commit):
             if classify_url(original) == "external":
                 continue
             target, fragment, directory = source_target(root, name, original, tracked)
-            if target == "docs/README.md":
-                target = INDEX
             if target == "vendor/kryptering/LICENSE":
                 target = "third-party/kryptering/LICENSE"
             if target in bundled:
@@ -226,7 +229,7 @@ def read_contract(root):
     if set(contract) != {"format", "documents", "source_only"} or contract["format"] != FORMAT:
         raise ValueError("unsupported release documentation contract")
     documents = contract["documents"]
-    if not isinstance(documents, dict) or not 2 <= len(documents) <= 128 or not {"README.md", INDEX} <= documents.keys():
+    if not isinstance(documents, dict) or not 2 <= len(documents) <= 192 or not {"README.md", INDEX} <= documents.keys():
         raise ValueError("incomplete or oversized documentation list")
     online = contract["source_only"]
     if not isinstance(online, list) or len(online) > 512 or len(set(online)) != len(online):
@@ -276,8 +279,6 @@ def refresh_contract(root):
                 if classify_url(original) == "external":
                     continue
                 target, _, _ = source_target(root, name, original, tracked)
-                if target == "docs/README.md":
-                    target = INDEX
                 if target == "vendor/kryptering/LICENSE":
                     target = "third-party/kryptering/LICENSE"
                 if target not in set(contract["documents"]) | set(BASE):
@@ -366,7 +367,7 @@ def stage(root, directory, commit, target):
         path.write_bytes(data)
     rows = inventory(directory)
     record = {"format": FORMAT, "source_commit": commit, "target": target,
-              "contract_sha256": digest(read_file(root, CONTRACT)),
+              "contract_sha256": contract_digest(contract),
               "source_documents": contract["documents"], "files": rows,
               "qualification": "archive structure and offline documentation only; packaged binaries are not executed"}
     (directory / MANIFEST).write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
@@ -378,7 +379,7 @@ def validate_tree(source, directory, commit, target):
     record = load_json(read_file(directory, MANIFEST))
     docs, contract = rendered_documents(source, commit)
     if (record.get("format") != FORMAT or record.get("source_commit") != commit or
-            record.get("target") != target or record.get("contract_sha256") != digest(read_file(source, CONTRACT)) or
+            record.get("target") != target or record.get("contract_sha256") != contract_digest(contract) or
             record.get("source_documents") != contract["documents"]):
         raise ValueError("stale or mismatched source documentation identity")
     actual = inventory(directory)
@@ -452,6 +453,22 @@ def check_archive(source, archive, commit, target, expected_root):
         raise ValueError("archive exceeds compressed byte budget")
     windows = target.endswith("windows-msvc")
     bound_archive_headers(archive, windows)
+    # Bind every component, including implicit directories, before extraction
+    # can collapse differently cased names on a case-insensitive filesystem.
+    casing = {}
+
+    def register_casing(name):
+        parts = name.split("/")
+        for length in range(1, len(parts) + 1):
+            prefix = "/".join(parts[:length])
+            folded = prefix.casefold()
+            if folded in casing and casing[folded] != prefix:
+                raise ValueError("inconsistent archive path casing")
+            casing[folded] = prefix
+
+    expected_files = required_files(target) | set(read_contract(source)["documents"]) | {MANIFEST}
+    for name in expected_files:
+        register_casing(expected_root + "/" + name)
     opener = zipfile.ZipFile if windows else lambda path: tarfile.open(path, "r:gz")
     with opener(archive) as package, tempfile.TemporaryDirectory(prefix="soup-wall-release-docs-") as temporary:
         members = package.infolist() if windows else package.getmembers()
@@ -464,6 +481,7 @@ def check_archive(source, archive, commit, target, expected_root):
             safe_name(name)
             if name != expected_root and not name.startswith(expected_root + "/"):
                 raise ValueError("unexpected archive root")
+            register_casing(name)
             if name.casefold() in paths:
                 raise ValueError("duplicate/colliding archive entry")
             paths.add(name.casefold())
@@ -477,8 +495,12 @@ def check_archive(source, archive, commit, target, expected_root):
                 if not member.isfile() and not is_directory:
                     raise ValueError("linked or special tar entry")
                 size = member.size
-                if name.rsplit("/", 1)[-1] in {"agentfw", "soup-wall-bench", "llm-firewall", "soup-wall-gateway"} and not member.mode & 0o111:
-                    raise ValueError("Unix binary lost executable mode")
+                if is_directory and member.mode & 0o500 != 0o500:
+                    raise ValueError("Unix directory lost owner read/traverse mode")
+                if not is_directory and not member.mode & stat.S_IRUSR:
+                    raise ValueError("Unix file lost owner readable mode")
+                if name.rsplit("/", 1)[-1] in {"agentfw", "soup-wall-bench", "llm-firewall", "soup-wall-gateway"} and not member.mode & stat.S_IXUSR:
+                    raise ValueError("Unix binary lost owner executable mode")
             if size > MAX_FILE or size < 0:
                 raise ValueError("archive entry size budget exceeded")
             total += size
