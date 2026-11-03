@@ -4,13 +4,15 @@
 use super::PostgresTenantStore;
 use crate::tenant_store::{
     agent_enrollment::{credential_hash, valid_id, validated_rotation},
+    managed_idempotency::{ensure_key_shape, intent_digest, keyed_result},
     managed_policy::{
         acknowledgement_overdue, exact_id, hex, rollout_agent_status, DeploymentMode, MAX_YAML,
     },
-    now_unix, random_base64url, AppliedReport, EnrolledAgent, IssuedAgentCredential,
-    ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
-    ManagedGroupRollout, ManagedIssuer, ManagedRevision, RolloutPhase, RotationOutcome,
-    RotationRequest, SignedManagedBundle,
+    now_unix, random_base64url, AdminRole, AppliedReport, DeploymentIdempotency, EnrolledAgent,
+    IdempotencyConflict, IssuedAgentCredential, KeyedDeployment, ManagedAgentGroup,
+    ManagedDeployment, ManagedGroupMember, ManagedGroupRevision, ManagedGroupRollout,
+    ManagedIssuer, ManagedRevision, RolloutPhase, RotationOutcome, RotationRequest,
+    SignedManagedBundle,
 };
 use anyhow::{bail, ensure, Context, Result};
 use sha2::{Digest, Sha256};
@@ -127,6 +129,33 @@ impl PostgresTenantStore {
             )).await?;
             self.bounded(tx.execute(
                 "INSERT INTO llm_firewall_schema_migrations(version,applied_at_unix) VALUES(28,$1)",
+                &[&now_unix()],
+            ))
+            .await?;
+        }
+        // SOU-219: optional idempotency keys for individual deployment issuance.
+        if self
+            .bounded(tx.query_opt(
+                "SELECT version FROM llm_firewall_schema_migrations WHERE version=29",
+                &[],
+            ))
+            .await?
+            .is_none()
+        {
+            self.bounded(tx.batch_execute(
+                "CREATE TABLE IF NOT EXISTS managed_agent_deployment_keys (
+                    tenant_id TEXT NOT NULL, agent_id TEXT NOT NULL,
+                    idempotency_key TEXT NOT NULL CHECK(length(idempotency_key) BETWEEN 8 AND 128),
+                    admin_id TEXT NOT NULL,
+                    intent_digest BYTEA NOT NULL CHECK(octet_length(intent_digest)=32),
+                    deployment_sequence BIGINT NOT NULL, created_at_unix BIGINT NOT NULL,
+                    PRIMARY KEY(tenant_id,agent_id,idempotency_key),
+                    UNIQUE(tenant_id,agent_id,deployment_sequence),
+                    FOREIGN KEY(tenant_id,agent_id,deployment_sequence)
+                      REFERENCES managed_agent_deployments(tenant_id,agent_id,deployment_sequence));"
+            )).await?;
+            self.bounded(tx.execute(
+                "INSERT INTO llm_firewall_schema_migrations(version,applied_at_unix) VALUES(29,$1)",
                 &[&now_unix()],
             ))
             .await?;
@@ -391,6 +420,89 @@ impl PostgresTenantStore {
                 issuer,
             )
             .await?;
+        self.bounded(tx.commit()).await?;
+        Ok(result)
+    }
+
+    /// Keyed issuance in one transaction: the Agent row lock serializes concurrent callers, so a
+    /// second caller observes the committed key and replays instead of issuing again.
+    pub(in crate::tenant_store) async fn deploy_managed_revision_keyed(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+        rollback: bool,
+        issuer: Option<&ManagedIssuer>,
+        idem: &DeploymentIdempotency<'_>,
+    ) -> Result<KeyedDeployment> {
+        ensure_key_shape(idem)?;
+        let mut client = self.checkout().await?;
+        let tx = self.bounded(client.transaction()).await?;
+        let mode = if rollback {
+            DeploymentMode::Rollback
+        } else {
+            DeploymentMode::Activate
+        };
+        // Current Agent, tenant and administrator authorization precede any stored result.
+        self.lock_managed_agent(&tx, tenant, agent).await?;
+        if idem.admin_id != "bootstrap_owner" {
+            let role: Option<String> = self
+                .bounded(tx.query_opt(
+                    "SELECT role FROM control_plane_admins WHERE id=$1 AND active=TRUE FOR SHARE",
+                    &[&idem.admin_id],
+                ))
+                .await?
+                .map(|row| row.get(0));
+            let role = role.context("administrator is no longer active")?;
+            ensure!(
+                AdminRole::from_storage(&role)?.permits(AdminRole::Owner),
+                "administrator role does not permit deployment"
+            );
+        }
+        let digest: String = self
+            .bounded(tx.query_opt(
+                "SELECT policy_sha256 FROM managed_agent_revisions WHERE tenant_id=$1 AND agent_id=$2 AND revision=$3 AND approved_at_unix IS NOT NULL",
+                &[&tenant, &agent, &revision],
+            ))
+            .await?
+            .context("revision not approved or not found")?
+            .get(0);
+        let intent = intent_digest(idem, revision, &digest, mode);
+        let existing = self
+            .bounded(tx.query_opt(
+                "SELECT admin_id,intent_digest,deployment_sequence FROM managed_agent_deployment_keys WHERE tenant_id=$1 AND agent_id=$2 AND idempotency_key=$3",
+                &[&tenant, &agent, &idem.key],
+            ))
+            .await?;
+        let (sequence, replayed) = if let Some(row) = existing {
+            let admin: String = row.get(0);
+            let stored: Vec<u8> = row.get(1);
+            ensure!(
+                admin == idem.admin_id && stored == intent,
+                IdempotencyConflict
+            );
+            (row.get::<_, i64>(2), true)
+        } else {
+            let issuer = issuer.context("Agent policy issuer unavailable")?;
+            let created = self
+                .deploy_managed_revision_tx(&tx, tenant, agent, revision, mode, issuer)
+                .await?;
+            let sequence = i64::try_from(created.deployment_sequence)?;
+            self.bounded(tx.execute(
+                "INSERT INTO managed_agent_deployment_keys(tenant_id,agent_id,idempotency_key,admin_id,intent_digest,deployment_sequence,created_at_unix) VALUES($1,$2,$3,$4,$5,$6,$7)",
+                &[&tenant, &agent, &idem.key, &idem.admin_id, &intent, &sequence, &created.issued_at_unix],
+            ))
+            .await?;
+            (sequence, false)
+        };
+        let row = self
+            .bounded(tx.query_one(
+                "SELECT tenant_id,agent_id,deployment_sequence,revision,policy_sha256,action,status,issued_at_unix,applied_at_unix,bundle_json FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 AND deployment_sequence=$3",
+                &[&tenant, &agent, &sequence],
+            ))
+            .await?;
+        let bundle_json: String = row.get(9);
+        let result = keyed_result(deployment(row)?, &bundle_json, replayed)?;
         self.bounded(tx.commit()).await?;
         Ok(result)
     }
