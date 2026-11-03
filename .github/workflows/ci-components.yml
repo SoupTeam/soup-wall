@@ -3461,6 +3461,11 @@ jobs:
           python3 -B scripts/qualify-installed-pilot.py --run --selection "$selection" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou215-installed-pilot" \
             2>&1 | tee "$RUNNER_TEMP/sou215-installed-pilot.log"
+          # The first-use demo adds the explicit single-use Ask control, timeout and daemon-loss recovery on the same generation.
+          (cd "$HOME" && python3 -B "$GITHUB_WORKSPACE/scripts/pilot-demo.py" --run --selection "$selection" \
+            --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
+            --strace "$(command -v strace)" --output "$RUNNER_TEMP/sou215-pilot-demo") \
+            2>&1 | tee "$RUNNER_TEMP/sou215-pilot-demo.log"
       - name: Retain finite pilot scope reports including failure
         if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'pilot-scope'
         uses: actions/upload-artifact@v7
@@ -3471,6 +3476,8 @@ jobs:
             ${{ runner.temp }}/sou215-pilot-scope.log
             ${{ runner.temp }}/sou215-installed-pilot/report.json
             ${{ runner.temp }}/sou215-installed-pilot.log
+            ${{ runner.temp }}/sou215-pilot-demo/report.json
+            ${{ runner.temp }}/sou215-pilot-demo.log
           if-no-files-found: warn
           retention-days: 30
       - name: Qualify installed project presets through two owned projects

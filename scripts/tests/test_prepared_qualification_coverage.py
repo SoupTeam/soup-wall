@@ -292,6 +292,7 @@ class PreparedQualificationCoverage(unittest.TestCase):
                 self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
                 self.assertIn("--pilot-scope-only", body)
                 self.assertIn("scripts/qualify-installed-pilot.py --run --selection", body)
+                self.assertIn("scripts/pilot-demo.py", body)
 
     def test_update_dispatch_is_targeted_and_does_not_replace_existing_qualification(self):
         context = {"github.event_name": "workflow_dispatch",

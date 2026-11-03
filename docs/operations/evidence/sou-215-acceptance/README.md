@@ -24,8 +24,9 @@ _Results pending: no native run has been recorded for this ledger yet._ Required
 write/reset/send with independent witnesses and live `observed-live` status with `scope.mode: enforce`), `status-after-run`
 and `cancel` cases run on the scope-selected prefix, plus `scope-selected-through-preview-and-prepare`, `excluded-option-preview`,
 `standard-cases-ran-under-scope`, `excluded-capability-refused`, `tampered-scope-refused`, `unselected-claims-nothing`,
-`status-never-claims-more` and `owned-cleanup`. The existing `qualify-installed-pilot.py --run` command then runs on the generation
-prepared by the scope-selected prefix for single-use Ask, daemon loss, refused effects and cleanup.
+`status-never-claims-more` and `owned-cleanup`. The existing `qualify-installed-pilot.py --run` command and the first-use demo
+`pilot-demo.py --run` then run on the generation prepared by the scope-selected prefix for daemon loss, refused effects and
+cleanup (installed pilot) and the explicit single-use Ask control, timeout and daemon-loss recovery (demo).
 
 ## Known boundaries
 

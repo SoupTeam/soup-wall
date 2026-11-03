@@ -135,7 +135,7 @@ claim it. `python3 -B scripts/pilot_scope.py --check` recomputes every binding a
 
 `scripts/qualify-pilot-scope.py` (focused workflow mode `installed_focus: pilot-scope`) runs the selected scope through the
 installed commands outside the checkout and reuses the existing acceptance commands: the installed front-door driver
-for preview/prepare/status/refusal and `scripts/qualify-installed-pilot.py --run` against the scope-selected generation for
-useful filesystem and Git reads, a denied action with independent zero-effect witnesses, supported single-use Ask,
-daemon loss and cleanup. It also proves that an excluded capability refuses with zero starts and that status separates
+for preview/prepare/status/refusal and useful filesystem and Git reads with refused effects, then
+`scripts/qualify-installed-pilot.py --run` and the first-use demo `scripts/pilot-demo.py --run` against the
+scope-selected generation for independent zero-effect witnesses, the explicit single-use Ask control, daemon loss and cleanup. It also proves that an excluded capability refuses with zero starts and that status separates
 enforce, unavailable and unqualified. Failed or incomplete attempts are retained, not rewritten.
