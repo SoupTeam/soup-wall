@@ -26,7 +26,13 @@ mod agent_enrollment;
 pub mod fleet;
 pub mod fleet_triage;
 mod managed_async;
+mod managed_confirmation;
 mod managed_policy;
+pub use managed_confirmation::{
+    valid_confirmation_id, CohortAgent, CohortBlocker, CohortPreview, ConfirmationFailure,
+    ConfirmationRefused, GroupStartPreview, GuardedStart, LatestRollout, StartConfirmation,
+    StartGuard, CONFIRMATION_TTL_SECS, MAX_PREVIEW_AGENTS,
+};
 pub use managed_policy::{
     AppliedReport, ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
     ManagedGroupRollout, ManagedIssuer, ManagedRevision, ManagedRolloutAgentStatus, RolloutPhase,

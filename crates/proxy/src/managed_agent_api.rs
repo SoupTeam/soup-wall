@@ -8,12 +8,14 @@
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
+use axum::Extension;
 use axum::Json;
 use serde::Deserialize;
 
 use crate::handlers::Shared;
 use crate::tenant_store::{
-    AppliedReport, EnrolledAgent, ManagedIssuer, RotationRequest, TenantStore,
+    AdminIdentity, AppliedReport, ConfirmationRefused, EnrolledAgent, ManagedIssuer,
+    RotationRequest, StartGuard, TenantStore,
 };
 
 #[derive(Deserialize)]
@@ -453,6 +455,17 @@ pub struct StartRolloutRequest {
     pub revision: String,
     #[serde(default)]
     pub issuer_key_id: Option<String>,
+    /// From `POST .../rollout/preview`. Absent keeps the documented unguarded start.
+    #[serde(default)]
+    pub confirmation_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreviewRolloutRequest {
+    pub revision: String,
+    #[serde(default)]
+    pub issuer_key_id: Option<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -692,6 +705,7 @@ pub async fn list_group_revisions(
 
 pub async fn start_group_rollout(
     State(state): State<Shared>,
+    Extension(identity): Extension<AdminIdentity>,
     Path((tenant_id, group_id)): Path<(String, String)>,
     Json(input): Json<StartRolloutRequest>,
 ) -> Response {
@@ -702,15 +716,59 @@ pub async fn start_group_rollout(
         );
     };
     let target_key = input.issuer_key_id.clone();
-    match tokio::task::spawn(async move {
-        let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref())?;
-        db.start_managed_group_rollout_async(&tenant_id, &group_id, &input.revision, &issuer)
-            .await
+    let result = tokio::task::spawn(async move {
+        let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref());
+        match input.confirmation_id.as_deref() {
+            None => {
+                let issuer = issuer?;
+                db.start_managed_group_rollout_async(
+                    &tenant_id,
+                    &group_id,
+                    &input.revision,
+                    &issuer,
+                )
+                .await
+                .map(|rollout| (rollout, None))
+            }
+            Some(id) => {
+                let guard = StartGuard {
+                    confirmation_id: id,
+                    admin_id: &identity.admin_id,
+                    requested_issuer_key: target_key.as_deref(),
+                };
+                db.start_managed_group_rollout_guarded_async(
+                    &tenant_id,
+                    &group_id,
+                    &input.revision,
+                    issuer.ok().as_ref(),
+                    &guard,
+                )
+                .await
+                .map(|started| (started.rollout, Some(started.replayed)))
+            }
+        }
     })
-    .await
-    {
-        Ok(Ok(rollout)) => (StatusCode::CREATED, Json(rollout)).into_response(),
+    .await;
+    match result {
+        Ok(Ok((rollout, replayed))) => {
+            let mut body = serde_json::to_value(&rollout).unwrap_or_default();
+            if let Some(replayed) = replayed {
+                body["confirmation"] = serde_json::json!({ "replayed": replayed });
+            }
+            (StatusCode::CREATED, Json(body)).into_response()
+        }
         Ok(Err(e)) => {
+            if let Some(refused) = e.downcast_ref::<ConfirmationRefused>() {
+                tracing::warn!(code = refused.code(), "guarded group rollout start refused");
+                return (
+                    StatusCode::CONFLICT,
+                    Json(serde_json::json!({
+                        "error": refused.to_string(),
+                        "code": refused.code(),
+                    })),
+                )
+                    .into_response();
+            }
             let msg = e.to_string();
             tracing::warn!(error = %msg, "group rollout start refused");
             if msg.contains("already in progress")
@@ -719,6 +777,45 @@ pub async fn start_group_rollout(
                 failure(StatusCode::CONFLICT, "active rollout already in progress")
             } else {
                 failure(StatusCode::BAD_REQUEST, "rollout cannot be started")
+            }
+        }
+        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
+    }
+}
+
+/// Authoritative, non-executing preview of what a start would freeze and issue right now.
+/// It grants no authority; the start re-derives every fact under its own transaction.
+pub async fn preview_group_rollout(
+    State(state): State<Shared>,
+    Extension(identity): Extension<AdminIdentity>,
+    Path((tenant_id, group_id)): Path<(String, String)>,
+    Json(input): Json<PreviewRolloutRequest>,
+) -> Response {
+    let Some(db) = store(&state) else {
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Console storage unavailable",
+        );
+    };
+    match tokio::task::spawn(async move {
+        db.preview_managed_group_start_async(
+            &tenant_id,
+            &group_id,
+            &input.revision,
+            &identity.admin_id,
+            input.issuer_key_id.as_deref(),
+        )
+        .await
+    })
+    .await
+    {
+        Ok(Ok(preview)) => Json(preview).into_response(),
+        Ok(Err(e)) => {
+            tracing::warn!(error = %e, "group rollout preview refused");
+            if e.to_string().contains("not found") {
+                failure(StatusCode::NOT_FOUND, "group not found")
+            } else {
+                failure(StatusCode::BAD_REQUEST, "rollout preview unavailable")
             }
         }
         Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),

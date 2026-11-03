@@ -317,10 +317,10 @@ def main():
                 def start(name):
                     page.locator("#rollout-start-revision").select_option(name)
                     page.get_by_role("button", name="Start pilot deployment").click()
-                    expect(page.locator("#rollout-confirm")).to_contain_text("Preview pilots: pilot")
-                    expect(page.locator("#rollout-confirm")).to_contain_text("Preview workers: worker-1, worker-2")
+                    expect(page.locator("#rollout-confirm")).to_contain_text("Server preview pilots: pilot")
+                    expect(page.locator("#rollout-confirm")).to_contain_text("Server preview workers: worker-1, worker-2")
                     confirm(name)
-                    status_has(f"Start {name}: accepted by the server. The frozen cohort matches your preview.")
+                    status_has(f"Start {name}: accepted by the server. The frozen cohort is exactly the server preview you confirmed.")
 
                 # 1. Baseline to all three through the browser; the gate opens on real ACKs.
                 revision("baseline", BASELINE)

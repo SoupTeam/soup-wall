@@ -4,6 +4,14 @@ Changes to the public Soup Wall source distribution are recorded here. Release a
 
 ## Unreleased
 
+- Added an authoritative cohort preview and guarded start for Console group rollouts (SOU-220).
+  `POST .../groups/:g/rollout/preview` returns the exact server-authorized cohort, approved digest, baselines
+  and sequences, blockers and a five-minute confirmation, issuing nothing. `POST .../rollout` with
+  `confirmation_id` revalidates it inside the issuing transaction/lease and refuses with HTTP 409 and zero
+  deployments on any drift; a confirmation is bound to tenant, group, administrator and intent, is single use
+  and reconciles a lost response to the same rollout. The Console shows the server preview and asks for a fresh
+  one after a conflict. Unguarded starts are unchanged. SQLite and PostgreSQL (migration 30).
+
 - Added `agentfw mcp-schema-upgrade` (SOU-204): an offline review of an original MCP
   `tools/list` upgrade against the accepted before snapshot, its identity document and the
   current operator registry or declarations, which are required (an explicit `--snapshot-only`

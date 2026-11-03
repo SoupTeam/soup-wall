@@ -426,7 +426,7 @@ pub(super) fn migrate_existing_groups(db: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
-fn group_schema(db: &rusqlite::Connection) -> Result<()> {
+pub(super) fn group_schema(db: &rusqlite::Connection) -> Result<()> {
     if db.is_autocommit() {
         let tx =
             rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)?;
@@ -494,6 +494,8 @@ fn group_schema(db: &rusqlite::Connection) -> Result<()> {
     if !has_snapshot {
         db.execute_batch("ALTER TABLE managed_group_rollouts ADD COLUMN initial_sequences_json TEXT NOT NULL DEFAULT '{}';")?;
     }
+    db.execute_batch(super::managed_confirmation::SQLITE_CONFIRMATION_SCHEMA)
+        .context("cannot prepare group start confirmation table")?;
     Ok(())
 }
 
@@ -515,7 +517,7 @@ type SqliteRolloutRow = (
     String,
 );
 
-fn eligible_group(db: &rusqlite::Connection, tenant: &str, group: &str) -> Result<()> {
+pub(super) fn eligible_group(db: &rusqlite::Connection, tenant: &str, group: &str) -> Result<()> {
     ensure!(
         exact_id(tenant) && exact_id(group),
         "invalid group identity"
@@ -532,7 +534,7 @@ fn eligible_group(db: &rusqlite::Connection, tenant: &str, group: &str) -> Resul
     Ok(())
 }
 
-fn eligible(db: &rusqlite::Connection, tenant: &str, agent: &str) -> Result<()> {
+pub(super) fn eligible(db: &rusqlite::Connection, tenant: &str, agent: &str) -> Result<()> {
     ensure!(
         exact_id(tenant) && exact_id(agent),
         "invalid policy audience"
@@ -1182,7 +1184,7 @@ impl TenantStore {
         Ok(result)
     }
 
-    fn start_managed_group_rollout_conn(
+    pub(super) fn start_managed_group_rollout_conn(
         &self,
         db: &rusqlite::Connection,
         tenant: &str,
@@ -2505,7 +2507,7 @@ impl TenantStore {
         Ok(plan)
     }
 
-    fn get_managed_group_rollout_conn(
+    pub(super) fn get_managed_group_rollout_conn(
         &self,
         db: &rusqlite::Connection,
         tenant: &str,

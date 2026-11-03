@@ -60,11 +60,15 @@ jobs:
       - name: Build and run SQLite regressions
         run: |
           cargo build --locked -p llm-firewall -p agentfw
-          cargo test --locked -p llm-firewall --test managed_group_rollout --test managed_group_atomic
+          cargo test --locked -p llm-firewall --test managed_group_rollout --test managed_group_atomic --test managed_cohort_confirmation
       - name: Run the same fault and concurrency controls on PostgreSQL
         env:
           SOUP_GROUP_TEST_POSTGRES_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_controls?sslmode=disable
         run: cargo test --locked -p llm-firewall --test managed_group_atomic postgres_atomic_restart_and_concurrency -- --ignored
+      - name: Run cohort preview and guarded start controls over HTTP on PostgreSQL
+        env:
+          SOUP_COHORT_TEST_POSTGRES_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_controls?sslmode=disable
+        run: cargo test --locked -p llm-firewall --test managed_cohort_confirmation postgres_cohort_confirmation_over_http -- --ignored
       - name: Four real Agents with encrypted SQLite recovery
         run: python3 scripts/managed-group-rollout-demo.py --no-build --output target/group-sqlite.json
       - name: Four real Agents with encrypted PostgreSQL recovery

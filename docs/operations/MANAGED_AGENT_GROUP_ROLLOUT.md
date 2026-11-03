@@ -15,6 +15,40 @@ An Owner can deploy an approved policy to a frozen Agent inventory in two waves:
 
 Acknowledgement deadlines are 300 seconds from deployment issuance. Gate evaluation uses the persisted ACK timestamp: a late ACK cannot reopen an expired gate, while a timely ACK remains valid if the operator evaluates it later. ACK processing and explicit Owner `advance` evaluate transitions; GET reports an overdue Agent without issuing deployments. An entirely offline fleet requires the operator to call `advance` to process its expired deadline. A stopped gate is never bypassed by elapsed time or restart. If no affected Agent has a restorable baseline, manual rollback refuses the request rather than claiming restoration.
 
+## Authoritative cohort preview and guarded start (SOU-220)
+
+`POST /admin/v1/tenants/:t/groups/:g/rollout/preview` with `{"revision":"candidate","issuer_key_id":null}` (Owner, like every
+group mutation) returns what a start would freeze and issue **right now**, from server state: the exact effective
+pilots and workers, the approved group revision digest, each Agent's authorization, applied baseline revision and latest
+sequence/status, the latest rollout of the group, and a list of `blockers` (not approved, empty group or no pilot, an active or
+already completed rollout, an Agent in another group's active rollout, an unacknowledged deployment, a revoked Agent, a revision
+collision on an Agent, no usable signer, more than 500 Agents). `startable` is true only without blockers, and only then is a
+`confirmation` returned: a versioned identity (`swc1_...`), valid for five minutes, with `snapshot_sha256`, a digest of every fact
+listed. The preview issues no deployment and changes no membership, revision or rollout; the only row it writes is the
+confirmation (one outstanding per administrator and group; asking again replaces it). It is information, never authorization.
+
+`POST .../rollout` with `{"revision":"candidate","confirmation_id":"swc1_..."}` is the guarded start. Inside the same transaction
+(SQLite) or tenant lease (PostgreSQL) that issues the pilot wave, and before anything is issued, the server rechecks the
+administrator, then the confirmation, then recomputes the same facts. The confirmation is bound to tenant, group, the
+authenticated administrator and the canonical intent (revision, requested signer). Any mismatch answers HTTP 409 with a
+`code`, issues **zero** deployments, creates no rollout and does not consume the confirmation:
+
+| `code` | Meaning |
+| --- | --- |
+| `confirmation_stale` | membership, pilot flag, an Agent's authorization, the revision, a baseline, a sequence or another rollout changed after the preview; request a new preview |
+| `confirmation_expired` | older than five minutes |
+| `confirmation_invalid` | unknown, forged, malformed, for another tenant, group, administrator, revision or signer, or superseded by a newer preview or rollout |
+
+A successful guarded start consumes the confirmation in the same transaction and records the rollout it created. Repeating the
+request with the same confirmation, because a response was lost, returns that same rollout (`confirmation.replayed: true`)
+and issues nothing, while the group's latest rollout is still that one; reconciling through `GET .../rollout` is equivalent.
+A confirmation never starts a second rollout.
+
+**Compatibility.** `POST .../rollout` without `confirmation_id` is unchanged: it starts, resumes or returns the existing rollout
+exactly as documented above, with no `confirmation` object in the response. The Console always uses the guarded form. A caller
+that wants the guarantee must send the confirmation; the server does not infer it. PostgreSQL migration 30 adds
+`managed_group_start_confirmations`; SQLite creates it on first use. Individual (single-Agent) deployment is not changed.
+
 A group cannot be deleted during `pilot`, `standard`, `paused` or `rolling_back`. Live membership changes do not change the persisted rollout inventory or its ACK routing. Failed/rolled-back plans remain inspectable; terminal `advance` and retry behavior never allocate another deployment.
 
 ## Transaction ownership and retry behavior
@@ -43,7 +77,8 @@ Use `x-llm-firewall-admin-token: Bearer <token>`. All group mutations require Ow
 | DELETE | `/:g/members/:agent` |
 | POST / GET | `/:g/revisions` |
 | POST | `/:g/revisions/:revision/approve` |
-| POST / GET | `/:g/rollout` |
+| POST / GET | `/:g/rollout` (POST accepts an optional `confirmation_id`; see below) |
+| POST | `/:g/rollout/preview` |
 | POST | `/:g/rollout/advance`, `/pause`, `/resume`, `/rollback` |
 
 Create/start requests retain their existing bodies, for example `{"revision":"v2","issuer_key_id":"optional-key-id"}`. Identical successful start retries retain the original HTTP 201 response and identity. GET and transition responses include the frozen plan and an `agents` map containing expected/latest sequences, acknowledgement deadline, state and last matching acknowledgement metadata. States include `not_issued`, `pending`, `overdue`, `applied`, `rejected`, `conflict`, `revoked` and `unresolved_baseline`. The view is read from one database snapshot; it contains no signing seeds, credentials or policy YAML.
@@ -61,7 +96,7 @@ New archives use schema contract 27 and its inventory. Older schema-26 archives 
 ## Reproduction and evidence
 
 ```sh
-cargo test -p llm-firewall --test managed_group_rollout --test managed_group_atomic
+cargo test -p llm-firewall --test managed_group_rollout --test managed_group_atomic --test managed_cohort_confirmation
 SOUP_GROUP_TEST_POSTGRES_URL='<owned disposable PostgreSQL URL>' \
   cargo test -p llm-firewall --test managed_group_atomic \
   postgres_atomic_restart_and_concurrency -- --ignored

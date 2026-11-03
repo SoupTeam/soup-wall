@@ -247,25 +247,117 @@ class RolloutPanelBrowserTests(unittest.TestCase):
                 self.assertEqual(self.owner_buttons_enabled(), 0)
                 self.assertEqual(self.posts, [("POST", self.rollout_path("/pause"))])
 
-    def test_start_reports_a_frozen_cohort_that_differs_from_the_preview(self):
+    def server_preview(self, **changes):
+        agents = [("pilot", "pilot"), ("worker-1", "worker")]
+        value = {"contract_version": "sw-group-rollout-preview/1", "executed": False, "tenant_id": TENANT, "group_id": "fleet",
+                 "revision": "baseline", "policy_sha256": "b" * 64, "approved": True, "issuer_key_id": None,
+                 "signer_available": True, "pilots": ["pilot"], "workers": ["worker-1"],
+                 "agents": [{"agent_id": a, "wave": w, "authorized": True, "baseline_revision": "old", "latest_sequence": 7,
+                             "latest_revision": "old", "latest_status": "applied"} for a, w in agents],
+                 "latest_rollout": None, "blockers": [], "startable": True, "snapshot_sha256": "d" * 64,
+                 "confirmation": {"version": 1, "id": "swc1_" + "A" * 43, "expires_at_unix": 1900000000}}
+        value.update(changes)
+        return value
+
+    def baseline_revision(self):
         self.plan = None
         self.revisions.append({"tenant_id": TENANT, "group_id": "fleet", "revision": "baseline",
                                "policy_sha256": "b" * 64, "approved": True})
+
+    def start_review(self, status="Review the server preview"):
+        self.page.locator("#rollout-start-revision").select_option("baseline")
+        self.page.get_by_role("button", name="Start pilot deployment").click()
+        self.wait_status(status)
+
+    def test_start_shows_the_server_preview_and_sends_only_its_confirmation(self):
+        self.baseline_revision()
         frozen = dict(PLAN, revision="baseline", policy_sha256="b" * 64, standard_agents=["worker-1"])
+        bodies = []
 
         def start(route):
+            bodies.append(json.loads(route.request.post_data))
             self.plan = frozen
             self.json(route, frozen, 201)
 
+        self.overrides[("POST", self.rollout_path("/preview"))] = (200, self.server_preview())
         self.overrides[("POST", self.rollout_path())] = start
         self.open()
-        self.page.locator("#rollout-start-revision").select_option("baseline")
-        self.page.get_by_role("button", name="Start pilot deployment").click()
-        self.assertIn("Preview workers: worker-1, worker-2", self.page.locator("#rollout-confirm").inner_text())
+        self.start_review()
+        text = self.page.locator("#rollout-confirm").inner_text()
+        for fragment in ("Server preview pilots: pilot", "Server preview workers: worker-1", "b" * 64, "d" * 64,
+                         "worker-1 (worker): baseline old, latest sequence 7 (applied)"):
+            self.assertIn(fragment, text)
+        self.assertIn("Nothing has been issued", self.page.locator("#rollout-status").inner_text())
+        # Browsing the preview issues nothing: only the read-only preview was requested.
+        self.assertEqual(self.posts, [("POST", self.rollout_path("/preview"))])
         self.confirm("baseline")
-        self.wait_status("froze a different cohort than your preview")
-        self.assertIn("Current membership differs from the frozen cohort", self.page.locator("#rollout-members").inner_text())
+        self.wait_status("exactly the server preview you confirmed")
+        self.assertEqual(bodies, [{"revision": "baseline", "confirmation_id": "swc1_" + "A" * 43}])
         self.assertEqual(json.loads(self.page.evaluate("JSON.stringify(Object.keys(localStorage))")), [])
+
+    def test_a_cohort_that_drifts_after_the_preview_is_refused_and_re_reviewed(self):
+        self.baseline_revision()
+        previews = [self.server_preview(),
+                    self.server_preview(workers=["worker-1", "worker-3"], snapshot_sha256="e" * 64,
+                                        confirmation={"version": 1, "id": "swc1_" + "B" * 43, "expires_at_unix": 1900000000})]
+        starts = []
+
+        def preview(route):
+            self.json(route, previews.pop(0) if len(previews) > 1 else previews[0])
+
+        def start(route):
+            starts.append(json.loads(route.request.post_data)["confirmation_id"])
+            self.json(route, {"error": "the cohort changed since it was previewed", "code": "confirmation_stale"}, 409)
+
+        self.overrides[("POST", self.rollout_path("/preview"))] = preview
+        self.overrides[("POST", self.rollout_path())] = start
+        self.open()
+        self.start_review()
+        self.confirm("baseline")
+        self.page.wait_for_function("() => document.getElementById('rollout-confirm').innerText.includes('worker-3')")
+        text = self.page.locator("#rollout-confirm").inner_text()
+        self.assertIn("Nothing was issued", text)
+        self.assertIn("e" * 64, text)
+        # One refused start with the old confirmation; the new one has not been sent by anything.
+        self.assertEqual(starts, ["swc1_" + "A" * 43])
+        self.assertEqual(self.posts.count(("POST", self.rollout_path())), 1)
+        self.assertEqual(self.posts.count(("POST", self.rollout_path("/preview"))), 2)
+
+    def test_a_blocked_preview_offers_no_confirmation(self):
+        self.baseline_revision()
+        blocked = self.server_preview(startable=False, confirmation=None, blockers=[
+            {"code": "agent_not_authorized", "agent_id": "worker-1", "detail": "not enrolled, revoked or tenant inactive"}])
+        self.overrides[("POST", self.rollout_path("/preview"))] = (200, blocked)
+        self.open()
+        self.start_review("blocked")
+        text = self.page.locator("#rollout-confirm").inner_text()
+        self.assertIn("Blocked: agent_not_authorized (worker-1)", text)
+        self.assertEqual(self.page.locator("#rollout-confirm-input").count(), 0)
+        self.assertEqual(self.posts, [("POST", self.rollout_path("/preview"))])
+
+    def test_an_unavailable_or_mismatched_preview_never_allows_a_start(self):
+        self.baseline_revision()
+        for label, action in (("unavailable", (503, {"error": "Console unavailable"})),
+                              ("another group", (200, self.server_preview(group_id="other"))),
+                              ("another revision", (200, self.server_preview(revision="candidate")))):
+            with self.subTest(label=label):
+                self.posts.clear()
+                self.overrides[("POST", self.rollout_path("/preview"))] = action
+                self.open()
+                self.start_review("Nothing was issued")
+                self.assertEqual(self.page.locator("#rollout-confirm-input").count(), 0)
+                self.assertEqual(self.posts, [("POST", self.rollout_path("/preview"))])
+
+    def test_a_lost_start_response_reconciles_instead_of_resubmitting(self):
+        self.baseline_revision()
+        self.overrides[("POST", self.rollout_path("/preview"))] = (200, self.server_preview())
+        self.overrides[("POST", self.rollout_path())] = "abort"
+        self.open()
+        self.start_review()
+        self.confirm("baseline")
+        self.wait_status("Reconciled")
+        self.assertEqual(self.posts.count(("POST", self.rollout_path())), 1)
+        self.assertEqual(self.posts.count(("POST", self.rollout_path("/preview"))), 1)
 
     def test_revision_digest_mismatch_is_not_presented_as_reviewed(self):
         def create(route):
