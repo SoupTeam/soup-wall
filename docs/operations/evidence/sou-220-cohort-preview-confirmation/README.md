@@ -34,6 +34,18 @@ independently takes migration 29 and the same inventory fields; whichever merges
 two fixture additions. The encrypted backup/restore demos have not been run locally (`age` is not installed); the
 re-dispatched workflow is the evidence.
 
+## Focused CI result on PostgreSQL 16 (workflow_dispatch, no full matrix)
+
+`managed-group-rollout.yml`, run `41712822310`, exact source `10965ca204f40e72732b2cfee90a1e534b143808`, **passed**: the SQLite
+regressions including `managed_cohort_confirmation`; the existing PostgreSQL fault/concurrency controls; the new step
+`Run cohort preview and guarded start controls over HTTP on PostgreSQL`; and both existing real-Agent demos with encrypted
+SQLite and PostgreSQL recovery (which exercise the updated recovery inventory). The earlier run `41711567465` (source
+`fd5d58ed`) failed only the SQLite recovery step for the inventory reason above and is kept, not relabelled. The local
+PostgreSQL 14 caveat below therefore no longer limits the PostgreSQL claim for this source. The Playwright suite and
+`console-rollout-acceptance.py` (Linux, `agent-fleet.yml`) were not dispatched: the former passed locally, the latter is
+still unrun. This is not a full Ready CI, CodeQL or admission result. Later commits that change only this ledger are not
+re-qualified.
+
 ## Explicit skips and caveats
 
 * **PostgreSQL 16 not observed by the author.** The local server was PostgreSQL 14.17. The existing migration contains the
