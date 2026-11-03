@@ -6,28 +6,25 @@
 required observations, then the installed update entry rejected its dedicated
 arguments; removal remained incomplete. Historical outcomes are never backfilled.
 
-**Fixed author candidate: NO-GO for the complete lifecycle.** Independent runs
-[583](https://github.com/SoupTeam/soup-wall/actions/runs/41671867237) and
-[584](https://github.com/SoupTeam/soup-wall/actions/runs/41672949388) each passed
-14/15 required observations. All useful work, interruption/recovery, Ask/replay,
-A-B-A and completed-run archival passed. Native removal preview still refused:
-`process_evidence_unavailable_or_inconsistent`. In each environment, two same-UID
-processes returned `EACCES` while reading `cwd`, with the same hashed identities
-persisting through all three previews. Their origin/relationship to the pilot
-was not established; they are not assumed unrelated or safely inactive. No
-confirmation was emitted, no removal applied, and bootstrap removal/status
-remained unattempted. This is a genuine unresolved process-visibility blocker,
-not a passing uninstall or complete lifecycle acceptance.
+**Fixed author candidate: GO for the exact measured prepared-CI path.** Independent
+runs [591](https://github.com/SoupTeam/soup-wall/actions/runs/41711794121) and
+[592](https://github.com/SoupTeam/soup-wall/actions/runs/41711848382) each passed
+all 15 required observations, including actual confirmed removal/status for both
+direct and bootstrap component homes. Private before/after process provenance
+and the unchanged native guard confirm complete process visibility. The path
+requires an exclusively owned, empty hosted-CI user session and the namespace
+prerequisite below; this is not stock-host or full-product acceptance.
 
-Product: `62b9e69a449c0372ac5226f9e0545d888d4ea1f7`; measurement driver:
-`4b7209908d9be08b2bcdce2ebba2956686f336a7`. The product awaits review and is not
-newly accepted main. Later evidence/documentation commits do not claim a new
-native execution. The supported measured prefix is installation through useful
-work, recovery and archival under the prerequisites below. Complete removal
-requires fresh qualification with fully available same-UID process evidence;
-its original guard must remain intact. No safe in-scope product correction for
-the inaccessible processes was established, and no privileges, force-stop,
-process exclusions or security relaxation were introduced.
+Product: `62b9e69a449c0372ac5226f9e0545d888d4ea1f7`; frozen measurement driver:
+`9ecc23806afc8bf22bd06dca8761c50edec6662f`. The product remains an author
+candidate awaiting review, not newly accepted main. Later documentation/evidence
+commits do not claim another native execution.
+
+Earlier runs 583/584 remain genuine 14/15 NO-GO observations. Their source reports
+could not identify the two inaccessible same-UID processes and emitted no removal
+confirmation/apply. Subsequent pre-install diagnosis established their origin,
+and ordinary-user preparation now actually terminates the empty owned user
+session before installed-host use. No process is excluded from removal checks.
 
 Accepted baseline: `9a3c5b38e56ebc6ebbeedfda98805f6a327cb371`.
 [Draft PR #348](https://github.com/SoupTeam/soup-wall/pull/348) contains two
@@ -68,47 +65,105 @@ This mode creates no OS accounts. Unassisted stock-host installation is unproven
 
 ## Measured candidate outcomes
 
-Both runs used UID/GID 1001, effective capabilities 0, Ubuntu 24.04 x86_64 and
-runner image `20261026.354.1`, with distinct hashed boot identities. Each completed
-four tasks per project and two independently calibrated denied-call controls;
-forbidden original dispatches, network connections and marker files were zero.
-The unchanged walkthrough passed 12 main cases plus four emergency-Stop cases;
-the separate two-profile Ask smoke passed one-use redemption/replay controls.
-A-B-A passed three useful reads and two paused-launch refusals with zero host
-executions/provider requests. All 13 completed outer runs reported stopped owned
-processes. Project bytes and Git/index/object state matched their pre-run
-snapshots after the full lifecycle through update/rollback.
+Both environments used ordinary UID/GID 1001 with zero effective capabilities,
+native Ubuntu 24.04 x86_64 and distinct boot identities. Each passed four useful
+tasks per project and both independently calibrated denied-call controls with
+zero forbidden original dispatches, network connections and marker files. The
+unchanged walkthrough passed 12 main plus four emergency-Stop cases. Separate
+Ask smoke passed two-profile one-use redemption/replay correctness and the
+existing five-second first-pending bound.
+
+Each A-B-A sequence passed three useful reads and two paused-launch refusals
+with zero host executions/provider requests. All 13 completed outer runs reported
+stopped owned processes and were archived/cleaned. Both native component removals
+returned retained-journal status with verified acknowledgement hashes. Project
+bytes/Git state, synthetic user files, prepared selections, managed generations,
+Agent executables and maintenance history survived removal. Product source/tree
+matched before and after the complete lifecycle in both environments.
 
 | Run | Native Agent source build | Catalog / ledger preparation | Eight useful task wall times | First pending, filesystem / Git | Archived + cleaned runs | Required inventory |
 | --- | --- | --- | --- | --- | --- | --- |
-| 583 | 200.016 s | 33.071 / 32.765 s | 27.656–28.997 s | 1302.5 / 1315.4 ms | 13/13 | 14 passed, 1 failed |
-| 584 | 201.597 s | 32.177 / 31.954 s | 29.388–29.744 s | 1169.4 / 1181.4 ms | 13/13 | 14 passed, 1 failed |
+| 591 | 149.288 s | 24.780 / 24.521 s | 21.962–22.273 s | 1007.8 / 990.0 ms | 13/13 | 15/15 passed |
+| 592 | 188.722 s | 31.905 / 31.146 s | 28.193–29.528 s | 1409.0 / 1389.1 ms | 13/13 | 15/15 passed |
 
-Build/preparation/task times cover different phases, not total human onboarding
-or a per-tool percentile. Both first-pending observations met the existing
-5000 ms correctness bound. All other installation/useful-task latency thresholds
-remain unapproved. Independent builds have per-environment output hashes;
-bit-identical reproduction is not claimed.
+These durations describe separate phases, not human onboarding or per-tool
+percentiles. General useful-task/installation latency thresholds remain
+unapproved. Equal source does not imply bit-identical independent native builds;
+exact per-environment outputs are retained.
 
-[Evidence metadata index](evidence/sou-216-acceptance/summary.json) retains every
-attempt, frozen expectation verification, original artifact/report digests,
-source/input/profile/policy hashes, timings, cleanup, archive outcomes and all
-removal preview observations. Original reports remain in their linked Actions
-artifacts. The failure path exits before the final whole-source snapshot;
-initial source/tree and build receipt identities and post-lifecycle project
-snapshots remain available. No final whole-source preservation claim is made.
+[Evidence metadata index](evidence/sou-216-acceptance/summary.json) retains all
+17 complete-lifecycle attempts with original statuses, independent expectation
+verification, source/input/profile/policy hashes, timings, cleanup, archive and
+removal outcomes. Original report contracts remain in the linked Actions artifacts.
+The earlier NO-GO failure paths omit their final whole-source snapshot; those
+missing observations are not backfilled by the successful new measurements.
+
+## Process visibility and owned CI session preparation
+
+Read-only pre-install [probe 585](https://github.com/SoupTeam/soup-wall/actions/runs/41705360233)
+identified the inaccessible processes as the existing `systemd --user` manager
+and its `(sd-pam)` child, both predating pilot execution. Private observations
+retain PID/start/parent, all UID values, capabilities, tracing, dumpability when
+reported, namespace and cgroup evidence. Raw argv/environment contents are never
+collected. [Probe 588](https://github.com/SoupTeam/soup-wall/actions/runs/41709392593)
+confirmed their normal termination and complete same-UID visibility afterwards.
+
+The preparation helper is restricted to owned disposable GitHub-hosted Ubuntu
+24.04 x86_64 jobs, ordinary UID and zero effective capabilities. It matches the
+system manager's read-only `user@UID.service` identity to the kernel process
+identities and exact cgroup cohort. The cohort must contain only that manager
+and its PAM child, must exclude the runner/driver ancestry, and must have no
+tracing, other active scopes, working service processes, non-vendor units or
+pending jobs. Unknown or changed evidence refuses before any exit request.
+
+Only then does the helper request the documented
+[`systemctl --user exit`](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html)
+operation. It waits for those exact identities to terminate and independently
+requires all same-UID process evidence to be available. UID, capabilities,
+namespaces, caller cgroup, ptrace settings and AppArmor context remain unchanged.
+This helper uses no sudo, PID/group kill, force flag, account creation, system-wide service reconfiguration or
+global settings change, or ignored process. This preparation is not a personal
+workstation cleanup command; the helper refuses outside its disposable-CI scope.
+
+The native product/removal implementation remains pinned and unchanged. Every
+preview and apply still performs the original complete process/run checks; a
+session preparation report never authorizes removal. The workload records
+visibility before installed-host execution and after completed-run cleanup.
+A separate read-only step records private provenance after the full attempt and
+cannot enable quiescence. Standard CMS AES-256-GCM envelopes retain the bounded
+private snapshots; only the public recipient certificate is versioned. The
+private key and decrypted records remain outside Git. Artifact/ciphertext/plaintext
+hashes and authenticated decryption results are retained in the
+[diagnostic metadata index](evidence/sou-216-acceptance/process-diagnostics.json).
+Original raw run archives and removal journals remain private in the disposable
+job until teardown, while their outcome/hash evidence is preserved.
+
+This adds a measured environment prerequisite: a quiescent, exclusively owned CI
+user session. It does not establish complete lifecycle acceptance for an active
+personal desktop or an arbitrary host with unreadable processes.
 
 ## Reproduce
 
-From a clean measurement-driver checkout, use the existing
+Check out frozen driver `9ecc23806afc8bf22bd06dca8761c50edec6662f` in a clean
+measurement checkout. Use the existing
 [installed producer](PILOT_INSTALLED_FRONT_DOOR.md). Supply inputs emitted by the
-pinned native builders and retain the original build receipt:
+pinned native builders and retain the original build receipt. In the owned hosted
+CI job, after acquisition/build and before the installed-host workload, prepare
+complete process visibility using the CI-only helper:
+
+```sh
+SOUP_CI_RUNNER_ENVIRONMENT=github-hosted \
+  python3 -I -B scripts/ci_pilot_user_session.py --quiesce
+export SOU216_CI_USER_SESSION_REPORT="$RUNNER_TEMP/sou216-user-session/report.json"
+```
+
+Supply the actual builder-output paths for the producer command:
 
 ```sh
 python3 -B scripts/qualify-installed-front-door.py --run --clean-user-only \
   --runtime-source /absolute/pinned-product-source \
   --source-build-receipt /private/agent-build/generations/ID/receipt.json \
-  --expected-commit FULL_MEASUREMENT_DRIVER_COMMIT \
+  --expected-commit 9ecc23806afc8bf22bd06dca8761c50edec6662f \
   --output /private/new-clean-user-result \
   --component-python /usr/bin/python3.12 --strace /usr/bin/strace \
   --agentfw /private/agent-build/generations/ID/bin/agentfw \
@@ -120,7 +175,15 @@ python3 -B scripts/qualify-installed-front-door.py --run --clean-user-only \
   --python /usr/bin/python3.12 --allow-download
 ```
 
-The existing `mcp-real-filesystem.yml` workflow adds the explicit
+After the installed-host attempt, including failures, collect read-only private
+provenance without any session-exit operation:
+
+```sh
+SOUP_CI_RUNNER_ENVIRONMENT=github-hosted \
+  python3 -I -B scripts/ci_pilot_user_session.py --after-cleanup
+```
+
+The existing `mcp-real-filesystem.yml` workflow automates these steps with the explicit
 `installed_focus=clean-user`, `native_preparation_only=true` selection. Leave
 every other flag false, optional comparison inputs empty and stability off.
 Dispatch twice at the same driver commit for two fresh environments. Acquisition
@@ -137,8 +200,8 @@ Both environments use two new projects, distinct from historical SOU-145 inputs:
 | Catalog service | Read the API contract exactly; inspect the complete pending configuration diff; trace both local commits; inspect the latest commit |
 | Release ledger | Read the release-review contract exactly; inspect the complete pending retention diff; trace both local commits; inspect the latest commit |
 
-Expected source bytes, Git commit IDs, messages and complete pending diffs are
-recorded before any provider or host is started. Each task uses the genuine
+Each project’s expected source bytes, Git commit IDs, messages and complete
+pending diff are recorded before that project’s first provider/host execution. Each task uses the genuine
 pinned host and original servers through `agentfw pilot`, outside both source
 checkouts. Error flags, missing/partial replies and unconfirmed process cleanup
 cannot count as useful work. A failed useful task remains in its four-task
@@ -211,6 +274,11 @@ replacement report contract. No canceled attempt contributes success evidence.
 | [579](https://github.com/SoupTeam/soup-wall/actions/runs/41655608365), [580](https://github.com/SoupTeam/soup-wall/actions/runs/41655905813) | Each 13 passed, 1 failed, 1 incomplete | `maintenance_scope_changed` on the first coordinated useful run; added the documented separate bootstrap and identity-pinned coordinated maintenance integration. |
 | [581](https://github.com/SoupTeam/soup-wall/actions/runs/41664166977), [582](https://github.com/SoupTeam/soup-wall/actions/runs/41665051216) | Each 14 passed, 1 failed | A-B-A and paused-launch refusals passed. Removal preview reported unverified retained read-only runs and unavailable process evidence; no removal applied. Driver now uses accepted archival and records bounded process diagnostics. |
 | [583](https://github.com/SoupTeam/soup-wall/actions/runs/41671867237), [584](https://github.com/SoupTeam/soup-wall/actions/runs/41672949388) | Each 14 passed, 1 failed | All 13 completed runs archived/cleaned. Three fresh previews each refused solely on unavailable process evidence; two persistent same-UID `cwd` EACCES observations per environment. No apply or bootstrap removal/status. |
+| [585](https://github.com/SoupTeam/soup-wall/actions/runs/41705360233) | Diagnosis only | Identified the existing systemd user manager and sd-pam before any pilot execution. |
+| [586](https://github.com/SoupTeam/soup-wall/actions/runs/41708018868), [587](https://github.com/SoupTeam/soup-wall/actions/runs/41708695515) | Failed preparation diagnostics | Catalog/parser refusals before any exit request; bounded private provenance retained. Empty systemctl unit/job responses now use strict documented text parsing. |
+| [588](https://github.com/SoupTeam/soup-wall/actions/runs/41709392593) | Preparation only, passed | Exact empty user-session cohort terminated through the user API; complete visibility and unchanged security context verified. No application acceptance claim. |
+| [589](https://github.com/SoupTeam/soup-wall/actions/runs/41710501051), [590](https://github.com/SoupTeam/soup-wall/actions/runs/41710580902) | Canceled: each 6 passed, 9 incomplete | Superseded to add encrypted post-cleanup provenance; original incomplete outcomes retained. |
+| [591](https://github.com/SoupTeam/soup-wall/actions/runs/41711794121), [592](https://github.com/SoupTeam/soup-wall/actions/runs/41711848382) | Each 15/15 passed | Complete native lifecycle, original removal preview/apply/status for two homes, preserved user data and authenticated before/after private provenance. |
 
 Earlier fully instrumented useful-task timings are not a performance baseline for
 later ordinary launches. The two denied-call controls retain full syscall capture.
@@ -229,13 +297,14 @@ is NO-GO, including when the relationship of unreadable same-user processes is u
 
 ## Development verification and handoff
 
-Focused local suites: 101 tests, 90 passed and 11 platform/environment skips.
+Focused local suites: 112 tests, 101 passed and 11 platform/environment skips.
 Mandatory native pin checks additionally exercise Linux process refusal and
 maintenance/current-generation controls. Source workflow actionlint, generated
 workflow consistency and local documentation links pass. Local checks do not
 establish native acceptance. The measured driver’s Draft fast checks, admission
-and all five CodeQL analyses passed; both native qualification workflows correctly
-remain failed/NO-GO at strict removal preview.
+and all five CodeQL analyses are checked separately from native acceptance. Both
+new native qualification workflows passed; earlier failed/NO-GO reports retain
+their original results.
 
 PR stays Draft. Final shared Ready qualification, review/admission and merge
 remain TL-owned. Checkpoint: November 4; delivery deadline: November 5, 2026.
