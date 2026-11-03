@@ -63,3 +63,18 @@ class SessionScope(unittest.TestCase):
             user_file=Path(directory)/'custom.service';user_file.write_text('[Service]\nExecStop=/owned/job\n')
             with self.assertRaisesRegex(ValueError,'session_nonvendor_user_unit'):
                 m.vendor_file(str(user_file))
+
+
+class UnitCatalog(unittest.TestCase):
+    def test_empty_catalog_and_descriptions_do_not_depend_on_json_support(self):
+        self.assertEqual(m.unit_rows(''), [])
+        self.assertEqual(m.unit_rows('  init.scope loaded active running System and Service Manager\n'),
+                         [dict(unit='init.scope', active='active', sub='running')])
+        for text in ('null', '[]', '0 units listed.', 'owned.service not-found active running Unknown'):
+            with self.assertRaisesRegex(ValueError, 'session_unit_listing_unrecognized'):
+                m.unit_rows(text)
+
+    def test_pending_jobs_refuse_before_exit_without_treating_text_as_json(self):
+        with mock.patch.object(m,'control',side_effect=['', '1 owned.service start running']), \
+             self.assertRaisesRegex(ValueError,'session_user_jobs_pending'):
+            m.user_units()

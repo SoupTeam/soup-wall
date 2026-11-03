@@ -123,11 +123,22 @@ def vendor_file(path):
     return hashlib.sha256(raw_bytes(selected)).hexdigest()
 
 
+def unit_rows(text):
+    rows = []
+    for line in text.splitlines():
+        if not line.strip(): continue
+        fields = line.split(None, 4)
+        require(len(fields) >= 4 and fields[1] == 'loaded', 'session_unit_listing_unrecognized')
+        rows.append(dict(unit=fields[0], active=fields[2], sub=fields[3]))
+    require(len(rows) <= 64, 'session_unit_count_bound')
+    return rows
+
+
 def user_units(private=None):
-    units = json.loads(control('--user', 'list-units', '--all', '--type=service,scope,socket,target,timer,path',
-        '--state=active,activating,deactivating,reloading', '--output=json'))
-    if private is not None: private['user_units'] = units
-    require(isinstance(units, list) and len(units) <= 64, 'session_unit_count_bound')
+    listing = control('--user', 'list-units', '--all', '--plain', '--full', '--no-legend',
+        '--type=service,scope,socket,target,timer,path', '--state=active,activating,deactivating,reloading')
+    if private is not None: private['user_unit_listing'] = listing
+    units = unit_rows(listing)
     result = []
     for row in units:
         name = row['unit']; require(row['active'] == 'active', 'session_user_unit_transitioning')
@@ -140,7 +151,9 @@ def user_units(private=None):
         hashes = [vendor_file(fields['FragmentPath'])]
         hashes += [vendor_file(p) for p in shlex.split(fields.get('DropInPaths', ''))]
         result.append({'unit_sha256': H.digest(name), 'sub': row['sub'], 'vendor_file_sha256': hashes})
-    require(json.loads(control('--user', 'list-jobs', '--output=json')) == [], 'session_user_jobs_pending')
+    jobs = control('--user', 'list-jobs', '--plain', '--no-legend').strip()
+    if private is not None: private['user_job_listing'] = jobs
+    require(jobs in ('', 'No jobs running.'), 'session_user_jobs_pending')
     return result
 
 
