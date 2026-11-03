@@ -47,6 +47,21 @@ class ConfigurationDispatch(unittest.TestCase):
         ordinary.assert_not_called()
 
 
+class InstalledUpdateDispatch(unittest.TestCase):
+    def test_native_component_home_does_not_hide_update_subcommand(self):
+        # The native entry always prepends this global option. The ordinary
+        # parser's placeholder update command cannot parse dedicated options.
+        for prefix in ([], ["--agent-home", "/private/installed-component"]):
+            with self.subTest(prefix=prefix):
+                helper = mock.Mock(); helper.main.return_value = 7
+                words = ["preview", "--prefix", "/private/coordinator", "--inventory", "/private/candidate.json"]
+                with mock.patch.object(M, "load", return_value=helper) as loading, mock.patch.object(M, "parser", side_effect=AssertionError("installed update entered ordinary parser")) as ordinary:
+                    self.assertEqual(M.main([*prefix, "update", *words]), 7)
+                loading.assert_called_once_with("front_door_update", "pilot_update.py")
+                helper.main.assert_called_once_with(words)
+                ordinary.assert_not_called()
+
+
 @unittest.skipUnless(sys.platform.startswith("linux"), "native toolchain qualification uses Linux")
 class QualificationToolchain(unittest.TestCase):
     def test_private_home_keeps_existing_default_toolchain(self):
