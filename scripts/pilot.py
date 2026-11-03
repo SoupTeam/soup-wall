@@ -283,8 +283,12 @@ def scope_gate(state, asserted):
     require(isinstance(recorded, dict) and set(recorded) == {"id", "document_sha256"}, "scope_document_changed", "scope")
     document, digest_value = scope_document()
     require(recorded == {"id": document["id"], "document_sha256": digest_value}, "scope_document_changed", "scope")
-    selection = PREP.PILOT.strict_json(Path(state["selection"]).read_bytes())
-    result = SCOPE.conformance(document, selection, scope_kit())
+    try:
+        selection = PREP.PILOT.strict_json(Path(state["selection"]).read_bytes())
+        result = SCOPE.conformance(document, selection, scope_kit())
+    except Exception:
+        # A missing, unreadable or malformed selection is a finite refusal, never an uncaught error.
+        raise Failure("scope_selection_nonconforming", "scope") from None
     require(result["state"] == "conforming", "scope_selection_nonconforming", "scope")
     return recorded
 
@@ -308,8 +312,11 @@ def scope_status(state, selection_state, protection):
         return {**result, "state": "unavailable", "reasons": [failure.code]}
     if recorded != {"id": document["id"], "document_sha256": digest_value}:
         return {**result, "state": "document-changed", "reasons": ["scope_document_changed"]}
-    selection = PREP.PILOT.strict_json(Path(state["selection"]).read_bytes())
-    found = SCOPE.conformance(document, selection, scope_kit())
+    try:
+        selection = PREP.PILOT.strict_json(Path(state["selection"]).read_bytes())
+        found = SCOPE.conformance(document, selection, scope_kit())
+    except Exception:
+        return {**result, "state": "unavailable", "reasons": ["scope_selection_unreadable"]}
     return {**result, "state": found["state"], "document_sha256": digest_value, "reasons": found["reasons"]}
 
 

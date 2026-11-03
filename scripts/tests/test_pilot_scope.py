@@ -384,6 +384,17 @@ class FrontDoor(unittest.TestCase):
             self.failure('scope_selection_nonconforming', M.run, args)
             spawn.assert_not_called()
 
+    def test_a_missing_or_malformed_selection_is_a_finite_refusal_not_an_uncaught_error(self):
+        for damage in (lambda: self.selection.unlink(), lambda: self.selection.write_text('not json'),
+                       lambda: self.selection.write_text('[]')):
+            with self.subTest():
+                self.selection.write_text(json.dumps(selection()))
+                damage()
+                self.failure('scope_selection_nonconforming', M.scope_gate, self.state, None)
+                result = M.scope_status(self.state, 'configured', 'configured-not-running')
+                self.assertIn(result['state'], ('unavailable', 'nonconforming'))
+                self.assertTrue(result['reasons'])
+
     def test_status_states_never_claim_more_than_observed(self):
         live = M.scope_status(self.state, 'configured', 'observed-live')
         self.assertEqual((live['state'], live['mode'], live['selected']), ('conforming', 'enforce', True))
