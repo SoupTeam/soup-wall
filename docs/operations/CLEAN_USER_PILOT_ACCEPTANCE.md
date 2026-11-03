@@ -2,10 +2,16 @@
 
 ## Selected path and current decision
 
-**Not yet measured.** No first-use, performance or product GO follows from local
-Python checks. This report will retain both fresh ordinary-user runs, including
-failed and incomplete observations. The checkpoint is November 4 and delivery
-deadline is November 5, 2026.
+**Accepted baseline: NO-GO for the complete lifecycle.** Native run 573 completed
+13 of 15 required observations: all eight useful tasks, both denied-call controls,
+the unchanged 12-case walkthrough, component install and two-profile Ask/replay
+smoke passed. Installed coordinated update then failed before its JSON preview;
+removal remained unattempted. This matches the independently reproduced routing
+defect below. Original failed/incomplete outcomes remain retained.
+
+**Fixed author candidate: final two-environment measurements pending.** No
+first-use, performance or product GO follows from local Python checks. The
+checkpoint is November 4 and delivery deadline is November 5, 2026.
 
 The accepted baseline is `9a3c5b38e56ebc6ebbeedfda98805f6a327cb371`. The first clean-user attempts
 use that exact product. Inspection also reproduced an installed update defect:
@@ -143,3 +149,31 @@ The initial diagnostic capture used a 2048-byte strace string cap; the next driv
 uses the accepted full argument-string bound and preserves finite observer
 refusal codes. A regression rejects abbreviated installed collector arguments.
 No product policy/classifier was relaxed. Final measured outcomes remain pending.
+
+Run [573](https://github.com/SoupTeam/soup-wall/actions/runs/41649571638) used
+driver `90226b6facdadf34621c4070863ef3c9bf21976f` and the unchanged accepted
+product. Both denied-call observers passed after complete capture was selected.
+The original report ends with `JSONDecodeError` in `update-rollback` (the
+installed update parser emitted no JSON); required removal remains incomplete.
+Artifact digest: `3e0903a6dc1301615e82a3a4d2e5433b7d3a9005269886e17d7c673160d57bac`.
+Run [574](https://github.com/SoupTeam/soup-wall/actions/runs/41649814940) was
+explicitly canceled as superseded after the baseline routing defect was
+reproduced. It contributes no success evidence.
+
+Run [575](https://github.com/SoupTeam/soup-wall/actions/runs/41650804844) used
+product candidate `75875f16dfbc19503feb22fe6871116cf6bd7618` and driver
+`90efca5f2275cb6e3a794263d5db4e91c9b7758e`: 13 required cases passed, update
+failed with `operator_refused:active_or_uncertain_pilot_run`, removal remained
+incomplete. Artifact digest:
+`9ea1f3608e5adc850be7bf65e6620957be61b2a4ea908ff687abd7e6386cdb07`.
+The unchanged inactivity guard treats an exact selected binary path anywhere in
+a same-user argv as active/uncertain evidence. The long-lived qualification
+parent itself carried the selected role paths. The driver now execs its isolated
+entry using a private anonymous argument descriptor, then closes that descriptor
+before qualification. The guard is unchanged; a native regression still requires
+it to refuse a real process carrying the selected path. Runs 576/577 were canceled
+as superseded and retain their incomplete observations.
+
+Useful-task timings in the new driver use ordinary installed launches. Full
+syscall capture remains on both denied-call controls. Earlier instrumented
+attempts are not a performance baseline or optimization claim.

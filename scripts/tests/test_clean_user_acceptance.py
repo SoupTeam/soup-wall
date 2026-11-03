@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -86,3 +87,52 @@ class DispatchCapture(unittest.TestCase):
         incomplete[0] = incomplete[0].replace(json.dumps("x" * 4096), '"xxx"...')
         with self.assertRaises((ValueError, SyntaxError)):
             witness.collector_dispatches("\n".join(incomplete), binary, strict=False)
+
+
+class PrivateArguments(unittest.TestCase):
+    def probe(self, root, hold=False):
+        path = root / "probe.py"
+        path.write_text("import importlib.util,json,os,sys\n"
+            + "s=importlib.util.spec_from_file_location('entry'," + repr(str(SCRIPT)) + ");m=importlib.util.module_from_spec(s);s.loader.exec_module(m)\n"
+            + "fd=int(sys.argv[2]);value=m.transferred_arguments(fd)\n"
+            + "try: os.fstat(fd);closed=False\nexcept OSError: closed=True\n"
+            + "print(json.dumps({'original':value,'visible':sys.argv[1:],'descriptor_closed':closed}),flush=True)\n"
+            + ("sys.stdin.readline()\n" if hold else ""))
+        return path
+
+    def command(self, probe, arguments):
+        program = ("import importlib.util;"
+            + "s=importlib.util.spec_from_file_location('entry'," + repr(str(SCRIPT)) + ");"
+            + "m=importlib.util.module_from_spec(s);s.loader.exec_module(m);"
+            + "m.replace_process(" + repr(arguments) + "," + repr(str(probe)) + ")")
+        return [sys.executable, "-I", "-B", "-S", "-c", program]
+
+    def test_exec_preserves_all_inputs_and_closes_private_descriptor(self):
+        arguments = ["--agentfw", "/owned/selected runtime/agentfw", "--claude", "/owned/host", "unicode-ұ"]
+        with tempfile.TemporaryDirectory() as directory:
+            value = json.loads(subprocess.check_output(self.command(self.probe(Path(directory)), arguments)))
+        self.assertEqual(value["original"], arguments)
+        self.assertTrue(value["descriptor_closed"])
+        self.assertEqual(value["visible"][0], "--arguments-fd")
+        self.assertTrue(set(arguments).isdisjoint(value["visible"]))
+
+    @unittest.skipUnless(sys.platform == "linux", "real accepted guard requires Linux /proc")
+    def test_unchanged_inactivity_guard_still_refuses_selected_argv_but_accepts_exec_handoff(self):
+        guard = m.load(SCRIPT.parents[1], "clean_user_process_guard", "switch-prepared-pilot.py")
+        summary = {"agent_path": "/owned/selected-agent", "claude_path": "/owned/selected-host"}
+        with tempfile.TemporaryDirectory() as directory:
+            arguments = ["--agentfw", summary["agent_path"], "--claude", summary["claude_path"]]
+            process = subprocess.Popen(self.command(self.probe(Path(directory), hold=True), arguments),
+                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            try:
+                self.assertEqual(json.loads(process.stdout.readline())["original"], arguments)
+                guard.require_inactive(summary)
+                busy = subprocess.Popen([sys.executable, "-c", "import time;time.sleep(30)", summary["agent_path"]])
+                try:
+                    with self.assertRaisesRegex(ValueError, "active_or_uncertain_pilot_run"):
+                        guard.require_inactive(summary)
+                finally:
+                    busy.terminate(); busy.wait(timeout=5)
+            finally:
+                process.communicate("done\n", timeout=5)
+            self.assertEqual(process.returncode, 0)
