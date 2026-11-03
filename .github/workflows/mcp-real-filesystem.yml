@@ -110,7 +110,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: mcp-real-filesystem-${{ github.event.pull_request.number || github.ref }}
+  group: mcp-real-filesystem-${{ github.event.inputs.installed_focus == 'clean-user' && github.run_id || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
