@@ -205,3 +205,24 @@ The driver now uses the documented dedicated bootstrap, and the product candidat
 adds a stable, identity-pinned coordinator gate with full current-generation
 revalidation. A legacy direct installation remains a separate scope. Native
 qualification of this candidate remains pending.
+
+Runs [581](https://github.com/SoupTeam/soup-wall/actions/runs/41664166977) and
+[582](https://github.com/SoupTeam/soup-wall/actions/runs/41665051216) used product
+`62b9e69a449c0372ac5226f9e0545d888d4ea1f7` and driver
+`be5e99b79211455af3b3d37cf54c49dd9010fb7a`. Both completed 14/15 required cases,
+including useful A-B-A runs and independent zero-host/provider maintenance
+refusals across update and rollback. Removal preview blocked on
+`active_or_unverified_retained_run` and
+`process_evidence_unavailable_or_inconsistent`; no removal was attempted.
+Artifact digests: `bc3eba9a4498597aa51369428e198dbc2ae8232fb131682dc0558026b5505e19`
+and `fe95e9d04a48238707716b3e984582462683993298e482790aec73d20194a7ee`.
+
+Before component removal, the corrected sequence now enters maintenance for both
+installation homes and uses the existing [completed-run archival](completed-run-archival.md)
+preview/archive/apply protocol on every completed read-only run. Exact private
+archives, their hashes and outcome records are retained. Unknown/incomplete state
+is never purged. Removal still uses its original process-evidence requirements;
+read-only diagnostics record finite failure stages, and at most three fresh
+previews may observe a transient process-only refusal. Every such observation
+remains in the report. Only a fully clear fresh native preview can be applied;
+persistent uncertainty remains NO-GO.

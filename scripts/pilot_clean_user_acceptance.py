@@ -301,6 +301,87 @@ def coordinated_update(a, env, archive, built, fixture, installed, q, report):
     return facts, second.prefix, entry, entry_home
 
 
+def archive_completed_runs(a, env, report):
+    """Use the accepted explicit archive protocol; never purge unknown state."""
+    archive = load(a.runtime_source, "sou216_run_archive", "pilot-run-archive.py")
+    destination = a.output / "private-run-archives"; destination.mkdir(mode=0o700)
+    with archive.S.Directory(a.state_root, state_parent=True) as parent:
+        names = parent.names(32)
+        ids = [archive.S.run_id(name) for name in names]
+    expected = sum(row.get("status") == "completed" for row in report["cases"])
+    require(len(ids) == expected and len(ids) > 0, "archive_run_denominator_mismatch")
+    facts = {"status": "running", "expected_completed_runs": expected, "batches": [],
+             "raw_archives": "private; not uploaded", "local_audit_proves_execution": False}
+    report["run_archival"] = facts
+    script = a.runtime_source / "scripts/pilot-run-archive.py"
+    def call(*words):
+        result = subprocess.run([str(a.component_python), "-I", "-B", str(script), *map(str, words)],
+            cwd=a.work, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+        require(len(result.stdout) <= 256 * 1024, "archive_report_bound")
+        value = json.loads(result.stdout)
+        require(result.returncode == 0, "archive_refused:" + str(value.get("reason", "excluded_or_incomplete")))
+        return value
+    for offset in range(0, len(ids), archive.MAX_RUNS):
+        batch = sorted(ids)[offset:offset + archive.MAX_RUNS]
+        words = ["preview", "--state-parent", a.state_root]
+        for run_id in batch: words += ["--run-id", run_id]
+        preview = call(*words)
+        require(not preview["excluded"] and len(preview["runs"]) == len(batch), "archive_preview_incomplete")
+        plan = destination / ("plan-" + str(offset) + ".json"); save(plan, preview)
+        options = ["--plan", plan, "--confirm", preview["plan_sha256"], "--archive-directory", destination]
+        published = call("archive", *options)
+        require(published["complete"] and all(r["outcome"] == "archived_source_retained" for r in published["runs"]),
+                "archive_publication_incomplete")
+        applied = call("apply", *options)
+        require(applied["complete"] and len(applied["runs"]) == len(batch)
+                and all(r["outcome"] == "archived_and_removed" for r in applied["runs"]), "archive_apply_incomplete")
+        require(all(sha(destination / r["archive"]) == r["archive_sha256"] for r in published["runs"]),
+                "verified_archive_changed")
+        facts["batches"].append({"plan_sha256": preview["plan_sha256"],
+            "published": published["runs"], "applied": applied["runs"]})
+        save(a.output / "report.json", report)
+    with archive.S.Directory(a.state_root, state_parent=True) as parent:
+        require(not parent.names(32), "archival_left_unverified_state")
+    facts.update(status="passed", completed_runs_archived=expected, state_parent_retained=True)
+
+
+def process_observation():
+    """Read-only private diagnostics; never used to authorize removal."""
+    observations = []
+    known = {"bash", "tee", "python3", "python3.12", "node", "Runner.Worker", "Runner.Listener",
+             "git", "gpg-agent", "ssh-agent", "sccache", "agentfw", "bwrap"}
+    for proc in Path("/proc").iterdir():
+        if not proc.name.isdecimal(): continue
+        stage, role, identity = "identity", "other", None
+        try:
+            if proc.stat().st_uid != os.getuid(): continue
+            before = (proc / "stat").read_bytes()
+            tail = before.rsplit(b")", 1)[1].split()
+            if tail[0] == b"Z": continue
+            identity = digest({"pid": int(proc.name), "start": tail[19].decode()})
+            comm = (proc / "comm").read_text().strip(); role = comm if comm in known else "other"
+            for stage in ("cwd", "exe", "root"):
+                (proc / stage).readlink(); (proc / stage).stat()
+            for stage in ("cmdline", "environ", "maps"):
+                with (proc / stage).open("rb") as stream: raw = stream.read(1024 * 1024 + 1)
+                if len(raw) > 1024 * 1024: raise ValueError("bound")
+                if stage == "maps": raw.decode("utf-8", "strict")
+            stage = "fd"
+            descriptors = list((proc / "fd").iterdir())
+            if len(descriptors) > 1024: raise ValueError("bound")
+            for fd in descriptors:
+                try: fd.readlink(); fd.stat()
+                except FileNotFoundError: pass
+            stage = "closing-identity"
+            if (proc / "stat").read_bytes().rsplit(b")", 1)[1].split()[19] != tail[19]:
+                raise ValueError("changed")
+        except (OSError, ValueError, UnicodeError, IndexError) as error:
+            if proc.exists():
+                observations.append({"process_identity_sha256": identity, "role": role,
+                    "stage": stage, "errno": getattr(error, "errno", None), "error_type": type(error).__name__})
+    return {"authorization": False, "unavailable": observations}
+
+
 def qualify(a, report):
     require(platform.system() == "Linux" and platform.machine() == "x86_64" and os.geteuid() != 0,
             "ordinary_native_linux_user_required")
@@ -534,6 +615,17 @@ def qualify(a, report):
             report["projects"][name]["after_lifecycle_sha256"] = digest(after_lifecycle)
         before_remove = {name: {"files": q.snapshot(chosen.project), "repository": q.snapshot(chosen.repository),
                                "preparation": q.snapshot(chosen.prefix)} for name, chosen, _ in fixtures}
+        report["removal_maintenance"] = []
+        for label, selected_args, selected_home, prefix in (("direct", a, a.agent_home, fixtures[0][1].prefix),
+                ("bootstrap", entry_args, entry_home, a.output / "coordinator")):
+            words = ["pilot", "--home", selected_home, "maintenance"]
+            selection = ["--prefix", prefix, "--state-root", a.state_root]
+            pause = operator(selected_args, env, *words, "preview", *selection, "--operation", "enter")
+            paused = operator(selected_args, env, *words, "enter", *selection,
+                "--confirm", pause["confirmation_sha256"])
+            require(paused.get("status") == "entered", "removal_maintenance_not_entered")
+            report["removal_maintenance"].append({"installation": label, "status": "entered"})
+        archive_completed_runs(a, env, report)
         recovery = a.output / "removal-recovery"; recovery.mkdir(mode=0o700)
         retained = {"coordinator": q.snapshot(a.output / "coordinator"),
             "bootstrap_versions": q.snapshot(entry_home / "versions"),
@@ -545,9 +637,17 @@ def qualify(a, report):
             words = ["--home", selected_home, "--state", a.state_root, "--journal", journal]
             for prefix in [chosen.prefix for _, chosen, _ in fixtures] + [a.prefix, update_prefix]:
                 words += ["--prefix", prefix]
-            preview = operator(selected_args, env, "pilot-removal", "preview", *words)
-            report["removal_preview"] = {"installation": label,
-                **{key: preview.get(key) for key in ("status", "blockers", "confirmation_sha256")}}
+            attempts = report["removal"].setdefault("preview_attempts", [])
+            for attempt in range(3):
+                preview = operator(selected_args, env, "pilot-removal", "preview", *words)
+                observed = {"installation": label, "attempt": attempt + 1,
+                    **{key: preview.get(key) for key in ("status", "blockers", "confirmation_sha256")}}
+                if preview.get("status") == "blocked": observed["process_observation"] = process_observation()
+                attempts.append(observed); report["removal_preview"] = observed
+                save(a.output / "report.json", report)
+                if preview.get("confirmation_sha256"): break
+                if set(preview.get("blockers", [])) != {"process_evidence_unavailable_or_inconsistent"}: break
+                time.sleep(0.1)
             require(preview.get("executed") is False and preview.get("confirmation_sha256") and not journal.exists(),
                     "removal_preview_failed")
             removed = operator(selected_args, env, "pilot-removal", "apply", *words,
