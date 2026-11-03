@@ -341,6 +341,7 @@ class Run(unittest.TestCase):
         self.assertTrue(args.prefix.is_absolute())
 
 
+@unittest.skipUnless(sys.platform == "linux", "Live process status requires Linux /proc")
 class Status(unittest.TestCase):
     """Status counts only a live run of the requested selection."""
 

@@ -1104,6 +1104,11 @@ def qualify(args, report):
 
 
 def main():
+    if "--clean-user-only" in sys.argv[1:]:
+        # Isolate imports: product helpers must come from the pinned accepted
+        # checkout, rather than this newer measurement driver's module cache.
+        return subprocess.call([sys.executable, "-I", "-B", "-S",
+            str(ROOT / "scripts/pilot_clean_user_acceptance.py"), *sys.argv[1:]])
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--run", action="store_true", required=True)
     parser.add_argument("--output", type=Path, required=True)
