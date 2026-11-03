@@ -113,14 +113,20 @@ def properties(user, name, fields):
 def vendor_file(path):
     selected = Path(path).resolve(strict=True)
     require(selected.is_relative_to(Path('/usr/lib/systemd/user')), 'session_nonvendor_user_unit')
+    for parent in (selected.parent, *selected.parents):
+        if not parent.is_relative_to(Path('/usr/lib/systemd/user')): break
+        info = parent.stat()
+        require(info.st_uid == 0 and not info.st_mode & 0o022, 'session_untrusted_unit_parent')
     info = selected.stat()
     require(stat.S_ISREG(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022,
         'session_untrusted_user_unit')
     return hashlib.sha256(raw_bytes(selected)).hexdigest()
 
 
-def user_units():
-    units = json.loads(control('--user', 'list-units', '--all', '--state=active,activating,deactivating,reloading', '--output=json'))
+def user_units(private=None):
+    units = json.loads(control('--user', 'list-units', '--all', '--type=service,scope,socket,target,timer,path',
+        '--state=active,activating,deactivating,reloading', '--output=json'))
+    if private is not None: private['user_units'] = units
     require(isinstance(units, list) and len(units) <= 64, 'session_unit_count_bound')
     result = []
     for row in units:
@@ -177,7 +183,7 @@ def quiesce(report, private):
     cohort = group_processes(unit['ControlGroup'])
     rows = validate_empty_session(os.getuid(), unit, cohort, private['before'],
         report['before']['unavailable'], os.getpid())
-    units = user_units(); report['empty_vendor_user_units'] = units
+    units = user_units(private); report['empty_vendor_user_units'] = units
     require(user_units() == units and properties(False, unit_name, fields) == unit, 'session_scope_changed')
     require(all(identity(raw_process(row['pid'])) == identity(row) for row in rows), 'session_identity_changed')
     report['quiescence'] = {'scope': 'empty owned per-user service manager on disposable hosted CI only',
