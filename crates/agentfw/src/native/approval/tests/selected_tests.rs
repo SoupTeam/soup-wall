@@ -139,7 +139,12 @@ fn fixture(format: &str) -> (Env, String, Value, String, SelectedInvocation) {
     let creating = format == crate::mcp::server_profile::filesystem_create::FORMAT;
     let name = if creating {
         "write_file"
-    } else if format == crate::mcp::server_profile::FORMAT {
+    } else if matches!(
+        format,
+        crate::mcp::server_profile::FORMAT
+            | crate::mcp::server_profile::filesystem_roots::FORMAT
+            | crate::mcp::server_profile::filesystem_links::FORMAT
+    ) {
         "read_text_file"
     } else {
         "git_show"
@@ -170,6 +175,12 @@ fn fixture(format: &str) -> (Env, String, Value, String, SelectedInvocation) {
     ).unwrap(), DEFAULT_TAINT_CAP));
     let args = if creating {
         json!({"path":"/workspace/approved.txt","content":"approved café 🥣"})
+    } else if matches!(
+        format,
+        crate::mcp::server_profile::filesystem_roots::FORMAT
+            | crate::mcp::server_profile::filesystem_links::FORMAT
+    ) {
+        json!({"path":"/workspace/alpha/notes.txt"})
     } else if name == "read_text_file" {
         json!({"path":"/workspace/notes.txt"})
     } else if format == crate::mcp::server_profile::git::FILE_READS_FORMAT {
@@ -308,7 +319,10 @@ async fn selected_status_cancel_require_the_private_owner_even_when_header_is_ab
 
 const FORMATS: &[&str] = &[
     crate::mcp::server_profile::FORMAT,
+    crate::mcp::server_profile::filesystem_roots::FORMAT,
+    crate::mcp::server_profile::filesystem_links::FORMAT,
     crate::mcp::server_profile::git::FORMAT,
+    crate::mcp::server_profile::git::linked_worktree::FORMAT,
     crate::mcp::server_profile::git::LOCAL_REFS_FORMAT,
     crate::mcp::server_profile::git::FILE_READS_FORMAT,
     crate::mcp::server_profile::git::SHALLOW_FORMAT,
@@ -511,7 +525,15 @@ fn selected_changed_arguments_expiry_and_hard_deny_cannot_redeem() {
                 if name == "write_file" {
                     presented["content"] = json!("unapproved");
                 } else if name == "read_text_file" {
-                    presented["path"] = json!("/workspace/other.txt");
+                    presented["path"] = if matches!(
+                        *format,
+                        crate::mcp::server_profile::filesystem_roots::FORMAT
+                            | crate::mcp::server_profile::filesystem_links::FORMAT
+                    ) {
+                        json!("/workspace/beta/notes.txt")
+                    } else {
+                        json!("/workspace/other.txt")
+                    };
                 } else {
                     presented["revision"] = json!("a".repeat(40));
                 }

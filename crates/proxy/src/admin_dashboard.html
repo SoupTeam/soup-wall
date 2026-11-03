@@ -17,6 +17,15 @@
     #fleet-filter{margin:14px 0}
     #fleet-status{margin:12px 0}
     #fleet-panel .inline{margin-top:10px}
+    #history-timeline{display:grid;gap:8px;margin:12px 0 0;padding-left:22px}
+    #history-timeline li{padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface2);overflow-wrap:anywhere}
+    #history-timeline li p{margin:4px 0 0}
+    #history-timeline code{display:block;margin-top:4px;color:#c9d9fa;overflow-wrap:anywhere}
+    #history-timeline .history-pending,#history-timeline .history-superseded{border-color:#8b6d36}
+    #history-timeline .history-rejected{border-color:#9b4652}
+    #history-summary a{color:var(--blue)}
+    #history-snapshot{max-height:360px}
+    .history-reasons{margin:8px 0 0;padding-left:20px;color:var(--muted)}
     #rollout-panel,#enroll-panel{margin-top:22px}
     .layout>*,.stack>*{min-width:0}
     #enroll-status{margin:12px 0}
@@ -79,6 +88,15 @@
   <p id="fleet-status" role="status" class="note">Select a tenant to view enrolled Agents.</p>
   <div id="fleet-list" class="table-wrap"></div><div class="inline"><button id="fleet-first" type="button" class="secondary tiny">First page</button><button id="fleet-next" type="button" class="secondary tiny" disabled>Next page</button></div>
   <div id="fleet-agent-detail" class="section" aria-live="polite"></div><button id="fleet-history-next" type="button" class="secondary tiny" disabled>Older deployments</button>
+  <section id="history-panel" class="section" aria-labelledby="history-title">
+    <h2 id="history-title">Recorded Agent history</h2>
+    <p class="note">Issued, fetched and acknowledged deployments with enrollment and revocation, as recorded by this Console. It is not runtime attestation: current protection and liveness stay unknown.</p>
+    <p id="history-status" role="status" class="note">Select an Agent in the fleet list to build its recorded history.</p>
+    <div class="inline"><button id="history-more" type="button" class="secondary tiny" disabled>Load older records</button><button id="history-preview" type="button" class="secondary tiny" disabled>Preview incident snapshot</button><button id="history-download" type="button" class="secondary tiny" disabled>Download snapshot JSON</button></div>
+    <div id="history-summary" aria-live="polite"></div>
+    <ol id="history-timeline" aria-label="Recorded events, oldest first"></ol>
+    <pre id="history-snapshot" class="hidden" tabindex="0" aria-label="Incident snapshot preview"></pre>
+  </section>
 </section>
 
 <section id="enroll-panel" class="section" aria-labelledby="enroll-title">
@@ -123,7 +141,8 @@
     /* FLEET_PANEL */
     /* ROLLOUT_PANEL */
     /* ENROLLMENT_PANEL */
-    const selectPanels=id=>{fleet.select(id);enrollment.select(id);rollout.select(id)};
+    /* AGENT_HISTORY */
+    const selectPanels=id=>{agentHistory.clear();fleet.select(id);enrollment.select(id);rollout.select(id)};
     $("lock-console").addEventListener("click",()=>{adminToken="";currentAdmin=null;enrollment.clear();location.replace("/admin")});
     const applyRole=()=>{const role=currentAdmin.role;document.body.classList.remove("role-owner","role-operator","role-viewer");document.body.classList.add("role-"+role);$("current-admin").textContent=currentAdmin.admin_name+" · "+role;$("role-display").textContent=role};
     const renderTenants=()=>{const q=$("tenant-search").value.trim().toLowerCase(),shown=tenants.filter(t=>!q||t.name.toLowerCase().includes(q)||t.id.toLowerCase().includes(q));$("tenant-total").textContent=tenants.length;$("tenant-active").textContent=tenants.filter(t=>t.active).length;$("tenant-suspended").textContent=tenants.filter(t=>!t.active).length;const list=$("tenant-list");list.replaceChildren();if(!shown.length){list.append(make("p",q?"No tenants match this search.":"No tenants yet.","empty"));return}shown.forEach(t=>{const b=make("button",undefined,"tenant "+(t.active?"active":"inactive")+(selectedTenant?.id===t.id?" selected":""));b.append(make("span",t.name),make("small",t.id));b.addEventListener("click",()=>selectTenant(t));list.append(b)})};

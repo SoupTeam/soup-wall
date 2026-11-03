@@ -165,5 +165,68 @@ class InstalledMode(unittest.TestCase):
             self.assertFalse(any(path.name == "__pycache__" for path in tree.rglob("*")))
 
 
+    def test_packaged_offline_tools_work_without_a_checkout(self):
+        archive, _ = BUILDER.assemble(BUILDER.contents(), SOURCE)
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            tree = base / "tree"
+            with tarfile.open(fileobj=__import__("io").BytesIO(archive)) as handle:
+                for member in handle.getmembers()[1:]:
+                    target = tree / member.name
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(handle.extractfile(member).read())
+            home = base / "home"
+            home.mkdir(mode=0o700)
+            entry = tree / "scripts/pilot.py"
+            update = tree / "scripts/pilot_update.py"
+            environment = {"PATH": "/usr/bin:/bin", "HOME": str(home), "LANG": "C.UTF-8"}
+            result = subprocess.run([
+                sys.executable, "-I", "-B", str(tree / "scripts/agent-command-help.py"),
+                "--pilot", str(entry), "--sha256", hashlib.sha256(entry.read_bytes()).hexdigest(),
+                "--update-sha256", hashlib.sha256(update.read_bytes()).hexdigest(), "list",
+            ], cwd=home, env=environment, capture_output=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            catalog = json.loads(result.stdout)
+            commands = [row["command"] for row in catalog["commands"]]
+            self.assertIn(["provider", "update"], commands)
+            self.assertIn(["update", "rollback"], commands)
+            bundles = []
+            originals = {}
+            for name, setup in (("before", "unknown"), ("after", "ready")):
+                folder = home / name
+                folder.mkdir(mode=0o700)
+                report = {"schema": "sw-agent-doctor/1",
+                          "scope": "local_setup_and_authenticated_runtime_not_active_host_execution",
+                          "observed_at_ms": 1, "setup": setup,
+                          "active_host_call_protection": "unknown", "checks": [],
+                          "prompt": "OWNED_PRIVATE_CANARY"}
+                raw = json.dumps(report).encode()
+                (folder / "report.json").write_bytes(raw)
+                (folder / "manifest.json").write_text(json.dumps({
+                    "schema": "sw-agent-doctor-support/1", "report_schema": "sw-agent-doctor/1",
+                    "files": [{"name": "report.json", "bytes": len(raw),
+                               "sha256": hashlib.sha256(raw).hexdigest()}]}))
+                bundles.append(folder)
+                originals.update({path: path.read_bytes() for path in folder.iterdir()})
+            output = home / "private"
+            output.mkdir(mode=0o700)
+            result = subprocess.run([
+                sys.executable, "-I", "-B", str(tree / "scripts/agent-diagnostic-diff.py"),
+                *map(str, bundles), "--json-out", str(output / "diff.json"),
+                "--markdown-out", str(output / "diff.md"),
+            ], cwd=home, env=environment, capture_output=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            compared = json.loads((output / "diff.json").read_bytes())
+            self.assertIn("configuration.setup", compared["changed_fields"])
+            self.assertTrue(compared["historical"])
+            self.assertFalse(compared["execution_observed"])
+            self.assertNotIn("OWNED_PRIVATE_CANARY", (output / "diff.json").read_text())
+            self.assertNotIn("OWNED_PRIVATE_CANARY", (output / "diff.md").read_text())
+            for path, raw in originals.items():
+                self.assertEqual(path.read_bytes(), raw)
+            self.assertFalse((tree / ".git").exists())
+            self.assertFalse(any(tree.rglob("__pycache__")))
+
+
 if __name__ == "__main__":
     unittest.main()
