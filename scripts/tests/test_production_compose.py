@@ -35,6 +35,8 @@ class FakeDocker:
         self.model_override = None
         self.stdin_values = []
         self.current_model = None
+        self.modern = False
+        self.descriptor_override = None
 
     def model(self):
         services = {name: {"image": row["image"], "platform": "linux/" + self.arch,
@@ -55,8 +57,18 @@ class FakeDocker:
         return model
 
     def image(self, name):
+        if self.modern and name != "firewall":
+            return self.lock["images"][name]["image"].split("@", 1)[1]
         return (GATEWAY if name == "firewall" else
                 self.lock["images"][name]["platforms"]["linux/" + self.arch]["config_digest"])
+
+    def manifest(self, name):
+        return ("sha256:" + "e" * 64 if name == "firewall" else
+                self.lock["images"][name]["platforms"]["linux/" + self.arch]["manifest_digest"])
+
+    def descriptor(self, name):
+        return {"digest": self.manifest(name), "mediaType": next(iter(MODULE.MANIFEST_TYPES)),
+                "platform": {"os": "linux", "architecture": self.arch}}
 
     def add_container(self, name):
         service = (self.current_model or self.model())["services"][name]
@@ -76,6 +88,8 @@ class FakeDocker:
             "Mounts": ([{"Type": "bind", "Destination": "/app/firewall.yaml", "RW": False}]
                        if name == "firewall" else [{"Type": "volume", "Name": "owned-test_" + name + "-data",
                            "Destination": "/var/lib/postgresql/data" if name == "postgres" else "/data", "RW": True}])}
+        if self.modern:
+            self.containers[name]["ImageManifestDescriptor"] = self.descriptor(name)
 
     def run(self, args, *, stdin=None, environment=None, timeout=180):
         self.calls.append(args)
@@ -83,13 +97,21 @@ class FakeDocker:
             self.stdin_values.append(stdin)
             self.current_model = json.loads(stdin.replace("$$", "$"))
         if args[:2] == ["image", "inspect"]:
-            name = next((n for n, row in self.lock["images"].items() if row["image"] == args[2]), "firewall")
-            return json.dumps([{"Id": self.wrong_image if name == "postgres" and self.wrong_image else self.image(name),
-                                "Os": "linux", "Architecture": self.arch, "Config": {}}])
+            name = next((n for n, row in self.lock["images"].items() if row["image"] == args[-1]), "firewall")
+            actual = {"Id": self.wrong_image if name == "postgres" and self.wrong_image else self.image(name),
+                      "Os": "linux", "Architecture": self.arch, "Config": {}}
+            if self.modern:
+                actual["Descriptor"] = {"digest": self.image(name), "mediaType": next(iter(MODULE.INDEX_TYPES))}
+                if "--platform" in args:
+                    actual["Id"] = self.manifest(name)
+                    actual["Descriptor"] = self.descriptor(name)
+                if self.descriptor_override:
+                    self.descriptor_override(name, args, actual)
+            return json.dumps([actual])
         if args[:2] == ["container", "inspect"]:
             return json.dumps([next(row for row in self.containers.values() if row["Id"] == args[2])])
         if args[0] == "version":
-            return json.dumps({"Os": "linux", "Arch": self.arch})
+            return json.dumps({"Os": "linux", "Arch": self.arch, "ApiVersion": "1.56" if self.modern else "1.43"})
         if args[-3:] == ["config", "--format", "json"]:
             result = self.model()
             if self.after_render:
@@ -296,6 +318,80 @@ class ProductionComposeControls(unittest.TestCase):
             self.assertEqual(MODULE.main(args), 1)
         gate.assert_not_called()
         self.assertEqual(existing.read_text(), "previous attempt")
+
+    def test_modern_index_and_platform_manifest_are_both_bound(self):
+        self.docker.modern = True
+        report = self.closure().execute("start")
+        self.assertEqual(report["images"]["postgres"]["store_identity"], "oci-manifest")
+        self.assertEqual(report["images"]["postgres"]["local_image_id"], self.docker.image("postgres"))
+        self.assertEqual(report["images"]["postgres"]["selected_local_id"], self.docker.manifest("postgres"))
+        self.assertTrue(any("--platform" in call for call in self.docker.calls))
+
+    def test_modern_wrong_platform_child_is_not_accepted_from_matching_index(self):
+        self.docker.modern = True
+        def mismatch(name, args, actual):
+            if name == "postgres" and "--platform" in args:
+                actual["Id"] = "sha256:" + "f" * 64
+                actual["Descriptor"]["digest"] = actual["Id"]
+        self.docker.descriptor_override = mismatch
+        with self.assertRaisesRegex(MODULE.ClosureError, "locked_platform_manifest_mismatch"):
+            self.closure().execute("start")
+        self.assertEqual(self.docker.mutations(), [])
+
+    def test_modern_platform_descriptor_cannot_disagree_with_selected_daemon(self):
+        self.docker.modern = True
+        def mismatch(name, args, actual):
+            if name == "postgres" and "--platform" in args:
+                actual["Descriptor"]["platform"]["architecture"] = "arm64"
+        self.docker.descriptor_override = mismatch
+        with self.assertRaisesRegex(MODULE.ClosureError, "local_manifest_identity"):
+            self.closure().execute("start")
+        self.assertEqual(self.docker.mutations(), [])
+
+    def test_bare_index_id_without_manifest_descriptors_has_no_weak_fallback(self):
+        self.docker.modern = True
+        def omit(name, args, actual):
+            actual.pop("Descriptor", None)
+        self.docker.descriptor_override = omit
+        with self.assertRaisesRegex(MODULE.ClosureError, "local_image_identity"):
+            self.closure().execute("start")
+        self.assertEqual(self.docker.mutations(), [])
+
+    def test_container_matching_index_with_wrong_actual_child_is_refused(self):
+        self.docker.modern = True
+        self.docker.add_container("redis")
+        self.docker.containers["redis"]["ImageManifestDescriptor"]["digest"] = "sha256:" + "f" * 64
+        with self.assertRaisesRegex(MODULE.ClosureError, "container_platform_manifest_mismatch"):
+            self.closure().execute("start")
+        self.assertEqual(self.docker.mutations(), [])
+
+    def test_container_index_store_requires_actual_manifest_descriptor(self):
+        self.docker.modern = True
+        self.docker.add_container("redis")
+        del self.docker.containers["redis"]["ImageManifestDescriptor"]
+        with self.assertRaisesRegex(MODULE.ClosureError, "container_platform_manifest_mismatch"):
+            self.closure().execute("start")
+        self.assertEqual(self.docker.mutations(), [])
+
+    def test_legacy_config_store_with_modern_api_stays_strict_and_supported(self):
+        original = self.docker.json
+        def modern_api(args, **kwargs):
+            return ({"Os": "linux", "Arch": "amd64", "ApiVersion": "1.56"}
+                    if args[0] == "version" else original(args, **kwargs))
+        with patch.object(self.docker, "json", side_effect=modern_api):
+            report = self.closure().execute("start")
+        self.assertEqual(report["images"]["postgres"]["store_identity"], "legacy-config")
+
+    def test_modern_matching_child_does_not_approve_wrong_parent_index(self):
+        self.docker.modern = True
+        def wrong_parent(name, args, actual):
+            if name == "postgres" and "--platform" not in args:
+                actual["Id"] = "sha256:" + "f" * 64
+                actual["Descriptor"]["digest"] = actual["Id"]
+        self.docker.descriptor_override = wrong_parent
+        with self.assertRaisesRegex(MODULE.ClosureError, "local_manifest_identity"):
+            self.closure().execute("start")
+        self.assertEqual(self.docker.mutations(), [])
 
 
 if __name__ == "__main__":

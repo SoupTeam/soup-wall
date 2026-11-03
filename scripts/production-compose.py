@@ -27,6 +27,10 @@ DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 PROJECT = re.compile(r"[a-z][a-z0-9-]{0,47}\Z")
 PLATFORMS = {"linux/amd64", "linux/arm64"}
 MAX_BYTES = 2 * 1024 * 1024
+MANIFEST_TYPES = {"application/vnd.oci.image.manifest.v1+json",
+                  "application/vnd.docker.distribution.manifest.v2+json"}
+INDEX_TYPES = {"application/vnd.oci.image.index.v1+json",
+               "application/vnd.docker.distribution.manifest.list.v2+json"}
 
 
 class ClosureError(Exception):
@@ -113,6 +117,7 @@ class ProductionCompose:
         self.gateway_image = gateway_image
         self.docker = docker or Docker()
         self.image_defaults = {}
+        self.container_identities = {}
         self.snapshot = {p: bounded_file(self.root / p) for p in (*INPUTS, LOCK, IMPLEMENTATION)}
         self.lock = decode(self.snapshot[LOCK])
         self._validate_lock()
@@ -121,13 +126,15 @@ class ProductionCompose:
         self.platform = server.get("Os", "") + "/" + str(arch)
         if self.platform not in PLATFORMS:
             fail("unsupported_daemon_platform")
+        api = str(server.get("ApiVersion", server.get("APIVersion", "0")))
+        self.platform_inspection = bool(re.fullmatch(r"[0-9]+\.[0-9]+", api)
+                                        and tuple(map(int, api.split("."))) >= (1, 49))
         self.images = {name: {
             "reference": value["image"],
             "config_digest": value["platforms"][self.platform]["config_digest"],
             "manifest_digest": value["platforms"][self.platform]["manifest_digest"],
         } for name, value in self.lock["images"].items()}
-        self.images["firewall"] = {"reference": gateway_image,
-                                   "config_digest": gateway_image}
+        self.images["firewall"] = {"reference": gateway_image}
         self.configuration = None
         self.frozen = None
         self.policy_snapshot = None
@@ -168,15 +175,59 @@ class ProductionCompose:
             result = self.docker.json(["image", "inspect", row["reference"]])
             if not isinstance(result, list) or len(result) != 1:
                 fail("image_inspection_incomplete")
-            actual = result[0]
+            root = result[0]
+            actual = root
+            if self.platform_inspection:
+                selected = self.docker.json(["image", "inspect", "--platform", self.platform,
+                                             row["reference"]])
+                if not isinstance(selected, list) or len(selected) != 1:
+                    fail("image_inspection_incomplete")
+                actual = selected[0]
             platform = str(actual.get("Os")) + "/" + str(actual.get("Architecture"))
-            if actual.get("Id") != row["config_digest"] or platform != self.platform:
+            if platform != self.platform:
                 fail("local_image_identity_or_platform_mismatch")
+            root_descriptor = root.get("Descriptor")
+            descriptor = actual.get("Descriptor")
+            if root_descriptor is not None or descriptor is not None:
+                expected_root = (row["reference"].split("@", 1)[1]
+                                 if name != "firewall" else self.gateway_image)
+                if (not self.platform_inspection or not isinstance(root_descriptor, dict)
+                        or root_descriptor.get("digest") != expected_root
+                        or root.get("Id") != expected_root
+                        or root_descriptor.get("mediaType") not in INDEX_TYPES | MANIFEST_TYPES
+                        or not isinstance(descriptor, dict)
+                        or descriptor.get("mediaType") not in MANIFEST_TYPES
+                        or not DIGEST.fullmatch(descriptor.get("digest", ""))
+                        or actual.get("Id") != descriptor["digest"]
+                        or not self._descriptor_platform(descriptor)):
+                    fail("local_manifest_identity_or_platform_mismatch")
+                if name != "firewall" and descriptor["digest"] != row["manifest_digest"]:
+                    fail("locked_platform_manifest_mismatch")
+                # A verified immutable child manifest content-addresses the
+                # lock's reviewed config blob. Modern containerd stores expose
+                # index/manifest IDs here, not the legacy config ID.
+                row["manifest_digest"] = descriptor["digest"]
+                row["local_image_id"] = root["Id"]
+                row["selected_local_id"] = actual["Id"]
+                row["store_identity"] = "oci-manifest"
+                self.container_identities[name] = (root["Id"], descriptor["digest"])
+            else:
+                expected_config = row.get("config_digest", self.gateway_image)
+                if actual.get("Id") != expected_config or root.get("Id") != expected_config:
+                    fail("local_image_identity_or_platform_mismatch")
+                row["local_image_id"] = expected_config
+                row["store_identity"] = "legacy-config"
+                self.container_identities[name] = (expected_config, None)
             defaults = actual.get("Config", {})
             if not isinstance(defaults, dict):
                 fail("image_configuration_missing")
             self.image_defaults[name] = defaults
         self.unchanged()
+
+    def _descriptor_platform(self, descriptor):
+        platform = descriptor.get("platform", {})
+        return (isinstance(platform, dict)
+                and str(platform.get("os")) + "/" + str(platform.get("architecture")) == self.platform)
 
     def _args(self):
         return ["compose", "--project-name", self.project, "--project-directory",
@@ -267,12 +318,20 @@ class ProductionCompose:
             row = actual[0]
             config = row.get("Config", {})
             labels = config.get("Labels", {})
-            if (row.get("Image") != self.images[name]["config_digest"]
+            image_id, manifest_digest = self.container_identities[name]
+            if (row.get("Image") != image_id
                     or config.get("Image") != self.images[name]["reference"]
                     or labels.get("com.docker.compose.project") != self.project
                     or labels.get("com.docker.compose.service") != name
                     or labels.get("com.docker.compose.oneoff", "false").lower() != "false"):
                 fail("container_identity_or_owner_mismatch")
+            if manifest_digest is not None:
+                descriptor = row.get("ImageManifestDescriptor", {})
+                if (not isinstance(descriptor, dict)
+                        or descriptor.get("digest") != manifest_digest
+                        or descriptor.get("mediaType") not in MANIFEST_TYPES
+                        or not self._descriptor_platform(descriptor)):
+                    fail("container_platform_manifest_mismatch")
             service = self.configuration["services"][name]
             defaults = self.image_defaults[name]
             expected_env = self._environment(defaults.get("Env", []))

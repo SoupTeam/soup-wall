@@ -12,6 +12,18 @@ license/advisory approval gate. It checks the image configuration ID actually
 present in Docker, rather than trusting the readable version tag. The Gateway
 must be selected by its independently reviewed local `sha256:` image ID.
 
+Docker's legacy image store exposes configuration IDs. Its containerd image
+store can expose an OCI index ID instead. The gate keeps these identities
+distinct: legacy stores must match the exact locked config ID; modern stores
+must match the immutable parent index, the daemon-platform child manifest
+selected with `docker image inspect --platform`, and the actual container's
+`ImageManifestDescriptor`. That reviewed child manifest content-addresses the
+locked config blob. A matching index without a matching platform manifest is
+insufficient. The Gateway's explicit local image ID likewise binds its selected
+child manifest; reports distinguish the observed parent/selected IDs from the
+lock's config digest. No network lookup or image-save fallback occurs during
+this check.
+
 ## Stage inputs explicitly
 
 Build from the accepted source through the existing Dockerfile. Keep a clean
