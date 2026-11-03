@@ -78,3 +78,12 @@ class UnitCatalog(unittest.TestCase):
         with mock.patch.object(m,'control',side_effect=['', '1 owned.service start running']), \
              self.assertRaisesRegex(ValueError,'session_user_jobs_pending'):
             m.user_units()
+
+
+class UserExitBoundary(unittest.TestCase):
+    def test_system_or_forced_exit_never_reaches_systemctl(self):
+        with mock.patch.object(m.subprocess, 'run') as run:
+            for words in (('exit',), ('--system', 'exit'), ('--user', '--force', 'exit')):
+                with self.assertRaisesRegex(ValueError, 'session_root_exit_forbidden'):
+                    m.control(*words)
+            run.assert_not_called()

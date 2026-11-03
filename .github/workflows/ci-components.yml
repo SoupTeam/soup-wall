@@ -2009,14 +2009,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: ${{ (github.event.inputs.coordinated_update_only == 'true' || github.event.inputs.installed_focus == 'clean-user') && '0' || '1' }}
           persist-credentials: ${{ github.event.inputs.coordinated_update_only != 'true' }}
-      - name: Quiesce an empty owned CI user session before pilot execution
-        if: github.event.inputs.installed_focus == 'clean-user'
-        shell: bash
-        env:
-          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
-        run: |
-          set -euo pipefail
-          python3 -I -B scripts/ci_pilot_user_session.py --quiesce
       - name: Validate Git stage-reuse qualification dispatch
         if: github.event.inputs.stage_reuse_only == 'true'
         env:
@@ -2353,6 +2345,7 @@ jobs:
                      if k not in {'installed_focus','native_preparation_only','stability_mode'})
           CHECK
           python3 -B -m unittest discover -s scripts/tests -p test_clean_user_acceptance.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_ci_pilot_user_session.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door_component.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_maintenance.py -v
@@ -3330,9 +3323,19 @@ jobs:
             ${{ runner.temp }}/installed-linked-worktrees.log
           if-no-files-found: warn
           retention-days: 30
+      - name: Quiesce an empty owned CI user session before pilot execution
+        if: github.event.inputs.installed_focus == 'clean-user'
+        shell: bash
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          python3 -I -B scripts/ci_pilot_user_session.py --quiesce
       - name: Qualify pinned installed pilot in a clean ordinary-user environment
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'clean-user' && github.event.inputs.native_preparation_only == 'true'
         shell: bash
+        env:
+          SOU216_CI_USER_SESSION_REPORT: ${{ runner.temp }}/sou216-user-session/report.json
         run: |
           set -euo pipefail
           asset="$RUNNER_TEMP/sou111-assets"

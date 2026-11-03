@@ -513,6 +513,20 @@ def qualify(a, report):
     report["clean_user"] = {"required": required, "cases": [
         {"id": name, "status": "incomplete", "attempted": False} for name in required]}
     rows = {row["id"]: row for row in report["clean_user"]["cases"]}
+    session_path = os.environ.get("SOU216_CI_USER_SESSION_REPORT")
+    if session_path:
+        session_path = Path(session_path)
+        require(session_path.stat().st_size <= 256 * 1024, "ci_user_session_report_bound")
+        observed_session = json.loads(session_path.read_bytes())
+        require(observed_session["driver_source"] == driver_identity
+                and observed_session["status"] in ("already-visible", "quiesced-empty-ci-user-session")
+                and observed_session["installed_host_executed"] is False
+                and observed_session["native_removal_guard_changed"] is False,
+                "ci_user_session_metadata_mismatch")
+        report["ci_user_session"] = {"report_sha256": sha(session_path), "observation": observed_session,
+            "authorizes_removal": False}
+    report["initial_process_observation"] = process_observation()
+    require(not report["initial_process_observation"]["unavailable"], "initial_process_visibility_unavailable")
     def begin(name):
         rows[name]["attempted"] = True
         rows[name]["started_at_ms"] = time.time_ns() // 1_000_000
@@ -679,6 +693,7 @@ def qualify(a, report):
             require(paused.get("status") == "entered", "removal_maintenance_not_entered")
             report["removal_maintenance"].append({"installation": label, "status": "entered"})
         archive_completed_runs(a, env, report)
+        report["after_cleanup_process_observation"] = process_observation()
         recovery = a.output / "removal-recovery"; recovery.mkdir(mode=0o700)
         retained = {"coordinator": q.snapshot(a.output / "coordinator"),
             "bootstrap_versions": q.snapshot(entry_home / "versions"),
@@ -721,7 +736,8 @@ def qualify(a, report):
             "bootstrap_anchor_sha256": sha(entry_home / "pilot-maintenance.anchor.json")}, "removal_changed_retained_state")
         report["removal"].update(coordinator_and_generations_retained=True, bootstrap_agent_retained=True,
                                  maintenance_history_retained=True, retained_state_sha256=digest(retained))
-        require((a.agent_home / "unrelated-user-file").read_text() == "Owned Agent user data must survive.\n",
+        require((a.agent_home / "unrelated-user-file").read_text() == "Owned Agent user data must survive.\n"
+                and (entry_home / "unrelated-user-file").read_text() == "Owned bootstrap user data must survive.\n",
                 "component_removal_changed_user_state")
         require(before_remove == {name: {"files": q.snapshot(chosen.project), "repository": q.snapshot(chosen.repository),
                                         "preparation": q.snapshot(chosen.prefix)} for name, chosen, _ in fixtures}

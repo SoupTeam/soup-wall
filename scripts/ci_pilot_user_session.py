@@ -94,6 +94,8 @@ def context():
 
 
 def control(*words):
+    if 'exit' in words:
+        require(words == ('--user', 'exit'), 'session_root_exit_forbidden')
     env = {'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C', 'HOME': str(Path.home()),
         'XDG_RUNTIME_DIR': '/run/user/' + str(os.getuid()), 'SYSTEMD_COLORS': '0',
         'DBUS_SYSTEM_BUS_ADDRESS': 'unix:path=/run/dbus/system_bus_socket'}
@@ -113,7 +115,7 @@ def properties(user, name, fields):
 def vendor_file(path):
     selected = Path(path).resolve(strict=True)
     require(selected.is_relative_to(Path('/usr/lib/systemd/user')), 'session_nonvendor_user_unit')
-    for parent in (selected.parent, *selected.parents):
+    for parent in selected.parents:
         if not parent.is_relative_to(Path('/usr/lib/systemd/user')): break
         info = parent.stat()
         require(info.st_uid == 0 and not info.st_mode & 0o022, 'session_untrusted_unit_parent')
@@ -225,7 +227,7 @@ def main():
     parser.add_argument('--quiesce', action='store_true')
     args = parser.parse_args()
     report = {'diagnostic': 'SOU-216 owned CI user-session preparation', 'authorization': False,
-        'product_executed': False, 'native_removal_guard_changed': False, 'status': 'failed'}
+        'installed_host_executed': False, 'native_removal_guard_changed': False, 'status': 'failed'}
     private = {}
     directory = None
     try:
