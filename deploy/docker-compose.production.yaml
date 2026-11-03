@@ -6,7 +6,9 @@ name: soup-wall-production
 # front of the loopback-bound host port.
 services:
   postgres:
-    image: postgres:16-alpine
+    image: docker.io/library/postgres:16.15-alpine3.24@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
+    platform: ${SOUP_WALL_PLATFORM:?use scripts/production-compose.py}
+    pull_policy: never
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env.production}
@@ -21,7 +23,9 @@ services:
       retries: 6
 
   redis:
-    image: redis:7-alpine
+    image: docker.io/library/redis:7.4.12-alpine3.21@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
+    platform: ${SOUP_WALL_PLATFORM:?use scripts/production-compose.py}
+    pull_policy: never
     restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env.production}
@@ -35,10 +39,11 @@ services:
       retries: 6
 
   firewall:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-    image: soup-wall:production
+    # Build separately, record the resulting local sha256 image ID, then use
+    # the guarded command. Startup never builds or fetches a replacement.
+    image: ${SOUP_WALL_IMAGE:?set the reviewed local sha256 image ID}
+    platform: ${SOUP_WALL_PLATFORM:?use scripts/production-compose.py}
+    pull_policy: never
     restart: unless-stopped
     depends_on:
       postgres:
