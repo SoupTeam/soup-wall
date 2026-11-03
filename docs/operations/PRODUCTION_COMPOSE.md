@@ -1,6 +1,6 @@
 # Verified production Compose inputs
 
-The production template keeps PostgreSQL major16 and Redis major7. Its dependency
+The production template keeps PostgreSQL major 16 and Redis major 7. Its dependency
 references include immutable OCI index digests; the lock also records the exact
 Linux amd64 and arm64 child manifest and image-configuration digests. Architecture
 comes from the selected Docker daemon, including Docker Desktop's Linux engine,
@@ -59,7 +59,9 @@ Gateway preflight without starting dependencies. `migrate` starts and verifies
 the pinned dependencies before invoking the existing one-shot migration.
 `start` verifies healthy dependency containers before starting the Gateway with
 `--no-deps`, then checks every actual container's image ID, project/service
-ownership and health. No Gateway startup follows a wrong/missing image,
+ownership, process/environment configuration, data-volume identity, isolation
+and health. Secret values are compared in memory and never included in reports.
+No Gateway startup follows a wrong/missing image,
 unsupported architecture, changed source/configuration or failed dependency
 verification.
 
@@ -109,22 +111,22 @@ source and inputs.
 4. For rollback, stop the owned services and select the previous accepted source,
    lock, local image ID, protected environment and retained policy snapshot.
    Remove only changed owned containers, preserving volumes. Repeat the guarded
-   sequence. PostgreSQL16 minor releases retain the data-directory major; that
+   sequence. PostgreSQL 16 minor releases retain the data-directory major; that
    fact does not make arbitrary database/application schema downgrades safe.
    If schema or storage format changed, restore the tested compatible backup
    instead. There is no automatic rollback or major migration here.
 
 ## Source and policy observations
 
-The lock records the exact official PostgreSQL16.15/Alpine3.24 and
-Redis7.4.12/Alpine3.21 recipes and source archive hashes. Their upstream notes are
-retained: [PostgreSQL16.15](https://www.postgresql.org/docs/release/16.15/) includes
+The lock records the exact official PostgreSQL 16.15/Alpine 3.24 and
+Redis 7.4.12/Alpine 3.21 recipes and source archive hashes. Their upstream notes are
+retained: [PostgreSQL 16.15](https://www.postgresql.org/docs/release/16.15/) includes
 security corrections and migration considerations;
-[Redis7.4.12](https://github.com/redis/redis/releases/tag/7.4.12) includes the
+[Redis 7.4.12](https://github.com/redis/redis/releases/tag/7.4.12) includes the
 cluster-bus large-message security fix. Pinning these artifacts does not certify
 all bundled Alpine packages or establish an absence of vulnerabilities.
 
-Redis7.4 uses the upstream choice of RSALv2 or SSPLv1, as recorded in its
+Redis 7.4 uses the upstream choice of RSALv2 or SSPLv1, as recorded in its
 [exact source license](https://github.com/redis/redis/blob/7.4.12/LICENSE.txt).
 The manifest makes no license-policy change or legal/release approval. The
 existing runtime inventory clearance and final publication gates stay separate.
@@ -145,3 +147,21 @@ exercise readiness and PostgreSQL/Redis outage/recovery without provider traffic
 Their current project and fixture environment must identify the same owned stack.
 Retain actual authenticated data/restart witnesses separately from structural
 controls and distinguish skipped architectures from executed targets.
+
+The reproducible owned-stack qualification uses an already-built image whose
+`org.opencontainers.image.revision` label equals the supplied accepted Gateway
+source. It creates a random project and disposable credentials, runs the existing
+health/dependency drill, verifies admin and database authentication, writes
+PostgreSQL/Redis witnesses and verifies those witnesses plus the tenant after a
+three-container restart. It also checks missing-image and wrong-owned-container
+refusal without replacement. Only that owned project's containers and volumes are
+removed afterwards; no deployment or external database is reused.
+
+```text
+python3 scripts/qualify-production-compose.py --run --expected-commit <clean-full-qualification-source> --gateway-source-commit <full-reviewed-gateway-source> --gateway-image-id sha256:<reviewed-image-id> --output <new-qualification.json>
+```
+
+This command requires a clean source checkout, both prefetched dependency images,
+the reviewed local Gateway image, Docker Compose and `pwsh` for the existing
+PowerShell drill. It sends no model-provider requests. An unavailable prerequisite
+or failed negative/control remains a failed observation, never a simulated pass.
