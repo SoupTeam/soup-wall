@@ -1,0 +1,163 @@
+{
+  "acceptance": {
+    "after_discovery_identity": "unchanged_from_before",
+    "after_raw_artifact": "unchanged_from_before",
+    "analyzer_accepts": false,
+    "statement": "This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process."
+  },
+  "analyzer": {
+    "command": "agentfw mcp-schema-upgrade",
+    "version": "0.3.0"
+  },
+  "coverage": {
+    "complete": false,
+    "gaps": [
+      {
+        "effect": "the before snapshot was not checked against an accepted identity document",
+        "gap": "before_identity_not_verified"
+      }
+    ],
+    "unsupported_constructs": []
+  },
+  "findings": [],
+  "format": "sw-mcp/schema-upgrade-report/1",
+  "identity_rules": {
+    "analysis_normalization": "sorted object keys; required/enum/type compared as sets; used only to compare, never as identity",
+    "definition_identity": "profile_author::digest(tool)",
+    "discovery_identity": "profile_author::digest(result) for JSON-RPC, of the whole document for sw-mcp/operator-discovery/1",
+    "raw_file": "sha256 of the exact input bytes",
+    "schema_identity": "profile_author::digest(inputSchema): sha256 of sorted-key compact JSON"
+  },
+  "inputs": {
+    "after": {
+      "bytes": 749,
+      "discovery_sha256": "605cbc4776cd1ab1e85ba3ce14ac34d1ec9010c0bada8c1f27bfe742bef0b41a",
+      "file_name": "discovery.json",
+      "format": "sw-mcp/operator-discovery/1",
+      "operator_label_untrusted": null,
+      "raw_sha256": "82a8621734d664b7ec948949eb6467e4dff8061c993994de138b3ab86aa55764",
+      "tool_count": 1
+    },
+    "before": {
+      "bytes": 749,
+      "discovery_sha256": "605cbc4776cd1ab1e85ba3ce14ac34d1ec9010c0bada8c1f27bfe742bef0b41a",
+      "file_name": "discovery.json",
+      "format": "sw-mcp/operator-discovery/1",
+      "operator_label_untrusted": null,
+      "raw_sha256": "82a8621734d664b7ec948949eb6467e4dff8061c993994de138b3ab86aa55764",
+      "tool_count": 1
+    },
+    "before_identity": null,
+    "current_declarations": {
+      "bytes": 627,
+      "file_name": "declarations.json",
+      "format": "sw-mcp/operator-declaration/1",
+      "raw_sha256": "de304c769a08e64faff87b202ff921eb7e6595c72ac27cf0bb5c8c94eae5e023",
+      "registry_id": "sou65-owned",
+      "tools": 1
+    },
+    "proposed_registry": null
+  },
+  "limits": {
+    "max_coverage_entries": 1024,
+    "max_declaration_bytes": 262144,
+    "max_diff_steps": 131072,
+    "max_document_depth": 32,
+    "max_document_nodes": 65536,
+    "max_findings": 2048,
+    "max_label_bytes": 256,
+    "max_output_bytes": 16777216,
+    "max_referenced_file_bytes": 1048576,
+    "max_referenced_files": 16,
+    "max_snapshot_bytes": 262144,
+    "max_tools": 64,
+    "max_value_excerpt_bytes": 1024,
+    "runtime_subset": {
+      "max_depth": 8,
+      "max_items": 256,
+      "max_schema_nodes": 1024
+    }
+  },
+  "non_authority": {
+    "accepts_schema": false,
+    "grants_permission": false,
+    "installs": false,
+    "launches_server": false,
+    "model_classification": false,
+    "modifies_profile_or_declarations": false,
+    "network_or_reference_retrieval": false,
+    "statement": "This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process."
+  },
+  "review_pack": {
+    "complete": true,
+    "file": "review-pack.json",
+    "records": 0,
+    "truncated": 0
+  },
+  "summary": {
+    "analysis_mode": "declaration_bound",
+    "analysis_truncated": false,
+    "byte_identical": true,
+    "classification": "byte_identical",
+    "coverage_complete": false,
+    "declaration_findings": 0,
+    "discovery_identity_changed": false,
+    "exit_code": 0,
+    "findings": {
+      "inert_metadata": 0,
+      "requalification_required": 0,
+      "review_required": 0,
+      "total": 0,
+      "unsupported": 0
+    },
+    "new_unaccepted_identities": [],
+    "outcome": "no_drift",
+    "semantic_review": "available_for_supported_subset",
+    "tool_order_changed": false,
+    "tools_added": 0,
+    "tools_after": 1,
+    "tools_before": 1,
+    "tools_changed": 0,
+    "tools_removed": 0,
+    "tools_unchanged": 1
+  },
+  "tools": [
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "15f1489653a2389e9dbe688ba52448e500fc46fa9f9c7781908667293649105a",
+        "output_schema_sha256": null,
+        "schema_sha256": "5dc7ee60f351a1c09517603683276c627fb090f171841f053a801d717a610a48"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "15f1489653a2389e9dbe688ba52448e500fc46fa9f9c7781908667293649105a",
+        "output_schema_sha256": null,
+        "schema_sha256": "5dc7ee60f351a1c09517603683276c627fb090f171841f053a801d717a610a48"
+      },
+      "current_declaration": {
+        "action": "authority:read_only",
+        "capabilities": {},
+        "destinations": [],
+        "reference": "declarations:tools[0]",
+        "resources": [],
+        "result_provenance": null,
+        "schema_sha256": "5dc7ee60f351a1c09517603683276c627fb090f171841f053a801d717a610a48"
+      },
+      "name": "read_document",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "absent"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    }
+  ]
+}

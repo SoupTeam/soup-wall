@@ -1,0 +1,377 @@
+{
+  "format": "sw-mcp/schema-upgrade-fixtures/1",
+  "notice": "Upgrade fixtures are synthetic mutations of accepted snapshots. They are not upstream releases and must never be accepted or installed.",
+  "generator": "scripts/schema-upgrade-fixtures.py",
+  "fixtures": [
+    {
+      "fixture": "fs-keys-reordered.json",
+      "synthetic": true,
+      "kind": "mutated_upgrade_snapshot",
+      "baseline": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+      "mutation": "every JSON object's keys reversed; content unchanged",
+      "fixture_raw_sha256": "a4d722d9d8f39841450afb42e48b81ccd58894d85ae449fa657c1d6fae79a47b",
+      "expect": {
+        "exit": 5,
+        "classification": "raw_bytes_differ_identities_equal"
+      }
+    },
+    {
+      "fixture": "fs-tools-reordered.json",
+      "synthetic": true,
+      "kind": "mutated_upgrade_snapshot",
+      "baseline": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+      "mutation": "tools list reversed and object keys reversed",
+      "fixture_raw_sha256": "81145944f0a6b5b35e6e9d555d2c0897144ee22008cd6be4578373be71211bc2",
+      "expect": {
+        "exit": 5,
+        "classification": "inert_metadata_only",
+        "kinds": [
+          "tool_order_changed"
+        ]
+      }
+    },
+    {
+      "fixture": "fs-metadata-inert.json",
+      "synthetic": true,
+      "kind": "mutated_upgrade_snapshot",
+      "baseline": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+      "mutation": "descriptions/title wording changed (tool and schema level)",
+      "fixture_raw_sha256": "68bb93c7d9e5fbd7b90e2e0d00ecc607f68b72c2baf64bd454a1090077b4bf63",
+      "expect": {
+        "exit": 5,
+        "classification": "inert_metadata_only",
+        "kinds": [
+          "tool_metadata_changed",
+          "schema_metadata_changed"
+        ]
+      }
+    },
+    {
+      "fixture": "fs-malicious-metadata.json",
+      "synthetic": true,
+      "kind": "mutated_upgrade_snapshot",
+      "baseline": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+      "mutation": "injection text, bidi/control characters, spreadsheet formulas and a false read-only hint on write_file",
+      "fixture_raw_sha256": "6f583e5f10a0cc3af88700d3b2b86062f6b5bea49886d18bfb9fc7ab200048b4",
+      "expect": {
+        "exit": 5,
+        "classification": "review_required",
+        "kinds": [
+          "tool_metadata_changed",
+          "behavior_hint_changed"
+        ]
+      }
+    },
+    {
+      "fixture": "fs-tools-added-removed.json",
+      "synthetic": true,
+      "kind": "mutated_upgrade_snapshot",
+      "baseline": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+      "mutation": "get_file_info removed; delete_file added with a read-only claim",
+      "fixture_raw_sha256": "7ae2b92133df99825a45b19ae075083e56245749e9ee25ae95116d439d011c8a",
+      "expect": {
+        "exit": 5,
+        "classification": "review_required",
+        "kinds": [
+          "tool_added",
+          "tool_removed"
+        ]
+      }
+    },
+    {
+      "fixture": "fs-required-default-type-enum.json",
+      "synthetic": true,
+      "kind": "mutated_upgrade_snapshot",
+      "baseline": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+      "mutation": "read_text_file path removed; search_files excludePatterns required; sortBy enum size->mtime and default; directory_tree default; read_file head nullable, tail number->string",
+      "fixture_raw_sha256": "622913bcc0b319c99aebfd1de0cffc0cbabb99dd831082a6b7d6ee5c7ae4f610",
+      "expect": {
+        "exit": 5,
+        "classification": "unsupported_present",
+        "kinds": [
+          "required_field_removed",
+          "required_added",
+          "enum_values_added",
+          "enum_values_removed",
+          "default_changed",
+          "nullable_added",
+          "type_changed"
+        ]
+      }
+    },
+    {
+      "fixture": "fs-nested-array.json",
+      "synthetic": true,
+      "kind": "mutated_upgrade_snapshot",
+      "baseline": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+      "mutation": "edit_file edits[].mode added, oldText maxLength; read_multiple_files paths minItems/maxItems/items.minLength",
+      "fixture_raw_sha256": "5b0144b1e25c13bb401ed49ab746c816699602ceb95f1e615a31d10f700d3491",
+      "expect": {
+        "exit": 5,
+        "classification": "review_required",
+        "kinds": [
+          "field_added",
+          "constraint_changed"
+        ]
+      }
+    },
+    {
+      "fixture": "fs-result-capability.json",
+      "synthetic": true,
+      "kind": "mutated_upgrade_snapshot",
+      "baseline": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+      "mutation": "read_text_file output gains encoding; list_allowed_directories outputSchema removed; read_file execution.taskSupport changed",
+      "fixture_raw_sha256": "d9071c727f7ab829d9fb8920a27f72ad63e5adc96be97150bdaa86cb22a6bcaa",
+      "expect": {
+        "exit": 5,
+        "classification": "review_required",
+        "kinds": [
+          "field_added",
+          "result_shape_removed",
+          "capability_changed"
+        ]
+      }
+    },
+    {
+      "fixture": "fs-destination-controls.json",
+      "synthetic": true,
+      "kind": "mutated_upgrade_snapshot",
+      "baseline": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+      "mutation": "move_file destination string->array; nested options.notify.destination added; list_directory path gains unsupported format",
+      "fixture_raw_sha256": "eb0095c7b71d19694c2af0ad1d53013c107229f883abb68f7830a6d25d26b881",
+      "expect": {
+        "exit": 5,
+        "classification": "unsupported_present",
+        "kinds": [
+          "type_changed",
+          "field_added",
+          "unsupported_construct_changed"
+        ]
+      }
+    },
+    {
+      "fixture": "fs-unsupported.json",
+      "synthetic": true,
+      "kind": "mutated_upgrade_snapshot",
+      "baseline": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+      "mutation": "format, oneOf, remote $ref, recursive $defs and an unknown tool member",
+      "fixture_raw_sha256": "357fb3b6307de32f4df9146b640f370fecea0d085f4b0c6b502b6748f58f3836",
+      "expect": {
+        "exit": 5,
+        "classification": "unsupported_present",
+        "kinds": [
+          "unsupported_construct_changed",
+          "unsupported_member_changed"
+        ]
+      }
+    },
+    {
+      "fixture": "git-metadata-inert.json",
+      "synthetic": true,
+      "kind": "mutated_upgrade_snapshot",
+      "baseline": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+      "mutation": "git_status description and repo_path title changed",
+      "fixture_raw_sha256": "f47ddd6b93e05463284b6af87d09389bc4161bbfbd6d6b7d6164ab3243d1da22",
+      "expect": {
+        "exit": 5,
+        "classification": "inert_metadata_only"
+      }
+    },
+    {
+      "fixture": "git-semantic.json",
+      "synthetic": true,
+      "kind": "mutated_upgrade_snapshot",
+      "baseline": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+      "mutation": "git_log default 10->1000; git_diff context_lines integer->string; git_show revision optional; git_add minItems 0; git_branch enum; git_commit false read-only hint; git_reset removed; git_push added",
+      "fixture_raw_sha256": "9c27adff206eaf6f58f90483c2ef541997976d63bf2daa635b53285ac49c188a",
+      "expect": {
+        "exit": 5,
+        "classification": "unsupported_present",
+        "kinds": [
+          "default_changed",
+          "type_changed",
+          "required_removed",
+          "constraint_changed",
+          "enum_added",
+          "behavior_hint_changed",
+          "tool_removed",
+          "tool_added"
+        ]
+      }
+    },
+    {
+      "fixture": "git-extreme-bound.json",
+      "synthetic": true,
+      "kind": "mutated_upgrade_snapshot",
+      "baseline": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+      "mutation": "git_status repo_path maxLength = u64::MAX",
+      "fixture_raw_sha256": "fa0859610f6639f80fb943e92a56c70d029763480b52a0e3fc2b1887b0eb46b9",
+      "expect": {
+        "exit": 5,
+        "classification": "unsupported_present",
+        "kinds": [
+          "constraint_changed",
+          "schema_outside_runtime_subset"
+        ]
+      }
+    },
+    {
+      "fixture": "git-recursive-ref.json",
+      "synthetic": true,
+      "kind": "mutated_upgrade_snapshot",
+      "baseline": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+      "mutation": "self-recursive $defs/$ref in git_status",
+      "fixture_raw_sha256": "5a4dc4156e1a46eb69fd5b64150b00872545e61545a04b54f2bcb4809313fcfe",
+      "expect": {
+        "exit": 5,
+        "classification": "unsupported_present"
+      }
+    },
+    {
+      "fixture": "invalid-duplicate-key.json",
+      "synthetic": true,
+      "kind": "invalid_input",
+      "baseline": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+      "mutation": "duplicate object member inserted textually",
+      "fixture_raw_sha256": "dffd0fe08048156b38b7d7dbbc3cf62e4712ba9ef0891fe55e5351ea294dce19",
+      "expect": {
+        "exit": 2,
+        "refusal": "duplicate_json_member"
+      }
+    },
+    {
+      "fixture": "invalid-duplicate-tool.json",
+      "synthetic": true,
+      "kind": "invalid_input",
+      "baseline": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+      "mutation": "git_status listed twice",
+      "fixture_raw_sha256": "3c1570b71e954b63d313aaf625eb33217919abce0243ac5bb1e183cff0e02d71",
+      "expect": {
+        "exit": 2,
+        "refusal": "duplicate_tool"
+      }
+    },
+    {
+      "fixture": "invalid-nan.json",
+      "synthetic": true,
+      "kind": "invalid_input",
+      "baseline": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+      "mutation": "non-JSON constant NaN",
+      "fixture_raw_sha256": "4a99d3f44f114523cfb4523f417d55f8fb0bdbebe7d353db79126993af98a5f7",
+      "expect": {
+        "exit": 2,
+        "refusal": "malformed_json"
+      }
+    },
+    {
+      "fixture": "invalid-paginated.json",
+      "synthetic": true,
+      "kind": "invalid_input",
+      "baseline": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+      "mutation": "result.nextCursor present",
+      "fixture_raw_sha256": "b565cb5bc4028a4ca9ed57f6440161f022abc81cb0389784d6536925ffd1614a",
+      "expect": {
+        "exit": 2,
+        "refusal": "incomplete_snapshot"
+      }
+    },
+    {
+      "fixture": "invalid-deep.json",
+      "synthetic": true,
+      "kind": "invalid_input",
+      "baseline": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+      "mutation": "inputSchema nested 40 objects deep",
+      "fixture_raw_sha256": "47caedc4ba01561e2eba4f185153144151cf00e754c99f222e03e036a5909656",
+      "expect": {
+        "exit": 2,
+        "refusal": "depth_exceeded"
+      }
+    },
+    {
+      "fixture": "filesystem-readonly-v1.registry.json",
+      "synthetic": false,
+      "kind": "reproduced_installer_registry",
+      "provenance_status": "reproduced from the accepted installer function; NOT an observed installed operator registry",
+      "baseline": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+      "accepted_base_revision": "b385e7506ab26896637f348e3180e52d1fc6d423",
+      "installer": "scripts/install-sou62-filesystem-profile.py",
+      "installer_git_blob": "7e1d44ab1df78d3aee5cc23f16db4c438f52c7c2",
+      "function": "registry",
+      "parameters": {},
+      "serialization": "json.dumps(indent=2, ensure_ascii=False) + newline, as installer private_json",
+      "fixture_raw_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7"
+    },
+    {
+      "fixture": "git-readonly-v1.registry.json",
+      "synthetic": false,
+      "kind": "reproduced_installer_registry",
+      "provenance_status": "reproduced from the accepted installer function; NOT an observed installed operator registry",
+      "baseline": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+      "accepted_base_revision": "b385e7506ab26896637f348e3180e52d1fc6d423",
+      "installer": "scripts/install-sou68-git-profile.py",
+      "installer_git_blob": "52e67a45e9f562817d14ce33ac9128512513b64d",
+      "function": "registry",
+      "parameters": {
+        "local_references": false,
+        "file_revisions": false,
+        "shallow_repository": false
+      },
+      "serialization": "json.dumps(indent=2, ensure_ascii=False) + newline, as installer private_json",
+      "fixture_raw_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385"
+    },
+    {
+      "fixture": "fs-control-current.registry.json",
+      "synthetic": true,
+      "kind": "synthetic_control_declaration",
+      "baseline": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+      "derivation": "accepted filesystem registry + egress selector /destination on move_file",
+      "fixture_raw_sha256": "d87b555162420a4e8625682c912065e55c0a0c16fe87b381b3e003554d66e57f"
+    },
+    {
+      "fixture": "fs-control-proposed.registry.json",
+      "synthetic": true,
+      "kind": "synthetic_proposed_declaration",
+      "baseline": "fs-destination-controls.json",
+      "derivation": "installer registry() of the mutated after snapshot; move_file action network and two egress selectors (draft, never accepted)",
+      "fixture_raw_sha256": "8cb5a56b434e4033c1dbb4d669c234fc525eedaee3442779ee0956b6b9a3d74d"
+    },
+    {
+      "fixture": "git-extreme-bound-before.json",
+      "synthetic": true,
+      "kind": "mutated_before_snapshot",
+      "baseline": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+      "baseline_raw_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+      "mutation": "git_status repo_path maxLength = u64::MAX in the before snapshot",
+      "fixture_raw_sha256": "fa0859610f6639f80fb943e92a56c70d029763480b52a0e3fc2b1887b0eb46b9"
+    },
+    {
+      "fixture": "fs-proposed-action-only.registry.json",
+      "synthetic": true,
+      "kind": "synthetic_proposed_declaration",
+      "baseline": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+      "derivation": "reproduced filesystem registry with read_text_file action_class read_only -> network; schemas unchanged (draft, never accepted)",
+      "fixture_raw_sha256": "aebed0b12105afae9224e70c86e1df37dfbb3ee1c7dcca396115fe87f4227ead"
+    }
+  ]
+}

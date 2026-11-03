@@ -1,0 +1,40 @@
+MCP original-tool schema upgrade review (offline, non-authoritative)
+Format: sw-mcp/schema-upgrade-report/1
+
+NOTICE: This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process.
+
+before: file upstream-tools-list.json raw_sha256 8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b (6022 bytes, 12 tools, mcp/tools-list-response)
+        discovery_sha256 0ebf2d0c147352d483aed19e6988749c8641a11258ac05a16e0a58639163489c
+        operator label (untrusted): "profiles/mcp/git-readonly-v1/upstream-tools-list.json@b385e7506ab2"
+after : file git-recursive-ref.json raw_sha256 5a4dc4156e1a46eb69fd5b64150b00872545e61545a04b54f2bcb4809313fcfe (11224 bytes, 12 tools, mcp/tools-list-response)
+        discovery_sha256 1460e950ab358ad475d6dab32507cd70e87554627432184b7c5bf3a33a8a21aa
+        operator label (untrusted): "SYNTHETIC git-recursive-ref.json"
+before identity: verified upstream-identity.json raw_sha256 90fbf2f84db1fee38145914adaf851c35d9b8b3735dc4e78caf7820c507e09e4 (3 referenced files verified)
+current declarations: sw-native/1 git-readonly-v1.registry.json raw_sha256 5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385
+
+Outcome: review_required / unsupported_present (exit 5)
+Snapshots byte-identical: false; declaration findings: 1
+Tools: before 12 after 12; added 0 removed 0 changed 1 unchanged 11
+Findings: 6 (inert metadata 1, review required 1, unsupported 3, declaration requalification 1)
+Coverage complete: false; review-pack records: 5
+New UNACCEPTED tool identities (1): git_status
+Accepted by this analyzer: nothing.
+
+Findings (tool / pointer / kind / nature):
+  [F-cf20934a1e178b1b] git_status /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): e3eb0910a0b7d725877173b42aa54849c5a978932a2192e3f814a9d92794db25
+      after  (untrusted): 988aa2154927df58dbf7fdce811381a0b06c074e225e06f4036f46403f36130b
+  [F-1c6556dd365973dd] git_status /inputSchema schema_outside_runtime_subset unsupported -> examples 1
+  [F-91c38ad5c99e4dd5] git_status /inputSchema/$defs unsupported_construct_changed unsupported -> examples 1
+      after  (untrusted): {"loop":{"$ref":"#/$defs/loop"}}
+  [F-c506b45edd42abc4] git_status /inputSchema/properties/repo_path/$ref unsupported_construct_changed unsupported -> examples 1
+      after  (untrusted): #/$defs/loop
+  [F-d5e17087341cd609] git_status /inputSchema/properties/repo_path/title schema_metadata_changed inert_metadata -> examples 0
+      before (untrusted): Repo Path
+  [F-c971418141002a7d] git_status /inputSchema/properties/repo_path/type type_changed review_required -> examples 1
+      before (untrusted): string
+
+Coverage gaps:
+  - {"entries":23,"gap":"unsupported_constructs_present"}
+  - {"gap":"examples_not_constructed","records":4}
+Unsupported constructs reported: 23

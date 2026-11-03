@@ -1,0 +1,673 @@
+{
+  "acceptance": {
+    "after_discovery_identity": "new_unaccepted",
+    "after_raw_artifact": "new_unaccepted",
+    "analyzer_accepts": false,
+    "statement": "This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process."
+  },
+  "analyzer": {
+    "command": "agentfw mcp-schema-upgrade",
+    "version": "0.3.0"
+  },
+  "coverage": {
+    "complete": false,
+    "gaps": [
+      {
+        "effect": "semantic review unavailable: action/resource/destination semantics unknown; no declared-selector findings or declaration-grounded examples",
+        "gap": "no_current_declarations",
+        "mode": "snapshot_only"
+      },
+      {
+        "effect": "the before snapshot was not checked against an accepted identity document",
+        "gap": "before_identity_not_verified"
+      },
+      {
+        "entries": 20,
+        "gap": "unsupported_constructs_present"
+      },
+      {
+        "gap": "examples_not_constructed",
+        "records": 1
+      }
+    ],
+    "unsupported_constructs": [
+      {
+        "area": "input",
+        "construct": "missing type",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/contains",
+        "side": "before",
+        "tool": "git_branch"
+      },
+      {
+        "area": "input",
+        "construct": "anyOf",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/contains/anyOf",
+        "side": "before",
+        "tool": "git_branch"
+      },
+      {
+        "area": "input",
+        "construct": "missing type",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/not_contains",
+        "side": "before",
+        "tool": "git_branch"
+      },
+      {
+        "area": "input",
+        "construct": "anyOf",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/not_contains/anyOf",
+        "side": "before",
+        "tool": "git_branch"
+      },
+      {
+        "area": "input",
+        "construct": "missing type",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/contains",
+        "side": "after",
+        "tool": "git_branch"
+      },
+      {
+        "area": "input",
+        "construct": "anyOf",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/contains/anyOf",
+        "side": "after",
+        "tool": "git_branch"
+      },
+      {
+        "area": "input",
+        "construct": "missing type",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/not_contains",
+        "side": "after",
+        "tool": "git_branch"
+      },
+      {
+        "area": "input",
+        "construct": "anyOf",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/not_contains/anyOf",
+        "side": "after",
+        "tool": "git_branch"
+      },
+      {
+        "area": "input",
+        "construct": "missing type",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/base_branch",
+        "side": "before",
+        "tool": "git_create_branch"
+      },
+      {
+        "area": "input",
+        "construct": "anyOf",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/base_branch/anyOf",
+        "side": "before",
+        "tool": "git_create_branch"
+      },
+      {
+        "area": "input",
+        "construct": "missing type",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/base_branch",
+        "side": "after",
+        "tool": "git_create_branch"
+      },
+      {
+        "area": "input",
+        "construct": "anyOf",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/base_branch/anyOf",
+        "side": "after",
+        "tool": "git_create_branch"
+      },
+      {
+        "area": "input",
+        "construct": "missing type",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/end_timestamp",
+        "side": "before",
+        "tool": "git_log"
+      },
+      {
+        "area": "input",
+        "construct": "anyOf",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/end_timestamp/anyOf",
+        "side": "before",
+        "tool": "git_log"
+      },
+      {
+        "area": "input",
+        "construct": "missing type",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/start_timestamp",
+        "side": "before",
+        "tool": "git_log"
+      },
+      {
+        "area": "input",
+        "construct": "anyOf",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/start_timestamp/anyOf",
+        "side": "before",
+        "tool": "git_log"
+      },
+      {
+        "area": "input",
+        "construct": "missing type",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/end_timestamp",
+        "side": "after",
+        "tool": "git_log"
+      },
+      {
+        "area": "input",
+        "construct": "anyOf",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/end_timestamp/anyOf",
+        "side": "after",
+        "tool": "git_log"
+      },
+      {
+        "area": "input",
+        "construct": "missing type",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/start_timestamp",
+        "side": "after",
+        "tool": "git_log"
+      },
+      {
+        "area": "input",
+        "construct": "anyOf",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/start_timestamp/anyOf",
+        "side": "after",
+        "tool": "git_log"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "after": null,
+      "area": "input",
+      "argument_pointer": "/repo_path",
+      "before": 18446744073709551615,
+      "declaration_refs": [],
+      "detail": {
+        "direction": "loosened",
+        "keyword": "maxLength"
+      },
+      "example_ids": [
+        "E-99eee244cdd9e84d"
+      ],
+      "id": "F-94f72c6ad4dfee30",
+      "kind": "constraint_changed",
+      "nature": "review_required",
+      "pointer": "/inputSchema/properties/repo_path/maxLength",
+      "review_reasons": [
+        "Length or item bounds changed."
+      ],
+      "tool": "git_status"
+    }
+  ],
+  "format": "sw-mcp/schema-upgrade-report/1",
+  "identity_rules": {
+    "analysis_normalization": "sorted object keys; required/enum/type compared as sets; used only to compare, never as identity",
+    "definition_identity": "profile_author::digest(tool)",
+    "discovery_identity": "profile_author::digest(result) for JSON-RPC, of the whole document for sw-mcp/operator-discovery/1",
+    "raw_file": "sha256 of the exact input bytes",
+    "schema_identity": "profile_author::digest(inputSchema): sha256 of sorted-key compact JSON"
+  },
+  "inputs": {
+    "after": {
+      "bytes": 6022,
+      "discovery_sha256": "0ebf2d0c147352d483aed19e6988749c8641a11258ac05a16e0a58639163489c",
+      "file_name": "upstream-tools-list.json",
+      "format": "mcp/tools-list-response",
+      "operator_label_untrusted": null,
+      "raw_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+      "tool_count": 12
+    },
+    "before": {
+      "bytes": 11196,
+      "discovery_sha256": "3ff3e9692b6858ddcf0037dcae1e45a0f401b1d899b38d7b44b8ce23a3da3a6b",
+      "file_name": "git-extreme-bound-before.json",
+      "format": "mcp/tools-list-response",
+      "operator_label_untrusted": null,
+      "raw_sha256": "fa0859610f6639f80fb943e92a56c70d029763480b52a0e3fc2b1887b0eb46b9",
+      "tool_count": 12
+    },
+    "before_identity": null,
+    "current_declarations": null,
+    "proposed_registry": null
+  },
+  "limits": {
+    "max_coverage_entries": 1024,
+    "max_declaration_bytes": 262144,
+    "max_diff_steps": 131072,
+    "max_document_depth": 32,
+    "max_document_nodes": 65536,
+    "max_findings": 2048,
+    "max_label_bytes": 256,
+    "max_output_bytes": 16777216,
+    "max_referenced_file_bytes": 1048576,
+    "max_referenced_files": 16,
+    "max_snapshot_bytes": 262144,
+    "max_tools": 64,
+    "max_value_excerpt_bytes": 1024,
+    "runtime_subset": {
+      "max_depth": 8,
+      "max_items": 256,
+      "max_schema_nodes": 1024
+    }
+  },
+  "non_authority": {
+    "accepts_schema": false,
+    "grants_permission": false,
+    "installs": false,
+    "launches_server": false,
+    "model_classification": false,
+    "modifies_profile_or_declarations": false,
+    "network_or_reference_retrieval": false,
+    "statement": "This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process."
+  },
+  "review_pack": {
+    "complete": true,
+    "file": "review-pack.json",
+    "records": 1,
+    "truncated": 0
+  },
+  "summary": {
+    "analysis_mode": "snapshot_only",
+    "analysis_truncated": false,
+    "byte_identical": false,
+    "classification": "review_required",
+    "coverage_complete": false,
+    "declaration_findings": 0,
+    "discovery_identity_changed": true,
+    "exit_code": 5,
+    "findings": {
+      "inert_metadata": 0,
+      "requalification_required": 0,
+      "review_required": 1,
+      "total": 1,
+      "unsupported": 0
+    },
+    "new_unaccepted_identities": [
+      "git_status"
+    ],
+    "outcome": "review_required",
+    "semantic_review": "unavailable_snapshot_only",
+    "tool_order_changed": false,
+    "tools_added": 0,
+    "tools_after": 12,
+    "tools_before": 12,
+    "tools_changed": 1,
+    "tools_removed": 0,
+    "tools_unchanged": 11
+  },
+  "tools": [
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "e97f8d7e8e33e68f23c573e2027126247253db849e8ab4a9df44c5b5dbe0f24e",
+        "output_schema_sha256": null,
+        "schema_sha256": "bcca48730b12740da64f7a0c898574eb9bb3aa7679dcf0bd8ac8b9889b6254fa"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "e97f8d7e8e33e68f23c573e2027126247253db849e8ab4a9df44c5b5dbe0f24e",
+        "output_schema_sha256": null,
+        "schema_sha256": "bcca48730b12740da64f7a0c898574eb9bb3aa7679dcf0bd8ac8b9889b6254fa"
+      },
+      "current_declaration": null,
+      "name": "git_add",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "absent"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "9726dbd1d09733ca68ac5acab9ed23fd33de3adec4ebbd3b06628ebc91eca162",
+        "output_schema_sha256": null,
+        "schema_sha256": "57d04063c4a36858343773eb6928ffd7a2e52a4d95545a310845d8facdc0211c"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "9726dbd1d09733ca68ac5acab9ed23fd33de3adec4ebbd3b06628ebc91eca162",
+        "output_schema_sha256": null,
+        "schema_sha256": "57d04063c4a36858343773eb6928ffd7a2e52a4d95545a310845d8facdc0211c"
+      },
+      "current_declaration": null,
+      "name": "git_branch",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "reason": "MCP schema type missing",
+          "status": "unsupported"
+        },
+        "after_result": {
+          "status": "absent"
+        },
+        "before_input": {
+          "reason": "MCP schema type missing",
+          "status": "unsupported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "4ab7d39d3db4317b930371c39164a78b5686e7c4046505608a23185f05a67e5a",
+        "output_schema_sha256": null,
+        "schema_sha256": "516dc2e905ce6d79254be1035b338c26992f1c8e66a4e5d88d7b6a7485833969"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "4ab7d39d3db4317b930371c39164a78b5686e7c4046505608a23185f05a67e5a",
+        "output_schema_sha256": null,
+        "schema_sha256": "516dc2e905ce6d79254be1035b338c26992f1c8e66a4e5d88d7b6a7485833969"
+      },
+      "current_declaration": null,
+      "name": "git_checkout",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "absent"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "75374f9754dc66a3496b158e7d20aa5dae700fa631e00673c7fba63c1ca5aed6",
+        "output_schema_sha256": null,
+        "schema_sha256": "292f379542fc33ea01f62648f50aab4b07518bb7614f79895e9a77639043f3c3"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "75374f9754dc66a3496b158e7d20aa5dae700fa631e00673c7fba63c1ca5aed6",
+        "output_schema_sha256": null,
+        "schema_sha256": "292f379542fc33ea01f62648f50aab4b07518bb7614f79895e9a77639043f3c3"
+      },
+      "current_declaration": null,
+      "name": "git_commit",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "absent"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "bb46d952e3306ba9068f7bc9e7892d515eec1ece9005d23602d3bcb51070cf05",
+        "output_schema_sha256": null,
+        "schema_sha256": "a729d00b7ca12f742eace3e299d98df0290c382a2fa54033f487aaefa787b0ed"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "bb46d952e3306ba9068f7bc9e7892d515eec1ece9005d23602d3bcb51070cf05",
+        "output_schema_sha256": null,
+        "schema_sha256": "a729d00b7ca12f742eace3e299d98df0290c382a2fa54033f487aaefa787b0ed"
+      },
+      "current_declaration": null,
+      "name": "git_create_branch",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "reason": "MCP schema type missing",
+          "status": "unsupported"
+        },
+        "after_result": {
+          "status": "absent"
+        },
+        "before_input": {
+          "reason": "MCP schema type missing",
+          "status": "unsupported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "637344c71d370a96cfe77ad81bbb7672637a649524f25d5445316db996e927b0",
+        "output_schema_sha256": null,
+        "schema_sha256": "3028417740cd7f02a8ada0da7f65571b0a98309b3b308c5226ad40dbeeea2eb0"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "637344c71d370a96cfe77ad81bbb7672637a649524f25d5445316db996e927b0",
+        "output_schema_sha256": null,
+        "schema_sha256": "3028417740cd7f02a8ada0da7f65571b0a98309b3b308c5226ad40dbeeea2eb0"
+      },
+      "current_declaration": null,
+      "name": "git_diff",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "absent"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "48eb42b8f643b75aca966c127b458e4b0e23611bba8097dcc965d699188332d1",
+        "output_schema_sha256": null,
+        "schema_sha256": "edcbb5d9ac0831c9d613d55e28fc6e5a446313ce413a7bb6fba7ba11d5cc6d5b"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "48eb42b8f643b75aca966c127b458e4b0e23611bba8097dcc965d699188332d1",
+        "output_schema_sha256": null,
+        "schema_sha256": "edcbb5d9ac0831c9d613d55e28fc6e5a446313ce413a7bb6fba7ba11d5cc6d5b"
+      },
+      "current_declaration": null,
+      "name": "git_diff_staged",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "absent"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "032b059faeb5b9810d9941eaf4c62b331685e49a0bc48fdaf0bb4c00bee3f677",
+        "output_schema_sha256": null,
+        "schema_sha256": "f6d9cece66ac042e727f712545825c152c5d6dc39c944dc99c3319b3464bd5db"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "032b059faeb5b9810d9941eaf4c62b331685e49a0bc48fdaf0bb4c00bee3f677",
+        "output_schema_sha256": null,
+        "schema_sha256": "f6d9cece66ac042e727f712545825c152c5d6dc39c944dc99c3319b3464bd5db"
+      },
+      "current_declaration": null,
+      "name": "git_diff_unstaged",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "absent"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "782b3a418610360414ad396aac5a0e31786f6fe14ee9755723880ce1f8c2c4fe",
+        "output_schema_sha256": null,
+        "schema_sha256": "6a12081f35d8069ddca7d1e70de8c4181cbb0475098b23cb24b13f8ad385240e"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "782b3a418610360414ad396aac5a0e31786f6fe14ee9755723880ce1f8c2c4fe",
+        "output_schema_sha256": null,
+        "schema_sha256": "6a12081f35d8069ddca7d1e70de8c4181cbb0475098b23cb24b13f8ad385240e"
+      },
+      "current_declaration": null,
+      "name": "git_log",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "reason": "MCP schema type missing",
+          "status": "unsupported"
+        },
+        "after_result": {
+          "status": "absent"
+        },
+        "before_input": {
+          "reason": "MCP schema type missing",
+          "status": "unsupported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "86fba998411abf22305ade791102e0dfaa88ca1c20da2ee73a994eee358bd340",
+        "output_schema_sha256": null,
+        "schema_sha256": "5e4fc873d15789835f724f59e69d268a2d3cb614605712363eb16549ce0c6563"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "86fba998411abf22305ade791102e0dfaa88ca1c20da2ee73a994eee358bd340",
+        "output_schema_sha256": null,
+        "schema_sha256": "5e4fc873d15789835f724f59e69d268a2d3cb614605712363eb16549ce0c6563"
+      },
+      "current_declaration": null,
+      "name": "git_reset",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "absent"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "f6d0e0c25131cc510e2ac0c87583075dac87bfde34e4d548f5c20bd1e57787d6",
+        "output_schema_sha256": null,
+        "schema_sha256": "5ba0f464a65a0e4d67c6944e157bdf9fc35447b568ac17f11db31e7adc4716f4"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "f6d0e0c25131cc510e2ac0c87583075dac87bfde34e4d548f5c20bd1e57787d6",
+        "output_schema_sha256": null,
+        "schema_sha256": "5ba0f464a65a0e4d67c6944e157bdf9fc35447b568ac17f11db31e7adc4716f4"
+      },
+      "current_declaration": null,
+      "name": "git_show",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "absent"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "7787e2a97eefcd2732e282e8dcc8cd9219788587d4933f34940ba33f3c5c5a2e",
+        "output_schema_sha256": null,
+        "schema_sha256": "e3eb0910a0b7d725877173b42aa54849c5a978932a2192e3f814a9d92794db25"
+      },
+      "after_identity_status": "new_unaccepted",
+      "before": {
+        "definition_sha256": "7409022d170adf20dca714e128bcf2e3ce84f5ebc8e96704b4e7727bd552152f",
+        "output_schema_sha256": null,
+        "schema_sha256": "eb6b8494d5f82cdcec14ecd3e78575bff4ddbb7310d24cc0334f10e02d512dca"
+      },
+      "current_declaration": null,
+      "name": "git_status",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "absent"
+        },
+        "before_input": {
+          "reason": "MCP string bound exceeds profile limits",
+          "status": "unsupported"
+        }
+      },
+      "status": "changed"
+    }
+  ]
+}

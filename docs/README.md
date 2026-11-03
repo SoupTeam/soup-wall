@@ -44,6 +44,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Windows bounded Agent audit retention](operations/AGENT_AUDIT_RETENTION_WINDOWS.md) | Native local NTFS scope, private ACLs, recovery, export and standard-user acceptance |
 | [Roadmap support and evidence report](operations/ROADMAP_SUPPORT_REPORT.md) | Offline exact-source support matrix, evidence validation, private report and review boundaries |
 | [Opt-in stdio MCP admission](operations/MCP_STDIO_ADMISSION.md) | Reviewed schemas, pre-execution calls and result release to the MCP host |
+| [Offline MCP schema upgrade review](operations/MCP_SCHEMA_UPGRADE_REVIEW.md) | Exact before/after tools/list identities, per-path drift findings, bounded review examples and required re-qualification |
 | [Managed policy transitions in active MCP sessions](operations/MANAGED_NATIVE_TRANSITIONS.md) | Dispatch/result boundaries, stale approvals, signed rollback and independent runtime evidence |
 | [Native MCP diagnostic output](operations/NATIVE_MCP_STDERR.md) | Bounded discarded child stderr, safe metadata, owned cleanup and required Linux evidence |
 | [Sandboxed real filesystem MCP](operations/MCP_REAL_FILESYSTEM.md) | Explicit pinned Linux read-only server, bounded overlap/cancellation and required actual-host acceptance |

@@ -1,0 +1,62 @@
+# agentfw lib suite: accepted base vs head (Windows, default test parallelism)
+# base = detached worktree at b385e7506ab26896637f348e3180e52d1fc6d423, CARGO_TARGET_DIR=target-base
+== base run 1
+test result: ok. 758 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 31.66s
+== base run 2
+test result: ok. 758 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 31.56s
+== base run 3
+test mcp::profile_lifecycle::tests::exact_preview_approval_rejects_yes_stale_config_and_wrong_operation ... FAILED
+test mcp::profile_lifecycle::tests::install_works_with_nonexistent_relative_home ... FAILED
+thread 'mcp::profile_lifecycle::tests::exact_preview_approval_rejects_yes_stale_config_and_wrong_operation' (8336) panicked at crates\agentfw\src\mcp\profile_lifecycle.rs:5550:32:
+thread 'mcp::profile_lifecycle::tests::install_works_with_nonexistent_relative_home' (23260) panicked at crates\agentfw\src\mcp\profile_lifecycle.rs:4120:9:
+test result: FAILED. 756 passed; 2 failed; 2 ignored; 0 measured; 0 filtered out; finished in 31.39s
+== base run 4
+test mcp::profile_lifecycle::tests::preview_preserves_source_and_rejects_server_rebinding ... FAILED
+test mcp::profile_lifecycle::tests::recovery_handles_interrupted_hard_link_publication ... FAILED
+test windows_onboarding::tests::occupied_foreign_port_receives_no_preview_traffic ... ok
+called `Result::unwrap()` on an `Err` value: unresolved daemon process ownership: agent port is occupied by an unowned process; resolve or stop the daemon before profile operations
+called `Result::unwrap()` on an `Err` value: recovery restored configuration but daemon ownership check failed: unresolved daemon process ownership: agent port is occupied by an unowned process; resolve or stop the daemon before profile operations; refusing to clear journal
+test result: FAILED. 756 passed; 2 failed; 2 ignored; 0 measured; 0 filtered out; finished in 31.38s
+== base run 5
+test mcp::profile_lifecycle::tests::install_works_with_nonexistent_relative_home ... FAILED
+test windows_onboarding::tests::occupied_foreign_port_receives_no_preview_traffic ... ok
+test result: FAILED. 757 passed; 1 failed; 2 ignored; 0 measured; 0 filtered out; finished in 31.39s
+== base run 6
+test mcp::profile_lifecycle::tests::recovery_handles_interrupted_hard_link_publication ... FAILED
+test windows_onboarding::tests::occupied_foreign_port_receives_no_preview_traffic ... ok
+called `Result::unwrap()` on an `Err` value: conflict during recovery: daemon ownership check failed before clearing journal: unresolved daemon process ownership after config write: agent port is occupied by an unowned process; refusing to commit activation
+test result: FAILED. 757 passed; 1 failed; 2 ignored; 0 measured; 0 filtered out; finished in 31.36s
+== head run 1
+test mcp::profile_lifecycle::tests::preview_preserves_source_and_rejects_server_rebinding ... FAILED
+thread 'mcp::profile_lifecycle::tests::preview_preserves_source_and_rejects_server_rebinding' (16940) panicked at crates\agentfw\src\mcp\profile_lifecycle.rs:5583:32:
+test result: FAILED. 784 passed; 1 failed; 2 ignored; 0 measured; 0 filtered out; finished in 31.36s
+== head run 2
+test mcp::profile_lifecycle::tests::install_works_with_nonexistent_relative_home ... FAILED
+test mcp::profile_lifecycle::tests::preview_preserves_source_and_rejects_server_rebinding ... FAILED
+thread 'mcp::profile_lifecycle::tests::install_works_with_nonexistent_relative_home' (21028) panicked at crates\agentfw\src\mcp\profile_lifecycle.rs:4120:9:
+thread 'mcp::profile_lifecycle::tests::preview_preserves_source_and_rejects_server_rebinding' (19984) panicked at crates\agentfw\src\mcp\profile_lifecycle.rs:5583:32:
+test result: FAILED. 783 passed; 2 failed; 2 ignored; 0 measured; 0 filtered out; finished in 31.40s
+== head run 3
+test mcp::profile_lifecycle::tests::install_works_with_nonexistent_relative_home ... FAILED
+test mcp::profile_lifecycle::tests::exact_preview_approval_rejects_yes_stale_config_and_wrong_operation ... FAILED
+thread 'mcp::profile_lifecycle::tests::install_works_with_nonexistent_relative_home' (22400) panicked at crates\agentfw\src\mcp\profile_lifecycle.rs:4120:9:
+thread 'mcp::profile_lifecycle::tests::exact_preview_approval_rejects_yes_stale_config_and_wrong_operation' (23700) panicked at crates\agentfw\src\mcp\profile_lifecycle.rs:5550:32:
+test result: FAILED. 783 passed; 2 failed; 2 ignored; 0 measured; 0 filtered out; finished in 31.38s
+== head run 1 with --skip schema_upgrade
+test mcp::profile_lifecycle::tests::exact_preview_approval_rejects_yes_stale_config_and_wrong_operation ... FAILED
+test mcp::profile_lifecycle::tests::install_works_with_nonexistent_relative_home ... FAILED
+test windows_onboarding::tests::occupied_foreign_port_receives_no_preview_traffic ... ok
+called `Result::unwrap()` on an `Err` value: unresolved daemon process ownership: agent port is occupied by an unowned process; resolve or stop the daemon before profile operations
+test result: FAILED. 756 passed; 2 failed; 2 ignored; 0 measured; 27 filtered out; finished in 31.36s
+== head run 2 with --skip schema_upgrade
+test mcp::profile_lifecycle::tests::exact_preview_approval_rejects_yes_stale_config_and_wrong_operation ... FAILED
+test mcp::profile_lifecycle::tests::preview_preserves_source_and_rejects_server_rebinding ... FAILED
+test windows_onboarding::tests::occupied_foreign_port_receives_no_preview_traffic ... ok
+called `Result::unwrap()` on an `Err` value: unresolved daemon process ownership: agent port is occupied by an unowned process; resolve or stop the daemon before profile operations
+called `Result::unwrap()` on an `Err` value: unresolved daemon process ownership: agent port is occupied by an unowned process; resolve or stop the daemon before profile operations
+test result: FAILED. 756 passed; 2 failed; 2 ignored; 0 measured; 27 filtered out; finished in 31.36s
+== head run 3 with --skip schema_upgrade
+test mcp::profile_lifecycle::tests::exact_preview_approval_rejects_yes_stale_config_and_wrong_operation ... FAILED
+test windows_onboarding::tests::occupied_foreign_port_receives_no_preview_traffic ... ok
+called `Result::unwrap()` on an `Err` value: unresolved daemon process ownership: agent port is occupied by an unowned process; resolve or stop the daemon before profile operations
+test result: FAILED. 757 passed; 1 failed; 2 ignored; 0 measured; 27 filtered out; finished in 31.42s

@@ -201,6 +201,17 @@ pub(crate) struct ProfileTool {
     pub(crate) egress_selectors: Vec<Value>,
 }
 
+/// Structural check of one strict `sw-mcp/operator-declaration/1` document for
+/// offline review tools. It never compiles, installs or grants authority.
+pub(crate) fn validate_declaration_document(value: &Value) -> Result<()> {
+    let declarations: Declarations = serde_json::from_value(value.clone())?;
+    ensure!(
+        declarations.format == DECLARATION_FORMAT,
+        "unsupported declaration format"
+    );
+    Ok(())
+}
+
 pub(crate) fn parse_profile_bytes(raw: &[u8]) -> Result<Profile> {
     let v = strict(raw)?;
     let profile: Profile = serde_json::from_value(v)?;

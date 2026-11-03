@@ -1,0 +1,67 @@
+MCP original-tool schema upgrade review (offline, non-authoritative)
+Format: sw-mcp/schema-upgrade-report/1
+
+NOTICE: This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process.
+
+before: file upstream-tools-list.json raw_sha256 8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b (6022 bytes, 12 tools, mcp/tools-list-response)
+        discovery_sha256 0ebf2d0c147352d483aed19e6988749c8641a11258ac05a16e0a58639163489c
+        operator label (untrusted): "profiles/mcp/git-readonly-v1/upstream-tools-list.json@b385e7506ab2"
+after : file git-semantic.json raw_sha256 9c27adff206eaf6f58f90483c2ef541997976d63bf2daa635b53285ac49c188a (11307 bytes, 12 tools, mcp/tools-list-response)
+        discovery_sha256 ce57def326e848c641144288621216f7269931b4c633fd569dcb8a50c4854dd6
+        operator label (untrusted): "SYNTHETIC git-semantic.json"
+before identity: verified upstream-identity.json raw_sha256 90fbf2f84db1fee38145914adaf851c35d9b8b3735dc4e78caf7820c507e09e4 (3 referenced files verified)
+current declarations: sw-native/1 git-readonly-v1.registry.json raw_sha256 5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385
+
+Outcome: review_required / unsupported_present (exit 5)
+Snapshots byte-identical: false; declaration findings: 7
+Tools: before 12 after 12; added 1 removed 1 changed 6 unchanged 5
+Findings: 17 (inert metadata 0, review required 10, unsupported 2, declaration requalification 5)
+Coverage complete: false; review-pack records: 20
+New UNACCEPTED tool identities (7): git_add, git_branch, git_commit, git_diff, git_log, git_push, git_show
+Accepted by this analyzer: nothing.
+
+Findings (tool / pointer / kind / nature):
+  [F-58fe711621e1a800] git_add /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): bcca48730b12740da64f7a0c898574eb9bb3aa7679dcf0bd8ac8b9889b6254fa
+      after  (untrusted): f191ccf945d5cadb3e7c66293598b05c3cd0a166cec8a1f93f59ec6260f58864
+  [F-3a2faaf01c2bfff0] git_add /inputSchema/properties/files/minItems constraint_changed review_required -> examples 1
+      before (untrusted): 1
+      after  (untrusted): 0
+  [F-37de189b1783db45] git_branch /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): 57d04063c4a36858343773eb6928ffd7a2e52a4d95545a310845d8facdc0211c
+      after  (untrusted): 89fce134116133d6d349ee5138c506a64d45678229a3a515262a548166449840
+  [F-b4910c0758b2780a] git_branch /inputSchema schema_outside_runtime_subset unsupported -> examples 1
+  [F-49546f6f12412ed3] git_branch /inputSchema/properties/branch_type/enum enum_added review_required -> examples 2
+      after  (untrusted): ["local","remote","all"]
+  [F-9503789febb1cbc3] git_commit /annotations/readOnlyHint behavior_hint_changed review_required -> examples 1
+      before (untrusted): false
+      after  (untrusted): true
+  [F-e20d20925e4def60] git_diff /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): 3028417740cd7f02a8ada0da7f65571b0a98309b3b308c5226ad40dbeeea2eb0
+      after  (untrusted): 162af8eea70222b2fa0372dc88fd53da2f83d9042171f225f60b69b9b984cd95
+  [F-3e0a6a9d227d049e] git_diff /inputSchema/properties/context_lines/type type_changed review_required -> examples 2
+      before (untrusted): integer
+      after  (untrusted): string
+  [F-5bbfae730470966c] git_log /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): 6a12081f35d8069ddca7d1e70de8c4181cbb0475098b23cb24b13f8ad385240e
+      after  (untrusted): 8d19a2f47cf981757a0978c2c981d9c71089bdfcb449745d8334038acf18b5be
+  [F-f8153054803e62a7] git_log /inputSchema schema_outside_runtime_subset unsupported -> examples 1
+  [F-508d984f8cb3110c] git_log /inputSchema/properties/max_count/default default_changed review_required -> examples 2
+      before (untrusted): 10
+      after  (untrusted): 1000
+  [F-e9321dc6ffeeea68] git_push (tool) tool_added review_required -> examples 1
+      after  (untrusted): {"annotations":{"readOnlyHint":true},"description":"Read-only status helper (claim is untrusted).","inputSchema":{"properties":{"force":{"default":false,"type":"boolean"},"remote":{"type":"string"},"repo_path":{"type":"string"}},"required":…[76 more bytes]
+  [F-7a33d710bc0d3824] git_push (tool) undeclared_tool_added review_required -> examples 1
+  [F-26a4f87dba108496] git_reset (tool) declared_tool_removed review_required -> examples 1
+  [F-3a8f21fc41b04aa4] git_reset (tool) tool_removed review_required -> examples 1
+      before (untrusted): {"annotations":{"destructiveHint":true,"idempotentHint":true,"openWorldHint":false,"readOnlyHint":false},"description":"Unstages all staged changes","inputSchema":{"properties":{"repo_path":{"title":"Repo Path","type":"string"}},"required":…[69 more bytes]
+  [F-382d6207b606ae53] git_show /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): 5ba0f464a65a0e4d67c6944e157bdf9fc35447b568ac17f11db31e7adc4716f4
+      after  (untrusted): 777ddc6c01b1b56658549b0fc663ce2f433ab6116a4eb2a857626febcaf42401
+  [F-e8f657514769119f] git_show /inputSchema/required required_removed review_required -> examples 1
+      before (untrusted): revision
+
+Coverage gaps:
+  - {"entries":20,"gap":"unsupported_constructs_present"}
+  - {"gap":"examples_not_constructed","records":6}
+Unsupported constructs reported: 20

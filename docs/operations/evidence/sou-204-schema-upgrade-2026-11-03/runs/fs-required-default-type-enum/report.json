@@ -1,0 +1,1104 @@
+{
+  "acceptance": {
+    "after_discovery_identity": "new_unaccepted",
+    "after_raw_artifact": "new_unaccepted",
+    "analyzer_accepts": false,
+    "statement": "This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process."
+  },
+  "analyzer": {
+    "command": "agentfw mcp-schema-upgrade",
+    "version": "0.3.0"
+  },
+  "coverage": {
+    "complete": false,
+    "gaps": [
+      {
+        "entries": 5,
+        "gap": "unsupported_constructs_present"
+      },
+      {
+        "gap": "examples_not_constructed",
+        "records": 4
+      }
+    ],
+    "unsupported_constructs": [
+      {
+        "area": "input",
+        "construct": "type (union array)",
+        "handling": "reported_not_analyzed",
+        "pointer": "/inputSchema/properties/head/type",
+        "side": "after",
+        "tool": "read_file"
+      },
+      {
+        "area": "result",
+        "construct": "missing type",
+        "handling": "reported_not_analyzed",
+        "pointer": "/outputSchema/properties/content/items",
+        "side": "before",
+        "tool": "read_media_file"
+      },
+      {
+        "area": "result",
+        "construct": "anyOf",
+        "handling": "reported_not_analyzed",
+        "pointer": "/outputSchema/properties/content/items/anyOf",
+        "side": "before",
+        "tool": "read_media_file"
+      },
+      {
+        "area": "result",
+        "construct": "missing type",
+        "handling": "reported_not_analyzed",
+        "pointer": "/outputSchema/properties/content/items",
+        "side": "after",
+        "tool": "read_media_file"
+      },
+      {
+        "area": "result",
+        "construct": "anyOf",
+        "handling": "reported_not_analyzed",
+        "pointer": "/outputSchema/properties/content/items/anyOf",
+        "side": "after",
+        "tool": "read_media_file"
+      }
+    ]
+  },
+  "findings": [
+    {
+      "after": "720f501de0a24001b725754aa6414132e05a94fde31555a3ee8541f589538736",
+      "area": "declaration",
+      "argument_pointer": null,
+      "before": "99ea8d9c9e9241d82937687caaa04b622eff094f2ba194cd7c8ee3e43dc6ed9c",
+      "declaration_refs": [
+        "registry:tools[9]"
+      ],
+      "detail": {
+        "after_identity_status": "new_unaccepted",
+        "declaration": "registry:tools[9]"
+      },
+      "example_ids": [
+        "E-3a3299d64d5c6287"
+      ],
+      "id": "F-5152a50b45ee63b2",
+      "kind": "declaration_binding_stale",
+      "nature": "requalification_required",
+      "pointer": "/inputSchema",
+      "review_reasons": [
+        "The current declaration is bound to the before schema identity. The after identity is unaccepted until a new declaration is reviewed and the profile re-qualified."
+      ],
+      "tool": "directory_tree"
+    },
+    {
+      "after": [
+        "node_modules"
+      ],
+      "area": "input",
+      "argument_pointer": "/excludePatterns",
+      "before": [],
+      "declaration_refs": [],
+      "detail": {
+        "applied_by_runtime": false
+      },
+      "example_ids": [
+        "E-8af22d1911cca455",
+        "E-24e636ac2812a9dc"
+      ],
+      "id": "F-6949834194a8f87f",
+      "kind": "default_changed",
+      "nature": "review_required",
+      "pointer": "/inputSchema/properties/excludePatterns/default",
+      "review_reasons": [
+        "Server-applied default changed. Runtime validation never applies defaults, so the effective behavior of an omitted argument changed without any visible argument."
+      ],
+      "tool": "directory_tree"
+    },
+    {
+      "after": "867c2bed9355b9a8908b080a5cc59fc56928db9e69326cb66b23449aa92f2130",
+      "area": "declaration",
+      "argument_pointer": null,
+      "before": "8d6f5d6dcaa186f44c30e5d278419c2559f6032a3455fc3fdbe4865910b35941",
+      "declaration_refs": [
+        "registry:tools[8]"
+      ],
+      "detail": {
+        "after_identity_status": "new_unaccepted",
+        "declaration": "registry:tools[8]"
+      },
+      "example_ids": [
+        "E-a96d137ade7c63ae"
+      ],
+      "id": "F-27477fdca4bdfb21",
+      "kind": "declaration_binding_stale",
+      "nature": "requalification_required",
+      "pointer": "/inputSchema",
+      "review_reasons": [
+        "The current declaration is bound to the before schema identity. The after identity is unaccepted until a new declaration is reviewed and the profile re-qualified."
+      ],
+      "tool": "list_directory_with_sizes"
+    },
+    {
+      "after": "mtime",
+      "area": "input",
+      "argument_pointer": "/sortBy",
+      "before": "name",
+      "declaration_refs": [],
+      "detail": {
+        "applied_by_runtime": false
+      },
+      "example_ids": [
+        "E-c584f453cbb0afe0",
+        "E-aa7e1a06f7c3fd47"
+      ],
+      "id": "F-6f73b093c14e4e4b",
+      "kind": "default_changed",
+      "nature": "review_required",
+      "pointer": "/inputSchema/properties/sortBy/default",
+      "review_reasons": [
+        "Server-applied default changed. Runtime validation never applies defaults, so the effective behavior of an omitted argument changed without any visible argument."
+      ],
+      "tool": "list_directory_with_sizes"
+    },
+    {
+      "after": [
+        "name",
+        "mtime"
+      ],
+      "area": "input",
+      "argument_pointer": "/sortBy",
+      "before": [
+        "name",
+        "size"
+      ],
+      "declaration_refs": [],
+      "detail": {
+        "values": [
+          "mtime"
+        ]
+      },
+      "example_ids": [
+        "E-18dbf05b3a9cf224"
+      ],
+      "id": "F-d457095da9a6a188",
+      "kind": "enum_values_added",
+      "nature": "review_required",
+      "pointer": "/inputSchema/properties/sortBy/enum",
+      "review_reasons": [
+        "Set of admitted literal values changed; new values may select new behavior."
+      ],
+      "tool": "list_directory_with_sizes"
+    },
+    {
+      "after": [
+        "name",
+        "mtime"
+      ],
+      "area": "input",
+      "argument_pointer": "/sortBy",
+      "before": [
+        "name",
+        "size"
+      ],
+      "declaration_refs": [],
+      "detail": {
+        "values": [
+          "size"
+        ]
+      },
+      "example_ids": [
+        "E-0e8972dfc9490373"
+      ],
+      "id": "F-b7f910570ff97f49",
+      "kind": "enum_values_removed",
+      "nature": "review_required",
+      "pointer": "/inputSchema/properties/sortBy/enum",
+      "review_reasons": [
+        "Literal values were withdrawn; previously valid calls are refused."
+      ],
+      "tool": "list_directory_with_sizes"
+    },
+    {
+      "after": "3b14cab8531c56d6f4cc173970a31cba41433104306ddcd6bb70df3e54d3a9f6",
+      "area": "declaration",
+      "argument_pointer": null,
+      "before": "d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8",
+      "declaration_refs": [
+        "registry:tools[0]"
+      ],
+      "detail": {
+        "after_identity_status": "new_unaccepted",
+        "declaration": "registry:tools[0]"
+      },
+      "example_ids": [
+        "E-88eada8e1e38fd48"
+      ],
+      "id": "F-0aefb886655ed5a4",
+      "kind": "declaration_binding_stale",
+      "nature": "requalification_required",
+      "pointer": "/inputSchema",
+      "review_reasons": [
+        "The current declaration is bound to the before schema identity. The after identity is unaccepted until a new declaration is reviewed and the profile re-qualified."
+      ],
+      "tool": "read_file"
+    },
+    {
+      "after": null,
+      "area": "input",
+      "argument_pointer": null,
+      "before": null,
+      "declaration_refs": [],
+      "detail": {
+        "reason": "MCP schema type missing",
+        "validator": "agentfw::mcp::input::InputSchema::read_selected"
+      },
+      "example_ids": [
+        "E-66605ae3476d21f4"
+      ],
+      "id": "F-8cb30b6dd1283847",
+      "kind": "schema_outside_runtime_subset",
+      "nature": "unsupported",
+      "pointer": "/inputSchema",
+      "review_reasons": [
+        "After schema is outside the runtime-supported input subset; examples cannot be verified."
+      ],
+      "tool": "read_file"
+    },
+    {
+      "after": [
+        "number",
+        "null"
+      ],
+      "area": "input",
+      "argument_pointer": "/head",
+      "before": "number",
+      "declaration_refs": [],
+      "detail": {
+        "after_types": [
+          "null",
+          "number"
+        ],
+        "before_types": [
+          "number"
+        ]
+      },
+      "example_ids": [
+        "E-098e53818a0b77ae"
+      ],
+      "id": "F-094047f611885466",
+      "kind": "nullable_added",
+      "nature": "review_required",
+      "pointer": "/inputSchema/properties/head/type",
+      "review_reasons": [
+        "Accepted value type changed; enforcement and declared selectors assume the old type."
+      ],
+      "tool": "read_file"
+    },
+    {
+      "after": "string",
+      "area": "input",
+      "argument_pointer": "/tail",
+      "before": "number",
+      "declaration_refs": [],
+      "detail": {
+        "after_types": [
+          "string"
+        ],
+        "before_types": [
+          "number"
+        ]
+      },
+      "example_ids": [
+        "E-323cfbbae62d5854",
+        "E-824c69f732533f64"
+      ],
+      "id": "F-740346dc2b035222",
+      "kind": "type_changed",
+      "nature": "review_required",
+      "pointer": "/inputSchema/properties/tail/type",
+      "review_reasons": [
+        "Accepted value type changed; enforcement and declared selectors assume the old type."
+      ],
+      "tool": "read_file"
+    },
+    {
+      "after": "b568cedd4a20769c83797f92b662776770bb69ca79b501386d0cf7a43e37a482",
+      "area": "declaration",
+      "argument_pointer": null,
+      "before": "d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8",
+      "declaration_refs": [
+        "registry:tools[1]"
+      ],
+      "detail": {
+        "after_identity_status": "new_unaccepted",
+        "declaration": "registry:tools[1]"
+      },
+      "example_ids": [
+        "E-f396ad4eb24b24a6"
+      ],
+      "id": "F-59caf24b163353fa",
+      "kind": "declaration_binding_stale",
+      "nature": "requalification_required",
+      "pointer": "/inputSchema",
+      "review_reasons": [
+        "The current declaration is bound to the before schema identity. The after identity is unaccepted until a new declaration is reviewed and the profile re-qualified."
+      ],
+      "tool": "read_text_file"
+    },
+    {
+      "after": null,
+      "area": "input",
+      "argument_pointer": "/path",
+      "before": {
+        "type": "string"
+      },
+      "declaration_refs": [],
+      "detail": {
+        "field": "path",
+        "required_in_before": true
+      },
+      "example_ids": [
+        "E-de6c0b346964f521",
+        "E-8e8f1dff154aa7e8"
+      ],
+      "id": "F-f50eaac0ccc6f756",
+      "kind": "required_field_removed",
+      "nature": "review_required",
+      "pointer": "/inputSchema/properties/path",
+      "review_reasons": [
+        "Argument removed; callers, declarations and selectors referencing it must be reviewed."
+      ],
+      "tool": "read_text_file"
+    },
+    {
+      "after": "f39a0f2a729ceae6d0b259f91a7238a7ad0298aacee37c1fc5552198cd1eeaa1",
+      "area": "declaration",
+      "argument_pointer": null,
+      "before": "5b5a1eaeb940a6cfdd01f018784754be5204da54959a26b19ee5d00231636cc1",
+      "declaration_refs": [
+        "registry:tools[11]"
+      ],
+      "detail": {
+        "after_identity_status": "new_unaccepted",
+        "declaration": "registry:tools[11]"
+      },
+      "example_ids": [
+        "E-b967b5f46aa4f58f"
+      ],
+      "id": "F-304e8b3f6ac8b2b0",
+      "kind": "declaration_binding_stale",
+      "nature": "requalification_required",
+      "pointer": "/inputSchema",
+      "review_reasons": [
+        "The current declaration is bound to the before schema identity. The after identity is unaccepted until a new declaration is reviewed and the profile re-qualified."
+      ],
+      "tool": "search_files"
+    },
+    {
+      "after": "excludePatterns",
+      "area": "input",
+      "argument_pointer": "/excludePatterns",
+      "before": null,
+      "declaration_refs": [],
+      "detail": {
+        "field": "excludePatterns"
+      },
+      "example_ids": [
+        "E-2423e2d9baac2452"
+      ],
+      "id": "F-4e6a6633b0afafe7",
+      "kind": "required_added",
+      "nature": "review_required",
+      "pointer": "/inputSchema/required",
+      "review_reasons": [
+        "Argument became required; previously valid invocations are now refused."
+      ],
+      "tool": "search_files"
+    }
+  ],
+  "format": "sw-mcp/schema-upgrade-report/1",
+  "identity_rules": {
+    "analysis_normalization": "sorted object keys; required/enum/type compared as sets; used only to compare, never as identity",
+    "definition_identity": "profile_author::digest(tool)",
+    "discovery_identity": "profile_author::digest(result) for JSON-RPC, of the whole document for sw-mcp/operator-discovery/1",
+    "raw_file": "sha256 of the exact input bytes",
+    "schema_identity": "profile_author::digest(inputSchema): sha256 of sorted-key compact JSON"
+  },
+  "inputs": {
+    "after": {
+      "bytes": 21715,
+      "discovery_sha256": "5fa6482cf5242d4870964993249f2c56fa911cedeaa65d4899a066bb525182db",
+      "file_name": "fs-required-default-type-enum.json",
+      "format": "mcp/tools-list-response",
+      "operator_label_untrusted": "SYNTHETIC fs-required-default-type-enum.json",
+      "raw_sha256": "622913bcc0b319c99aebfd1de0cffc0cbabb99dd831082a6b7d6ee5c7ae4f610",
+      "tool_count": 14
+    },
+    "before": {
+      "bytes": 21676,
+      "discovery_sha256": "67425ee68375ed484c131989ea3adf3f07a91a04540c100fac0ce61f3ba09c37",
+      "file_name": "upstream-tools-list.json",
+      "format": "mcp/tools-list-response",
+      "operator_label_untrusted": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@b385e7506ab2",
+      "raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+      "tool_count": 14
+    },
+    "before_identity": {
+      "bytes": 5860,
+      "checks": [
+        {
+          "check": "discoveryResultSha256",
+          "status": "verified"
+        },
+        {
+          "check": "per_tool_inputSchemaSha256_and_originalDefinitionSha256",
+          "status": "verified",
+          "tools": 14
+        },
+        {
+          "check": "packageLockSha256",
+          "reason": "implicit reference without a declared path",
+          "status": "recorded_not_verified"
+        }
+      ],
+      "file_name": "upstream-identity.json",
+      "format": "sw-mcp/filesystem-readonly-upstream/1",
+      "per_tool_identities": true,
+      "raw_sha256": "bd2b235f11e4e3ccd31467185b33b26751a626ed23e499ca72392b56dc9849ca",
+      "referenced_files": [
+        {
+          "path": "upstream-notices/servers-a40bc270-LICENSE",
+          "sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
+          "status": "verified"
+        },
+        {
+          "path": "upstream-notices/typescript-sdk-ff07b001-LICENSE",
+          "sha256": "5e13dbbc1d120fc2a03cecde7c91424ae2d7de11b63d58ded2f4431e261ee50d",
+          "status": "verified"
+        },
+        {
+          "path": "upstream-notices/node-v22.22.0-LICENSE",
+          "sha256": "e991d81497a85bb24fc6bffae0a3637a6accd6c6bc5ce1f2c5698bd555cf9d49",
+          "status": "verified"
+        }
+      ]
+    },
+    "current_declarations": {
+      "bytes": 3884,
+      "file_name": "filesystem-readonly-v1.registry.json",
+      "format": "sw-native/1",
+      "raw_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+      "registry_id": "filesystem-readonly-v1",
+      "tools": 14
+    },
+    "proposed_registry": null
+  },
+  "limits": {
+    "max_coverage_entries": 1024,
+    "max_declaration_bytes": 262144,
+    "max_diff_steps": 131072,
+    "max_document_depth": 32,
+    "max_document_nodes": 65536,
+    "max_findings": 2048,
+    "max_label_bytes": 256,
+    "max_output_bytes": 16777216,
+    "max_referenced_file_bytes": 1048576,
+    "max_referenced_files": 16,
+    "max_snapshot_bytes": 262144,
+    "max_tools": 64,
+    "max_value_excerpt_bytes": 1024,
+    "runtime_subset": {
+      "max_depth": 8,
+      "max_items": 256,
+      "max_schema_nodes": 1024
+    }
+  },
+  "non_authority": {
+    "accepts_schema": false,
+    "grants_permission": false,
+    "installs": false,
+    "launches_server": false,
+    "model_classification": false,
+    "modifies_profile_or_declarations": false,
+    "network_or_reference_retrieval": false,
+    "statement": "This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process."
+  },
+  "review_pack": {
+    "complete": true,
+    "file": "review-pack.json",
+    "records": 18,
+    "truncated": 0
+  },
+  "summary": {
+    "analysis_mode": "declaration_bound",
+    "analysis_truncated": false,
+    "byte_identical": false,
+    "classification": "unsupported_present",
+    "coverage_complete": false,
+    "declaration_findings": 5,
+    "discovery_identity_changed": true,
+    "exit_code": 5,
+    "findings": {
+      "inert_metadata": 0,
+      "requalification_required": 5,
+      "review_required": 8,
+      "total": 14,
+      "unsupported": 1
+    },
+    "new_unaccepted_identities": [
+      "directory_tree",
+      "list_directory_with_sizes",
+      "read_file",
+      "read_text_file",
+      "search_files"
+    ],
+    "outcome": "review_required",
+    "semantic_review": "available_for_supported_subset",
+    "tool_order_changed": false,
+    "tools_added": 0,
+    "tools_after": 14,
+    "tools_before": 14,
+    "tools_changed": 5,
+    "tools_removed": 0,
+    "tools_unchanged": 9
+  },
+  "tools": [
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "720d1604002b3c1a768bc811e8354aac162e946a53a998afc20a6d2e91e583d4",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "720d1604002b3c1a768bc811e8354aac162e946a53a998afc20a6d2e91e583d4",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720"
+      },
+      "current_declaration": {
+        "action": "side_effecting",
+        "capabilities": {},
+        "destinations": [],
+        "reference": "registry:tools[6]",
+        "resources": [],
+        "result_provenance": "untrusted",
+        "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720"
+      },
+      "name": "create_directory",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "supported"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "3d6a1c3fe8333c4a435c391826aa98d622c36b8266b09846ebd82408d4d1bda9",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "720f501de0a24001b725754aa6414132e05a94fde31555a3ee8541f589538736"
+      },
+      "after_identity_status": "new_unaccepted",
+      "before": {
+        "definition_sha256": "7645bc3877aa38908a5fc772d29ae7a3d3f05587a2e8826979c739cf40c57363",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "99ea8d9c9e9241d82937687caaa04b622eff094f2ba194cd7c8ee3e43dc6ed9c"
+      },
+      "current_declaration": {
+        "action": "read_only",
+        "capabilities": {
+          "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+        },
+        "destinations": [],
+        "reference": "registry:tools[9]",
+        "resources": [],
+        "result_provenance": "untrusted",
+        "schema_sha256": "99ea8d9c9e9241d82937687caaa04b622eff094f2ba194cd7c8ee3e43dc6ed9c"
+      },
+      "name": "directory_tree",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "supported"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "changed"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "afd5a5de1972206d0e9762ff8ad7797ee8dd3e1b83f0428426c98d2d2520308e",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "88459ef670b139a12a3e0335ae0a4584dd892f60f45f565b545e1004d7565dd5"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "afd5a5de1972206d0e9762ff8ad7797ee8dd3e1b83f0428426c98d2d2520308e",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "88459ef670b139a12a3e0335ae0a4584dd892f60f45f565b545e1004d7565dd5"
+      },
+      "current_declaration": {
+        "action": "side_effecting",
+        "capabilities": {},
+        "destinations": [],
+        "reference": "registry:tools[5]",
+        "resources": [],
+        "result_provenance": "untrusted",
+        "schema_sha256": "88459ef670b139a12a3e0335ae0a4584dd892f60f45f565b545e1004d7565dd5"
+      },
+      "name": "edit_file",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "supported"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "7f44dc48bac24a1e6b18b92d58d1669c80102fae3843e73579217972b67c80f6",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "7f44dc48bac24a1e6b18b92d58d1669c80102fae3843e73579217972b67c80f6",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720"
+      },
+      "current_declaration": {
+        "action": "read_only",
+        "capabilities": {
+          "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+        },
+        "destinations": [],
+        "reference": "registry:tools[12]",
+        "resources": [],
+        "result_provenance": "untrusted",
+        "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720"
+      },
+      "name": "get_file_info",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "supported"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "2b43c9bb5cde269e30b4e22b1dc38386f4fecf44dfa8a773a7fce9e38e2c0aa2",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "7a014b717a77aac971ea0ab5c0ff47bb13e6cae7ef9442d9dedb15ce36381b15"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "2b43c9bb5cde269e30b4e22b1dc38386f4fecf44dfa8a773a7fce9e38e2c0aa2",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "7a014b717a77aac971ea0ab5c0ff47bb13e6cae7ef9442d9dedb15ce36381b15"
+      },
+      "current_declaration": {
+        "action": "read_only",
+        "capabilities": {
+          "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+        },
+        "destinations": [],
+        "reference": "registry:tools[13]",
+        "resources": [],
+        "result_provenance": "untrusted",
+        "schema_sha256": "7a014b717a77aac971ea0ab5c0ff47bb13e6cae7ef9442d9dedb15ce36381b15"
+      },
+      "name": "list_allowed_directories",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "supported"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "0d2a2b301c6ec3cbea78b3546aede23781a81bd82000b34f4cbfb3d94bfc8db7",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "0d2a2b301c6ec3cbea78b3546aede23781a81bd82000b34f4cbfb3d94bfc8db7",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720"
+      },
+      "current_declaration": {
+        "action": "read_only",
+        "capabilities": {
+          "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+        },
+        "destinations": [],
+        "reference": "registry:tools[7]",
+        "resources": [],
+        "result_provenance": "untrusted",
+        "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720"
+      },
+      "name": "list_directory",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "supported"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "e94b266cae961e0e9f161c2c9acdabee33ae2a2a776a7c7fa860eeaafc2459f3",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "867c2bed9355b9a8908b080a5cc59fc56928db9e69326cb66b23449aa92f2130"
+      },
+      "after_identity_status": "new_unaccepted",
+      "before": {
+        "definition_sha256": "8642b99b56eb227fd3ac37d3c43fc984be9b872d85e91874d0600fddbb53c4c3",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "8d6f5d6dcaa186f44c30e5d278419c2559f6032a3455fc3fdbe4865910b35941"
+      },
+      "current_declaration": {
+        "action": "read_only",
+        "capabilities": {
+          "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+        },
+        "destinations": [],
+        "reference": "registry:tools[8]",
+        "resources": [],
+        "result_provenance": "untrusted",
+        "schema_sha256": "8d6f5d6dcaa186f44c30e5d278419c2559f6032a3455fc3fdbe4865910b35941"
+      },
+      "name": "list_directory_with_sizes",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "supported"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "changed"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "46d4d5c7da0e8553c69eb9b970927adc0b54bfdcc9876a01983cd9ab3f8d9430",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "621218ed9bc38b6cde9c6dc003583fb5778e5076bb28e25634b9070b33264682"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "46d4d5c7da0e8553c69eb9b970927adc0b54bfdcc9876a01983cd9ab3f8d9430",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "621218ed9bc38b6cde9c6dc003583fb5778e5076bb28e25634b9070b33264682"
+      },
+      "current_declaration": {
+        "action": "destructive",
+        "capabilities": {},
+        "destinations": [],
+        "reference": "registry:tools[10]",
+        "resources": [],
+        "result_provenance": "untrusted",
+        "schema_sha256": "621218ed9bc38b6cde9c6dc003583fb5778e5076bb28e25634b9070b33264682"
+      },
+      "name": "move_file",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "supported"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "3c19dd91c32aa842fbcaaec2b50b6def8451bc733deb2e5041315ad0c06faa20",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "3b14cab8531c56d6f4cc173970a31cba41433104306ddcd6bb70df3e54d3a9f6"
+      },
+      "after_identity_status": "new_unaccepted",
+      "before": {
+        "definition_sha256": "762744c16831e2becafdbaf9a15da2660e5670dfa1984a368403145b6e9ac3a9",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8"
+      },
+      "current_declaration": {
+        "action": "read_only",
+        "capabilities": {
+          "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+        },
+        "destinations": [],
+        "reference": "registry:tools[0]",
+        "resources": [],
+        "result_provenance": "untrusted",
+        "schema_sha256": "d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8"
+      },
+      "name": "read_file",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "reason": "MCP schema type missing",
+          "status": "unsupported"
+        },
+        "after_result": {
+          "status": "supported"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "changed"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "efe5a84687d7780182276a3ae46d325c1c269116ad490fa9149e39bbe50c6777",
+        "output_schema_sha256": "f461cb8a726391d68b319ba94d9dc44368c9afb952009e023dba28e863fb2c45",
+        "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "efe5a84687d7780182276a3ae46d325c1c269116ad490fa9149e39bbe50c6777",
+        "output_schema_sha256": "f461cb8a726391d68b319ba94d9dc44368c9afb952009e023dba28e863fb2c45",
+        "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720"
+      },
+      "current_declaration": {
+        "action": "read_only",
+        "capabilities": {},
+        "destinations": [],
+        "reference": "registry:tools[2]",
+        "resources": [],
+        "result_provenance": "untrusted",
+        "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720"
+      },
+      "name": "read_media_file",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "reason": "MCP schema type missing",
+          "status": "unsupported"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "484710b0d97999f0c16d950c850c285a187ac4fbd4fdef5b0f13d0f3b483e164",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "725ce07791beba80842b7322c0bfece72ba66b4ff3c3dfecf74f3401ce9d125e"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "484710b0d97999f0c16d950c850c285a187ac4fbd4fdef5b0f13d0f3b483e164",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "725ce07791beba80842b7322c0bfece72ba66b4ff3c3dfecf74f3401ce9d125e"
+      },
+      "current_declaration": {
+        "action": "read_only",
+        "capabilities": {
+          "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+        },
+        "destinations": [],
+        "reference": "registry:tools[3]",
+        "resources": [],
+        "result_provenance": "untrusted",
+        "schema_sha256": "725ce07791beba80842b7322c0bfece72ba66b4ff3c3dfecf74f3401ce9d125e"
+      },
+      "name": "read_multiple_files",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "supported"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "61dce282a9111ae8677771096e573647c943507a98a9908680006e75e0cb26b8",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "b568cedd4a20769c83797f92b662776770bb69ca79b501386d0cf7a43e37a482"
+      },
+      "after_identity_status": "new_unaccepted",
+      "before": {
+        "definition_sha256": "658bc8c7fed2aefe6102d5e87589689b4a286b83340ac1a3a456b37e6cf4f77a",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8"
+      },
+      "current_declaration": {
+        "action": "read_only",
+        "capabilities": {
+          "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+        },
+        "destinations": [],
+        "reference": "registry:tools[1]",
+        "resources": [],
+        "result_provenance": "untrusted",
+        "schema_sha256": "d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8"
+      },
+      "name": "read_text_file",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "supported"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "changed"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "0a394a1dbb885b5ff21aa5a214a971f5d216cff61ef5571582a7fdebf7617a2e",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "f39a0f2a729ceae6d0b259f91a7238a7ad0298aacee37c1fc5552198cd1eeaa1"
+      },
+      "after_identity_status": "new_unaccepted",
+      "before": {
+        "definition_sha256": "6c46ed09491987b06c8c1511d8f6d42031eabaf852eb4d6e80185e317142120b",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "5b5a1eaeb940a6cfdd01f018784754be5204da54959a26b19ee5d00231636cc1"
+      },
+      "current_declaration": {
+        "action": "read_only",
+        "capabilities": {
+          "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+        },
+        "destinations": [],
+        "reference": "registry:tools[11]",
+        "resources": [],
+        "result_provenance": "untrusted",
+        "schema_sha256": "5b5a1eaeb940a6cfdd01f018784754be5204da54959a26b19ee5d00231636cc1"
+      },
+      "name": "search_files",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "supported"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "changed"
+    },
+    {
+      "accepted_by_analyzer": false,
+      "after": {
+        "definition_sha256": "0074a16be22f98393479625ae28b74688c56985d581aa37e1ff61f7fbd37d11d",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "ce17c85e8a5883552a11555f9b893de497fadab965a5c7935c0cb8f3c55b91d6"
+      },
+      "after_identity_status": "unchanged_from_before",
+      "before": {
+        "definition_sha256": "0074a16be22f98393479625ae28b74688c56985d581aa37e1ff61f7fbd37d11d",
+        "output_schema_sha256": "33d4fe043a365ec261c3f8b35b8bfc379d75b3ccb90b9e94de23e2879649f36b",
+        "schema_sha256": "ce17c85e8a5883552a11555f9b893de497fadab965a5c7935c0cb8f3c55b91d6"
+      },
+      "current_declaration": {
+        "action": "side_effecting",
+        "capabilities": {},
+        "destinations": [],
+        "reference": "registry:tools[4]",
+        "resources": [],
+        "result_provenance": "untrusted",
+        "schema_sha256": "ce17c85e8a5883552a11555f9b893de497fadab965a5c7935c0cb8f3c55b91d6"
+      },
+      "name": "write_file",
+      "proposed_declaration": null,
+      "runtime_subset": {
+        "after_input": {
+          "status": "supported"
+        },
+        "after_result": {
+          "status": "supported"
+        },
+        "before_input": {
+          "status": "supported"
+        }
+      },
+      "status": "unchanged"
+    }
+  ]
+}

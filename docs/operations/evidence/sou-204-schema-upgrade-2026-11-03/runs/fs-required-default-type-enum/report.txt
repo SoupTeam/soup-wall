@@ -1,0 +1,66 @@
+MCP original-tool schema upgrade review (offline, non-authoritative)
+Format: sw-mcp/schema-upgrade-report/1
+
+NOTICE: This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process.
+
+before: file upstream-tools-list.json raw_sha256 d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954 (21676 bytes, 14 tools, mcp/tools-list-response)
+        discovery_sha256 67425ee68375ed484c131989ea3adf3f07a91a04540c100fac0ce61f3ba09c37
+        operator label (untrusted): "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@b385e7506ab2"
+after : file fs-required-default-type-enum.json raw_sha256 622913bcc0b319c99aebfd1de0cffc0cbabb99dd831082a6b7d6ee5c7ae4f610 (21715 bytes, 14 tools, mcp/tools-list-response)
+        discovery_sha256 5fa6482cf5242d4870964993249f2c56fa911cedeaa65d4899a066bb525182db
+        operator label (untrusted): "SYNTHETIC fs-required-default-type-enum.json"
+before identity: verified upstream-identity.json raw_sha256 bd2b235f11e4e3ccd31467185b33b26751a626ed23e499ca72392b56dc9849ca (3 referenced files verified)
+current declarations: sw-native/1 filesystem-readonly-v1.registry.json raw_sha256 63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7
+
+Outcome: review_required / unsupported_present (exit 5)
+Snapshots byte-identical: false; declaration findings: 5
+Tools: before 14 after 14; added 0 removed 0 changed 5 unchanged 9
+Findings: 14 (inert metadata 0, review required 8, unsupported 1, declaration requalification 5)
+Coverage complete: false; review-pack records: 18
+New UNACCEPTED tool identities (5): directory_tree, list_directory_with_sizes, read_file, read_text_file, search_files
+Accepted by this analyzer: nothing.
+
+Findings (tool / pointer / kind / nature):
+  [F-5152a50b45ee63b2] directory_tree /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): 99ea8d9c9e9241d82937687caaa04b622eff094f2ba194cd7c8ee3e43dc6ed9c
+      after  (untrusted): 720f501de0a24001b725754aa6414132e05a94fde31555a3ee8541f589538736
+  [F-6949834194a8f87f] directory_tree /inputSchema/properties/excludePatterns/default default_changed review_required -> examples 2
+      before (untrusted): []
+      after  (untrusted): ["node_modules"]
+  [F-27477fdca4bdfb21] list_directory_with_sizes /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): 8d6f5d6dcaa186f44c30e5d278419c2559f6032a3455fc3fdbe4865910b35941
+      after  (untrusted): 867c2bed9355b9a8908b080a5cc59fc56928db9e69326cb66b23449aa92f2130
+  [F-6f73b093c14e4e4b] list_directory_with_sizes /inputSchema/properties/sortBy/default default_changed review_required -> examples 2
+      before (untrusted): name
+      after  (untrusted): mtime
+  [F-d457095da9a6a188] list_directory_with_sizes /inputSchema/properties/sortBy/enum enum_values_added review_required -> examples 1
+      before (untrusted): ["name","size"]
+      after  (untrusted): ["name","mtime"]
+  [F-b7f910570ff97f49] list_directory_with_sizes /inputSchema/properties/sortBy/enum enum_values_removed review_required -> examples 1
+      before (untrusted): ["name","size"]
+      after  (untrusted): ["name","mtime"]
+  [F-0aefb886655ed5a4] read_file /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8
+      after  (untrusted): 3b14cab8531c56d6f4cc173970a31cba41433104306ddcd6bb70df3e54d3a9f6
+  [F-8cb30b6dd1283847] read_file /inputSchema schema_outside_runtime_subset unsupported -> examples 1
+  [F-094047f611885466] read_file /inputSchema/properties/head/type nullable_added review_required -> examples 1
+      before (untrusted): number
+      after  (untrusted): ["number","null"]
+  [F-740346dc2b035222] read_file /inputSchema/properties/tail/type type_changed review_required -> examples 2
+      before (untrusted): number
+      after  (untrusted): string
+  [F-59caf24b163353fa] read_text_file /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8
+      after  (untrusted): b568cedd4a20769c83797f92b662776770bb69ca79b501386d0cf7a43e37a482
+  [F-f50eaac0ccc6f756] read_text_file /inputSchema/properties/path required_field_removed review_required -> examples 2
+      before (untrusted): {"type":"string"}
+  [F-304e8b3f6ac8b2b0] search_files /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): 5b5a1eaeb940a6cfdd01f018784754be5204da54959a26b19ee5d00231636cc1
+      after  (untrusted): f39a0f2a729ceae6d0b259f91a7238a7ad0298aacee37c1fc5552198cd1eeaa1
+  [F-4e6a6633b0afafe7] search_files /inputSchema/required required_added review_required -> examples 1
+      after  (untrusted): excludePatterns
+
+Coverage gaps:
+  - {"entries":5,"gap":"unsupported_constructs_present"}
+  - {"gap":"examples_not_constructed","records":4}
+Unsupported constructs reported: 5
