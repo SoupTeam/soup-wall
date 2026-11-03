@@ -6,7 +6,7 @@ on:
       installed_focus:
         description: Focus one installed qualification; linked/filesystem/configuration also require native_preparation_only
         type: choice
-        options: ['off', linked-worktrees, filesystem-roots, filesystem-links, workspace-snapshot, clean-user, proxy-preflight, configuration-recovery, maintenance, policy-activation, budget-presets]
+        options: ['off', linked-worktrees, filesystem-roots, filesystem-links, workspace-snapshot, clean-user, clean-user-processes, proxy-preflight, configuration-recovery, maintenance, policy-activation, budget-presets]
         default: 'off'
       project_presets_only:
         description: Focus installed SOU-197 project presets (use with native_preparation_only)
@@ -115,10 +115,43 @@ concurrency:
 
 jobs:
   impact:
-    if: github.event.inputs.provider_preflight_only != 'true' && github.event.inputs.installed_focus != 'proxy-preflight' && github.event.inputs.native_result_profile_only != 'true' && github.event.inputs.cache_exchange_only != 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.stability_mode == '' || github.event.inputs.stability_mode == 'off')
+    if: github.event.inputs.installed_focus != 'clean-user-processes' && github.event.inputs.provider_preflight_only != 'true' && github.event.inputs.installed_focus != 'proxy-preflight' && github.event.inputs.native_result_profile_only != 'true' && github.event.inputs.cache_exchange_only != 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.stability_mode == '' || github.event.inputs.stability_mode == 'off')
     uses: ./.github/workflows/ci-impact-plan.yml
     with:
       workflow: mcp-real-filesystem.yml
+  manual-sou216-process-probe:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'clean-user-processes'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Observe same-UID process provenance before any product execution
+        shell: bash
+        env:
+          DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'CHECK'
+          import json, os
+          values=json.loads(os.environ['DISPATCH_INPUTS'])
+          assert values.get('stability_mode','off')=='off'
+          assert all(v in ('false','',False) for k,v in values.items()
+                     if k not in {'installed_focus','stability_mode'})
+          CHECK
+          python3 -I -B scripts/pilot_clean_user_acceptance.py --process-probe-only \
+            > "$RUNNER_TEMP/sou216-processes.json"
+          cat "$RUNNER_TEMP/sou216-processes.json"
+      - name: Retain bounded metadata-only process diagnosis
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou216-processes-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sou216-processes.json
+          if-no-files-found: error
+          retention-days: 7
   sou193-provider-preflight:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.provider_preflight_only == 'true'
     runs-on: ubuntu-24.04

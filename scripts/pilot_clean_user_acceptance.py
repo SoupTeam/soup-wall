@@ -345,11 +345,60 @@ def archive_completed_runs(a, env, report):
     facts.update(status="passed", completed_runs_archived=expected, state_parent_retained=True)
 
 
+PROCESS_ROLES = {"bash", "tee", "python3", "python3.12", "node", "Runner.Worker", "Runner.Listener",
+    "git", "gpg-agent", "ssh-agent", "sccache", "agentfw", "bwrap", "claude", "systemd", "(sd-pam)",
+    "sd-pam", "(sd-exec-strv)", "sudo", "su", "login", "dbus-daemon", "dbus-broker", "sshd", "sh"}
+
+
+def process_provenance(proc):
+    """Bounded kernel metadata only: no argv, environment or filesystem paths."""
+    def bounded(path, cap):
+        with path.open("rb") as stream: raw = stream.read(cap + 1)
+        require(len(raw) <= cap, "process_provenance_cap")
+        return raw
+    def read(path):
+        before = bounded(path / "stat", 8192).rsplit(b")", 1)[1].split()
+        status = dict(line.split(b":", 1) for line in bounded(path / "status", 65536).splitlines() if b":" in line)
+        uids = [int(n) for n in status[b"Uid"].split()]
+        require(len(uids) == 4, "process_provenance_uid")
+        comm = bounded(path / "comm", 256).strip()
+        text = comm.decode("utf-8", "replace")
+        row = {"process_identity_sha256": digest({"pid": int(path.name), "start": before[19].decode()}),
+            "role": text if text in PROCESS_ROLES else "other", "comm_sha256": hashlib.sha256(comm).hexdigest(),
+            "uids": dict(zip(("real", "effective", "saved", "filesystem"), uids)),
+            "state": before[0].decode("ascii"), "effective_capabilities": int(status[b"CapEff"], 16)}
+        after = bounded(path / "stat", 8192).rsplit(b")", 1)[1].split()
+        require(before[19] == after[19], "process_provenance_identity_changed")
+        return row, int(before[1]), int(before[19])
+    rows, seen, path = [], set(), proc
+    for _ in range(16):
+        if path.name in seen: break
+        seen.add(path.name)
+        row, parent, start = read(path)
+        rows.append(row)
+        if path == proc: first_start = start
+        if parent == 0: break
+        path = proc.parent / str(parent)
+    self_stat = bounded(proc.parent / "self/stat", 8192).rsplit(b")", 1)[1].split()
+    return {"authorization": False, "predates_driver": first_start < int(self_stat[19]), "ancestry": rows}
+
+
+def process_probe():
+    """Observe a fresh runner before any pilot build/install/run; never authorize removal."""
+    require(platform.system() == "Linux" and os.geteuid() != 0, "ordinary_linux_process_probe_required")
+    status = dict(line.split(":", 1) for line in Path("/proc/self/status").read_text().splitlines() if ":" in line)
+    report = {"diagnostic": "SOU-216 pre-install process visibility", "authorization": False,
+        "product_executed": False, "driver_source": source(DRIVER, git(DRIVER, "rev-parse", "HEAD")),
+        "uid": os.getuid(), "effective_capabilities": int(status["CapEff"].strip(), 16),
+        "boot_identity_sha256": sha("/proc/sys/kernel/random/boot_id"),
+        "process_observation": process_observation()}
+    print(json.dumps(report, sort_keys=True))
+    return 0
+
+
 def process_observation():
     """Read-only private diagnostics; never used to authorize removal."""
     observations = []
-    known = {"bash", "tee", "python3", "python3.12", "node", "Runner.Worker", "Runner.Listener",
-             "git", "gpg-agent", "ssh-agent", "sccache", "agentfw", "bwrap"}
     for proc in Path("/proc").iterdir():
         if not proc.name.isdecimal(): continue
         stage, role, identity = "identity", "other", None
@@ -359,7 +408,7 @@ def process_observation():
             tail = before.rsplit(b")", 1)[1].split()
             if tail[0] == b"Z": continue
             identity = digest({"pid": int(proc.name), "start": tail[19].decode()})
-            comm = (proc / "comm").read_text().strip(); role = comm if comm in known else "other"
+            comm = (proc / "comm").read_text().strip(); role = comm if comm in PROCESS_ROLES else "other"
             for stage in ("cwd", "exe", "root"):
                 (proc / stage).readlink(); (proc / stage).stat()
             for stage in ("cmdline", "environ", "maps"):
@@ -377,8 +426,12 @@ def process_observation():
                 raise ValueError("changed")
         except (OSError, ValueError, UnicodeError, IndexError) as error:
             if proc.exists():
-                observations.append({"process_identity_sha256": identity, "role": role,
-                    "stage": stage, "errno": getattr(error, "errno", None), "error_type": type(error).__name__})
+                detail = {"process_identity_sha256": identity, "role": role,
+                    "stage": stage, "errno": getattr(error, "errno", None), "error_type": type(error).__name__}
+                try: detail["provenance"] = process_provenance(proc)
+                except (OSError, ValueError, UnicodeError, IndexError, KeyError):
+                    detail["provenance"] = {"authorization": False, "status": "unavailable"}
+                observations.append(detail)
     return {"authorization": False, "unavailable": observations}
 
 
@@ -687,6 +740,8 @@ def qualify(a, report):
 
 
 def main(argv=None):
+    if (sys.argv[1:] if argv is None else argv) == ["--process-probe-only"]:
+        return process_probe()
     if argv is None and len(sys.argv) == 3 and sys.argv[1] == "--arguments-fd":
         argv = transferred_arguments(int(sys.argv[2]))
     parser = argparse.ArgumentParser(description=__doc__)

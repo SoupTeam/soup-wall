@@ -136,3 +136,45 @@ class PrivateArguments(unittest.TestCase):
             finally:
                 process.communicate("done\n", timeout=5)
             self.assertEqual(process.returncode, 0)
+
+
+class ProcessProvenance(unittest.TestCase):
+    def process(self, root, pid, parent, start, comm, uids):
+        path = root / str(pid); path.mkdir()
+        fields = ["S", str(parent)] + ["0"] * 17 + [str(start)]
+        (path / "stat").write_text(f"{pid} ({comm}) " + " ".join(fields))
+        (path / "comm").write_text(comm + "\n")
+        (path / "status").write_text("Uid:\t" + "\t".join(map(str, uids)) + "\nCapEff:\t0000000000000000\n")
+        (path / "cmdline").write_bytes(b"private-argument-canary\0")
+        (path / "environ").write_bytes(b"PRIVATE=private-environment-canary\0")
+        return path
+
+    def fixture(self, root, comm="(sd-pam)"):
+        path = self.process(root, 123, 1, 100, comm, (1001, 0, 0, 0))
+        self.process(root, 1, 0, 1, "systemd", (0, 0, 0, 0))
+        driver = root / "self"; driver.mkdir()
+        (driver / "stat").write_text("456 (python3) " + " ".join(["R", "123"] + ["0"] * 17 + ["300"]))
+        return path
+
+    def test_real_uid_is_not_assumed_effective_and_diagnostic_never_authorizes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            value = m.process_provenance(self.fixture(Path(directory)))
+        self.assertFalse(value["authorization"])
+        self.assertTrue(value["predates_driver"])
+        self.assertEqual(value["ancestry"][0]["role"], "(sd-pam)")
+        self.assertEqual(value["ancestry"][0]["uids"], dict(real=1001, effective=0, saved=0, filesystem=0))
+        self.assertEqual(value["ancestry"][1]["role"], "systemd")
+        encoded = json.dumps(value)
+        self.assertNotIn("private-argument-canary", encoded)
+        self.assertNotIn("private-environment-canary", encoded)
+        self.assertNotIn("pid", value["ancestry"][0])
+
+    def test_unknown_names_are_hashed_and_missing_credentials_cannot_be_complete_provenance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.fixture(Path(directory), comm="private-name-canary")
+            value = m.process_provenance(path)
+            self.assertEqual(value["ancestry"][0]["role"], "other")
+            self.assertNotIn("private-name-canary", json.dumps(value))
+            (path / "status").write_text("Uid:\t1001\t1001\t1001\nCapEff:\t0\n")
+            with self.assertRaisesRegex(ValueError, "process_provenance_uid"):
+                m.process_provenance(path)
