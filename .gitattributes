@@ -101,3 +101,9 @@ scripts/benchmarks/pilot-readiness-policies/*.yaml text eol=lf
 scripts/qualify-publication-admission.py text eol=lf
 docs/operations/evidence/publication-admission/** text eol=lf
 docs/operations/evidence/sou157-mapped-git-41456736055/** text eol=lf
+
+# SOU-204 schema-upgrade fixtures and evidence are bound by raw-byte SHA-256. Some fixtures
+# derive from the verbatim Git snapshot (CRLF bytes) and the CSV uses RFC 4180 CRLF rows:
+# store every byte verbatim, without line-ending conversion.
+crates/agentfw/tests/fixtures/schema_upgrade/** -text
+docs/operations/evidence/sou-204-schema-upgrade-2026-11-03/** -text

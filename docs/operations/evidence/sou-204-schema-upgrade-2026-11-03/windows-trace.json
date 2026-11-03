@@ -1,7 +1,7 @@
 {
   "format": "sw-evidence/sou204-windows-trace/1",
   "instrumentation": "Win32 debugging API from Python ctypes (DEBUG_PROCESS); one-shot int3 breakpoints on ws2_32.dll exports; no administrator rights, installs or host setting changes",
-  "binary_sha256": "53932b344f22bcaa666480e0e7e20f3dd071486ab8afa2842dab5a46b6991f92",
+  "binary_sha256": "c529715d89f9e97ab4404849b31a08240cb3fcc90f778a8c93da9b2f57d9f0ab",
   "ws2_32_sha256": "3fd679780f07a4bd64671c3b8c271c0c60aac5a3e0039d15129a6e52812373ca",
   "trapped_functions": [
     "WSAStartup",
@@ -159,7 +159,7 @@
       "winsock_calls_observed": {},
       "breakpoints_armed": 28,
       "network_provider_dlls_loaded": [],
-      "dll_loads": 52,
+      "dll_loads": 54,
       "result": "PASS"
     }
   ],
