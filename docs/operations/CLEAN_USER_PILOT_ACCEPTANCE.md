@@ -22,13 +22,23 @@ and were rejected before update preview. Reproduce on the accepted source with
 --prefix /private/owned-coordinator` (one command). This read-only failure does
 not require a model or installation.
 
-Product candidate `75875f16dfbc19503feb22fe6871116cf6bd7618` fixes only that routing behavior
-and adds a cause-specific regression. It is an **author candidate awaiting
-review**, not a newly accepted main. Final fresh runs pin this source in a
-separate clean checkout. Their existing native builders and component builder
-bind that exact source and binary set; the newer measurement-driver SHA remains
-separate. Driver, product, binary, profile, policy, selection and original
-child-report identities are recorded independently.
+Product candidate `62b9e69a449c0372ac5226f9e0545d888d4ea1f7` includes the
+routing fix first recorded in `75875f16dfbc19503feb22fe6871116cf6bd7618` and a
+coordinated-maintenance integration fix. A dedicated retained bootstrap home
+owns a stable gate bound to the exact coordinator directory identity. Every
+launch still verifies the currently selected managed component and selection;
+maintenance remains entered across generation update/rollback. Different or
+replaced coordinators and unselected components refuse, and legacy direct-home
+markers are never silently re-enrolled. Cause-specific regressions cover these
+controls. This is an **author candidate awaiting review**, not newly accepted main.
+
+Fresh runs pin this product in a separate clean checkout. The existing native
+builders and component builder bind its source and selected outputs; the newer
+measurement-driver SHA remains separate. Both environments use the same source
+and locked upstream/tool inputs, with exact independently built binary outputs
+recorded per environment. This does not claim bit-identical reproducible builds.
+Driver, product, binary, profile, policy, selection and original child-report
+identities are recorded independently.
 
 Supported measurement path: native Ubuntu 24.04 x86_64, ordinary non-root user
 with no effective capabilities, CPython 3.12 and the current pinned original
@@ -106,12 +116,16 @@ scope is not the full fifteen-case Ask inventory or performance acceptance.
 Original child reports retain their formats and hashes.
 
 The current `agentfw pilot update` controller selects two independently prepared
-generations of the same accepted product/binary set, with a useful original read
-before update, after update and after rollback. This measures coordinated
+generations of the same pinned product/binary set through the documented separate
+retained bootstrap Agent. Its installed copy is hash-verified against the native
+builder output. Useful original reads must succeed before update, after update
+and after rollback. Entered maintenance must independently refuse host execution
+and provider requests after both transitions, until a fresh confirmed leave. This measures coordinated
 selection recovery, not a binary-version upgrade. An additional identity-only
 synthetic component update checks stale-selection refusal and component rollback.
-Removal uses built-in `agentfw pilot-removal preview/apply/status`, explicit
-confirmation/consent and the retained recovery journal/acknowledgement. Its exact
+Removal uses built-in `agentfw pilot-removal preview/apply/status` for both direct
+and bootstrap component homes, explicit confirmation/consent and retained recovery
+journals/acknowledgements. Its exact
 receipt-owned component scope retains Agent executables, prepared generations,
 coordinator state, audit/history and recovery records by design. New project
 bytes, Git state, prepared selections and synthetic user files must survive. No classifier,
@@ -177,3 +191,17 @@ as superseded and retain their incomplete observations.
 Useful-task timings in the new driver use ordinary installed launches. Full
 syscall capture remains on both denied-call controls. Earlier instrumented
 attempts are not a performance baseline or optimization claim.
+
+Runs [579](https://github.com/SoupTeam/soup-wall/actions/runs/41655608365) and
+[580](https://github.com/SoupTeam/soup-wall/actions/runs/41655905813) used driver
+`2c74e609e2dcdf963d8549c385136f50a7d3ff58` and routing-only product candidate
+`75875f16dfbc19503feb22fe6871116cf6bd7618`. Each passed 13 required observations,
+then failed the first coordinated useful run with `maintenance_scope_changed`;
+update/rollback and removal stayed failed/incomplete. All observed processes had
+stopped. Their artifact digests are respectively
+`0bb5061b8f70d4ab19c2dbfb08dc32690012f17ec04cedd9bca58b371bd86736` and
+`02c5f4732ba5cf50ee003fb5be02490dfe507ba47371eb5ff1a85406e693ce6f`.
+The driver now uses the documented dedicated bootstrap, and the product candidate
+adds a stable, identity-pinned coordinator gate with full current-generation
+revalidation. A legacy direct installation remains a separate scope. Native
+qualification of this candidate remains pending.

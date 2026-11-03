@@ -1049,12 +1049,13 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_clean_user_acceptance.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door_component.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_maintenance.py -v
           umask 077
           runtime="$RUNNER_TEMP/sou216-accepted-source"
           test ! -e "$runtime"
           git clone --quiet --no-hardlinks --no-checkout "$GITHUB_WORKSPACE" "$runtime"
-          git -C "$runtime" checkout --quiet --detach 75875f16dfbc19503feb22fe6871116cf6bd7618
-          test "$(git -C "$runtime" rev-parse HEAD)" = 75875f16dfbc19503feb22fe6871116cf6bd7618
+          git -C "$runtime" checkout --quiet --detach 62b9e69a449c0372ac5226f9e0545d888d4ea1f7
+          test "$(git -C "$runtime" rev-parse HEAD)" = 62b9e69a449c0372ac5226f9e0545d888d4ea1f7
           test -z "$(git -C "$runtime" status --porcelain)"
           printf 'SOU216_RUNTIME_SOURCE=%s\n' "$runtime" >> "$GITHUB_ENV"
       - name: Build pinned selected runtimes without global installation
@@ -1742,6 +1743,7 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_private_edit_self_test.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_private_edit_qualification.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door_component.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_maintenance.py -v
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
           python3 -B scripts/qualify-private-edit-self-test.py --run \
             --agentfw "$SOU119_AGENTFW" --selection "$selection" --python /usr/bin/python3.12 \
@@ -1961,6 +1963,7 @@ jobs:
           set -euo pipefail
           asset="$RUNNER_TEMP/sou111-assets"
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door_component.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_maintenance.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_provider_profiles.py -v
           cargo test --locked -p agentfw --lib pilot_component
           # The component is built from this checkout and started only as the
