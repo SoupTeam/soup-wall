@@ -335,6 +335,57 @@ class FrontDoor(unittest.TestCase):
         unselected = M.scope_report(argparse.Namespace(scope=None, git_profile='git-linked-worktree-readonly-v1'), None, {})
         self.assertEqual((unselected['refused'], unselected['outside_scope_if_selected']), ([], ['capability-git-profiles']))
 
+    def test_unselected_unavailable_scope_preserves_preview_and_prepare(self):
+        helper = self.root / 'supplied-helper'
+        helper.write_text('fixture bytes: never executed')
+        for reason in ('scope_document_invalid', 'scope_binding_changed'):
+            with self.subTest(reason):
+                prefix = self.root / reason
+                words = ['prepare', '--apply', '--prefix', str(prefix)]
+                for role in ('git', 'bwrap', 'agentfw', 'git-launcher', 'sandbox-tests',
+                             'node', 'npm', 'python', 'claude'):
+                    words += ['--' + role, str(helper)]
+                args = M.parser().parse_args(words)
+                selected = prefix / 'preparation/generations' / ('c' * 32) / 'selection.json'
+                calls = []
+
+                def child(command, **_):
+                    calls.append(command)
+                    if '--prepare' in command:
+                        selected.parent.mkdir(parents=True)
+                        selected.write_text('{}')
+                        return 0, {'status': 'prepared-not-active', 'selection': str(selected)}
+                    return 0, {'status': 'plan', 'missing': []}
+
+                with mock.patch.object(M, 'scope_document', side_effect=M.Failure(reason, 'scope')), \
+                        mock.patch.object(M, 'source', return_value={'commit': '1' * 40, 'tree': '2' * 40, 'dirty': False}), \
+                        mock.patch.object(M, 'platform_reason', return_value=None), mock.patch.object(M, 'child', child):
+                    preview = M.plan(args)
+                    self.assertEqual(preview['scope']['refused'], [])
+                    self.assertEqual(preview['scope']['reason'], reason)
+                    self.assertFalse(preview['scope']['selected'])
+                    self.assertFalse(preview['scope']['available'])
+                    self.assertEqual(preview['missing'], [])
+                    self.assertFalse(prefix.exists())
+                    prepared = M.prepare(args)
+                self.assertEqual(prepared['status'], 'prepared-not-active')
+                self.assertNotIn('scope', M.read_state(prefix))
+                self.assertEqual(len(calls), 3)  # two plan inspections, then the mocked accepted preparation
+                self.assertEqual(sum('--prepare' in c for c in calls), 1)
+
+    def test_selected_unavailable_scope_still_refuses_before_preparation(self):
+        for reason in ('scope_document_invalid', 'scope_binding_changed'):
+            with self.subTest(reason):
+                prefix = self.root / reason
+                args = M.parser().parse_args(['prepare', '--apply', '--prefix', str(prefix), '--scope', 'linux-v1'])
+                with mock.patch.object(M, 'scope_document', side_effect=M.Failure(reason, 'scope')), \
+                        mock.patch.object(M, 'source', return_value={'commit': '1' * 40, 'tree': '2' * 40, 'dirty': False}), \
+                        mock.patch.object(M, 'platform_reason', return_value=None), mock.patch.object(M, 'child') as child:
+                    self.failure(reason, M.plan, args)
+                    self.failure(reason, M.prepare, args)
+                    child.assert_not_called()
+                self.assertFalse(prefix.exists())
+
     def test_a_recorded_scope_is_sticky_for_a_later_prepare(self):
         args = argparse.Namespace(scope=None, git_profile='git-readonly-file-revisions-v1')
         report = M.scope_report(args, {'scope': self.recorded}, {})

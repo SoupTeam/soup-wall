@@ -259,7 +259,7 @@ def scope_report(args, state, inputs):
         if requested is not None:
             raise
         return {"id": SCOPE.ID, "selected": False, "available": False, "reason": failure.code,
-                "instruction": HINTS.get(failure.code, "")}
+                "refused": [], "instruction": HINTS.get(failure.code, "")}
     excluded = SCOPE.requested_exclusions(document, git_profile=args.git_profile, inputs=inputs)
     return {"id": document["id"], "selected": requested is not None, "available": True,
             "document_sha256": digest_value, "enforcement": document["enforcement"]["mode"],
