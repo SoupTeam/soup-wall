@@ -116,6 +116,33 @@ class ReleaseDocumentation(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "canonical rendering"):
             self.check(self.archive(stage), stage)
 
+    def test_forged_self_manifest_does_not_hide_configuration_or_notice_corruption(self):
+        stage = self.stage()
+        original_record = (stage / docs.MANIFEST).read_bytes()
+        for name in ("firewall.yaml", "NOTICE", "third-party/kryptering/LICENSE"):
+            original_bytes = (stage / name).read_bytes()
+            forged = b"tampered configuration or attribution\n"
+            (stage / name).write_bytes(forged)
+            record = json.loads(original_record)
+            record["files"][name] = {"sha256": docs.digest(forged), "size": len(forged)}
+            (stage / docs.MANIFEST).write_text(json.dumps(record))
+            with self.subTest(path=name), self.assertRaisesRegex(ValueError, "payload differs from canonical source"):
+                self.check(self.archive(stage), stage)
+            (stage / name).write_bytes(original_bytes)
+            (stage / docs.MANIFEST).write_bytes(original_record)
+
+    def test_forged_self_manifest_does_not_hide_a_changed_gateway_alias(self):
+        target = docs.TARGETS[-1]
+        stage = self.stage(target)
+        forged = b"changed one-sided alias fixture\n"
+        name = "soup-wall-gateway.exe"
+        (stage / name).write_bytes(forged)
+        record = json.loads((stage / docs.MANIFEST).read_bytes())
+        record["files"][name] = {"sha256": docs.digest(forged), "size": len(forged)}
+        (stage / docs.MANIFEST).write_text(json.dumps(record))
+        with self.assertRaisesRegex(ValueError, "Gateway alias differs"):
+            self.check(self.archive(stage, target), stage, target)
+
     def test_wrong_source_and_target_refuse(self):
         stage = self.stage()
         archive = self.archive(stage)

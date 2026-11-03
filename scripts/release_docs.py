@@ -386,6 +386,17 @@ def validate_tree(source, directory, commit, target):
     del actual[MANIFEST]
     if actual != record.get("files") or set(actual) != required_files(target) | set(docs):
         raise ValueError("archive membership/hash mismatch")
+    for name in BASE:
+        original = "vendor/kryptering/LICENSE" if name == "third-party/kryptering/LICENSE" else name
+        # Compare the known source text across Git's LF/CRLF checkout forms.
+        # Copies stay verbatim, and inventory hashes still bind archived bytes.
+        archived = read_file(directory, name).replace(b"\r\n", b"\n")
+        authoritative = read_file(source, original).replace(b"\r\n", b"\n")
+        if archived != authoritative:
+            raise ValueError(f"release payload differs from canonical source: {name}")
+    suffix = ".exe" if target.endswith("windows-msvc") else ""
+    if actual["llm-firewall" + suffix] != actual["soup-wall-gateway" + suffix]:
+        raise ValueError("Gateway alias differs from the supplied binary")
     for name, data in docs.items():
         if read_file(directory, name) != data:
             raise ValueError("archive documentation differs from canonical rendering")
