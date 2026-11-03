@@ -1,59 +1,102 @@
 # Current installed Linux pilot: clean-user acceptance (SOU-216)
 
-## Selected path and current decision
+## Decision and exact source
 
-**Accepted baseline: NO-GO for the complete lifecycle.** Native run 573 completed
-13 of 15 required observations: all eight useful tasks, both denied-call controls,
-the unchanged 12-case walkthrough, component install and two-profile Ask/replay
-smoke passed. Installed coordinated update then failed before its JSON preview;
-removal remained unattempted. This matches the independently reproduced routing
-defect below. Original failed/incomplete outcomes remain retained.
+**Accepted baseline: NO-GO for the complete lifecycle.** Run 573 passed 13/15
+required observations, then the installed update entry rejected its dedicated
+arguments; removal remained incomplete. Historical outcomes are never backfilled.
 
-**Fixed author candidate: final two-environment measurements pending.** No
-first-use, performance or product GO follows from local Python checks. The
-checkpoint is November 4 and delivery deadline is November 5, 2026.
+**Fixed author candidate: NO-GO for the complete lifecycle.** Independent runs
+[583](https://github.com/SoupTeam/soup-wall/actions/runs/41671867237) and
+[584](https://github.com/SoupTeam/soup-wall/actions/runs/41672949388) each passed
+14/15 required observations. All useful work, interruption/recovery, Ask/replay,
+A-B-A and completed-run archival passed. Native removal preview still refused:
+`process_evidence_unavailable_or_inconsistent`. In each environment, two same-UID
+processes returned `EACCES` while reading `cwd`, with the same hashed identities
+persisting through all three previews. Their origin/relationship to the pilot
+was not established; they are not assumed unrelated or safely inactive. No
+confirmation was emitted, no removal applied, and bootstrap removal/status
+remained unattempted. This is a genuine unresolved process-visibility blocker,
+not a passing uninstall or complete lifecycle acceptance.
 
-The accepted baseline is `9a3c5b38e56ebc6ebbeedfda98805f6a327cb371`. The first clean-user attempts
-use that exact product. Inspection also reproduced an installed update defect:
-the native entry prepends `--agent-home`, but the update router only recognized
-`update` as argv[0], so its dedicated options fell through to an ordinary parser
-and were rejected before update preview. Reproduce on the accepted source with
-`python3 -B scripts/pilot.py --agent-home /private/owned-home update inspect
---prefix /private/owned-coordinator` (one command). This read-only failure does
-not require a model or installation.
+Product: `62b9e69a449c0372ac5226f9e0545d888d4ea1f7`; measurement driver:
+`4b7209908d9be08b2bcdce2ebba2956686f336a7`. The product awaits review and is not
+newly accepted main. Later evidence/documentation commits do not claim a new
+native execution. The supported measured prefix is installation through useful
+work, recovery and archival under the prerequisites below. Complete removal
+requires fresh qualification with fully available same-UID process evidence;
+its original guard must remain intact. No safe in-scope product correction for
+the inaccessible processes was established, and no privileges, force-stop,
+process exclusions or security relaxation were introduced.
 
-Product candidate `62b9e69a449c0372ac5226f9e0545d888d4ea1f7` includes the
-routing fix first recorded in `75875f16dfbc19503feb22fe6871116cf6bd7618` and a
-coordinated-maintenance integration fix. A dedicated retained bootstrap home
-owns a stable gate bound to the exact coordinator directory identity. Every
-launch still verifies the currently selected managed component and selection;
-maintenance remains entered across generation update/rollback. Different or
-replaced coordinators and unselected components refuse, and legacy direct-home
-markers are never silently re-enrolled. Cause-specific regressions cover these
-controls. This is an **author candidate awaiting review**, not newly accepted main.
+Accepted baseline: `9a3c5b38e56ebc6ebbeedfda98805f6a327cb371`.
+[Draft PR #348](https://github.com/SoupTeam/soup-wall/pull/348) contains two
+installation/recovery fixes with cause-specific regressions:
 
-Fresh runs pin this product in a separate clean checkout. The existing native
-builders and component builder bind its source and selected outputs; the newer
-measurement-driver SHA remains separate. Both environments use the same source
-and locked upstream/tool inputs, with exact independently built binary outputs
-recorded per environment. This does not claim bit-identical reproducible builds.
-Driver, product, binary, profile, policy, selection and original child-report
-identities are recorded independently.
+- Native `--agent-home` dispatch now reaches the dedicated update router. Baseline
+  reproduction: `python3 -B scripts/pilot.py --agent-home /private/owned-home update inspect --prefix /private/owned-coordinator`.
+  This read-only command reproduces the parser failure without installation or a model.
+- A documented dedicated bootstrap home binds its maintenance gate to the exact
+  coordinator directory identity. Every launch still verifies the selected
+  managed component and selection. Entered maintenance survives A-B-A; foreign
+  or replaced roots and unselected components refuse. Legacy direct markers are
+  never silently enrolled into another scope.
 
-Supported measurement path: native Ubuntu 24.04 x86_64, ordinary non-root user
-with no effective capabilities, CPython 3.12 and the current pinned original
-Claude Code, filesystem and Git packages. Two separately dispatched GitHub-hosted
-jobs provide fresh disposable user environments; each starts with empty private
-Agent/home/preparation state. Run ID and hashed kernel boot identity distinguish
-the environments. Cache state and build durations are observations; this is not
-a claim that every compiler/download cache was cold.
+Classifier, result-inspection and original Git implementations are unchanged.
+The unchanged native removal guard must obtain complete inactivity evidence;
+unknown state or unreadable same-user processes remain blockers.
 
-Ubuntu's namespace permission is an explicit administrator prerequisite. This
-uses the unchanged job-scoped exact-binary provisioning procedure documented in
-[native prerequisites](PILOT_NATIVE_PREREQUISITES.md). It changes no global sysctl,
-global AppArmor profile, setuid bit or product policy. The new measurement mode
-does not run the older isolated-account cleanup fixture or create OS accounts.
-A successful run cannot establish unassisted stock-host installation.
+## Confirmed measurement boundary
+
+Native Ubuntu 24.04 x86_64, CPython 3.12, ordinary non-root user with zero effective
+capabilities, pinned original Claude Code and filesystem/Git packages, and the
+existing local scripted provider. Two independent GitHub-hosted jobs start with
+empty private Agent/home/preparation state; hashed boot identity and run ID
+identify each environment. No paid API calls, real secrets or private projects.
+
+Installation uses the existing builders and source-bound component receipt.
+Execution occurs outside both product and driver checkouts. Product, driver,
+per-environment binary outputs, compiler inputs, profiles, policies, selections
+and original child reports retain separate hashes. Equal source does not imply
+bit-identical independent builds. Cache state and build durations are measured;
+fully cold caches are not claimed.
+
+The unchanged job-scoped exact-binary namespace permission is an administrator
+prerequisite; see [native prerequisites](PILOT_NATIVE_PREREQUISITES.md). No global
+sysctl, global AppArmor profile, setuid or product policy change is introduced.
+This mode creates no OS accounts. Unassisted stock-host installation is unproven.
+
+## Measured candidate outcomes
+
+Both runs used UID/GID 1001, effective capabilities 0, Ubuntu 24.04 x86_64 and
+runner image `20261026.354.1`, with distinct hashed boot identities. Each completed
+four tasks per project and two independently calibrated denied-call controls;
+forbidden original dispatches, network connections and marker files were zero.
+The unchanged walkthrough passed 12 main cases plus four emergency-Stop cases;
+the separate two-profile Ask smoke passed one-use redemption/replay controls.
+A-B-A passed three useful reads and two paused-launch refusals with zero host
+executions/provider requests. All 13 completed outer runs reported stopped owned
+processes. Project bytes and Git/index/object state matched their pre-run
+snapshots after the full lifecycle through update/rollback.
+
+| Run | Native Agent source build | Catalog / ledger preparation | Eight useful task wall times | First pending, filesystem / Git | Archived + cleaned runs | Required inventory |
+| --- | --- | --- | --- | --- | --- | --- |
+| 583 | 200.016 s | 33.071 / 32.765 s | 27.656–28.997 s | 1302.5 / 1315.4 ms | 13/13 | 14 passed, 1 failed |
+| 584 | 201.597 s | 32.177 / 31.954 s | 29.388–29.744 s | 1169.4 / 1181.4 ms | 13/13 | 14 passed, 1 failed |
+
+Build/preparation/task times cover different phases, not total human onboarding
+or a per-tool percentile. Both first-pending observations met the existing
+5000 ms correctness bound. All other installation/useful-task latency thresholds
+remain unapproved. Independent builds have per-environment output hashes;
+bit-identical reproduction is not claimed.
+
+[Evidence metadata index](evidence/sou-216-acceptance/summary.json) retains every
+attempt, frozen expectation verification, original artifact/report digests,
+source/input/profile/policy hashes, timings, cleanup, archive outcomes and all
+removal preview observations. Original reports remain in their linked Actions
+artifacts. The failure path exits before the final whole-source snapshot;
+initial source/tree and build receipt identities and post-lifecycle project
+snapshots remain available. No final whole-source preservation claim is made.
 
 ## Reproduce
 
@@ -151,78 +194,48 @@ or incomplete required observation is NO-GO for this scope. Scripted-provider
 results are not live-model attack efficacy, novice-human evidence, WSL evidence,
 license/advisory clearance, public release or full-product acceptance.
 
-## Preserved initial attempts
+## All attempts and reproducible defects
 
-Runs [571](https://github.com/SoupTeam/soup-wall/actions/runs/41645623208) and
-[572](https://github.com/SoupTeam/soup-wall/actions/runs/41646339891) used driver
-`fdfd0a85f69b52ea48c3c064c475df54234f6723`. They failed at the first denied-call
-observer after the catalog project's four useful tasks succeeded. Later cases
-remain incomplete, not skipped successes. Run 571 retained artifact digest
-`d03af541caae27de1bc958be8b9229a9c9cb75d7d1c627b5576b972e3991781a`.
-The initial diagnostic capture used a 2048-byte strace string cap; the next driver
-uses the accepted full argument-string bound and preserves finite observer
-refusal codes. A regression rejects abbreviated installed collector arguments.
-No product policy/classifier was relaxed. Final measured outcomes remain pending.
+The linked Actions artifacts retain the original report contracts and all
+failed/incomplete observations. The accompanying metadata index records exact
+artifact and original-report hashes; it is a projection, not another grader or
+replacement report contract. No canceled attempt contributes success evidence.
 
-Run [573](https://github.com/SoupTeam/soup-wall/actions/runs/41649571638) used
-driver `90226b6facdadf34621c4070863ef3c9bf21976f` and the unchanged accepted
-product. Both denied-call observers passed after complete capture was selected.
-The original report ends with `JSONDecodeError` in `update-rollback` (the
-installed update parser emitted no JSON); required removal remains incomplete.
-Artifact digest: `3e0903a6dc1301615e82a3a4d2e5433b7d3a9005269886e17d7c673160d57bac`.
-Run [574](https://github.com/SoupTeam/soup-wall/actions/runs/41649814940) was
-explicitly canceled as superseded after the baseline routing defect was
-reproduced. It contributes no success evidence.
+| Run | Required observations | Outcome / correction |
+| --- | --- | --- |
+| [571](https://github.com/SoupTeam/soup-wall/actions/runs/41645623208), [572](https://github.com/SoupTeam/soup-wall/actions/runs/41646339891) | Each 5 passed, 10 incomplete | Denied-call observer refused abbreviated collector arguments; driver switched to the accepted full capture bound, with a truncation regression. |
+| [573](https://github.com/SoupTeam/soup-wall/actions/runs/41649571638) | 13 passed, 2 incomplete | Baseline installed update produced no JSON because native `--agent-home` bypassed the dedicated router; product routing fixed. |
+| [574](https://github.com/SoupTeam/soup-wall/actions/runs/41649814940) | Canceled before application report | Superseded after baseline reproduction. |
+| [575](https://github.com/SoupTeam/soup-wall/actions/runs/41650804844) | 13 passed, 1 failed, 1 incomplete | Exact selected binary paths in the long-lived harness argv triggered the unchanged inactivity guard. Driver now execs through a private anonymous argument FD, closed before execution; a native regression still refuses genuine selected-path argv. |
+| [576](https://github.com/SoupTeam/soup-wall/actions/runs/41651856544), [577](https://github.com/SoupTeam/soup-wall/actions/runs/41652164981) | Canceled: 10/9 passed, 5/6 incomplete | Superseded by the corrected argument handoff; incomplete inventory retained. |
+| [579](https://github.com/SoupTeam/soup-wall/actions/runs/41655608365), [580](https://github.com/SoupTeam/soup-wall/actions/runs/41655905813) | Each 13 passed, 1 failed, 1 incomplete | `maintenance_scope_changed` on the first coordinated useful run; added the documented separate bootstrap and identity-pinned coordinated maintenance integration. |
+| [581](https://github.com/SoupTeam/soup-wall/actions/runs/41664166977), [582](https://github.com/SoupTeam/soup-wall/actions/runs/41665051216) | Each 14 passed, 1 failed | A-B-A and paused-launch refusals passed. Removal preview reported unverified retained read-only runs and unavailable process evidence; no removal applied. Driver now uses accepted archival and records bounded process diagnostics. |
+| [583](https://github.com/SoupTeam/soup-wall/actions/runs/41671867237), [584](https://github.com/SoupTeam/soup-wall/actions/runs/41672949388) | Each 14 passed, 1 failed | All 13 completed runs archived/cleaned. Three fresh previews each refused solely on unavailable process evidence; two persistent same-UID `cwd` EACCES observations per environment. No apply or bootstrap removal/status. |
 
-Run [575](https://github.com/SoupTeam/soup-wall/actions/runs/41650804844) used
-product candidate `75875f16dfbc19503feb22fe6871116cf6bd7618` and driver
-`90efca5f2275cb6e3a794263d5db4e91c9b7758e`: 13 required cases passed, update
-failed with `operator_refused:active_or_uncertain_pilot_run`, removal remained
-incomplete. Artifact digest:
-`9ea1f3608e5adc850be7bf65e6620957be61b2a4ea908ff687abd7e6386cdb07`.
-The unchanged inactivity guard treats an exact selected binary path anywhere in
-a same-user argv as active/uncertain evidence. The long-lived qualification
-parent itself carried the selected role paths. The driver now execs its isolated
-entry using a private anonymous argument descriptor, then closes that descriptor
-before qualification. The guard is unchanged; a native regression still requires
-it to refuse a real process carrying the selected path. Runs 576/577 were canceled
-as superseded and retain their incomplete observations.
+Earlier fully instrumented useful-task timings are not a performance baseline for
+later ordinary launches. The two denied-call controls retain full syscall capture.
 
-Useful-task timings in the new driver use ordinary installed launches. Full
-syscall capture remains on both denied-call controls. Earlier instrumented
-attempts are not a performance baseline or optimization claim.
+The corrected removal sequence enters maintenance for both homes, then uses the
+existing [completed-run archival](completed-run-archival.md) preview/archive/apply
+protocol on every completed read-only run. Archive bytes and recovery journals
+remain in the disposable job’s private output until runner teardown; published
+evidence retains their hashes/outcomes, not the raw archives or acknowledgement
+values. Preservation assertions describe the measured removal boundary, not
+permanent storage after the disposable environment is destroyed. Unknown/incomplete
+state is never purged. At most three fresh read-only native previews may observe
+a transient process-only refusal; each attempt is retained. Apply requires a
+fully clear fresh preview and repeats the original guard. Persistent uncertainty
+is NO-GO, including when the relationship of unreadable same-user processes is unknown.
 
-Runs [579](https://github.com/SoupTeam/soup-wall/actions/runs/41655608365) and
-[580](https://github.com/SoupTeam/soup-wall/actions/runs/41655905813) used driver
-`2c74e609e2dcdf963d8549c385136f50a7d3ff58` and routing-only product candidate
-`75875f16dfbc19503feb22fe6871116cf6bd7618`. Each passed 13 required observations,
-then failed the first coordinated useful run with `maintenance_scope_changed`;
-update/rollback and removal stayed failed/incomplete. All observed processes had
-stopped. Their artifact digests are respectively
-`0bb5061b8f70d4ab19c2dbfb08dc32690012f17ec04cedd9bca58b371bd86736` and
-`02c5f4732ba5cf50ee003fb5be02490dfe507ba47371eb5ff1a85406e693ce6f`.
-The driver now uses the documented dedicated bootstrap, and the product candidate
-adds a stable, identity-pinned coordinator gate with full current-generation
-revalidation. A legacy direct installation remains a separate scope. Native
-qualification of this candidate remains pending.
+## Development verification and handoff
 
-Runs [581](https://github.com/SoupTeam/soup-wall/actions/runs/41664166977) and
-[582](https://github.com/SoupTeam/soup-wall/actions/runs/41665051216) used product
-`62b9e69a449c0372ac5226f9e0545d888d4ea1f7` and driver
-`be5e99b79211455af3b3d37cf54c49dd9010fb7a`. Both completed 14/15 required cases,
-including useful A-B-A runs and independent zero-host/provider maintenance
-refusals across update and rollback. Removal preview blocked on
-`active_or_unverified_retained_run` and
-`process_evidence_unavailable_or_inconsistent`; no removal was attempted.
-Artifact digests: `bc3eba9a4498597aa51369428e198dbc2ae8232fb131682dc0558026b5505e19`
-and `fe95e9d04a48238707716b3e984582462683993298e482790aec73d20194a7ee`.
+Focused local suites: 101 tests, 90 passed and 11 platform/environment skips.
+Mandatory native pin checks additionally exercise Linux process refusal and
+maintenance/current-generation controls. Source workflow actionlint, generated
+workflow consistency and local documentation links pass. Local checks do not
+establish native acceptance. The measured driver’s Draft fast checks, admission
+and all five CodeQL analyses passed; both native qualification workflows correctly
+remain failed/NO-GO at strict removal preview.
 
-Before component removal, the corrected sequence now enters maintenance for both
-installation homes and uses the existing [completed-run archival](completed-run-archival.md)
-preview/archive/apply protocol on every completed read-only run. Exact private
-archives, their hashes and outcome records are retained. Unknown/incomplete state
-is never purged. Removal still uses its original process-evidence requirements;
-read-only diagnostics record finite failure stages, and at most three fresh
-previews may observe a transient process-only refusal. Every such observation
-remains in the report. Only a fully clear fresh native preview can be applied;
-persistent uncertainty remains NO-GO.
+PR stays Draft. Final shared Ready qualification, review/admission and merge
+remain TL-owned. Checkpoint: November 4; delivery deadline: November 5, 2026.
