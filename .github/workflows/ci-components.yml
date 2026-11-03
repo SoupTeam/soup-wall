@@ -2009,6 +2009,14 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: ${{ (github.event.inputs.coordinated_update_only == 'true' || github.event.inputs.installed_focus == 'clean-user') && '0' || '1' }}
           persist-credentials: ${{ github.event.inputs.coordinated_update_only != 'true' }}
+      - name: Quiesce an empty owned CI user session before pilot execution
+        if: github.event.inputs.installed_focus == 'clean-user'
+        shell: bash
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          python3 -I -B scripts/ci_pilot_user_session.py --quiesce
       - name: Validate Git stage-reuse qualification dispatch
         if: github.event.inputs.stage_reuse_only == 'true'
         env:
@@ -3345,6 +3353,8 @@ jobs:
         with:
           name: sou216-clean-user-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
+            ${{ runner.temp }}/sou216-user-session/report.json
+            ${{ runner.temp }}/sou216-user-session/private-provenance.cms
             ${{ runner.temp }}/sou216-clean-user/report.json
             ${{ runner.temp }}/sou216-clean-user/*/expected.private.json
             ${{ runner.temp }}/sou216-clean-user/walkthrough/report.json
