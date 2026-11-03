@@ -17,6 +17,20 @@ are lead-owned.
 | same, `-- --include-ignored` with `SOUP_DEPLOY_TEST_POSTGRES_URL` set | 3 passed, run twice against one persistent database |
 | `python3 scripts/ci_components.py --check`, `python3 scripts/check_docs.py` | clean |
 
+## Console recovery inventory (found by the first focused CI run)
+
+The first focused run (`41711423094`, source `8420894d`) passed this PR's SQLite and PostgreSQL controls but failed the
+existing step `Four real Agents with encrypted SQLite recovery`: the versioned recovery inventory
+(`scripts/fixtures/console_recovery_inventory_v1.json`) is a strict allowlist of tables, DDL digests and PostgreSQL
+migrations 1 through N, and the new table was not in it. Following the SOU-55 precedent, the next commit adds the table
+to the SQLite and PostgreSQL inventory, raises the accepted schema version from 28 to 29 in `console_recovery.py`, its
+acceptance driver, unit test and `CONSOLE_RECOVERY.md`. The fixture entries were generated from live catalogs, not by
+hand: the SQLite digest from SQLite itself, the PostgreSQL entries from the recovery tool's own `logical_schema()` on a
+database migrated by this branch, and the generator refuses to write unless every pre-existing entry is identical to the
+accepted fixture. Local checks: `inspect_sqlite` accepts a real database created by this branch's Console that contains a
+key row; `scripts/tests/test_console_recovery.py` passes (8 tests need `age`, which is not installed locally, and are skipped).
+The encrypted backup/restore demos themselves have not been run locally; the re-dispatched workflow is the evidence.
+
 ## Explicit skip and caveat: PostgreSQL
 
 The local database was PostgreSQL **14.17** (no newer server installed, host left unchanged).
