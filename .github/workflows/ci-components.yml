@@ -72,7 +72,7 @@ jobs:
           git restore .
           git rev-parse HEAD > target/fleet-evidence/source.txt
       - name: Fleet storage and authorization regressions
-        run: cargo test --locked -p llm-firewall --test fleet_projection --test fleet_triage
+        run: cargo test --locked -p llm-firewall --test fleet_projection --test fleet_triage --test agent_heartbeat
       - name: Build real Console and Agent
         run: cargo build --locked -p llm-firewall -p agentfw
       - name: Prepare isolated browser driver
@@ -98,6 +98,19 @@ jobs:
               --backend "$backend" --output "$RUNNER_TEMP/enrollment" || status=1
           done
           cp -r "$RUNNER_TEMP/enrollment" target/fleet-evidence/enrollment
+          exit $status
+      - name: Agent heartbeat status browser regressions
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_heartbeat_browser.py -v'
+      - name: Opt-in Agent heartbeat with real Agents
+        shell: bash
+        run: |
+          set +e
+          status=0
+          for backend in sqlite postgres; do
+            "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-agent-heartbeat-acceptance.py --no-build \
+              --backend "$backend" --output "$RUNNER_TEMP/heartbeat" || status=1
+          done
+          cp -r "$RUNNER_TEMP/heartbeat" target/fleet-evidence/heartbeat
           exit $status
       - name: Fleet triage overview browser regressions
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_fleet_triage_browser.py -v'

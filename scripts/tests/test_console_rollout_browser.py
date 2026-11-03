@@ -38,7 +38,8 @@ def page_html():
             .replace("/* ROLLOUT_PANEL */", (SRC / "rollout_panel.js").read_text(encoding="utf-8"))
             .replace("/* ENROLLMENT_PANEL */", (SRC / "enrollment_panel.js").read_text(encoding="utf-8"))
             .replace("/* AGENT_HISTORY */", (SRC / "agent_history.js").read_text(encoding="utf-8"))
-            .replace("/* FLEET_TRIAGE */", (SRC / "fleet_triage.js").read_text(encoding="utf-8")))
+            .replace("/* FLEET_TRIAGE */", (SRC / "fleet_triage.js").read_text(encoding="utf-8"))
+            .replace("/* AGENT_HEARTBEAT */", (SRC / "heartbeat_panel.js").read_text(encoding="utf-8")))
 
 
 @unittest.skipUnless(AVAILABLE, "optional Playwright browser fixture dependency unavailable")
