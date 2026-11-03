@@ -1,0 +1,60 @@
+{
+  "format": "sou155-native-execution/1",
+  "phase": "original-transport",
+  "status": "failed",
+  "source_commit": "45563bf32f6f25e0aac09be1d5e4106cad92df2e",
+  "model_calls": 0,
+  "cases": [
+    {
+      "case": "actual-original-useful-read",
+      "status": "passed",
+      "execution": {
+        "catalogue_sha256": "93297fe5d988afe888699fd72ae854e4b69b1825f60903e62f9ccd9af6994085",
+        "channel_generation_sha256": "fdcecb81ec625c9c952a2c7169b888040e1e1a543c5c2e1b7fc71b881d4e74d8",
+        "closure_sha256": "58c49141bc754855bfe0584ec21d9af5449a5542ce9aaead1f21983b9151cc4c",
+        "contract": "sw-mcp/verified-original-execution/1",
+        "daemon_instance_id": "S1rSqa8tK0xBWUJm5RXW6XE76wYHhbFBCUAKG5MV4kg",
+        "domain_witness": null,
+        "invocation_sha256": "8a7b47028395f3a9e17ff4f4f047cc7cb48896c656fe581256f37c388934598f",
+        "native_call_id": "qyHH9jqCLStUXm2SPIFPoO0BNEIwfN2ZVyl9jtCnq88",
+        "original_result_bytes": 188,
+        "original_result_sha256": "c935a9af3dc9e520572bc7745ae5c8654d1a564ef094c702d3823382890a7299",
+        "process_generation_sha256": "34422f28bedd10ea3952c104d934caddb79a72346d49724d2b44c818fac46e2b",
+        "session_epoch_sha256": "83238a53b505e7009052dd07a92b66ae31f90e9c4ce8f5eaf776a82e24335437"
+      }
+    }
+  ],
+  "acceptance_pass": false,
+  "startup_diagnostics": [],
+  "daemon_failures": [],
+  "diagnostic_codes": [
+    "mcp_budget_enforced",
+    "mcp_owner_active"
+  ],
+  "collector_exit_codes": [
+    null
+  ],
+  "failure_stack": [
+    {
+      "source": "scripts/ci/native-verified-execution.py",
+      "function": "main",
+      "line": 208
+    },
+    {
+      "source": "scripts/ci/formatter-shadow-controls.py",
+      "function": "exercise",
+      "line": 85
+    },
+    {
+      "source": "scripts/ci/formatter-shadow-controls.py",
+      "function": "require",
+      "line": 53
+    }
+  ],
+  "failure_location": {
+    "function": "require",
+    "line": 53
+  },
+  "reason": "shadow_preexecution_unknown_not_verified",
+  "owned_root_empty_final": true
+}

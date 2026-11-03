@@ -17,6 +17,15 @@
     #fleet-filter{margin:14px 0}
     #fleet-status{margin:12px 0}
     #fleet-panel .inline{margin-top:10px}
+    #triage-panel{margin:14px 0 18px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+    .triage-counts{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+    .triage-count{display:grid;gap:2px;text-align:left;font-weight:400;padding:9px 11px}
+    .triage-count strong{font-size:19px}
+    .triage-count span{color:var(--muted);font-size:12px}
+    .triage-count.selected{outline:2px solid var(--blue)}
+    .triage-problems{margin:0;padding-left:16px}
+    #triage-list td{overflow-wrap:anywhere}
+    #triage-list td:last-child{white-space:nowrap}
     #history-timeline{display:grid;gap:8px;margin:12px 0 0;padding-left:22px}
     #history-timeline li{padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface2);overflow-wrap:anywhere}
     #history-timeline li p{margin:4px 0 0}
@@ -84,6 +93,15 @@
           <div id="detail-content" class="hidden">
 <section id="fleet-panel" class="section" aria-labelledby="fleet-title">
   <div class="detail-head"><div><h2 id="fleet-title">Agent fleet</h2><p class="note">Enrollment and policy delivery records. Current runtime protection, liveness and registry identity are unknown.</p></div><button id="fleet-refresh" type="button" class="secondary">Refresh fleet</button></div>
+  <section id="triage-panel" aria-labelledby="triage-title">
+    <h3 id="triage-title">Fleet triage</h3>
+    <p class="note">Which enrolled Agents have recorded delivery or credential problems. Acknowledgement ages are history: they do not show current liveness or active protection.</p>
+    <div id="triage-summary" aria-live="polite"></div>
+    <form id="triage-filter" class="inline"><label class="field">Recorded problem<select id="triage-problem"><option value="attention">Needs attention (any problem)</option><option value="pending">Pending delivery</option><option value="rejected">Rejected</option><option value="mismatch">Applied revision differs from latest issued</option><option value="revoked">Credential revoked</option><option value="incomplete_history">Incomplete history</option><option value="no_ack">No acknowledgement recorded</option><option value="stale_ack">Old acknowledgement</option><option value="no_history">No delivery recorded</option><option value="no_recorded_problem">No recorded problem</option><option value="all">All Agents</option></select></label><label class="field">Old acknowledgement after<select id="triage-age"><option value="900">15 minutes</option><option value="3600">1 hour</option><option value="21600">6 hours</option><option value="86400" selected>1 day</option><option value="604800">7 days</option></select></label><label class="field">Sort<select id="triage-sort"><option value="agent_id">Agent ID</option><option value="ack_oldest">Oldest acknowledgement first</option></select></label><label class="field">Agent ID prefix<input id="triage-prefix" maxlength="128" autocomplete="off" placeholder="Filter by ID prefix"></label><button type="submit" class="secondary">Apply</button><button id="triage-refresh" type="button" class="secondary">Refresh triage</button></form>
+    <p id="triage-status" role="status" class="note">Select a tenant to see which Agents need attention.</p>
+    <div id="triage-list"></div>
+    <div class="inline"><button id="triage-first" type="button" class="secondary tiny" disabled>First page</button><button id="triage-next" type="button" class="secondary tiny" disabled>Next page</button></div>
+  </section>
   <form id="fleet-filter" class="inline"><label class="field">Agent ID prefix<input id="fleet-prefix" maxlength="128" autocomplete="off" placeholder="Filter by ID prefix"></label><label class="field">Enrollment<select id="fleet-enrollment"><option value="all">All enrollments</option><option value="active">Enrolled</option><option value="revoked">Revoked</option></select></label><label class="field">Latest recorded delivery<select id="fleet-delivery"><option value="all">All states</option><option value="issued">Issued / pending fetch</option><option value="delivered">Delivered / pending acknowledgement</option><option value="applied">Reported applied</option><option value="rejected">Rejected</option><option value="no_history">No history</option></select></label><button type="submit" class="secondary">Apply filters</button></form>
   <p id="fleet-status" role="status" class="note">Select a tenant to view enrolled Agents.</p>
   <div id="fleet-list" class="table-wrap"></div><div class="inline"><button id="fleet-first" type="button" class="secondary tiny">First page</button><button id="fleet-next" type="button" class="secondary tiny" disabled>Next page</button></div>
@@ -142,7 +160,8 @@
     /* ROLLOUT_PANEL */
     /* ENROLLMENT_PANEL */
     /* AGENT_HISTORY */
-    const selectPanels=id=>{agentHistory.clear();fleet.select(id);enrollment.select(id);rollout.select(id)};
+    /* FLEET_TRIAGE */
+    const selectPanels=id=>{agentHistory.clear();fleetTriage.select(id);fleet.select(id);enrollment.select(id);rollout.select(id)};
     $("lock-console").addEventListener("click",()=>{adminToken="";currentAdmin=null;enrollment.clear();location.replace("/admin")});
     const applyRole=()=>{const role=currentAdmin.role;document.body.classList.remove("role-owner","role-operator","role-viewer");document.body.classList.add("role-"+role);$("current-admin").textContent=currentAdmin.admin_name+" · "+role;$("role-display").textContent=role};
     const renderTenants=()=>{const q=$("tenant-search").value.trim().toLowerCase(),shown=tenants.filter(t=>!q||t.name.toLowerCase().includes(q)||t.id.toLowerCase().includes(q));$("tenant-total").textContent=tenants.length;$("tenant-active").textContent=tenants.filter(t=>t.active).length;$("tenant-suspended").textContent=tenants.filter(t=>!t.active).length;const list=$("tenant-list");list.replaceChildren();if(!shown.length){list.append(make("p",q?"No tenants match this search.":"No tenants yet.","empty"));return}shown.forEach(t=>{const b=make("button",undefined,"tenant "+(t.active?"active":"inactive")+(selectedTenant?.id===t.id?" selected":""));b.append(make("span",t.name),make("small",t.id));b.addEventListener("click",()=>selectTenant(t));list.append(b)})};

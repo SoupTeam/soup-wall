@@ -339,6 +339,12 @@ enum McpCommands {
         #[command(subcommand)]
         command: agentfw::mcp::profile_author::Command,
     },
+    /// Offline review of an original MCP tools/list schema upgrade (SOU-204).
+    /// Never accepts or installs a schema, grants permission, edits a profile,
+    /// starts a server or uses the network. Exit 0 byte-identical with no
+    /// finding, 5 review required (including declaration-only changes),
+    /// 2 invalid input, 3 input I/O, 4 output refused.
+    McpSchemaUpgrade(Box<agentfw::mcp::schema_upgrade::Args>),
     /// Read-only preview for the separately installed constrained replacement.
     ReplaceFilePreview {
         #[arg(long)]
@@ -1059,6 +1065,9 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
         }
         Cmd::Pilot(PilotCommands::PilotBudget(args)) => agentfw::pilot_budget::inspect(*args),
         Cmd::Pilot(PilotCommands::PilotApproval(args)) => agentfw::pilot_approval::operator(*args),
+        Cmd::Mcp(McpCommands::McpSchemaUpgrade(args)) => {
+            std::process::exit(agentfw::mcp::schema_upgrade::run_cli(*args))
+        }
         Cmd::Mcp(McpCommands::McpProfile { home, command }) => {
             let home = match home {
                 Some(h) => h,

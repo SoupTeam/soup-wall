@@ -1,0 +1,99 @@
+{
+  "backend": "postgres",
+  "binaries": {
+    "agentfw": "0bf1f6e150566b2722f3250d81a0524b4388bbcf440cd9cf299f96bd9521ec37",
+    "llm-firewall": "b9db00b1f77d99190876031002707267d42e8e6c086bdb056e252424feb64881"
+  },
+  "checks": {
+    "agent-api-fetch": true,
+    "agent-api-rejection": true,
+    "agent-credential-401": true,
+    "bounded-universe-pages-match-counts": true,
+    "browser-ack-oldest-sort": true,
+    "browser-bounded-universe-wording": true,
+    "browser-counts-match-projection": true,
+    "browser-denominator-and-no-health-claim": true,
+    "browser-filter-rejected": true,
+    "browser-no-recorded-problem-is-not-health": true,
+    "browser-no-writes-url-or-storage": true,
+    "browser-old-acknowledgement-historical": true,
+    "browser-operator-after-restart": true,
+    "browser-outside-agent-not-listed": true,
+    "browser-owner-after-restart": true,
+    "browser-prefix-all-outcomes": true,
+    "browser-second-page": true,
+    "browser-viewer-after-restart": true,
+    "concurrent-ack-recorded": true,
+    "concurrent-ack-reflected": true,
+    "deep-link-history": true,
+    "deep-link-rollout": true,
+    "invalid-queries-400": true,
+    "narrow-no-horizontal-overflow": true,
+    "no-session-401": true,
+    "outside-agent-applied": true,
+    "post-not-a-mutation": true,
+    "postgres-explicit-migration": true,
+    "projection-counts": true,
+    "projection-flags": true,
+    "projection-group-links": true,
+    "projection-no-private-fields": true,
+    "projection-unknown-liveness": true,
+    "read-operator": true,
+    "read-owner": true,
+    "read-viewer": true,
+    "stale-page-after-tenant-switch-discarded": true,
+    "tenant-isolation": true,
+    "triage-changed-nothing": true,
+    "unavailable-console-clears": true,
+    "unknown-tenant-404": true
+  },
+  "config_sha256": {
+    "console": "1d92adc73a6636bef04d009d1d6898655472cdc40d56587ee2cb8ad31275ddf5"
+  },
+  "format": "sw-console-fleet-triage-acceptance/1",
+  "postgres": {
+    "listen": "127.0.0.1",
+    "server": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
+    "tls": "sslmode=require with an owned CA"
+  },
+  "scope": "one disposable private Linux deployment; synthetic tenants and Agent IDs; recorded Console evidence only, not liveness, production, multi-host or runtime attestation",
+  "snapshots": {
+    "bounded_universe": [
+      {
+        "complete": false,
+        "counted_agents": 10000,
+        "matching": 0
+      },
+      {
+        "complete": false,
+        "counted_agents": 10000,
+        "matching": 0
+      },
+      {
+        "complete": false,
+        "counted_agents": 10000,
+        "matching": 0
+      }
+    ],
+    "counts": {
+      "attention": 38,
+      "complete": true,
+      "counted_agents": 39,
+      "incomplete_history": 1,
+      "matching": 39,
+      "mismatch": 1,
+      "no_ack": 3,
+      "no_history": 32,
+      "no_recorded_problem": 1,
+      "pending": 3,
+      "rejected": 1,
+      "revoked": 1,
+      "scan_limit": 10000,
+      "stale_ack": 1
+    }
+  },
+  "source_commit": "a164e61293efd92831785ee6906d113cd5960aca",
+  "source_dirty": false,
+  "source_tree": "adb8087c4023c317e3739a1cccd52cbb8d409d31",
+  "status": "passed"
+}

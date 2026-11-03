@@ -1,0 +1,190 @@
+{
+  "after_raw_sha256": "5a4dc4156e1a46eb69fd5b64150b00872545e61545a04b54f2bcb4809313fcfe",
+  "analysis_mode": "declaration_bound",
+  "before_raw_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+  "format": "sw-mcp/schema-upgrade-review-pack/1",
+  "generation": {
+    "complete": true,
+    "omitted": 0,
+    "records": 5
+  },
+  "label_definitions": {
+    "contradiction": "the identified contradiction with the cited declaration, or null",
+    "declaration_refs": "relevance and traceability only; a reference alone never makes a record adverse",
+    "human_approval": "none; records require operator review",
+    "runtime_enforcement": "never observed by this analyzer",
+    "schema_validity": "observed verdict of the runtime input validator on the after schema",
+    "semantic_expectation": "proposal: adverse_under_current_declaration (only with a stated contradiction of the cited declaration), behavior_change_vs_before_schema (concrete schema change), unknown_requires_manual_review (meaning not established by declarations), exercise_only, rejected_by_schema, unknown (unsupported/unconstructible), not_applicable",
+    "semantic_safety": "never established by schema validity"
+  },
+  "limits": {
+    "max_array_items": 4,
+    "max_build_depth": 8,
+    "max_example_bytes": 4096,
+    "max_records": 512,
+    "max_records_per_finding": 4,
+    "max_string_chars": 64
+  },
+  "records": [
+    {
+      "argument_pointer": null,
+      "arguments": null,
+      "check_category": "manual_semantic_review",
+      "declaration_refs": [],
+      "finding_ids": [
+        "F-1c6556dd365973dd"
+      ],
+      "finding_kind": "schema_outside_runtime_subset",
+      "finding_pointer": "/inputSchema",
+      "human_approval": "none",
+      "id": "E-a195062437ab0a3e",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "Construct outside the supported analysis subset; the analyzer neither interprets nor exercises it.",
+      "record_type": "unsupported_case",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [],
+        "note": "this finding cites no current declaration"
+      },
+      "semantic_expectation": "unknown",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#schema_outside_runtime_subset/manual_semantic_review",
+      "status": "proposal_for_human_review",
+      "tool": "git_status"
+    },
+    {
+      "argument_pointer": null,
+      "arguments": null,
+      "check_category": "re_review_declaration",
+      "declaration_refs": [
+        "registry:tools[0]"
+      ],
+      "finding_ids": [
+        "F-cf20934a1e178b1b"
+      ],
+      "finding_kind": "declaration_binding_stale",
+      "finding_pointer": "/inputSchema",
+      "human_approval": "none",
+      "id": "E-875996c0928bd008",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "A new declaration must be reviewed for the new exact identity before any admission.",
+      "record_type": "review_item",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [
+          "registry:tools[0]"
+        ],
+        "note": "declaration cited for relevance and traceability; no contradiction with it was identified"
+      },
+      "semantic_expectation": "not_applicable",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#declaration_binding_stale/re_review_declaration",
+      "status": "proposal_for_human_review",
+      "tool": "git_status"
+    },
+    {
+      "argument_pointer": "",
+      "arguments": null,
+      "check_category": "manual_semantic_review",
+      "declaration_refs": [],
+      "finding_ids": [
+        "F-91c38ad5c99e4dd5"
+      ],
+      "finding_kind": "unsupported_construct_changed",
+      "finding_pointer": "/inputSchema/$defs",
+      "human_approval": "none",
+      "id": "E-494c7fca23844caf",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "Construct outside the supported analysis subset; the analyzer neither interprets nor exercises it.",
+      "record_type": "unsupported_case",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [],
+        "note": "this finding cites no current declaration"
+      },
+      "semantic_expectation": "unknown",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#unsupported_construct_changed/manual_semantic_review",
+      "status": "proposal_for_human_review",
+      "tool": "git_status"
+    },
+    {
+      "argument_pointer": "/repo_path",
+      "arguments": null,
+      "check_category": "manual_semantic_review",
+      "declaration_refs": [],
+      "finding_ids": [
+        "F-c506b45edd42abc4"
+      ],
+      "finding_kind": "unsupported_construct_changed",
+      "finding_pointer": "/inputSchema/properties/repo_path/$ref",
+      "human_approval": "none",
+      "id": "E-9759d291be6416f9",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "Construct outside the supported analysis subset; the analyzer neither interprets nor exercises it.",
+      "record_type": "unsupported_case",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [],
+        "note": "this finding cites no current declaration"
+      },
+      "semantic_expectation": "unknown",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#unsupported_construct_changed/manual_semantic_review",
+      "status": "proposal_for_human_review",
+      "tool": "git_status"
+    },
+    {
+      "argument_pointer": "/repo_path",
+      "arguments": null,
+      "check_category": "base_invocation",
+      "declaration_refs": [],
+      "finding_ids": [
+        "F-c971418141002a7d"
+      ],
+      "finding_kind": "type_changed",
+      "finding_pointer": "/inputSchema/properties/repo_path/type",
+      "human_approval": "none",
+      "id": "E-dd0af45b147f0b7f",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "No minimal valid invocation within bounds: type is not a single supported type.",
+      "record_type": "unconstructible",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [],
+        "note": "this finding cites no current declaration"
+      },
+      "semantic_expectation": "unknown",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#type_changed/base_invocation",
+      "status": "proposal_for_human_review",
+      "tool": "git_status"
+    }
+  ],
+  "report_format": "sw-mcp/schema-upgrade-report/1",
+  "schema_validity_basis": "agentfw::mcp::input::InputSchema::read_selected(after inputSchema).validate(arguments); selected-profile objects are closed",
+  "status": "proposal_for_human_review",
+  "these_records_are_not": [
+    "gold_labels",
+    "training_data",
+    "human_approvals",
+    "runtime_permission",
+    "evidence_of_observed_runtime_enforcement",
+    "semantic_safety_determinations"
+  ]
+}

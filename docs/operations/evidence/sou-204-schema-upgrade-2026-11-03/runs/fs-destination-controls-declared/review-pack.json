@@ -1,0 +1,593 @@
+{
+  "after_raw_sha256": "eb0095c7b71d19694c2af0ad1d53013c107229f883abb68f7830a6d25d26b881",
+  "analysis_mode": "declaration_bound",
+  "before_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+  "format": "sw-mcp/schema-upgrade-review-pack/1",
+  "generation": {
+    "complete": true,
+    "omitted": 0,
+    "records": 14
+  },
+  "label_definitions": {
+    "contradiction": "the identified contradiction with the cited declaration, or null",
+    "declaration_refs": "relevance and traceability only; a reference alone never makes a record adverse",
+    "human_approval": "none; records require operator review",
+    "runtime_enforcement": "never observed by this analyzer",
+    "schema_validity": "observed verdict of the runtime input validator on the after schema",
+    "semantic_expectation": "proposal: adverse_under_current_declaration (only with a stated contradiction of the cited declaration), behavior_change_vs_before_schema (concrete schema change), unknown_requires_manual_review (meaning not established by declarations), exercise_only, rejected_by_schema, unknown (unsupported/unconstructible), not_applicable",
+    "semantic_safety": "never established by schema validity"
+  },
+  "limits": {
+    "max_array_items": 4,
+    "max_build_depth": 8,
+    "max_example_bytes": 4096,
+    "max_records": 512,
+    "max_records_per_finding": 4,
+    "max_string_chars": 64
+  },
+  "records": [
+    {
+      "argument_pointer": null,
+      "arguments": null,
+      "check_category": "manual_semantic_review",
+      "declaration_refs": [],
+      "finding_ids": [
+        "F-980ae5b8abca9e82"
+      ],
+      "finding_kind": "schema_outside_runtime_subset",
+      "finding_pointer": "/inputSchema",
+      "human_approval": "none",
+      "id": "E-9e18f3a552ec109b",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "Construct outside the supported analysis subset; the analyzer neither interprets nor exercises it.",
+      "record_type": "unsupported_case",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [],
+        "note": "this finding cites no current declaration"
+      },
+      "semantic_expectation": "unknown",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#schema_outside_runtime_subset/manual_semantic_review",
+      "status": "proposal_for_human_review",
+      "tool": "list_directory"
+    },
+    {
+      "argument_pointer": null,
+      "arguments": null,
+      "check_category": "re_review_declaration",
+      "declaration_refs": [
+        "registry:tools[7]"
+      ],
+      "finding_ids": [
+        "F-d5f2a40308991921"
+      ],
+      "finding_kind": "declaration_binding_stale",
+      "finding_pointer": "/inputSchema",
+      "human_approval": "none",
+      "id": "E-9f1d4b13939e6be0",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "A new declaration must be reviewed for the new exact identity before any admission.",
+      "record_type": "review_item",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [
+          "registry:tools[7]"
+        ],
+        "note": "declaration cited for relevance and traceability; no contradiction with it was identified"
+      },
+      "semantic_expectation": "not_applicable",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#declaration_binding_stale/re_review_declaration",
+      "status": "proposal_for_human_review",
+      "tool": "list_directory"
+    },
+    {
+      "argument_pointer": "/path",
+      "arguments": null,
+      "check_category": "manual_semantic_review",
+      "declaration_refs": [],
+      "finding_ids": [
+        "F-18898467745ad4ae"
+      ],
+      "finding_kind": "unsupported_construct_changed",
+      "finding_pointer": "/inputSchema/properties/path/format",
+      "human_approval": "none",
+      "id": "E-dc5dae160eafadf3",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "Construct outside the supported analysis subset; the analyzer neither interprets nor exercises it.",
+      "record_type": "unsupported_case",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [],
+        "note": "this finding cites no current declaration"
+      },
+      "semantic_expectation": "unknown",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#unsupported_construct_changed/manual_semantic_review",
+      "status": "proposal_for_human_review",
+      "tool": "list_directory"
+    },
+    {
+      "argument_pointer": null,
+      "arguments": null,
+      "check_category": "proposed_declaration_review",
+      "declaration_refs": [],
+      "finding_ids": [
+        "F-51da202b0cc7cbd0"
+      ],
+      "finding_kind": "declared_action_changed",
+      "finding_pointer": "",
+      "human_approval": "none",
+      "id": "E-ab08b607d6cdf00c",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "Proposed declaration differs from the current one; it is a draft and grants nothing.",
+      "record_type": "review_item",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [],
+        "note": "this finding cites no current declaration"
+      },
+      "semantic_expectation": "not_applicable",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#declared_action_changed/proposed_declaration_review",
+      "status": "proposal_for_human_review",
+      "tool": "move_file"
+    },
+    {
+      "argument_pointer": null,
+      "arguments": null,
+      "check_category": "proposed_declaration_review",
+      "declaration_refs": [],
+      "finding_ids": [
+        "F-40163e29ad41d726"
+      ],
+      "finding_kind": "declared_destination_changed",
+      "finding_pointer": "",
+      "human_approval": "none",
+      "id": "E-e3f64feba17c9249",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "Proposed declaration differs from the current one; it is a draft and grants nothing.",
+      "record_type": "review_item",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [],
+        "note": "this finding cites no current declaration"
+      },
+      "semantic_expectation": "not_applicable",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#declared_destination_changed/proposed_declaration_review",
+      "status": "proposal_for_human_review",
+      "tool": "move_file"
+    },
+    {
+      "argument_pointer": null,
+      "arguments": null,
+      "check_category": "re_review_declaration",
+      "declaration_refs": [
+        "registry:tools[10]"
+      ],
+      "finding_ids": [
+        "F-da5272f58b93ca9a"
+      ],
+      "finding_kind": "declaration_binding_stale",
+      "finding_pointer": "/inputSchema",
+      "human_approval": "none",
+      "id": "E-e380dca299bb828e",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "A new declaration must be reviewed for the new exact identity before any admission.",
+      "record_type": "review_item",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [
+          "registry:tools[10]"
+        ],
+        "note": "declaration cited for relevance and traceability; no contradiction with it was identified"
+      },
+      "semantic_expectation": "not_applicable",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#declaration_binding_stale/re_review_declaration",
+      "status": "proposal_for_human_review",
+      "tool": "move_file"
+    },
+    {
+      "argument_pointer": "/destination",
+      "arguments": {
+        "destination": [
+          "sw-review-destination-1",
+          "sw-review-destination-2"
+        ],
+        "source": "sw-review-placeholder"
+      },
+      "check_category": "multiple_values_through_declared_selector",
+      "contradiction": "registry:tools[10] declares the destination selector /destination against a single value in the before schema; the after schema admits several values through that one selector",
+      "declaration_refs": [
+        "registry:tools[10]"
+      ],
+      "finding_ids": [
+        "F-7d886eca460f07f5"
+      ],
+      "finding_kind": "declared_selector_target_changed",
+      "finding_pointer": "/inputSchema/properties/destination",
+      "human_approval": "none",
+      "id": "E-378e7391db071bc0",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement.",
+        "String values derived from 'sw-review-placeholder' are schema-shaped placeholders without meaning; numbers default to 0 and booleans to false.",
+        "schema_valid/schema_invalid is the observed result of the selected-profile runtime validator on the after schema; it says nothing about server behavior or policy outcome.",
+        "Semantic review must use the actual upstream implementation and the operator's declarations."
+      ],
+      "rationale": "The declared selector now addresses an array; several distinct values can travel through one declared resource/destination.",
+      "record_type": "invocation_example",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "schema_valid",
+      "semantic_basis": {
+        "declarations": [
+          "registry:tools[10]"
+        ],
+        "note": "the stated contradiction is with the cited current declaration, not with names or descriptions"
+      },
+      "semantic_expectation": "adverse_under_current_declaration",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#declared_selector_target_changed/multiple_values_through_declared_selector",
+      "status": "proposal_for_human_review",
+      "tool": "move_file",
+      "value_notes": [
+        {
+          "argument_pointer": "/destination",
+          "note": "declared selector: operator must substitute an in-scope value; the analyzer knows no valid resource or destination"
+        }
+      ]
+    },
+    {
+      "argument_pointer": "/destination",
+      "arguments": {
+        "destination": "sw-review-placeholder",
+        "source": "sw-review-placeholder"
+      },
+      "check_category": "previous_shape_at_declared_selector",
+      "contradiction": null,
+      "declaration_refs": [
+        "registry:tools[10]"
+      ],
+      "finding_ids": [
+        "F-7d886eca460f07f5"
+      ],
+      "finding_kind": "declared_selector_target_changed",
+      "finding_pointer": "/inputSchema/properties/destination",
+      "human_approval": "none",
+      "id": "E-d1db2d9a29af2ccd",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement.",
+        "String values derived from 'sw-review-placeholder' are schema-shaped placeholders without meaning; numbers default to 0 and booleans to false.",
+        "schema_valid/schema_invalid is the observed result of the selected-profile runtime validator on the after schema; it says nothing about server behavior or policy outcome.",
+        "Semantic review must use the actual upstream implementation and the operator's declarations."
+      ],
+      "rationale": "Supplies the declared selector in its before-schema shape; the observed validity shows whether the declared form is still admitted.",
+      "record_type": "invocation_example",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "schema_invalid",
+      "semantic_basis": {
+        "declarations": [
+          "registry:tools[10]"
+        ],
+        "note": "declaration cited for relevance and traceability; no contradiction with it was identified"
+      },
+      "semantic_expectation": "rejected_by_schema",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#declared_selector_target_changed/previous_shape_at_declared_selector",
+      "status": "proposal_for_human_review",
+      "tool": "move_file",
+      "value_notes": [
+        {
+          "argument_pointer": "/destination",
+          "note": "declared selector: operator must substitute an in-scope value; the analyzer knows no valid resource or destination"
+        }
+      ]
+    },
+    {
+      "argument_pointer": "/destination",
+      "arguments": null,
+      "check_category": "manual_semantic_review",
+      "declaration_refs": [
+        "registry:tools[10]"
+      ],
+      "finding_ids": [
+        "F-fa6bc6c3b6009710"
+      ],
+      "finding_kind": "items_changed",
+      "finding_pointer": "/inputSchema/properties/destination/items",
+      "human_approval": "none",
+      "id": "E-c71efb3405754e0b",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "No bounded invocation exercises this change in isolation.",
+      "record_type": "review_item",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [
+          "registry:tools[10]"
+        ],
+        "note": "declaration cited for relevance and traceability; no contradiction with it was identified"
+      },
+      "semantic_expectation": "not_applicable",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#items_changed/manual_semantic_review",
+      "status": "proposal_for_human_review",
+      "tool": "move_file"
+    },
+    {
+      "argument_pointer": "/destination",
+      "arguments": {
+        "destination": [],
+        "source": "sw-review-placeholder"
+      },
+      "check_category": "tightened_bound_edge",
+      "contradiction": null,
+      "declaration_refs": [
+        "registry:tools[10]"
+      ],
+      "finding_ids": [
+        "F-60c19a6fe84ec92b"
+      ],
+      "finding_kind": "constraint_changed",
+      "finding_pointer": "/inputSchema/properties/destination/minItems",
+      "human_approval": "none",
+      "id": "E-99aab5545de0ee72",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement.",
+        "String values derived from 'sw-review-placeholder' are schema-shaped placeholders without meaning; numbers default to 0 and booleans to false.",
+        "schema_valid/schema_invalid is the observed result of the selected-profile runtime validator on the after schema; it says nothing about server behavior or policy outcome.",
+        "Semantic review must use the actual upstream implementation and the operator's declarations."
+      ],
+      "rationale": "Value at the changed bound edge.",
+      "record_type": "invocation_example",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "schema_invalid",
+      "semantic_basis": {
+        "declarations": [
+          "registry:tools[10]"
+        ],
+        "note": "declaration cited for relevance and traceability; no contradiction with it was identified"
+      },
+      "semantic_expectation": "rejected_by_schema",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#constraint_changed/tightened_bound_edge",
+      "status": "proposal_for_human_review",
+      "tool": "move_file",
+      "value_notes": [
+        {
+          "argument_pointer": "/destination",
+          "note": "declared selector: operator must substitute an in-scope value; the analyzer knows no valid resource or destination"
+        }
+      ]
+    },
+    {
+      "argument_pointer": "/destination",
+      "arguments": {
+        "destination": [
+          "sw-review-placeholder"
+        ],
+        "source": "sw-review-placeholder"
+      },
+      "check_category": "changed_value_domain",
+      "contradiction": null,
+      "declaration_refs": [
+        "registry:tools[10]"
+      ],
+      "finding_ids": [
+        "F-3415499b70708bb0"
+      ],
+      "finding_kind": "type_changed",
+      "finding_pointer": "/inputSchema/properties/destination/type",
+      "human_approval": "none",
+      "id": "E-2d20328ccc4a5bb8",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement.",
+        "String values derived from 'sw-review-placeholder' are schema-shaped placeholders without meaning; numbers default to 0 and booleans to false.",
+        "schema_valid/schema_invalid is the observed result of the selected-profile runtime validator on the after schema; it says nothing about server behavior or policy outcome.",
+        "Semantic review must use the actual upstream implementation and the operator's declarations."
+      ],
+      "rationale": "Uses a value admitted by the changed after schema.",
+      "record_type": "invocation_example",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "schema_valid",
+      "semantic_basis": {
+        "declarations": [
+          "registry:tools[10]"
+        ],
+        "note": "declaration cited for relevance and traceability; no contradiction with it was identified"
+      },
+      "semantic_expectation": "behavior_change_vs_before_schema",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#type_changed/changed_value_domain",
+      "status": "proposal_for_human_review",
+      "tool": "move_file",
+      "value_notes": [
+        {
+          "argument_pointer": "/destination",
+          "note": "declared selector: operator must substitute an in-scope value; the analyzer knows no valid resource or destination"
+        }
+      ]
+    },
+    {
+      "argument_pointer": "/destination",
+      "arguments": {
+        "destination": "sw-review-placeholder",
+        "source": "sw-review-placeholder"
+      },
+      "check_category": "previous_value_domain",
+      "contradiction": null,
+      "declaration_refs": [
+        "registry:tools[10]"
+      ],
+      "finding_ids": [
+        "F-3415499b70708bb0"
+      ],
+      "finding_kind": "type_changed",
+      "finding_pointer": "/inputSchema/properties/destination/type",
+      "human_approval": "none",
+      "id": "E-83d1300a85204d85",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement.",
+        "String values derived from 'sw-review-placeholder' are schema-shaped placeholders without meaning; numbers default to 0 and booleans to false.",
+        "schema_valid/schema_invalid is the observed result of the selected-profile runtime validator on the after schema; it says nothing about server behavior or policy outcome.",
+        "Semantic review must use the actual upstream implementation and the operator's declarations."
+      ],
+      "rationale": "Uses a value shaped by the before schema; the observed validity shows whether it is still admitted.",
+      "record_type": "invocation_example",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "schema_invalid",
+      "semantic_basis": {
+        "declarations": [
+          "registry:tools[10]"
+        ],
+        "note": "declaration cited for relevance and traceability; no contradiction with it was identified"
+      },
+      "semantic_expectation": "rejected_by_schema",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#type_changed/previous_value_domain",
+      "status": "proposal_for_human_review",
+      "tool": "move_file",
+      "value_notes": [
+        {
+          "argument_pointer": "/destination",
+          "note": "declared selector: operator must substitute an in-scope value; the analyzer knows no valid resource or destination"
+        }
+      ]
+    },
+    {
+      "argument_pointer": "/options",
+      "arguments": {
+        "destination": [
+          "sw-review-placeholder"
+        ],
+        "options": {
+          "notify": {
+            "destination": "sw-review-placeholder"
+          }
+        },
+        "source": "sw-review-placeholder"
+      },
+      "check_category": "field_outside_declared_selectors",
+      "contradiction": null,
+      "declaration_refs": [
+        "registry:tools[10]"
+      ],
+      "finding_ids": [
+        "F-18cd62d51502c59f"
+      ],
+      "finding_kind": "field_added",
+      "finding_pointer": "/inputSchema/properties/options",
+      "human_approval": "none",
+      "id": "E-e2c20d949c303503",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement.",
+        "String values derived from 'sw-review-placeholder' are schema-shaped placeholders without meaning; numbers default to 0 and booleans to false.",
+        "schema_valid/schema_invalid is the observed result of the selected-profile runtime validator on the after schema; it says nothing about server behavior or policy outcome.",
+        "Semantic review must use the actual upstream implementation and the operator's declarations."
+      ],
+      "rationale": "Populates the new field with a schema-shaped value. Its meaning is unknown to the analyzer and must be reviewed against the implementation.",
+      "record_type": "invocation_example",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "schema_valid",
+      "semantic_basis": {
+        "declarations": [
+          "registry:tools[10]"
+        ],
+        "note": "declaration cited for relevance and traceability; no contradiction with it was identified"
+      },
+      "semantic_expectation": "unknown_requires_manual_review",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#field_added/field_outside_declared_selectors",
+      "status": "proposal_for_human_review",
+      "tool": "move_file",
+      "value_notes": [
+        {
+          "argument_pointer": "/destination",
+          "note": "declared selector: operator must substitute an in-scope value; the analyzer knows no valid resource or destination"
+        }
+      ]
+    },
+    {
+      "argument_pointer": "/options",
+      "arguments": {
+        "destination": [
+          "sw-review-placeholder"
+        ],
+        "options": "sw-review-wrong-type",
+        "source": "sw-review-placeholder"
+      },
+      "check_category": "new_field_type_rejection",
+      "contradiction": null,
+      "declaration_refs": [
+        "registry:tools[10]"
+      ],
+      "finding_ids": [
+        "F-18cd62d51502c59f"
+      ],
+      "finding_kind": "field_added",
+      "finding_pointer": "/inputSchema/properties/options",
+      "human_approval": "none",
+      "id": "E-66b407f7c5368275",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement.",
+        "String values derived from 'sw-review-placeholder' are schema-shaped placeholders without meaning; numbers default to 0 and booleans to false.",
+        "schema_valid/schema_invalid is the observed result of the selected-profile runtime validator on the after schema; it says nothing about server behavior or policy outcome.",
+        "Semantic review must use the actual upstream implementation and the operator's declarations."
+      ],
+      "rationale": "Supplies a value of the wrong JSON type for the new field.",
+      "record_type": "invocation_example",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "schema_invalid",
+      "semantic_basis": {
+        "declarations": [
+          "registry:tools[10]"
+        ],
+        "note": "declaration cited for relevance and traceability; no contradiction with it was identified"
+      },
+      "semantic_expectation": "rejected_by_schema",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#field_added/new_field_type_rejection",
+      "status": "proposal_for_human_review",
+      "tool": "move_file",
+      "value_notes": [
+        {
+          "argument_pointer": "/destination",
+          "note": "declared selector: operator must substitute an in-scope value; the analyzer knows no valid resource or destination"
+        }
+      ]
+    }
+  ],
+  "report_format": "sw-mcp/schema-upgrade-report/1",
+  "schema_validity_basis": "agentfw::mcp::input::InputSchema::read_selected(after inputSchema).validate(arguments); selected-profile objects are closed",
+  "status": "proposal_for_human_review",
+  "these_records_are_not": [
+    "gold_labels",
+    "training_data",
+    "human_approvals",
+    "runtime_permission",
+    "evidence_of_observed_runtime_enforcement",
+    "semantic_safety_determinations"
+  ]
+}

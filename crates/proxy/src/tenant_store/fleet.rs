@@ -121,15 +121,18 @@ pub struct FleetDetail {
     pub deployments: Vec<DeploymentRecord>,
     pub next_before_sequence: Option<String>,
 }
+/// Latest issued (`d`) and latest reported applied (`a`) deployment per
+/// enrollment `e`; shared with the triage projection.
+pub(super) const JOINS: &str = "LEFT JOIN managed_agent_deployments d ON d.tenant_id=e.tenant_id AND d.agent_id=e.agent_id
+        AND d.deployment_sequence=(SELECT MAX(x.deployment_sequence) FROM managed_agent_deployments x WHERE x.tenant_id=e.tenant_id AND x.agent_id=e.agent_id)
+        LEFT JOIN managed_agent_deployments a ON a.tenant_id=e.tenant_id AND a.agent_id=e.agent_id
+        AND a.deployment_sequence=(SELECT MAX(x.deployment_sequence) FROM managed_agent_deployments x WHERE x.tenant_id=e.tenant_id AND x.agent_id=e.agent_id AND x.status='applied' AND x.applied_at_unix IS NOT NULL)";
 // Every join includes BOTH identifiers. No query selects token_hash, bundle_json,
 // policy_yaml, credential generation, signing keys or filesystem paths.
 pub(super) fn summary_sql(with_deployments: bool, detail: bool) -> String {
     let columns = "d.deployment_sequence,d.revision,d.policy_sha256,d.action,d.status,d.issued_at_unix,d.applied_at_unix,
                    a.deployment_sequence,a.revision,a.policy_sha256,a.action,a.status,a.issued_at_unix,a.applied_at_unix";
-    let joins = "LEFT JOIN managed_agent_deployments d ON d.tenant_id=e.tenant_id AND d.agent_id=e.agent_id
-        AND d.deployment_sequence=(SELECT MAX(x.deployment_sequence) FROM managed_agent_deployments x WHERE x.tenant_id=e.tenant_id AND x.agent_id=e.agent_id)
-        LEFT JOIN managed_agent_deployments a ON a.tenant_id=e.tenant_id AND a.agent_id=e.agent_id
-        AND a.deployment_sequence=(SELECT MAX(x.deployment_sequence) FROM managed_agent_deployments x WHERE x.tenant_id=e.tenant_id AND x.agent_id=e.agent_id AND x.status='applied' AND x.applied_at_unix IS NOT NULL)";
+    let joins = JOINS;
     let cols = if with_deployments {
         columns
     } else {

@@ -1,0 +1,31 @@
+MCP original-tool schema upgrade review (offline, non-authoritative)
+Format: sw-mcp/schema-upgrade-report/1
+
+NOTICE: This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process.
+SNAPSHOT-ONLY MODE: no current operator declarations were supplied. Semantic review is UNAVAILABLE; action, resource and destination effects are unknown. This is not a semantic upgrade review.
+
+before: file git-extreme-bound-before.json raw_sha256 fa0859610f6639f80fb943e92a56c70d029763480b52a0e3fc2b1887b0eb46b9 (11196 bytes, 12 tools, mcp/tools-list-response)
+        discovery_sha256 3ff3e9692b6858ddcf0037dcae1e45a0f401b1d899b38d7b44b8ce23a3da3a6b
+after : file upstream-tools-list.json raw_sha256 8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b (6022 bytes, 12 tools, mcp/tools-list-response)
+        discovery_sha256 0ebf2d0c147352d483aed19e6988749c8641a11258ac05a16e0a58639163489c
+before identity: NOT VERIFIED (no identity document supplied)
+current declarations: NONE SUPPLIED (semantics unknown)
+
+Outcome: review_required / review_required (exit 5)
+Snapshots byte-identical: false; declaration findings: 0
+Tools: before 12 after 12; added 0 removed 0 changed 1 unchanged 11
+Findings: 1 (inert metadata 0, review required 1, unsupported 0, declaration requalification 0)
+Coverage complete: false; review-pack records: 1
+New UNACCEPTED tool identities (1): git_status
+Accepted by this analyzer: nothing.
+
+Findings (tool / pointer / kind / nature):
+  [F-94f72c6ad4dfee30] git_status /inputSchema/properties/repo_path/maxLength constraint_changed review_required -> examples 1
+      before (untrusted): 18446744073709551615
+
+Coverage gaps:
+  - {"effect":"semantic review unavailable: action/resource/destination semantics unknown; no declared-selector findings or declaration-grounded examples","gap":"no_current_declarations","mode":"snapshot_only"}
+  - {"effect":"the before snapshot was not checked against an accepted identity document","gap":"before_identity_not_verified"}
+  - {"entries":20,"gap":"unsupported_constructs_present"}
+  - {"gap":"examples_not_constructed","records":1}
+Unsupported constructs reported: 20

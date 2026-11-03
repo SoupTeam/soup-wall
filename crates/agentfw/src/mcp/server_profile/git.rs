@@ -313,7 +313,8 @@ pub(crate) fn validate_repository_with_shallow(root: &Path, shallow: bool) -> an
         );
     }
     let config = contents(&git_root.join("config"))?;
-    validate_configuration(&config)?;
+    validate_configuration(&config)
+        .context(super::super::verified_git::PreparationReason::RepositoryConfiguration)?;
     fn walk(path: &Path, depth: usize, count: &mut usize) -> anyhow::Result<()> {
         ensure!(depth <= 32, "Git repository depth limit");
         let pin = open(path, true)?;
@@ -366,6 +367,29 @@ pub(crate) fn validate_repository_with_shallow(root: &Path, shallow: bool) -> an
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn sou157_fixture_autocrlf_is_rejected_by_default_profile() {
+        let bounded = b"[core]\nrepositoryformatversion = 0\nfilemode = true\nbare = false\nlogallrefupdates = true\n";
+        let mut original_fixture = bounded.to_vec();
+        original_fixture.extend_from_slice(b"autocrlf = false\n");
+        assert!(super::validate_configuration(&original_fixture)
+            .unwrap_err()
+            .to_string()
+            .contains("unsupported Git configuration"));
+        super::validate_configuration(bounded).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::create_dir(directory.path().join(".git")).unwrap();
+        let configuration = directory.path().join(".git/config");
+        std::fs::write(&configuration, &original_fixture).unwrap();
+        let failure = super::validate_repository(directory.path()).unwrap_err();
+        assert_eq!(
+            crate::mcp::verified_git::failure_reason(&failure),
+            "repository_configuration"
+        );
+        std::fs::write(configuration, bounded).unwrap();
+        super::validate_repository(directory.path()).unwrap();
+    }
+
     #[test]
     fn git_policy_inspects_hash_bearing_results_and_preserves_followup() {
         use soup_wall_agent::{

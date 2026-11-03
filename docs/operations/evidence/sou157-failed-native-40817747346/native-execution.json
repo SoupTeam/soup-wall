@@ -1,0 +1,92 @@
+{
+  "format": "sou155-native-execution/1",
+  "phase": "original-transport",
+  "status": "failed",
+  "source_commit": "0b6ee53f35e7304720c72863b943989ad26eecfa",
+  "model_calls": 0,
+  "cases": [
+    {
+      "case": "actual-original-useful-read",
+      "status": "passed",
+      "execution": {
+        "catalogue_sha256": "a4628a03f5d83f0d613a03b5243104ecdb90902bad26ce9ee08c07b89069441e",
+        "channel_generation_sha256": "e268be6f4c0680acfb122c047540d560dc56a07acb8ef6fd58417716d0a302ea",
+        "closure_sha256": "9f6e8878edefd8a25362e0ac2437fa3d879987dd88a5feb3713650d0a403ca22",
+        "contract": "sw-mcp/verified-original-execution/1",
+        "daemon_instance_id": "t_Jcw3vVEA4XHLdmFkjGcq3B73yTHlSKAahz2Ta0vFg",
+        "domain_witness": null,
+        "invocation_sha256": "8a7b47028395f3a9e17ff4f4f047cc7cb48896c656fe581256f37c388934598f",
+        "native_call_id": "Z9HAhewVkCgd0pKqZeJIckUMBXeIVDLAgTzLf-m_KZk",
+        "original_result_bytes": 188,
+        "original_result_sha256": "c935a9af3dc9e520572bc7745ae5c8654d1a564ef094c702d3823382890a7299",
+        "process_generation_sha256": "79712eb7286b85179362a1d7eed59256eec00996e1a3eae3ead47e54349f180d",
+        "session_epoch_sha256": "0b0d2fd55cefa5c50df0c7ce8a674c8e69355c0f963920f637aa4ebf286dbdf2"
+      }
+    }
+  ],
+  "acceptance_pass": false,
+  "startup_diagnostics": [],
+  "daemon_failures": [],
+  "formatter_classifications": [
+    {
+      "case_id": "shadow-50-False",
+      "unknown": false,
+      "verdict": "allow",
+      "read_only": true
+    },
+    {
+      "case_id": "shadow-50-True",
+      "unknown": false,
+      "verdict": "allow",
+      "read_only": true
+    },
+    {
+      "case_id": "shadow-200-False",
+      "unknown": false,
+      "verdict": "allow",
+      "read_only": true
+    },
+    {
+      "case_id": "shadow-200-True",
+      "unknown": false,
+      "verdict": "allow",
+      "read_only": true
+    },
+    {
+      "case_id": "shadow-201-False",
+      "unknown": true,
+      "verdict": "ask",
+      "read_only": true
+    }
+  ],
+  "diagnostic_codes": [
+    "mcp_budget_enforced",
+    "mcp_owner_active"
+  ],
+  "collector_exit_codes": [
+    null
+  ],
+  "failure_stack": [
+    {
+      "source": "scripts/ci/native-verified-execution.py",
+      "function": "main",
+      "line": 208
+    },
+    {
+      "source": "scripts/ci/formatter-shadow-controls.py",
+      "function": "exercise",
+      "line": 130
+    },
+    {
+      "source": "scripts/ci/formatter-shadow-controls.py",
+      "function": "require",
+      "line": 96
+    }
+  ],
+  "failure_location": {
+    "function": "require",
+    "line": 96
+  },
+  "reason": "shadow_preexecution_unknown_not_verified",
+  "owned_root_empty_final": true
+}

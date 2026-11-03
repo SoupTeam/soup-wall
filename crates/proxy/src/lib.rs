@@ -195,6 +195,10 @@ pub fn app(state: Shared) -> Router {
                 get(fleet_api::detail),
             )
             .route(
+                "/admin/v1/tenants/:tenant_id/agent-triage",
+                get(fleet_api::triage),
+            )
+            .route(
                 "/admin/v1/tenants/:tenant_id/agents",
                 post(managed_agent_api::enroll).get(managed_agent_api::list),
             )

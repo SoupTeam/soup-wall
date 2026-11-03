@@ -19,7 +19,8 @@ pub async fn dashboard() -> Response {
                 "/* ENROLLMENT_PANEL */",
                 include_str!("enrollment_panel.js"),
             )
-            .replace("/* AGENT_HISTORY */", include_str!("agent_history.js")),
+            .replace("/* AGENT_HISTORY */", include_str!("agent_history.js"))
+            .replace("/* FLEET_TRIAGE */", include_str!("fleet_triage.js")),
     )
     .into_response();
     let headers = response.headers_mut();

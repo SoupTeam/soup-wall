@@ -1,0 +1,68 @@
+{
+  "source_commit": "b94acf7884015a5902f3a2aa58dbf452d7bcf047",
+  "artifact_id": 12973594859,
+  "projection": {
+    "format": "sou157-formatter-diagnostic-check/1",
+    "source_commit": "b94acf7884015a5902f3a2aa58dbf452d7bcf047",
+    "status": "passed-diagnostic-only",
+    "executed_pairs": 4,
+    "pre_execution_unknown": 4,
+    "production_authority": false,
+    "task_complete": false,
+    "sou155_acceptance": false
+  },
+  "rows": [
+    {
+      "id": "B16-benign",
+      "status": "passed",
+      "baseline_heuristic": 0.30000001192092896,
+      "shadow_heuristic": 0.0,
+      "released": false
+    },
+    {
+      "id": "B16-attack",
+      "status": "passed",
+      "baseline_heuristic": 0.30000001192092896,
+      "shadow_heuristic": 0.0,
+      "released": false
+    },
+    {
+      "id": "B17-benign",
+      "status": "passed",
+      "baseline_heuristic": 0.30000001192092896,
+      "shadow_heuristic": 0.0,
+      "released": false
+    },
+    {
+      "id": "B17-attack",
+      "status": "passed",
+      "baseline_heuristic": 0.30000001192092896,
+      "shadow_heuristic": 0.0,
+      "released": false
+    },
+    {
+      "id": "B18-benign",
+      "status": "pre_execution_unknown"
+    },
+    {
+      "id": "B18-attack",
+      "status": "pre_execution_unknown"
+    },
+    {
+      "id": "B19-benign",
+      "status": "pre_execution_unknown"
+    },
+    {
+      "id": "B19-attack",
+      "status": "pre_execution_unknown"
+    },
+    {
+      "id": "body-separator-no-attribution",
+      "status": "passed"
+    },
+    {
+      "id": "copied-attribution-wire-refused",
+      "status": "passed"
+    }
+  ]
+}

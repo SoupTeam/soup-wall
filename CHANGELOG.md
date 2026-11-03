@@ -4,6 +4,17 @@ Changes to the public Soup Wall source distribution are recorded here. Release a
 
 ## Unreleased
 
+- Added `agentfw mcp-schema-upgrade` (SOU-204): an offline review of an original MCP
+  `tools/list` upgrade against the accepted before snapshot, its identity document and the
+  current operator registry or declarations, which are required (an explicit `--snapshot-only`
+  comparison is reported as having no semantic review). It reports per-tool/path findings (inert
+  metadata, review required, unsupported, declaration requalification), coverage gaps and
+  a bounded review pack whose example validity is checked with the runtime input validator,
+  as JSON, quoted formula-safe CSV, text and a review guide. Records separate observed schema
+  validity from proposed, declaration-grounded semantic expectations. It never accepts or installs
+  a schema, grants permission, edits a profile, starts a server or uses the network; every
+  changed after identity stays unaccepted.
+
 - Added `agentfw tool-preview` (SOU-174): a non-executing, non-authoritative preview
   of one supplied original tool-call frame through the installed, verified classifier
   package and the original profile validators. It reports package, interpreter and

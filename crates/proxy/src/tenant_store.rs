@@ -24,6 +24,7 @@ use tokio::sync::mpsc;
 
 mod agent_enrollment;
 pub mod fleet;
+pub mod fleet_triage;
 mod managed_async;
 mod managed_policy;
 pub use managed_policy::{

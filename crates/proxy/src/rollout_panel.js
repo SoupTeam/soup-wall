@@ -418,7 +418,18 @@ const rollout = (() => {
     } finally { if (generation === epoch) { busy = false; lock(); } }
   }
 
-  return { select(id) {
+  // Deep link from the triage overview: selects an existing group of this
+  // tenant exactly as the group menu does. Returns false when it is absent.
+  async function open(id, groupId) {
+    if (!id || id !== tenant) return false;
+    if (!groups.some(g => g.group_id === groupId)) { await loadGroups(); if (id !== tenant) return false; }
+    if (!groups.some(g => g.group_id === groupId)) return false;
+    $("rollout-group").value = groupId;
+    $("rollout-group").dispatchEvent(new Event("change"));
+    $("rollout-panel").scrollIntoView({ block: "start" });
+    return true;
+  }
+  return { open, select(id) {
     controller?.abort(); controller = new AbortController(); epoch++;
     tenant = id; group = null; busy = false; blocked = ""; groups = [];
     $("rollout-group").replaceChildren(); clearGroup();
