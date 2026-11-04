@@ -194,5 +194,17 @@
     "source_sha256": "ed1e33edb91db323575274349facdebea4ec3498dbf60d2a3a006d40e36da52b",
     "log_sha256": "499bfb1075387a45b015c5f271bb59afc727b63dbbd91f9b2389e42671f20599",
     "elapsed_seconds": 1.08
+  },
+  {
+    "label": "disabled-lifecycle",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo test --offline --locked -p llm-firewall --test managed_reconciliation && cargo clippy --offline --locked -p llm-firewall --all-targets -- -D warnings && cargo fmt --all --check"
+    ],
+    "exit_code": 0,
+    "source_sha256": "8de2a73c1749fb21d64e8ce8ada4898e45e1064831a1d15c4f48c2952d888e10",
+    "log_sha256": "aca258c358f7ea2237a27ba83d751ddc7af54a917160413c8e1bbe3f7a5b8e26",
+    "elapsed_seconds": 8.37
   }
 ]

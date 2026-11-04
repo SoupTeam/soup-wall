@@ -440,6 +440,11 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(&cfg.bind).await?;
     tracing::info!("Soup Wall Gateway listening on {}", cfg.bind);
+    if !cfg.rollout_reconciliation.enabled {
+        // Preserve the existing lifecycle when the opt-in worker is disabled.
+        axum::serve(listener, app(state)).await?;
+        return Ok(());
+    }
     let (stop, shutdown) = tokio::sync::watch::channel(false);
     let worker = state
         .tenant_store

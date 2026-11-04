@@ -56,3 +56,11 @@ individual successful/failed scenarios. Raw logs remain private.
 
 This final update changes evidence only. Maintainer-owned current-main Ready,
 security/admission and merge have not been performed by the author.
+
+The final compatibility review also caught unconditional Console signal-handler
+registration while reconciliation was disabled. It is now gated by the opt-in
+flag. A real-process regression holds an authenticated HTTP body open, sends
+SIGTERM and verifies the original disabled-mode signal exit, with child cleanup.
+All reconciliation controls, fmt and Clippy pass after this change. Qualification
+on this last runtime revision is recorded separately from the earlier bb091dd3
+proof above.

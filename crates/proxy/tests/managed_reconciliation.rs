@@ -520,3 +520,91 @@ fn reconciliation_configuration_is_explicit_and_bounded() {
     c.interval_seconds = 0;
     assert!(c.validate().is_err());
 }
+
+/// An unfinished authenticated request distinguishes default SIGTERM from a
+/// newly installed graceful-drain handler. Disabled reconciliation must retain
+/// the pre-existing signal lifecycle, even while HTTP input is still pending.
+#[cfg(unix)]
+#[test]
+fn disabled_worker_preserves_console_sigterm_lifecycle() {
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::{Command, Stdio};
+    use std::time::Instant;
+    struct Guard(std::process::Child);
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let reserved = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = reserved.local_addr().unwrap();
+    drop(reserved);
+    std::fs::write(
+        dir.path().join("firewall.yaml"),
+        format!(
+            "bind: '{address}'\ntenant_store:\n  enabled: true\n  database_path: console.sqlite\n"
+        ),
+    )
+    .unwrap();
+    let mut child = Guard(
+        Command::new(env!("CARGO_BIN_EXE_llm-firewall"))
+            .current_dir(dir.path())
+            .env_clear()
+            .env("LLM_FW_ADMIN_TOKEN", "disposable-signal-test-token")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Ok(mut connection) = TcpStream::connect_timeout(&address, Duration::from_millis(100))
+        {
+            connection
+                .set_read_timeout(Some(Duration::from_millis(100)))
+                .unwrap();
+            connection
+                .write_all(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+                .unwrap();
+            let mut bytes = [0; 64];
+            if let Ok(n) = connection.read(&mut bytes) {
+                if std::str::from_utf8(&bytes[..n])
+                    .unwrap_or("")
+                    .contains("200")
+                {
+                    break;
+                }
+            }
+        }
+        assert!(
+            Instant::now() < deadline,
+            "disposable Console did not become healthy"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    let mut pending = TcpStream::connect(address).unwrap();
+    pending.write_all(b"POST /admin/v1/tenants HTTP/1.1\r\nHost: localhost\r\nx-llm-firewall-admin-token: Bearer disposable-signal-test-token\r\nContent-Type: application/json\r\nContent-Length: 1000\r\n\r\n{").unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    assert!(Command::new("/bin/kill")
+        .args(["-TERM", &child.0.id().to_string()])
+        .status()
+        .unwrap()
+        .success());
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        if let Some(status) = child.0.try_wait().unwrap() {
+            assert_eq!(status.signal(), Some(15));
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "disabled worker installed a graceful-drain handler"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    drop(pending);
+}

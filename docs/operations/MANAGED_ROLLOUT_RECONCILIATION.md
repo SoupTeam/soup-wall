@@ -10,7 +10,8 @@ rollout_reconciliation:
   batch_size: 32
 ```
 
-Enable only with `tenant_store.enabled: true`. Intervals are 1–300 seconds;
+When disabled, no worker signal handler is installed; Console keeps its existing
+process lifecycle. Enable only with `tenant_store.enabled: true`. Intervals are 1–300 seconds;
 pages contain 1–100 plans. Startup scans immediately. Each tick reads one
 ordered keyset page across active tenants, freezes the current maximum key for
 each scan cycle, wraps after an empty page, and
