@@ -55,7 +55,15 @@ class FakeDocker:
                  "volumes": {n + "-data": {"name": "owned-test_" + n + "-data"} for n in ("postgres", "redis")}}
         if self.model_override:
             self.model_override(model)
+        for service in services.values():
+            service.setdefault("command", None)
+            service.setdefault("entrypoint", None)
         return model
+
+    @staticmethod
+    def defaults(name):
+        return {"Cmd": None if name == "firewall" else [name],
+                "Entrypoint": ["soup-wall-gateway"] if name == "firewall" else ["docker-entrypoint.sh"]}
 
     def image(self, name):
         if self.modern and name != "firewall":
@@ -73,12 +81,19 @@ class FakeDocker:
 
     def add_container(self, name):
         service = (self.current_model or self.model())["services"][name]
+        defaults = self.defaults(name)
+        entrypoint = service.get("entrypoint")
+        command = service.get("command")
+        if command is None and entrypoint is None:
+            command = defaults["Cmd"]
+        if entrypoint is None:
+            entrypoint = defaults["Entrypoint"]
         self.containers[name] = {
             "Id": ("b" if name == "postgres" else "c" if name == "redis" else "d") * 64,
             "Image": self.image(name),
             "Config": {"Image": GATEWAY if name == "firewall" else self.lock["images"][name]["image"],
                        "Env": [k + "=" + v for k, v in service.get("environment", {}).items()],
-                       "Cmd": None, "Entrypoint": None, "User": "",
+                       "Cmd": command, "Entrypoint": entrypoint, "User": "",
                        "Labels": {"com.docker.compose.project": "owned-test",
                                   "com.docker.compose.service": name,
                                   "com.docker.compose.oneoff": "False"}},
@@ -101,7 +116,7 @@ class FakeDocker:
         if args[:2] == ["image", "inspect"]:
             name = next((n for n, row in self.lock["images"].items() if row["image"] == args[-1]), "firewall")
             actual = {"Id": self.wrong_image if name == "postgres" and self.wrong_image else self.image(name),
-                      "Os": "linux", "Architecture": self.arch, "Config": {}}
+                      "Os": "linux", "Architecture": self.arch, "Config": self.defaults(name)}
             if self.modern:
                 actual["Descriptor"] = {"digest": self.image(name), "mediaType": next(iter(MODULE.INDEX_TYPES))}
                 if "--platform" in args:
@@ -173,6 +188,24 @@ class ProductionComposeControls(unittest.TestCase):
         for call in calls:
             self.assertIn("--no-build", call)
             self.assertEqual(call[call.index("--pull") + 1], "never")
+
+    def test_rendered_null_process_fields_inherit_verified_image_defaults(self):
+        self.closure().execute("start")
+        self.assertEqual(self.docker.containers["postgres"]["Config"]["Cmd"], ["postgres"])
+        self.assertEqual(self.docker.containers["redis"]["Config"]["Entrypoint"], ["docker-entrypoint.sh"])
+
+    def test_explicit_process_override_still_requires_exact_actual_values(self):
+        def override(model):
+            model["services"]["redis"].update(command=["owned-command"], entrypoint=["owned-entrypoint"])
+        self.docker.model_override = override
+        for field in ("Cmd", "Entrypoint"):
+            with self.subTest(field=field):
+                self.docker.containers.clear()
+                self.docker.add_container("redis")
+                self.docker.containers["redis"]["Config"][field] = ["unexpected-process"]
+                with self.assertRaisesRegex(MODULE.ClosureError, "container_process_or_environment_mismatch"):
+                    self.closure().execute("start")
+                self.assertEqual(self.docker.mutations(), [])
 
     def test_matching_digest_reference_with_wrong_local_image_id_refuses(self):
         self.docker.wrong_image = "sha256:" + "f" * 64

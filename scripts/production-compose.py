@@ -408,9 +408,17 @@ class ProductionCompose:
             defaults = self.image_defaults[name]
             expected_env = self._environment(defaults.get("Env", []))
             expected_env.update(service.get("environment", {}))
+            # Compose emits explicit nulls for inherited process defaults.
+            # A non-null entrypoint suppresses the image's default command.
+            entrypoint = service.get("entrypoint")
+            command = service.get("command")
+            if command is None and entrypoint is None:
+                command = defaults.get("Cmd")
+            if entrypoint is None:
+                entrypoint = defaults.get("Entrypoint")
             if (self._environment(config.get("Env", [])) != expected_env
-                    or config.get("Cmd") != service.get("command", defaults.get("Cmd"))
-                    or config.get("Entrypoint") != service.get("entrypoint", defaults.get("Entrypoint"))
+                    or config.get("Cmd") != command
+                    or config.get("Entrypoint") != entrypoint
                     or config.get("User", "") != service.get("user", defaults.get("User", ""))):
                 fail("container_process_or_environment_mismatch")
             self._verify_container_isolation(name, row)
