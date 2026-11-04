@@ -146,6 +146,62 @@ cargo test --locked -p agentfw --lib native::execution::tests
 
 ## Reproduce
 
+### Consumer lifecycle audit after review 5758340215
+
+Source inspected at `c6f266f287eede403a678bbe07d89247c4c949fa`. The existing
+interfaces expose the following concrete lifecycle boundaries.
+
+| Boundary | Existing implementation | Required connection for quarantine |
+| --- | --- | --- |
+| Original response consumption | `native/execution.rs`, `OriginalResult::consume` checks exact source bytes, call, epoch, runtime and deadline, then returns `Consumed` metadata | Capture owned full bytes and source/taint state at this successful consume boundary under bounded daemon storage |
+| Receiving process ownership | `pilot_launcher.rs` retains the `Child` returned by `cmd.spawn`, its PID and owned group until reap | Bind that retained process generation to the daemon's quarantine consumer through authenticated launcher state |
+| Admission withdrawal | `native/pilot_stop.rs`, `revoke_selected` spends exact authority digests under the session lock and retires their sessions | Serialize purpose spending and quarantine invalidation with this admission lock |
+| Active effect cleanup | `pilot_approval.rs`, `cleanup_waiter` revokes and waits for selected namespace cleanup, then launcher terminates/reaps its host group | Produce a daemon-verifiable completion bound to the exact consumer generation and quarantine record |
+| Final stopped observation | `pilot_approval.rs`, `finish(host_stopped)` checks current daemon, pending approvals and cleanup, then publishes a terminal run receipt | A terminal host requires a separately authenticated receiving lifecycle before any future handoff |
+| Retained context | `native.rs`, `retire_sessions_terminal` emits SessionEnd and ends epoch spans | Preserve required source/taint in the quarantined record before this terminal cleanup |
+
+The current stop path terminates the receiving host. The code has no operation
+that both proves all effects drained and leaves that same recipient alive in a
+restricted analysis state. The daemon also lacks a binding from its consumed
+response to the launcher's retained `Child`. A PID or server-channel string
+supplied by the operator cannot establish that connection.
+
+`mcp/native_child.rs` has a `DrainReport` whose completion covers its stderr
+worker. Its process-group cleanup documents the `setsid`/`setpgid` escape limit.
+Using that report as proof that every consumer effect ended would exceed its
+implemented scope. Selected filesystem/Git namespace cleanup has its own owner
+observations and must participate in the lifecycle proof.
+
+The proposed bounded sequence for interface review is below.
+
+1. Successful private consume creates a daemon-owned record containing full bytes,
+   source grant/call/epoch/policy identity and retained taint. Apply a fixed record
+   count and total byte cap, plus the original deadline. Capacity exhaustion or
+   incomplete source state produces refusal.
+2. Resolve the actual consumer from an authenticated launcher registration holding
+   the owned process generation. Missing registration keeps the record withheld.
+3. Atomically spend purpose intent and withdraw exact authority under the existing
+   admission lock. Release the lock before waiting for existing owners to clean up.
+4. Require selected namespace cleanup and launcher-owned process/group termination
+   observations. On timeout, substitution, consumer exit or daemon restart, make
+   the record terminal and reject future intent against it.
+5. Treat transfer as a new receiving lifecycle requiring explicit binding and
+   review. The current terminal-stop path reaches disposal. A useful handoff needs
+   an agreed restricted recipient lifecycle before implementation can proceed.
+
+The concrete interface decision is whether to extend the existing launcher with
+authenticated consumer registration plus a terminal drain acknowledgement, then
+introduce an explicitly bound restricted receiving lifecycle. This crosses the
+documented launcher/control interface boundary and needs review before wiring.
+An alternative accepted existing lifecycle entry point must supply the same proof.
+
+Outstanding runtime witnesses include an effect already running when withdrawal
+starts, a subsequent admission attempt, process substitution, consumer exit,
+parent transfer, daemon restart and stale/replayed intent. Each observation must
+bind the process generation and original response. The present source audit
+establishes the missing interfaces. The runtime lifecycle and useful handoff
+remain unimplemented, and the six refusal outcomes remain open.
+
 ### November 4 inert operator contract
 
 Following reviews 5756731817 and 5757316087, `analysis_purpose.rs` introduces
