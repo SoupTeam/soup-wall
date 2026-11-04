@@ -1031,3 +1031,17 @@ pub async fn resume_group_rollout(
         Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
     }
 }
+
+/// Read-only tenant-authorized diagnostics. GET never scans or advances plans.
+pub async fn reconciliation_status(
+    State(state): State<Shared>,
+    Path((tenant, group)): Path<(String, String)>,
+) -> Response {
+    let Some(db) = store(&state) else {
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Console storage unavailable",
+        );
+    };
+    Json(serde_json::json!({"configured": state.config.rollout_reconciliation.enabled, "status": db.reconciliation_status(&tenant, &group)})).into_response()
+}

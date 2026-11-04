@@ -74,6 +74,7 @@ pub struct TenantStore {
     audit_dispatcher: Option<TenantAuditDispatcher>,
     usage_failed_events: Arc<AtomicU64>,
     webhook_signing_key: Option<WebhookSigningKey>,
+    pub(crate) reconciliation: Arc<Mutex<crate::rollout_reconciliation::ReconciliationStatus>>,
 }
 
 // Readiness counters moved to `crate::control_plane`: the data plane reports its
@@ -2024,6 +2025,7 @@ impl TenantStore {
             audit_dispatcher: None,
             usage_failed_events: Arc::new(AtomicU64::new(0)),
             webhook_signing_key: None,
+            reconciliation: Default::default(),
         })
     }
 
@@ -2101,6 +2103,7 @@ impl TenantStore {
             audit_dispatcher: None,
             usage_failed_events: Arc::new(AtomicU64::new(0)),
             webhook_signing_key: None,
+            reconciliation: Default::default(),
         })
     }
 
@@ -2266,6 +2269,7 @@ impl TenantStore {
             audit_dispatcher: None,
             usage_failed_events: Arc::new(AtomicU64::new(0)),
             webhook_signing_key: None,
+            reconciliation: Default::default(),
         })
     }
 

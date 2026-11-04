@@ -79,6 +79,10 @@ fn validate_tenant_store(
     postgres_url: Option<&str>,
     require_admin_token: bool,
 ) -> anyhow::Result<()> {
+    cfg.rollout_reconciliation.validate()?;
+    if cfg.rollout_reconciliation.enabled && !cfg.tenant_store.enabled {
+        anyhow::bail!("rollout reconciliation requires tenant_store.enabled");
+    }
     let tenant_store = &cfg.tenant_store;
     if !tenant_store.enabled {
         return Ok(());
@@ -436,7 +440,42 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(&cfg.bind).await?;
     tracing::info!("Soup Wall Gateway listening on {}", cfg.bind);
-    axum::serve(listener, app(state)).await?;
+    let (stop, shutdown) = tokio::sync::watch::channel(false);
+    let worker = state
+        .tenant_store
+        .clone()
+        .filter(|_| cfg.rollout_reconciliation.enabled)
+        .map(|store| {
+            let config = cfg.rollout_reconciliation.clone();
+            tokio::spawn(async move { store.run_rollout_reconciliation(config, shutdown).await })
+        });
+    let shutdown_stop = stop.clone();
+    let result = axum::serve(listener, app(state))
+        .with_graceful_shutdown(async move {
+            let ctrl_c = async {
+                let _ = tokio::signal::ctrl_c().await;
+            };
+            #[cfg(unix)]
+            let terminate = async {
+                if let Ok(mut signal) =
+                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                {
+                    signal.recv().await;
+                } else {
+                    std::future::pending::<()>().await;
+                }
+            };
+            #[cfg(not(unix))]
+            let terminate = std::future::pending::<()>();
+            tokio::select! { _ = ctrl_c => {}, _ = terminate => {} }
+            let _ = shutdown_stop.send(true);
+        })
+        .await;
+    let _ = stop.send(true);
+    if let Some(worker) = worker {
+        worker.await??;
+    }
+    result?;
     Ok(())
 }
 

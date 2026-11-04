@@ -1,0 +1,76 @@
+[
+  {
+    "label": "compile",
+    "command": [
+      "/opt/homebrew/bin/cargo",
+      "check",
+      "--offline",
+      "--locked",
+      "-p",
+      "llm-firewall",
+      "--all-targets"
+    ],
+    "exit_code": 101,
+    "source_sha256": "5f8f97d3cac6ddadc81353ef120c671d1d9cf1a5b204b5797db55c5e1a34af8b",
+    "log_sha256": "41f20608c67e618dd881cf8c8a3ed973d027986da71c35dcad8559bd9c557a11",
+    "elapsed_seconds": 44.05
+  },
+  {
+    "label": "reconciliation",
+    "command": [
+      "/opt/homebrew/bin/cargo",
+      "test",
+      "--offline",
+      "--locked",
+      "-p",
+      "llm-firewall",
+      "--test",
+      "managed_reconciliation"
+    ],
+    "exit_code": 101,
+    "source_sha256": "ea0c89ab37408686a7fb96c38c713e5b4460bb18ab493d25a5e6dad99bf850f1",
+    "log_sha256": "9e7b246370e8ba287ea1e0aaa0b1f196e6b42962f43fa27dd81d9eff050763d8",
+    "elapsed_seconds": 56.44
+  },
+  {
+    "label": "controls-build",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo test --offline --locked -p llm-firewall --test managed_reconciliation && cargo build --offline --locked -p llm-firewall -p agentfw"
+    ],
+    "exit_code": 0,
+    "source_sha256": "e3dbca363526becbd0af0b4cd3529bf1118c3c9138f2eb6fe4708f388a36fb46",
+    "log_sha256": "a38082cd4727d86c2398d01163bcc58f6d114ec0d69ec044a67af6db36a98650",
+    "elapsed_seconds": 30.42
+  },
+  {
+    "label": "real-offline-gate",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "python3",
+      "scripts/managed-group-rollout-demo.py",
+      "--no-build",
+      "--reconciliation",
+      "--output",
+      "/private/tmp/sou226-qualification/scratch/reconciliation-sqlite.json"
+    ],
+    "exit_code": 0,
+    "source_sha256": "e3dbca363526becbd0af0b4cd3529bf1118c3c9138f2eb6fe4708f388a36fb46",
+    "log_sha256": "a2eec9f0ab856fa6111d22f6f5405e521594ff8c8178eddaaa9ad2b08289b918",
+    "elapsed_seconds": 313.87
+  },
+  {
+    "label": "final-local",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo fmt --all --check && cargo test --offline --locked -p llm-firewall && cargo clippy --offline --locked -p llm-firewall --all-targets -- -D warnings"
+    ],
+    "exit_code": 0,
+    "source_sha256": "8a87426ef8badd360574b5074fae2bd13aa4da983196fdbc062b27c4f7f71dc1",
+    "log_sha256": "1e137fe63a7e2a2d0d75b8d2c0682f6ee6d07ddd8d915ed2d6b68911bf46b3aa",
+    "elapsed_seconds": 88.74
+  }
+]

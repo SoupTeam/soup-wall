@@ -52,6 +52,35 @@ fn deployment(row: Row) -> Result<ManagedDeployment> {
 }
 
 impl PostgresTenantStore {
+    pub(in crate::tenant_store) async fn discover_active_rollouts(
+        &self,
+        after: Option<&crate::rollout_reconciliation::RolloutCursor>,
+        limit: usize,
+    ) -> Result<Vec<crate::rollout_reconciliation::RolloutCursor>> {
+        let (tenant, group, rollout) = after
+            .map(|a| {
+                (
+                    a.tenant_id.as_str(),
+                    a.group_id.as_str(),
+                    a.rollout_id.as_str(),
+                )
+            })
+            .unwrap_or(("", "", ""));
+        let client = self.checkout().await?;
+        let rows = self.bounded(client.query(
+            "SELECT r.tenant_id,r.group_id,r.rollout_id FROM managed_group_rollouts r JOIN tenants t ON t.id=r.tenant_id WHERE t.active=TRUE AND r.phase IN ('pilot','standard','rolling_back') AND (r.tenant_id,r.group_id,r.rollout_id)>($1,$2,$3) ORDER BY r.tenant_id,r.group_id,r.rollout_id LIMIT $4",
+            &[&tenant, &group, &rollout, &(limit as i64)]
+        )).await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| crate::rollout_reconciliation::RolloutCursor {
+                tenant_id: r.get(0),
+                group_id: r.get(1),
+                rollout_id: r.get(2),
+            })
+            .collect())
+    }
+
     pub(super) async fn migrate_managed_agents(&self) -> Result<()> {
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
@@ -1821,6 +1850,17 @@ impl PostgresTenantStore {
         group_id: &str,
         issuer: Option<&ManagedIssuer>,
     ) -> Result<Option<ManagedGroupRollout>> {
+        self.advance_managed_group_rollout_checked(tenant, group_id, issuer, None)
+            .await
+    }
+
+    pub(in crate::tenant_store) async fn advance_managed_group_rollout_checked(
+        &self,
+        tenant: &str,
+        group_id: &str,
+        issuer: Option<&ManagedIssuer>,
+        expected: Option<&str>,
+    ) -> Result<Option<ManagedGroupRollout>> {
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
         self.bounded(tx.query_one(
@@ -1828,7 +1868,20 @@ impl PostgresTenantStore {
             &[&tenant],
         ))
         .await?;
-
+        if let Some(expected) = expected {
+            let current = self
+                .get_managed_group_rollout_query(&*tx, tenant, group_id)
+                .await?;
+            if !current.is_some_and(|plan| {
+                plan.rollout_id == expected
+                    && matches!(
+                        plan.phase,
+                        RolloutPhase::Pilot | RolloutPhase::Standard | RolloutPhase::RollingBack
+                    )
+            }) {
+                return Ok(None);
+            }
+        }
         let result = self
             .advance_managed_group_rollout_tx(&tx, tenant, group_id, issuer)
             .await?;

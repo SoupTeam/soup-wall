@@ -70,6 +70,8 @@ def digest(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--no-build', action='store_true')
+    parser.add_argument('--reconciliation', action='store_true', help='prove automatic expired-gate recovery after real downtime')
+    parser.add_argument('--downtime-seconds', type=int, default=305)
     parser.add_argument('--backend', choices=['sqlite', 'postgres'], default='sqlite')
     parser.add_argument('--output', type=Path, default=DEFAULT_OUTCOME)
     parser.add_argument('--database-url-env', default='SOUP_GROUP_DEMO_DATABASE_URL')
@@ -80,6 +82,8 @@ def main():
     parser.add_argument('--pg-dump', default='pg_dump')
     parser.add_argument('--pg-restore', default='pg_restore')
     args = parser.parse_args()
+    if args.reconciliation and args.downtime_seconds < 301:
+        parser.error('reconciliation witness requires at least 301 real seconds of downtime')
     if not args.no_build:
         subprocess.run(['cargo', 'build', '--locked', '-p', 'llm-firewall', '-p', 'agentfw'], cwd=ROOT, check=True)
     console_bin, agent_bin = [ROOT / 'target/debug' / name for name in ('llm-firewall', 'agentfw')]
@@ -128,6 +132,9 @@ def main():
                 cfg.write_text(f'bind: "127.0.0.1:{cp}"\ntenant_store:\n  enabled: true\n  backend: {args.backend}\n' +
                     (f'  database_path: "{database}"\n' if args.backend == 'sqlite' else
                      '  postgres_command_timeout_ms: 30000\n  postgres_pool_wait_timeout_ms: 10000\n'))
+                if args.reconciliation:
+                    with cfg.open('a') as output:
+                        output.write('rollout_reconciliation:\n  enabled: true\n  interval_seconds: 1\n  batch_size: 2\n')
                 if args.backend == 'postgres':
                     env['LLM_FW_POSTGRES_URL'] = database
             configuration(str(source_sqlite) if args.backend == 'sqlite' else source_url)
@@ -194,6 +201,31 @@ def main():
             for name in agents:
                 if name != 'pilot':
                     check(name + '-offline-canary-keeps-baseline', hook(name) == 'deny')
+            if args.reconciliation:
+                # No browser, manual advance, synthetic ACK or SQL clock edits.
+                for agent in agents.values(): stop(agent['process'])
+                stop(console)
+                report['configuration'].update({'reconciliation_enabled': True, 'interval_seconds': 1,
+                    'batch_size': 2, 'real_downtime_seconds': args.downtime_seconds,
+                    'config_sha256': digest(cfg)})
+                started = time.monotonic()
+                time.sleep(args.downtime_seconds)
+                console = spawn(console_bin, env, 'console-restarted.log')
+                wait('Console restarted', lambda: request('GET', base + '/healthz'))
+                rollback = wait('offline gate reconciled without POST', lambda: phase('rolling_back'))
+                check('expired-gate-with-browser-and-fleet-offline', time.monotonic()-started >= 301)
+                check('same-saved-plan-after-restart', rollback['rollout_id'] == candidate['rollout_id'])
+                check('one-rollback-issuance', rollback['active_deployments'] == {'pilot': 3})
+                time.sleep(3)
+                check('no-false-rollback-completion-without-ack', current()['phase'] == 'rolling_back')
+                check('retry-preserves-rollback-sequence', current()['active_deployments'] == rollback['active_deployments'])
+                agents['pilot']['process'] = spawn(agent_bin, agents['pilot']['env'], 'pilot-restarted.log')
+                wait('exact baseline applied', lambda: applied('pilot', 'baseline', 3))
+                wait('exact rollback acknowledgement', lambda: phase('rolled_back'))
+                check('baseline-restored-by-real-agent', hook('pilot') == 'deny')
+                check('rollback-complete-only-after-applied-ack', current()['phase'] == 'rolled_back')
+                report['passed'] = True
+                return
             expected_seq = candidate['active_deployments']['pilot']
             for label, name, sequence, sha in [('wrong-digest','pilot',expected_seq,'0'*64),
                 ('stale-sequence','pilot',1,candidate['policy_sha256']),('wrong-agent','worker-1',expected_seq,candidate['policy_sha256'])]:
@@ -250,6 +282,8 @@ def main():
             report['passed']=True
         report['cleanup_passed']=all(p.poll() is not None for p in children)
     finally:
+        if 'children' in locals():
+            report['cleanup_passed'] = all(p.poll() is not None for p in children)
         args.output.parent.mkdir(parents=True,exist_ok=True)
         args.output.write_text(json.dumps(report,indent=2)+'\n')
     assert report['cleanup_passed']

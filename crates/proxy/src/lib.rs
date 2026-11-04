@@ -27,6 +27,7 @@ pub mod pipeline;
 pub mod rate_limit;
 pub mod redis_limits;
 pub mod responses;
+pub mod rollout_reconciliation;
 pub mod saml_auth;
 pub mod scim;
 pub mod spend_limit;
@@ -260,6 +261,10 @@ pub fn app(state: Shared) -> Router {
             .route(
                 "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/preview",
                 post(managed_agent_api::preview_group_rollout),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/reconciliation",
+                get(managed_agent_api::reconciliation_status),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/advance",
@@ -555,6 +560,7 @@ pub fn test_config(base: String) -> Config {
         rate_limit: config::RateLimit::default(),
         spend_limit: config::SpendLimit::default(),
         tenant_store: config::TenantStoreConfig::default(),
+        rollout_reconciliation: Default::default(),
         redis_limits: config::RedisLimitsConfig::default(),
         capability_policy: capability::CapabilityPolicy::default(),
         output_moderation: config::OutputModeration::default(),
