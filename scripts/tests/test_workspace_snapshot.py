@@ -122,6 +122,45 @@ class Snapshot(unittest.TestCase):
         self.assertFalse(stage.exists())
         self.assertTrue((self.source / 'README.md').is_file())
 
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux capture required')
+    def test_recovery_refuses_replaced_stage_and_preserves_both_directories(self):
+        name = '.snapshot-' + 'e' * 32
+        stage = self.base / name
+        stage.mkdir(mode=0o700)
+        with M.IO.Directory(self.base) as parent, M.IO.Directory(stage) as directory:
+            owner = M.capture_owner(parent.fd, directory.fd, name, self.dest)
+            owner['creator']['start'] += 1
+            M.write_record(directory.fd, M.CAPTURE_OWNER, owner)
+        confirmation = M.recovery_preview(self.base, name)['confirmation']
+        original = self.base / 'original-stage'
+        stage.rename(original)
+        stage.mkdir(mode=0o700)
+        with M.IO.Directory(stage) as directory:
+            M.write_record(directory.fd, M.CAPTURE_OWNER, owner)
+        marker = stage / 'replacement'
+        marker.write_bytes(b'keep replacement')
+        with self.assertRaisesRegex(ValueError, 'recovery_identity_changed'):
+            M.recovery_apply(self.base, name, confirmation)
+        self.assertEqual(b'keep replacement', marker.read_bytes())
+        self.assertTrue((original / M.CAPTURE_OWNER).is_file())
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux capture required')
+    def test_recovery_refuses_stage_moved_to_another_store(self):
+        name = '.snapshot-' + 'f' * 32
+        stage = self.base / name
+        stage.mkdir(mode=0o700)
+        with M.IO.Directory(self.base) as parent, M.IO.Directory(stage) as directory:
+            owner = M.capture_owner(parent.fd, directory.fd, name, self.dest)
+            owner['creator']['start'] += 1
+            M.write_record(directory.fd, M.CAPTURE_OWNER, owner)
+        confirmation = M.recovery_preview(self.base, name)['confirmation']
+        other = self.base / 'other-store'
+        other.mkdir(mode=0o700)
+        stage.rename(other / name)
+        with self.assertRaisesRegex(ValueError, 'recovery_identity_changed'):
+            M.recovery_apply(other, name, confirmation)
+        self.assertTrue((other / name / M.CAPTURE_OWNER).is_file())
+
     def test_preview_is_metadata_only_and_zero_effect(self):
         read=os.read
         def no_content(fd,n):
