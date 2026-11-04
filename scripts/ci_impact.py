@@ -8,6 +8,8 @@ for scheduling, but a changed copy cannot relax the trusted gate's selection.
 from __future__ import annotations
 
 import argparse
+import ast
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -108,6 +110,102 @@ GATEWAY_CI = frozenset({
 })
 PYTHON_CI = frozenset({"documentation", "python-classifier"})
 
+# Exact base files only. Each entry was traced to the named executing consumer;
+# unfamiliar scripts, evidence, generated docs and authority helpers remain full.
+REVIEWED_CONSUMERS: dict[str, tuple[str, ...]] = {
+    "scripts/check_docs.py": ("documentation", "test"),
+    "scripts/tests/test_check_docs.py": ("documentation", "test"),
+    "scripts/tests/test_macos_relay_headers.py": ("test",),
+    "docs/operations/ASK_INBOX.md": ("documentation",),
+    "docs/operations/GIT_LOCAL_REFERENCES.md": ("documentation",),
+    "docs/operations/PILOT_PROVIDER_PROFILES.md": ("documentation",),
+    "docs/benchmarks/task3_resilience.md": ("documentation",),
+}
+# A new accepted base version of either executable must be reviewed again.
+REVIEWED_PYTHON_BLOBS = {
+    "scripts/check_docs.py": "65a0f6619df2ce753a80bfc6b5e4a85d4c58f698",
+    "scripts/tests/test_check_docs.py": "50c5858c7763fede7a753426e24f4d8c5c2c3051",
+    "scripts/tests/test_macos_relay_headers.py": "9063562c5419ff0e0a53a293e84ddec860e08624",
+}
+REVIEWED_DEPENDENCY_BLOBS = {
+    "scripts/tests/test_macos_relay_headers.py": {
+        "scripts/macos-file-acceptance.py": "2488a8374eab8ca2327bc68aa0edfa8785a4ca21",
+    },
+}
+MAX_REVIEWED_SCRIPT_BYTES = 128 * 1024
+
+
+def git_blob_sha(body: bytes) -> str:
+    return hashlib.sha1(b"blob " + str(len(body)).encode() + b"\0" + body).hexdigest()
+
+
+def bounded_git_blob(revision: str, path: str) -> bytes | None:
+    """Read only a small committed script; never trust worktree line endings."""
+    root = Path(__file__).resolve().parents[1]
+    try:
+        size_raw = subprocess.check_output(["git", "cat-file", "-s", revision + ":" + path],
+                                           cwd=root, timeout=10)
+        size = int(size_raw.strip())
+        if not 0 <= size <= MAX_REVIEWED_SCRIPT_BYTES:
+            return None
+        body = subprocess.check_output(["git", "show", revision + ":" + path],
+                                       cwd=root, timeout=10)
+        return body if len(body) == size else None
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+def git_tree_blob_sha(revision: str, path: str) -> str | None:
+    root = Path(__file__).resolve().parents[1]
+    try:
+        raw = subprocess.check_output(["git", "rev-parse", "--verify", revision + ":" + path],
+                                      cwd=root, timeout=10).decode("ascii").strip()
+        return raw if len(raw) == 40 and all(c in "0123456789abcdef" for c in raw) else None
+    except (OSError, UnicodeError, subprocess.SubprocessError):
+        return None
+
+
+def dependency_signature(body: bytes) -> tuple[str, ...] | None:
+    """Freeze imports and process/file access expressions for reviewed Python."""
+    if len(body) > MAX_REVIEWED_SCRIPT_BYTES:
+        return None
+    try:
+        tree = ast.parse(body.decode("utf-8"))
+    except (SyntaxError, UnicodeError, ValueError):
+        return None
+    found = []
+    try:
+        for index, node in enumerate(ast.walk(tree)):
+            if index >= 20000:
+                return None
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                found.append("import:" + ast.dump(node, include_attributes=False))
+            elif isinstance(node, ast.Call):
+                name = ast.unparse(node.func)
+                if (name in {"eval", "exec", "compile", "open", "__import__", "getattr", "git"}
+                        or name.startswith(("subprocess.", "importlib.", "os.system", "os.popen"))
+                        or name.rsplit(".", 1)[-1] in {"open", "read_text", "read_bytes", "glob", "rglob"}):
+                    found.append("call:" + ast.dump(node, include_attributes=False))
+    except (RecursionError, ValueError):
+        return None
+    return tuple(sorted(found))
+
+
+def reviewed_change_safe(path: str, detail: dict[str, object]) -> bool:
+    if detail.get("status") != "modified":
+        return False
+    if path not in REVIEWED_PYTHON_BLOBS:
+        return True
+    baseline, candidate = detail.get("base_content"), detail.get("head_content")
+    if not isinstance(baseline, bytes) or not isinstance(candidate, bytes):
+        return False
+    if git_blob_sha(baseline) != REVIEWED_PYTHON_BLOBS[path]:
+        return False
+    if detail.get("dependency_blobs", {}) != REVIEWED_DEPENDENCY_BLOBS.get(path, {}):
+        return False
+    before, after = dependency_signature(baseline), dependency_signature(candidate)
+    return before is not None and before == after
+
 
 def classify(path: str) -> str:
     """Unknown or CI-sensitive paths deliberately select full qualification."""
@@ -119,6 +217,8 @@ def classify(path: str) -> str:
         return "full"
     if path.startswith(("crates/core/", "crates/adapter/")):
         return "full"
+    if path in REVIEWED_CONSUMERS:
+        return "reviewed"
     if path.startswith(("docs/operations/", "docs/benchmarks/")):
         return "full"
     if path.startswith(("crates/agent/", "crates/agentfw/", "rule_baseline/", "profiles/mcp/")):
@@ -134,9 +234,17 @@ def classify(path: str) -> str:
     return "full"
 
 
-def plan(paths: list[str], *, force_full: bool = False) -> dict[str, object]:
+def plan(paths: list[str], *, force_full: bool = False,
+         change_details: dict[str, dict[str, object]] | None = None) -> dict[str, object]:
     categories = {classify(path) for path in paths}
-    if force_full or not paths or "full" in categories:
+    incomplete = change_details is not None and (
+        len(change_details) != len(paths) or set(change_details) != set(paths)
+        or any(not isinstance(change_details.get(path), dict)
+               or change_details[path].get("status") != "modified" for path in paths))
+    unverified_script = any(path in REVIEWED_PYTHON_BLOBS and (
+        change_details is None or not reviewed_change_safe(path, change_details.get(path, {})))
+        for path in paths)
+    if force_full or not paths or "full" in categories or incomplete or unverified_script:
         selected = {name: list(jobs) for name, jobs in WORKFLOW_JOBS.items()}
         mode = "full"
     else:
@@ -152,6 +260,8 @@ def plan(paths: list[str], *, force_full: bool = False) -> dict[str, object]:
         if "python" in categories:
             ci_jobs.update(PYTHON_CI)
             active.add("benchmark.yml")
+        for path in paths:
+            ci_jobs.update(REVIEWED_CONSUMERS.get(path, ()))
         selected["ci.yml"] = [job for job in CI_JOBS if job in ci_jobs]
         for name in active:
             selected[name] = list(WORKFLOW_JOBS[name])
@@ -172,14 +282,15 @@ def plan(paths: list[str], *, force_full: bool = False) -> dict[str, object]:
 
 
 def scheduled_plan(paths: list[str] | None, event_name: str,
-                   activation_verified: bool) -> dict[str, object]:
+                   activation_verified: bool,
+                   change_details: dict[str, dict[str, object]] | None = None) -> dict[str, object]:
     """Production scheduler: full until both operator switch and ruleset pass."""
     return plan(paths or [], force_full=paths is None or event_name != "pull_request"
-                or not activation_verified)
+                or not activation_verified, change_details=change_details)
 
 
-def candidate_paths() -> list[str] | None:
-    """Read the exact PR merge tree, refusing a stale or non-merge checkout."""
+def candidate_changes() -> dict[str, dict[str, object]] | None:
+    """Read status and reviewed script bytes from the exact PR merge tree."""
     event_path = os.environ.get("GITHUB_EVENT_PATH")
     if not event_path:
         return None
@@ -193,8 +304,31 @@ def candidate_paths() -> list[str] | None:
         return None
     if parents[1] != pr["base"]["sha"] or parents[2] != pr["head"]["sha"]:
         return None
-    raw = subprocess.check_output(["git", "diff", "--name-only", "--no-renames", "-z", parents[1], head])
-    return [entry.decode("utf-8", "surrogateescape") for entry in raw.split(b"\0") if entry]
+    raw = subprocess.check_output(["git", "diff", "--name-status", "--no-renames",
+                                   "-z", parents[1], head]).split(b"\0")
+    if not raw or raw[-1] != b"" or (len(raw) - 1) % 2:
+        return None
+    changes: dict[str, dict[str, object]] = {}
+    statuses = {b"M": "modified", b"A": "added", b"D": "removed"}
+    for index in range(0, len(raw) - 1, 2):
+        code, name = raw[index:index + 2]
+        path = name.decode("utf-8", "surrogateescape")
+        if not path or path in changes:
+            return None
+        detail: dict[str, object] = {"status": statuses.get(code, "unknown")}
+        if path in REVIEWED_PYTHON_BLOBS and code == b"M":
+            detail["base_content"] = bounded_git_blob(parents[1], path)
+            detail["head_content"] = bounded_git_blob(head, path)
+            detail["dependency_blobs"] = {
+                dependency: git_tree_blob_sha(parents[1], dependency)
+                for dependency in REVIEWED_DEPENDENCY_BLOBS.get(path, {})}
+        changes[path] = detail
+    return changes
+
+
+def candidate_paths() -> list[str] | None:
+    changes = candidate_changes()
+    return list(changes) if changes is not None else None
 
 
 def main() -> int:
@@ -202,7 +336,9 @@ def main() -> int:
     parser.add_argument("--workflow", choices=sorted(WORKFLOW_JOBS))
     parser.add_argument("--paths-json", type=Path, help="offline planner input, never used by a production gate")
     args = parser.parse_args()
-    paths = json.loads(args.paths_json.read_text(encoding="utf-8")) if args.paths_json else candidate_paths()
+    changes = None if args.paths_json else candidate_changes()
+    paths = (json.loads(args.paths_json.read_text(encoding="utf-8")) if args.paths_json else
+             (list(changes) if changes is not None else None))
     if os.environ.get("GITHUB_EVENT_NAME") == "pull_request" and paths is None and not args.paths_json:
         parser.error("PR checkout is not the exact head/base merge candidate")
     if paths is not None and (not isinstance(paths, list) or any(not isinstance(path, str) for path in paths)):
@@ -211,7 +347,8 @@ def main() -> int:
     # repository has activated it. Real PR runs require a live ruleset readback.
     result = (plan(paths) if args.paths_json else
               scheduled_plan(paths, os.environ.get("GITHUB_EVENT_NAME", ""),
-                             live_selective_enabled() if paths is not None else False))
+                             live_selective_enabled() if paths is not None else False,
+                             change_details=changes))
     if args.workflow:
         result = {"schema": result["schema"], "mode": result["mode"], "jobs": result["workflows"][args.workflow]}
     json.dump(result, sys.stdout, separators=(",", ":"), sort_keys=True)
