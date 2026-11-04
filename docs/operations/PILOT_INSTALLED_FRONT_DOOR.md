@@ -238,11 +238,12 @@ SOU-225 retains its separate early-diagnostics qualification.
 Native reproduction: dispatch `mcp-real-filesystem.yml` on the exact Draft source
 with `installed_focus=project-recovery`, `project_presets_only=true` and
 `native_preparation_only=true`; leave other modes off. The existing installed
-two-project qualifier exports/rebinds/imports into a fresh home, observes staged-catalog fsync and SIGKILLs its owned invocation before publication,
-recovers, then exercises both real
-protected reads, independent authority, sibling continuation and owned cleanup.
-Actual source pins, original failures and execution evidence are retained after
-measurement; a local archive/control fixture is not a protected-run qualification.
+two-project qualifier exports/rebinds/imports into a fresh home, observes staged
+catalog fsync and SIGKILLs its owned invocation before publication, recovers, then
+exercises both real protected reads, independent authority, sibling continuation
+and owned cleanup. The [5 November native evidence](evidence/PROJECT_PRESET_RECOVERY_2026-11-05.md)
+retains the measured source, original failed reports and successful 32-control
+installed result. A local archive/control fixture is not a protected-run qualification.
 
 ## 4. Update, roll back, recover, remove
 
