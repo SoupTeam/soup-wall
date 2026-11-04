@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+import base64
 import importlib.util
 from pathlib import Path
 import unittest
@@ -81,6 +82,14 @@ class OwnedQualificationTests(unittest.TestCase):
         self.assertIn("psql -h postgres -w", program)
         self.assertNotIn("127.0.0.1", program)
         self.assertIn('PGPASSWORD="$POSTGRES_PASSWORD"', program)
+
+    def test_generated_keys_meet_gateway_encryption_and_signing_contracts(self):
+        values = qualify.fixture_environment()
+        keys = [values[name] for name in ("LLM_FW_OIDC_STATE_KEY", "LLM_FW_WEBHOOK_SIGNING_KEY")]
+        self.assertNotEqual(*keys)
+        for key in keys:
+            self.assertRegex(key, r"^[A-Za-z0-9_-]{43}$")
+            self.assertEqual(len(base64.b64decode(key + "=", altchars=b"-_", validate=True)), 32)
 
     def test_unexpected_failure_text_cannot_enter_report(self):
         self.assertEqual(qualify.public_failure(ValueError("generated-sensitive-fixture-value")),

@@ -8,6 +8,7 @@ and PowerShell 7. Only this invocation's random Compose project is removed.
 """
 
 import argparse
+import base64
 from datetime import datetime, timezone
 import importlib.util
 import json
@@ -104,8 +105,11 @@ def request(path, *, method="GET", document=None, token=None):
 
 def fixture_environment():
     values = {name: secrets.token_hex(24) for name in (
-        "POSTGRES_PASSWORD", "REDIS_PASSWORD", "LLM_FW_ADMIN_TOKEN",
-        "LLM_FW_OIDC_STATE_KEY", "LLM_FW_WEBHOOK_SIGNING_KEY")}
+        "POSTGRES_PASSWORD", "REDIS_PASSWORD", "LLM_FW_ADMIN_TOKEN")}
+    # Gateway encryption/signing contracts require unpadded base64url keys
+    # decoding to exactly 32 bytes; ordinary random password text is invalid.
+    for name in ("LLM_FW_OIDC_STATE_KEY", "LLM_FW_WEBHOOK_SIGNING_KEY"):
+        values[name] = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii").rstrip("=")
     values.update(POSTGRES_USER="owned_compose", POSTGRES_DB="owned_compose")
     values["LLM_FW_POSTGRES_URL"] = ("postgres://owned_compose:" + values["POSTGRES_PASSWORD"]
                                       + "@postgres:5432/owned_compose?sslmode=disable")
