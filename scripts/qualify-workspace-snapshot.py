@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 
 CASES=('metadata-only-preview','exact-consented-private-capture','installed-storage-race-faults',
+       'installed-interrupted-capture-recovery',
        'incomplete-generation-refusal','explicit-single-root-preparation','stable-original-read-after-source-change',
        'in-use-removal-refusal','healthy-continuation','new-generation-refresh','source-and-sibling-preservation',
        'owned-process-cleanup','explicit-removal')
@@ -79,7 +80,11 @@ def changed():
 expect('source-changed-during-copy',changed)
 def partial():
     target=root/'partial';confirm=m.preview(source,target)['confirmation']
-    with patch.object(m,'write_record',side_effect=OSError(errno.ENOSPC,'owned injected fault')):m.create(source,target,confirm)
+    write=m.write_record
+    def full(directory,name,value):
+        if name=='receipt.json':raise OSError(errno.ENOSPC,'owned injected fault')
+        return write(directory,name,value)
+    with patch.object(m,'write_record',side_effect=full):m.create(source,target,confirm)
 expect('low-space-after-copy-before-publication',partial)
 def collision():
     target=root/'winner';confirm=m.preview(source,target)['confirmation'];publish=m.publish
@@ -101,6 +106,55 @@ print(json.dumps({'checks':checks,'partial_generations_selectable':False,'existi
     require(q.snapshot(scripts)==component_before,'workspace_snapshot_fault_driver_changed_component')
     controls=json.loads(result.stdout);require(len(controls['checks'])==5 and all(controls['checks'].values()),'workspace_snapshot_incomplete_fault_controls')
     passed('installed-storage-race-faults',installed_component_unchanged=True,**controls)
+    begin('installed-interrupted-capture-recovery')
+    crash_driver = r'''
+import os, signal, sys
+from pathlib import Path
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+import pilot_workspace_snapshot as snapshot
+source, destination = map(Path, sys.argv[2:4])
+def stop(*args, **kwargs):
+    os.kill(os.getpid(), signal.SIGKILL)
+point = sys.argv[4]
+original = snapshot.write_record
+def stop_before_receipt(directory, name, value):
+    if name == 'receipt.json':
+        stop()
+    return original(directory, name, value)
+target, failure = ('publish', stop) if point == 'publication' else ('write_record', stop_before_receipt)
+with patch.object(snapshot, target, side_effect=failure):
+    snapshot.create(source, destination, sys.argv[5])
+'''
+    for point in ('copy', 'publication'):
+        store = args.output / ('recovery-' + point)
+        store.mkdir(mode=0o700)
+        sibling = store / 'sibling'
+        sibling.write_bytes(b'owned sibling')
+        destination = store / 'snapshot'
+        confirmation = cli('preview', '--source', source, '--destination', destination)['confirmation']
+        killed = subprocess.run(
+            [str(args.component_python), '-I', '-S', '-B', '-c', crash_driver,
+             str(scripts), str(source), str(destination), point, confirmation],
+            cwd=door.cwd, env={}, stdin=subprocess.DEVNULL, capture_output=True, timeout=120)
+        require(killed.returncode == -9 and not destination.exists(), 'workspace_snapshot_capture_crash_missing')
+        inventory = cli('recovery-inventory', '--store', store)['stages']
+        require(len(inventory) == 1 and inventory[0]['state'] == 'abandoned', 'workspace_snapshot_abandoned_stage_missing')
+        name = inventory[0]['stage']
+        cli('inspect', '--snapshot', store / name, success=False)
+        words = ('--store', store, '--stage', name)
+        recovery = cli('recovery-preview', *words)
+        consent = (*words, '--confirm', recovery['confirmation'])
+        require(cli('recovery-apply', *consent)['status'] == 'snapshot-recovered'
+                and cli('recovery-apply', *consent)['status'] == 'snapshot-already-recovered'
+                and not (store / name).exists(), 'workspace_snapshot_recovery_not_idempotent')
+        fresh = cli('preview', '--source', source, '--destination', destination)
+        cli('create', '--source', source, '--destination', destination, '--confirm', fresh['confirmation'])
+        require(sibling.read_bytes() == b'owned sibling' and q.snapshot(source) == before
+                and cli('inspect', '--snapshot', generation)['binding'] == binding,
+                'workspace_snapshot_recovery_changed_unselected_data')
+    passed('installed-interrupted-capture-recovery', checkpoints=['copy', 'publication'],
+           idempotent=True, subsequent_capture=True, unrelated_data_preserved=True)
     begin('incomplete-generation-refusal')
     complete=(generation/'complete.json').read_bytes();(generation/'complete.json').unlink()
     try:cli('inspect','--snapshot',generation,success=False)

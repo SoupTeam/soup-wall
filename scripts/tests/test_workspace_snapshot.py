@@ -31,6 +31,97 @@ class Snapshot(unittest.TestCase):
         value=M.create(self.source,self.dest,self.confirmation())
         self.assertEqual('complete-snapshot',value['status']);return value
 
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux capture required')
+    def test_capture_records_creator_and_holds_stage_lock_until_publication(self):
+        publish = M.publish
+
+        def observe(parent, temporary, destination):
+            fd = os.open(temporary, os.O_RDONLY | os.O_DIRECTORY, dir_fd=parent)
+            try:
+                owner_fd = os.open('capture-owner.json', os.O_RDONLY, dir_fd=fd)
+                with os.fdopen(owner_fd, 'rb') as stream:
+                    owner = json.load(stream)
+                self.assertEqual(os.getpid(), owner['creator']['pid'])
+                self.assertEqual(os.fstat(fd).st_ino, owner['stage_identity']['inode'])
+                with self.assertRaises(BlockingIOError):
+                    M.fcntl.flock(fd, M.fcntl.LOCK_EX | M.fcntl.LOCK_NB)
+                with self.assertRaisesRegex(ValueError, 'incomplete_generation'):
+                    M.load(self.base / temporary)
+                self.assertEqual(
+                    [{'stage': temporary, 'state': 'active'}],
+                    M.recovery_inventory(self.base)['stages'],
+                )
+            finally:
+                os.close(fd)
+            publish(parent, temporary, destination)
+
+        with patch.object(M, 'publish', side_effect=observe):
+            self.made()
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux capture required')
+    def test_inventory_detects_reused_pid_and_preserves_stage(self):
+        name = '.snapshot-' + 'b' * 32
+        stage = self.base / name
+        stage.mkdir(mode=0o700)
+        with M.IO.Directory(self.base) as parent, M.IO.Directory(stage) as directory:
+            owner = M.capture_owner(parent.fd, directory.fd, name, self.dest)
+            owner['creator']['start'] += 1
+            M.write_record(directory.fd, M.CAPTURE_OWNER, owner)
+        self.assertEqual(
+            [{'stage': name, 'state': 'abandoned'}],
+            M.recovery_inventory(self.base)['stages'],
+        )
+        self.assertTrue(stage.is_dir())
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux capture required')
+    def test_recovery_preview_binds_current_stage_and_refuses_links(self):
+        name = '.snapshot-' + 'c' * 32
+        stage = self.base / name
+        stage.mkdir(mode=0o700)
+        with M.IO.Directory(self.base) as parent, M.IO.Directory(stage) as directory:
+            owner = M.capture_owner(parent.fd, directory.fd, name, self.dest)
+            owner['creator']['start'] += 1
+            M.write_record(directory.fd, M.CAPTURE_OWNER, owner)
+        first = M.recovery_preview(self.base, name)
+        self.assertEqual(first, M.recovery_preview(self.base, name))
+        self.assertFalse(first['executed'])
+        (stage / 'partial').write_bytes(b'incomplete')
+        self.assertNotEqual(first['confirmation'], M.recovery_preview(self.base, name)['confirmation'])
+        (stage / 'alias').symlink_to(self.source)
+        with self.assertRaisesRegex(ValueError, 'recovery_unsafe_entry'):
+            M.recovery_preview(self.base, name)
+        self.assertTrue((self.source / 'README.md').is_file())
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux capture required')
+    def test_recovery_apply_requires_current_consent_and_retries(self):
+        name = '.snapshot-' + 'd' * 32
+        stage = self.base / name
+        stage.mkdir(mode=0o700)
+        with M.IO.Directory(self.base) as parent, M.IO.Directory(stage) as directory:
+            owner = M.capture_owner(parent.fd, directory.fd, name, self.dest)
+            owner['creator']['start'] += 1
+            M.write_record(directory.fd, M.CAPTURE_OWNER, owner)
+        stale = M.recovery_preview(self.base, name)['confirmation']
+        (stage / 'partial').write_bytes(b'incomplete')
+        with self.assertRaisesRegex(ValueError, 'exact_confirmation_required'):
+            M.recovery_apply(self.base, name, stale)
+        current = M.recovery_preview(self.base, name)['confirmation']
+        unlink = os.unlink
+
+        def interrupt(path, *args, **kwargs):
+            if path == 'partial':
+                raise InterruptedError('interrupted recovery')
+            return unlink(path, *args, **kwargs)
+
+        with patch.object(M.os, 'unlink', side_effect=interrupt):
+            with self.assertRaises(InterruptedError):
+                M.recovery_apply(self.base, name, current)
+        self.assertTrue((stage / 'partial').is_file())
+        self.assertEqual('snapshot-recovered', M.recovery_apply(self.base, name, current)['status'])
+        self.assertEqual('snapshot-already-recovered', M.recovery_apply(self.base, name, current)['status'])
+        self.assertFalse(stage.exists())
+        self.assertTrue((self.source / 'README.md').is_file())
+
     def test_preview_is_metadata_only_and_zero_effect(self):
         read=os.read
         def no_content(fd,n):
