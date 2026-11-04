@@ -187,11 +187,15 @@ def main():
                     response=route.fetch()
                     captured.append(response.json())
                     route.abort("failed")
-                page.route("**/revisions/r2/deploy",lose_response)
+                # Match the panel's exact selected-Agent query alias so this
+                # control still loses a real, persisted issuance response.
+                lost_response_url = (f"{console}/admin/v1/tenants/{alpha}/agents/policy-revision/deploy"
+                                     "?agent_id=edge-single&revision=r2")
+                page.route(lost_response_url,lose_response)
                 page.locator("#single-deploy").click()
                 expect(page.locator("#single-policy-status")).to_contain_text("outcome unresolved")
                 check("lost-response-reaches-persisted-issuance",len(captured)==1 and captured[0]["deployment_sequence"]==2)
-                page.unroute("**/revisions/r2/deploy",lose_response)
+                page.unroute(lost_response_url,lose_response)
                 page.locator("#single-retry").click()
                 expect(page.locator("#single-intent")).to_contain_text("sequence 2")
                 D.wait_for("real candidate applied",lambda:applied("r2",2))
