@@ -1140,6 +1140,7 @@ def main():
     parser.add_argument("--workspace-snapshot-only", action="store_true", help="focused SOU-212 private snapshot acceptance")
     parser.add_argument("--filesystem-links-only", action="store_true", help="focused SOU-211 original internal file-link qualification")
     parser.add_argument("--filesystem-roots-only", action="store_true", help="focused SOU-202 installed filesystem-root qualification")
+    parser.add_argument("--project-recovery-only", action="store_true", help="recover explicit project presets before the existing two-project runs")
     parser.add_argument("--project-presets-only", action="store_true", help="focused installed named-project qualification")
     parser.add_argument("--policy-activation-only", action="store_true",
                         help="focused SOU-209 installed deny-only policy activation qualification")
@@ -1153,6 +1154,8 @@ def main():
     for name in INPUT_NAMES:
         parser.add_argument("--" + name.replace("_", "-"), type=Path)
     args = parser.parse_args()
+    if args.project_recovery_only:
+        args.project_presets_only = True
     args.output = args.output.resolve()
     args.agent_output = None
     report = {"format": FORMAT, "status": "failed", "cases": [], "skipped": 0,
@@ -1206,6 +1209,8 @@ def main():
     if args.project_presets_only:
         project = report.get("project_presets", {})
         summary["project_presets"] = {key: project.get(key) for key in ("status", "active_case", "last_cli")}
+    if args.project_recovery_only:
+        summary["project_recovery"] = report.get("project_recovery", {})
     print(json.dumps(summary))
     return 0 if report["status"] == "passed" else 1
 
