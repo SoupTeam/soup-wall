@@ -577,6 +577,10 @@ impl TenantStore {
             "invalid revision page"
         );
         let db = self.connection()?;
+        let exists: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_agent_revisions')", [], |r| r.get(0))?;
+        if !exists {
+            return Ok(Vec::new());
+        }
         let mut stmt=db.prepare("SELECT revision,policy_sha256,approved_at_unix IS NOT NULL FROM managed_agent_revisions WHERE tenant_id=?1 AND agent_id=?2 AND revision>?3 ORDER BY revision LIMIT ?4")?;
         let rows = stmt
             .query_map(params![tenant, agent, after, limit as i64], |r| {
@@ -599,6 +603,10 @@ impl TenantStore {
     ) -> Result<Option<ManagedRevisionDocument>> {
         ensure!(exact_id(revision), "invalid revision");
         let db = self.connection()?;
+        let exists: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_agent_revisions')", [], |r| r.get(0))?;
+        if !exists {
+            return Ok(None);
+        }
         Ok(db.query_row("SELECT policy_yaml,policy_sha256,approved_at_unix IS NOT NULL FROM managed_agent_revisions WHERE tenant_id=?1 AND agent_id=?2 AND revision=?3",params![tenant,agent,revision],|r|Ok(ManagedRevisionDocument{identity:ManagedRevision{tenant_id:tenant.into(),agent_id:agent.into(),revision:revision.into(),policy_sha256:r.get(1)?,approved:r.get(2)?},policy_yaml:r.get(0)?})).optional()?)
     }
 

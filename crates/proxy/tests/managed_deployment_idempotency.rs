@@ -278,6 +278,7 @@ fn key(label: &str) -> String {
 async fn controls(f: &Fixture) {
     let _guard = SERIAL.lock().await;
     set_signers();
+    cold_revision_gets_are_read_only_and_backend_equivalent(f).await;
     revision_readback_and_authoring_authorization(f).await;
     guarded_console_issuance_conflicts_without_side_effects(f).await;
     lost_response_returns_original_and_delivers_once(f).await;
@@ -1096,5 +1097,43 @@ async fn guarded_console_issuance_conflicts_without_side_effects(f: &Fixture) {
         .await
         .0,
         StatusCode::CREATED
+    );
+}
+
+async fn cold_revision_gets_are_read_only_and_backend_equivalent(f: &Fixture) {
+    let store = f.store().await;
+    let tenant = store
+        .create_tenant_async(&unique("Cold revision GET"))
+        .await
+        .unwrap();
+    let sqlite =
+        "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='managed_agent_revisions'";
+    let postgres="SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename='managed_agent_revisions'";
+    let before = f.count(sqlite, postgres).await;
+    let server = Server::start(store).await;
+    let url = format!(
+        "{}/admin/v1/tenants/{}/agents/never-enrolled/revisions",
+        server.base, tenant.id
+    );
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
+        .header("x-llm-firewall-admin-token", OWNER)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 200);
+    assert_eq!(response.json::<Value>().await.unwrap(), json!([]));
+    let response = client
+        .get(format!("{url}/absent"))
+        .header("x-llm-firewall-admin-token", OWNER)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 404);
+    assert_eq!(
+        f.count(sqlite, postgres).await,
+        before,
+        "GET allocated managed schema"
     );
 }

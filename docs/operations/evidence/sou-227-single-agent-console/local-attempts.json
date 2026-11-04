@@ -157,5 +157,31 @@
     "source_sha256": "9b86f49bea23eade5da1a1caf6ff26b0bf3e27caafc6e2b53c4fe8d120aad40f",
     "log_sha256": "0348a1742be9b133e2fbfa8fe2e2c7b2a841c5a131feea7aebfa0eddc04dc0e6",
     "elapsed_seconds": 2.14
+  },
+  {
+    "label": "final-evidence-docs",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "python3",
+      "-B",
+      "scripts/check_docs.py"
+    ],
+    "exit_code": 0,
+    "source_sha256": "d398ba330879129018e826237204086e50350e045f0bbc11206b222e75add7f4",
+    "log_sha256": "0348a1742be9b133e2fbfa8fe2e2c7b2a841c5a131feea7aebfa0eddc04dc0e6",
+    "elapsed_seconds": 0.39
+  },
+  {
+    "label": "cold-read-parity",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo test --offline --locked -p llm-firewall --test managed_deployment_idempotency && cargo clippy --offline --locked -p llm-firewall --all-targets -- -D warnings && cargo fmt --all --check"
+    ],
+    "exit_code": 0,
+    "source_sha256": "fd4633dc536cef30020919b30e88547e34a61904fea41e24ae4f0c1ec9322ff8",
+    "log_sha256": "a4e528e76acabe29fe49df815b633aa45e6b661a3058104238fa4b3ea392e1e1",
+    "elapsed_seconds": 18.98
   }
 ]

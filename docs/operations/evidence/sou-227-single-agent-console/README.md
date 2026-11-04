@@ -48,3 +48,11 @@ and evidence and are exercised by the final browser run. The full workspace
 passed 2024 tests with 15 explicit environment-dependent ignores; workspace
 all-target Clippy -D warnings and fmt passed. The final update changes evidence
 only. Final current-main Ready/security/admission and merge remain TL-owned.
+
+The final cold-store parity review found that SQLite's lazily created managed
+revision table could make a pre-enrollment GET return 503 while PostgreSQL
+returned an empty inventory/404. SQLite now probes only sqlite_master and returns
+the same empty results without DDL. The shared HTTP controls run this case first
+on each backend and assert schema-object counts do not change. Local controls,
+Clippy and fmt pass. The updated exact-source native qualification is recorded
+separately from the earlier 2332a752 proof.
