@@ -30,3 +30,21 @@ The full workspace initially hit EAGAIN creating a process in unchanged
 agentfw offline CLI controls. A sequential retry passed the entire workspace
 and all-target workspace Clippy; both attempts and exact snapshots are retained.
 No production source was changed to accommodate this environmental failure.
+
+## Final browser and real-effect qualification
+
+[Run 41851423556](https://github.com/SoupTeam/soup-wall/actions/runs/41851423556)
+passed at exact source 2332a752f225a7dcc528041ce9c5ca18af82acdb: 11 new browser
+tests, zero skips, zero callback/page errors; real browser/Console/Agent cycles
+on SQLite and PostgreSQL with observed hook deny → allow → deny effects,
+matching applied ACKs, same-sequence lost-response retry and higher-sequence
+rollback. Final reports and source/configuration/binary identities are retained;
+all 55 reported source-file hashes independently match that Git commit.
+
+PostgreSQL HTTP/recovery run 41848649060 passed at 32946036. All Rust source,
+Cargo manifests/lockfile and toolchain inputs are byte-identical between that
+qualified server implementation and 2332a752; the later changes are UI/fixtures
+and evidence and are exercised by the final browser run. The full workspace
+passed 2024 tests with 15 explicit environment-dependent ignores; workspace
+all-target Clippy -D warnings and fmt passed. The final update changes evidence
+only. Final current-main Ready/security/admission and merge remain TL-owned.
