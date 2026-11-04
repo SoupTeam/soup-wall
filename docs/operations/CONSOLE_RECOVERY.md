@@ -10,7 +10,7 @@ operator acceptance are required. No customer or default database is used by the
 
 The [versioned inventory](../../scripts/fixtures/console_recovery_inventory_v1.json)
 binds format 1 to accepted schema source `4f428e4b983111e5b2480e40d658628e3d198fe7`.
-PostgreSQL requires exactly migrations 1 through 26. SQLite has no native migration
+PostgreSQL requires exactly migrations 1 through 29. SQLite has no native migration
 version; the inventory binds its native table/column layouts, indexes, triggers and
 expected PRAGMA versions, including lazily created managed Agent tables when present.
 Unknown schemas require an explicit compatibility review, including future fleet tables.

@@ -26,7 +26,12 @@ mod agent_enrollment;
 pub mod fleet;
 pub mod fleet_triage;
 mod managed_async;
+mod managed_idempotency;
 mod managed_policy;
+pub use managed_idempotency::{
+    valid_idempotency_key, DeploymentIdempotency, IdempotencyConflict, KeyedDeployment,
+    MAX_IDEMPOTENCY_KEY_BYTES, MIN_IDEMPOTENCY_KEY_BYTES,
+};
 pub use managed_policy::{
     AppliedReport, ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
     ManagedGroupRollout, ManagedIssuer, ManagedRevision, ManagedRolloutAgentStatus, RolloutPhase,

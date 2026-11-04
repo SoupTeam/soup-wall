@@ -8,13 +8,18 @@
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
+use axum::Extension;
 use axum::Json;
 use serde::Deserialize;
 
 use crate::handlers::Shared;
 use crate::tenant_store::{
-    AppliedReport, EnrolledAgent, ManagedIssuer, RotationRequest, TenantStore,
+    valid_idempotency_key, AdminIdentity, AppliedReport, DeploymentIdempotency, EnrolledAgent,
+    IdempotencyConflict, ManagedIssuer, RotationRequest, TenantStore,
 };
+
+/// Optional header that makes one individual deployment POST safe to retry.
+pub const IDEMPOTENCY_KEY_HEADER: &str = "idempotency-key";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -258,11 +263,20 @@ pub async fn approve_revision(
 
 /// The seed never leaves the operator's environment; each deployment has
 /// fresh sequence and expiry. Rollback re-signs an older approved payload.
+///
+/// With an `Idempotency-Key` header an exact retry returns the original issuance. Without it the
+/// request is the documented keyless operation and always issues a new sequence.
 pub async fn deploy_revision(
     State(state): State<Shared>,
+    Extension(identity): Extension<AdminIdentity>,
+    headers: HeaderMap,
     Path((tenant, agent, revision)): Path<(String, String, String)>,
     Json(input): Json<NewDeploymentRequest>,
 ) -> Response {
+    let key = match idempotency_key(&headers) {
+        Ok(key) => key,
+        Err(()) => return failure(StatusCode::BAD_REQUEST, "invalid Idempotency-Key"),
+    };
     let Some(db) = store(&state) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -270,14 +284,61 @@ pub async fn deploy_revision(
         );
     };
     let target_key = input.issuer_key_id.clone();
+    let Some(key) = key else {
+        return match tokio::task::spawn(async move {
+            let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref())?;
+            db.deploy_managed_revision_async(&tenant, &agent, &revision, input.rollback, &issuer)
+                .await
+        })
+        .await
+        {
+            Ok(Ok(deployment)) => (StatusCode::CREATED, Json(deployment)).into_response(),
+            Ok(Err(e)) => {
+                tracing::warn!(error = %e, "Agent deployment refused");
+                failure(
+                    StatusCode::BAD_REQUEST,
+                    "deployment unavailable or not approved",
+                )
+            }
+            Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
+        };
+    };
     match tokio::task::spawn(async move {
-        let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref())?;
-        db.deploy_managed_revision_async(&tenant, &agent, &revision, input.rollback, &issuer)
-            .await
+        // A retry needs no signer; only a new issuance does.
+        let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref()).ok();
+        let idem = DeploymentIdempotency {
+            key: &key,
+            admin_id: &identity.admin_id,
+            requested_issuer_key: target_key.as_deref(),
+        };
+        db.deploy_managed_revision_keyed_async(
+            &tenant,
+            &agent,
+            &revision,
+            input.rollback,
+            issuer.as_ref(),
+            &idem,
+        )
+        .await
+        .map(|issued| (issued, key.clone()))
     })
     .await
     {
-        Ok(Ok(deployment)) => (StatusCode::CREATED, Json(deployment)).into_response(),
+        Ok(Ok((issued, key))) => {
+            let mut body = serde_json::to_value(&issued.deployment).unwrap_or_default();
+            body["idempotency"] = serde_json::json!({
+                "key": key,
+                "replayed": issued.replayed,
+                "envelope_sha256": issued.envelope_sha256,
+                "issuer_key_id": issued.issuer_key_id,
+                "expires_at_unix": issued.expires_at_unix,
+            });
+            (StatusCode::CREATED, Json(body)).into_response()
+        }
+        Ok(Err(e)) if e.downcast_ref::<IdempotencyConflict>().is_some() => failure(
+            StatusCode::CONFLICT,
+            "idempotency key conflicts with a previous request",
+        ),
         Ok(Err(e)) => {
             tracing::warn!(error = %e, "Agent deployment refused");
             failure(
@@ -286,6 +347,21 @@ pub async fn deploy_revision(
             )
         }
         Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
+    }
+}
+
+/// `Ok(None)` when absent; a repeated, non-ASCII or out-of-bounds header is rejected, never ignored.
+fn idempotency_key(headers: &HeaderMap) -> Result<Option<String>, ()> {
+    let mut values = headers.get_all(IDEMPOTENCY_KEY_HEADER).iter();
+    let Some(first) = values.next() else {
+        return Ok(None);
+    };
+    if values.next().is_some() {
+        return Err(());
+    }
+    match first.to_str() {
+        Ok(key) if valid_idempotency_key(key) => Ok(Some(key.to_owned())),
+        _ => Err(()),
     }
 }
 

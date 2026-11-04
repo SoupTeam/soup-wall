@@ -93,6 +93,25 @@ impl TenantStore {
             None => self.deploy_managed_revision(tenant, agent, revision, rollback, issuer),
         }
     }
+    pub async fn deploy_managed_revision_keyed_async(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+        rollback: bool,
+        issuer: Option<&ManagedIssuer>,
+        idem: &DeploymentIdempotency<'_>,
+    ) -> anyhow::Result<KeyedDeployment> {
+        match &self.postgres {
+            Some(pg) => {
+                pg.deploy_managed_revision_keyed(tenant, agent, revision, rollback, issuer, idem)
+                    .await
+            }
+            None => {
+                self.deploy_managed_revision_keyed(tenant, agent, revision, rollback, issuer, idem)
+            }
+        }
+    }
     pub async fn deliver_authorized_managed_bundle_async(
         &self,
         tenant: &str,
