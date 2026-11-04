@@ -212,7 +212,11 @@ pub fn app(state: Shared) -> Router {
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions",
-                post(managed_agent_api::create_revision),
+                post(managed_agent_api::create_revision).get(managed_agent_api::list_revisions),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision",
+                get(managed_agent_api::read_revision),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision/approve",

@@ -202,6 +202,8 @@ pub struct NewDeploymentRequest {
     #[serde(default)]
     pub rollback: bool,
     #[serde(default)]
+    pub expected_sequence: Option<u64>,
+    #[serde(default)]
     pub issuer_key_id: Option<String>,
 }
 
@@ -209,6 +211,7 @@ pub struct NewDeploymentRequest {
 /// never a Gateway TenantPolicyDocument.
 pub async fn create_revision(
     State(state): State<Shared>,
+    Extension(identity): Extension<AdminIdentity>,
     Path((tenant, agent)): Path<(String, String)>,
     Json(input): Json<NewRevisionRequest>,
 ) -> Response {
@@ -219,14 +222,20 @@ pub async fn create_revision(
         );
     };
     match tokio::task::spawn(async move {
-        db.create_managed_revision_async(&tenant, &agent, &input.revision, &input.policy_yaml)
-            .await
+        db.create_managed_revision_authorized_async(
+            &tenant,
+            &agent,
+            &input.revision,
+            &input.policy_yaml,
+            &identity.admin_id,
+        )
+        .await
     })
     .await
     {
         Ok(Ok(version)) => (StatusCode::CREATED, Json(version)).into_response(),
-        Ok(Err(e)) => {
-            tracing::warn!(error = %e, "managed revision creation denied");
+        Ok(Err(_)) => {
+            tracing::warn!("managed revision creation denied");
             failure(
                 StatusCode::BAD_REQUEST,
                 "revision invalid or already exists",
@@ -238,6 +247,7 @@ pub async fn create_revision(
 
 pub async fn approve_revision(
     State(state): State<Shared>,
+    Extension(identity): Extension<AdminIdentity>,
     Path((tenant, agent, revision)): Path<(String, String, String)>,
 ) -> Response {
     let Some(db) = store(&state) else {
@@ -247,7 +257,7 @@ pub async fn approve_revision(
         );
     };
     match tokio::task::spawn(async move {
-        db.approve_managed_revision_async(&tenant, &agent, &revision)
+        db.approve_managed_revision_authorized_async(&tenant, &agent, &revision, &identity.admin_id)
             .await
     })
     .await
@@ -285,6 +295,12 @@ pub async fn deploy_revision(
         );
     };
     let target_key = input.issuer_key_id.clone();
+    if input.expected_sequence.is_some() && key.is_none() {
+        return failure(
+            StatusCode::BAD_REQUEST,
+            "expected_sequence requires Idempotency-Key",
+        );
+    }
     let Some(key) = key else {
         return match tokio::task::spawn(async move {
             let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref())?;
@@ -311,6 +327,7 @@ pub async fn deploy_revision(
             key: &key,
             admin_id: &identity.admin_id,
             requested_issuer_key: target_key.as_deref(),
+            expected_sequence: input.expected_sequence,
         };
         db.deploy_managed_revision_keyed_async(
             &tenant,
@@ -335,6 +352,15 @@ pub async fn deploy_revision(
                 "expires_at_unix": issued.expires_at_unix,
             });
             (StatusCode::CREATED, Json(body)).into_response()
+        }
+        Ok(Err(e))
+            if e.downcast_ref::<crate::tenant_store::DeploymentPreconditionFailed>()
+                .is_some() =>
+        {
+            failure(
+                StatusCode::CONFLICT,
+                "deployment inventory changed or group rollout active; review and confirm again",
+            )
         }
         Ok(Err(e)) if e.downcast_ref::<IdempotencyConflict>().is_some() => failure(
             StatusCode::CONFLICT,
@@ -1029,5 +1055,63 @@ pub async fn resume_group_rollout(
             failure(StatusCode::BAD_REQUEST, "resume rollout refused")
         }
         Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
+    }
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct RevisionPage {
+    pub after: String,
+    pub limit: Option<usize>,
+}
+/// Bounded metadata discovery, with the same server-side tenant/role middleware.
+pub async fn list_revisions(
+    State(state): State<Shared>,
+    Path((tenant, agent)): Path<(String, String)>,
+    axum::extract::Query(page): axum::extract::Query<RevisionPage>,
+) -> Response {
+    let Some(db) = store(&state) else {
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Console storage unavailable",
+        );
+    };
+    if !(1..=100).contains(&page.limit.unwrap_or(50))
+        || page.after.len() > 128
+        || !page
+            .after
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+    {
+        return failure(StatusCode::BAD_REQUEST, "invalid revision page");
+    }
+    match db
+        .list_managed_revisions_async(&tenant, &agent, &page.after, page.limit.unwrap_or(50))
+        .await
+    {
+        Ok(rows) => Json(rows).into_response(),
+        Err(_) => failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "revision inventory unavailable",
+        ),
+    }
+}
+pub async fn read_revision(
+    State(state): State<Shared>,
+    Path((tenant, agent, revision)): Path<(String, String, String)>,
+) -> Response {
+    let Some(db) = store(&state) else {
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Console storage unavailable",
+        );
+    };
+    match db
+        .read_managed_revision_async(&tenant, &agent, &revision)
+        .await
+    {
+        Ok(Some(row)) => Json(row).into_response(),
+        Ok(None) => failure(StatusCode::NOT_FOUND, "revision not found"),
+        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "revision unavailable"),
     }
 }

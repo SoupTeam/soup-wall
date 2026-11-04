@@ -2,6 +2,64 @@
 //! Backend dispatch for the existing managed Agent contract.
 use super::*;
 impl TenantStore {
+    pub async fn create_managed_revision_authorized_async(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+        yaml: &str,
+        admin: &str,
+    ) -> anyhow::Result<ManagedRevision> {
+        match &self.postgres {
+            Some(pg) => {
+                pg.create_managed_revision_checked(tenant, agent, revision, yaml, Some(admin))
+                    .await
+            }
+            None => {
+                self.create_managed_revision_checked(tenant, agent, revision, yaml, Some(admin))
+            }
+        }
+    }
+    pub async fn approve_managed_revision_authorized_async(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+        admin: &str,
+    ) -> anyhow::Result<bool> {
+        match &self.postgres {
+            Some(pg) => {
+                pg.approve_managed_revision_checked(tenant, agent, revision, Some(admin))
+                    .await
+            }
+            None => self.approve_managed_revision_checked(tenant, agent, revision, Some(admin)),
+        }
+    }
+
+    pub async fn list_managed_revisions_async(
+        &self,
+        tenant: &str,
+        agent: &str,
+        after: &str,
+        limit: usize,
+    ) -> anyhow::Result<Vec<ManagedRevision>> {
+        match &self.postgres {
+            Some(pg) => pg.list_managed_revisions(tenant, agent, after, limit).await,
+            None => self.list_managed_revisions(tenant, agent, after, limit),
+        }
+    }
+    pub async fn read_managed_revision_async(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+    ) -> anyhow::Result<Option<ManagedRevisionDocument>> {
+        match &self.postgres {
+            Some(pg) => pg.read_managed_revision(tenant, agent, revision).await,
+            None => self.read_managed_revision(tenant, agent, revision),
+        }
+    }
+
     pub async fn enroll_managed_agent_async(
         &self,
         tenant_id: &str,

@@ -17,11 +17,11 @@ use crate::tenant_store::{
     managed_policy::{
         acknowledgement_overdue, exact_id, hex, rollout_agent_status, DeploymentMode, MAX_YAML,
     },
-    now_unix, random_base64url, AdminRole, AppliedReport, DeploymentIdempotency, EnrolledAgent,
-    IdempotencyConflict, IssuedAgentCredential, KeyedDeployment, ManagedAgentGroup,
-    ManagedDeployment, ManagedGroupMember, ManagedGroupRevision, ManagedGroupRollout,
-    ManagedIssuer, ManagedRevision, RolloutPhase, RotationOutcome, RotationRequest,
-    SignedManagedBundle,
+    now_unix, random_base64url, AdminRole, AppliedReport, DeploymentIdempotency,
+    DeploymentPreconditionFailed, EnrolledAgent, IdempotencyConflict, IssuedAgentCredential,
+    KeyedDeployment, ManagedAgentGroup, ManagedDeployment, ManagedGroupMember,
+    ManagedGroupRevision, ManagedGroupRollout, ManagedIssuer, ManagedRevision,
+    ManagedRevisionDocument, RolloutPhase, RotationOutcome, RotationRequest, SignedManagedBundle,
 };
 use anyhow::{bail, ensure, Context, Result};
 use sha2::{Digest, Sha256};
@@ -52,6 +52,31 @@ fn deployment(row: Row) -> Result<ManagedDeployment> {
 }
 
 impl PostgresTenantStore {
+    pub(in crate::tenant_store) async fn list_managed_revisions(
+        &self,
+        tenant: &str,
+        agent: &str,
+        after: &str,
+        limit: usize,
+    ) -> Result<Vec<ManagedRevision>> {
+        ensure!(
+            (1..=100).contains(&limit) && (after.is_empty() || exact_id(after)),
+            "invalid revision page"
+        );
+        let client = self.checkout().await?;
+        Ok(self.bounded(client.query("SELECT revision,policy_sha256,approved_at_unix IS NOT NULL FROM managed_agent_revisions WHERE tenant_id=$1 AND agent_id=$2 AND revision>$3 ORDER BY revision LIMIT $4", &[&tenant,&agent,&after,&(limit as i64)])).await?.into_iter().map(|r|ManagedRevision{tenant_id:tenant.into(),agent_id:agent.into(),revision:r.get(0),policy_sha256:r.get(1),approved:r.get(2)}).collect())
+    }
+    pub(in crate::tenant_store) async fn read_managed_revision(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+    ) -> Result<Option<ManagedRevisionDocument>> {
+        ensure!(exact_id(revision), "invalid revision");
+        let client = self.checkout().await?;
+        Ok(self.bounded(client.query_opt("SELECT policy_yaml,policy_sha256,approved_at_unix IS NOT NULL FROM managed_agent_revisions WHERE tenant_id=$1 AND agent_id=$2 AND revision=$3", &[&tenant,&agent,&revision])).await?.map(|r|ManagedRevisionDocument{identity:ManagedRevision{tenant_id:tenant.into(),agent_id:agent.into(),revision:revision.into(),policy_sha256:r.get(1),approved:r.get(2)},policy_yaml:r.get(0)}))
+    }
+
     pub(super) async fn migrate_managed_agents(&self) -> Result<()> {
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
@@ -412,6 +437,18 @@ impl PostgresTenantStore {
         revision: &str,
         yaml: &str,
     ) -> Result<ManagedRevision> {
+        self.create_managed_revision_checked(tenant, agent, revision, yaml, None)
+            .await
+    }
+
+    pub(in crate::tenant_store) async fn create_managed_revision_checked(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+        yaml: &str,
+        admin_id: Option<&str>,
+    ) -> Result<ManagedRevision> {
         ensure!(exact_id(revision), "invalid immutable revision");
         ensure!(
             !yaml.is_empty() && yaml.len() <= MAX_YAML,
@@ -422,6 +459,16 @@ impl PostgresTenantStore {
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
         self.lock_managed_agent(&tx, tenant, agent).await?;
+        if let Some(admin_id) = admin_id {
+            if admin_id != "bootstrap_owner" {
+                let row = self.bounded(tx.query_opt("SELECT role FROM control_plane_admins WHERE id=$1 AND active=TRUE FOR SHARE", &[&admin_id])).await?;
+                let role: String = row.context("administrator is no longer active")?.get(0);
+                ensure!(
+                    AdminRole::from_storage(&role)?.permits(AdminRole::Owner),
+                    "Owner role required"
+                );
+            }
+        }
         self.bounded(tx.execute("INSERT INTO managed_agent_revisions(tenant_id,agent_id,revision,policy_yaml,policy_sha256) VALUES($1,$2,$3,$4,$5)", &[&tenant,&agent,&revision,&yaml,&digest])).await?;
         self.bounded(tx.commit()).await?;
         Ok(ManagedRevision {
@@ -438,9 +485,30 @@ impl PostgresTenantStore {
         agent: &str,
         revision: &str,
     ) -> Result<bool> {
+        self.approve_managed_revision_checked(tenant, agent, revision, None)
+            .await
+    }
+
+    pub(in crate::tenant_store) async fn approve_managed_revision_checked(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+        admin_id: Option<&str>,
+    ) -> Result<bool> {
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
         self.lock_managed_agent(&tx, tenant, agent).await?;
+        if let Some(admin_id) = admin_id {
+            if admin_id != "bootstrap_owner" {
+                let row = self.bounded(tx.query_opt("SELECT role FROM control_plane_admins WHERE id=$1 AND active=TRUE FOR SHARE", &[&admin_id])).await?;
+                let role: String = row.context("administrator is no longer active")?.get(0);
+                ensure!(
+                    AdminRole::from_storage(&role)?.permits(AdminRole::Owner),
+                    "Owner role required"
+                );
+            }
+        }
         let changed = self.bounded(tx.execute("UPDATE managed_agent_revisions SET approved_at_unix=$4 WHERE tenant_id=$1 AND agent_id=$2 AND revision=$3 AND approved_at_unix IS NULL", &[&tenant,&agent,&revision,&now_unix()])).await?;
         self.bounded(tx.commit()).await?;
         Ok(changed == 1)
@@ -532,6 +600,15 @@ impl PostgresTenantStore {
             );
             (row.get::<_, i64>(2), true)
         } else {
+            if let Some(expected) = idem.expected_sequence {
+                let latest:i64=self.bounded(tx.query_one("SELECT COALESCE(MAX(deployment_sequence),0) FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2",&[&tenant,&agent])).await?.get(0);
+                ensure!(
+                    u64::try_from(latest).ok() == Some(expected),
+                    DeploymentPreconditionFailed
+                );
+                let overlap:bool=self.bounded(tx.query_one("SELECT EXISTS(SELECT 1 FROM managed_group_rollouts r WHERE tenant_id=$1 AND phase IN ('pilot','standard','paused','rolling_back') AND (r.pilot_agents_json::jsonb ? $2 OR r.standard_agents_json::jsonb ? $2))",&[&tenant,&agent])).await?.get(0);
+                ensure!(!overlap, DeploymentPreconditionFailed);
+            }
             let issuer = issuer.context("Agent policy issuer unavailable")?;
             let created = self
                 .deploy_managed_revision_tx(&tx, tenant, agent, revision, mode, issuer)

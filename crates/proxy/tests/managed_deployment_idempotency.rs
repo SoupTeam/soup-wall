@@ -278,6 +278,8 @@ fn key(label: &str) -> String {
 async fn controls(f: &Fixture) {
     let _guard = SERIAL.lock().await;
     set_signers();
+    revision_readback_and_authoring_authorization(f).await;
+    guarded_console_issuance_conflicts_without_side_effects(f).await;
     lost_response_returns_original_and_delivers_once(f).await;
     parallel_callers_share_one_issuance(f).await;
     conflicting_reuse_is_refused_without_issuance(f).await;
@@ -658,6 +660,7 @@ async fn authorization_is_rechecked_before_a_stored_result(f: &Fixture) {
                     key: stored_key,
                     admin_id: &owner.admin.id,
                     requested_issuer_key: None,
+                    expected_sequence: None,
                 },
             )
             .await;
@@ -784,4 +787,314 @@ async fn sqlite_older_database_gains_the_key_table_on_first_use() {
     assert_eq!(status, StatusCode::CREATED, "{body}");
     assert_eq!(f.keys(&a.tenant).await, 1);
     server.kill().await;
+}
+
+async fn revision_readback_and_authoring_authorization(f: &Fixture) {
+    let store = f.store().await;
+    let a = audience(&store, "Revision readback").await;
+    let b = audience(&store, "Other audience").await;
+    let viewer = store
+        .create_admin_async(&unique("Revision viewer"), AdminRole::Viewer)
+        .await
+        .unwrap();
+    let owner = store
+        .create_admin_async(&unique("Revision owner"), AdminRole::Owner)
+        .await
+        .unwrap();
+    let server = Server::start(store.clone()).await;
+    let client = reqwest::Client::new();
+    let path = format!(
+        "{}/admin/v1/tenants/{}/agents/{}/revisions",
+        server.base, a.tenant, a.agent
+    );
+    let view = format!("Bearer {}", viewer.token);
+    let response = client
+        .get(format!("{path}?limit=1"))
+        .header("x-llm-firewall-admin-token", &view)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 200);
+    let rows: Value = response.json().await.unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 1);
+    assert_eq!(rows[0]["revision"], "r1");
+    assert!(rows[0].get("policy_yaml").is_none());
+    let rows: Value = client
+        .get(format!("{path}?limit=1&after=r1"))
+        .header("x-llm-firewall-admin-token", &view)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(rows[0]["revision"], "r2");
+    let row: Value = client
+        .get(format!("{path}/r2"))
+        .header("x-llm-firewall-admin-token", &view)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(row["tenant_id"], a.tenant);
+    assert_eq!(row["agent_id"], a.agent);
+    assert_eq!(row["policy_yaml"], "default: deny\n");
+    assert_eq!(
+        row["policy_sha256"],
+        format!("{:x}", Sha256::digest(b"default: deny\n"))
+    );
+    assert_eq!(
+        client
+            .get(format!("{path}?limit=101"))
+            .header("x-llm-firewall-admin-token", &view)
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        400
+    );
+    assert_eq!(
+        client
+            .get(format!("{path}/missing"))
+            .header("x-llm-firewall-admin-token", &view)
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        404
+    );
+    assert_eq!(
+        client
+            .get(format!("{path}/r2"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        401
+    );
+    assert_eq!(
+        client
+            .post(&path)
+            .header("x-llm-firewall-admin-token", &view)
+            .json(&json!({"revision":"no","policy_yaml":"default: allow\n"}))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        403
+    );
+    // Readback is GET-only: no deployment or key allocation, no cross-audience YAML.
+    assert_eq!(f.deployments(&a.tenant).await, 0);
+    assert!(store
+        .read_managed_revision_async(&b.tenant, "absent", "r1")
+        .await
+        .unwrap()
+        .is_none());
+    let doc = store
+        .create_managed_revision_authorized_async(
+            &a.tenant,
+            &a.agent,
+            "new",
+            "default: deny\n",
+            &owner.admin.id,
+        )
+        .await
+        .unwrap();
+    assert!(!doc.approved);
+    assert!(store
+        .create_managed_revision_authorized_async(
+            &a.tenant,
+            &a.agent,
+            "new",
+            "default: allow\n",
+            &owner.admin.id
+        )
+        .await
+        .is_err());
+    let id = owner.admin.id;
+    let q = format!("UPDATE control_plane_admins SET role='viewer' WHERE id='{id}'");
+    f.sql(&q, &q).await;
+    assert!(store
+        .approve_managed_revision_authorized_async(&a.tenant, &a.agent, "new", &id)
+        .await
+        .is_err());
+    assert!(store
+        .create_managed_revision_authorized_async(
+            &a.tenant,
+            &a.agent,
+            "after-demotion",
+            "default: deny\n",
+            &id
+        )
+        .await
+        .is_err());
+    assert!(
+        !store
+            .read_managed_revision_async(&a.tenant, &a.agent, "new")
+            .await
+            .unwrap()
+            .unwrap()
+            .identity
+            .approved
+    );
+    store
+        .revoke_managed_agent_async(&a.tenant, &a.agent)
+        .await
+        .unwrap();
+    assert!(store
+        .create_managed_revision_authorized_async(
+            &a.tenant,
+            &a.agent,
+            "after-revocation",
+            "default: deny\n",
+            "bootstrap_owner"
+        )
+        .await
+        .is_err());
+    assert!(store
+        .approve_managed_revision_authorized_async(&a.tenant, &a.agent, "new", "bootstrap_owner")
+        .await
+        .is_err());
+}
+
+async fn guarded_console_issuance_conflicts_without_side_effects(f: &Fixture) {
+    let store = f.store().await;
+    let a = audience(&store, "Guarded Console").await;
+    let server = Server::start(store.clone()).await;
+    let first = key("guard-first");
+    let next = key("guard-next");
+    let (status, original) = post(
+        &server,
+        &a,
+        "r1",
+        Some(&first),
+        json!({"expected_sequence":0}),
+        OWNER,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, _) = post(
+        &server,
+        &a,
+        "r2",
+        Some(&next),
+        json!({"expected_sequence":0}),
+        OWNER,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(f.deployments(&a.tenant).await, 1);
+    assert_eq!(f.keys(&a.tenant).await, 1);
+    let (status, replay) = post(
+        &server,
+        &a,
+        "r1",
+        Some(&first),
+        json!({"expected_sequence":0}),
+        OWNER,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(
+        replay["deployment_sequence"],
+        original["deployment_sequence"]
+    );
+    assert_eq!(
+        idem(&replay)["envelope_sha256"],
+        idem(&original)["envelope_sha256"]
+    );
+    assert_eq!(
+        post(
+            &server,
+            &a,
+            "r1",
+            Some(&first),
+            json!({"expected_sequence":1}),
+            OWNER
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let (bundle, _) = fetch(&server, &a).await.unwrap();
+    acknowledge(&server, &a, &bundle).await;
+    store
+        .create_managed_group_async(&a.tenant, "guard-group", "Guard")
+        .await
+        .unwrap();
+    store
+        .enroll_managed_agent_async(&a.tenant, "pilot")
+        .await
+        .unwrap();
+    store
+        .add_managed_group_member_async(&a.tenant, "guard-group", "pilot", true)
+        .await
+        .unwrap();
+    store
+        .add_managed_group_member_async(&a.tenant, "guard-group", &a.agent, false)
+        .await
+        .unwrap();
+    store
+        .create_managed_group_revision_async(
+            &a.tenant,
+            "guard-group",
+            "group-candidate",
+            "default: deny\n",
+        )
+        .await
+        .unwrap();
+    store
+        .approve_managed_group_revision_async(&a.tenant, "guard-group", "group-candidate")
+        .await
+        .unwrap();
+    let issuer = llm_firewall::tenant_store::ManagedIssuer::from_environment_for_key(None).unwrap();
+    store
+        .start_managed_group_rollout_async(&a.tenant, "guard-group", "group-candidate", &issuer)
+        .await
+        .unwrap();
+    // This Agent is a frozen worker, not yet issued by the group. Sequence CAS
+    // alone would miss the conflict; live membership is not the ownership source.
+    store
+        .remove_managed_group_member_async(&a.tenant, "guard-group", &a.agent)
+        .await
+        .unwrap();
+    let (status, _) = post(
+        &server,
+        &a,
+        "r2",
+        Some(&next),
+        json!({"expected_sequence":1}),
+        OWNER,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(
+        store
+            .list_managed_deployments_async(&a.tenant, &a.agent)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(f.keys(&a.tenant).await, 1);
+    // A prior confirmed issuance can still be reconciled during a group rollout.
+    assert_eq!(
+        post(
+            &server,
+            &a,
+            "r1",
+            Some(&first),
+            json!({"expected_sequence":0}),
+            OWNER
+        )
+        .await
+        .0,
+        StatusCode::CREATED
+    );
 }

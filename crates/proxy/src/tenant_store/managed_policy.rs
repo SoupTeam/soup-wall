@@ -557,13 +557,68 @@ pub(super) fn eligible(db: &rusqlite::Connection, tenant: &str, agent: &str) -> 
     Ok(())
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct ManagedRevisionDocument {
+    #[serde(flatten)]
+    pub identity: ManagedRevision,
+    pub policy_yaml: String,
+}
+
 impl TenantStore {
+    pub fn list_managed_revisions(
+        &self,
+        tenant: &str,
+        agent: &str,
+        after: &str,
+        limit: usize,
+    ) -> Result<Vec<ManagedRevision>> {
+        ensure!(
+            (1..=100).contains(&limit) && (after.is_empty() || exact_id(after)),
+            "invalid revision page"
+        );
+        let db = self.connection()?;
+        let mut stmt=db.prepare("SELECT revision,policy_sha256,approved_at_unix IS NOT NULL FROM managed_agent_revisions WHERE tenant_id=?1 AND agent_id=?2 AND revision>?3 ORDER BY revision LIMIT ?4")?;
+        let rows = stmt
+            .query_map(params![tenant, agent, after, limit as i64], |r| {
+                Ok(ManagedRevision {
+                    tenant_id: tenant.into(),
+                    agent_id: agent.into(),
+                    revision: r.get(0)?,
+                    policy_sha256: r.get(1)?,
+                    approved: r.get(2)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+    pub fn read_managed_revision(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+    ) -> Result<Option<ManagedRevisionDocument>> {
+        ensure!(exact_id(revision), "invalid revision");
+        let db = self.connection()?;
+        Ok(db.query_row("SELECT policy_yaml,policy_sha256,approved_at_unix IS NOT NULL FROM managed_agent_revisions WHERE tenant_id=?1 AND agent_id=?2 AND revision=?3",params![tenant,agent,revision],|r|Ok(ManagedRevisionDocument{identity:ManagedRevision{tenant_id:tenant.into(),agent_id:agent.into(),revision:revision.into(),policy_sha256:r.get(1)?,approved:r.get(2)?},policy_yaml:r.get(0)?})).optional()?)
+    }
+
     pub fn create_managed_revision(
         &self,
         tenant: &str,
         agent: &str,
         revision: &str,
         yaml: &str,
+    ) -> Result<ManagedRevision> {
+        self.create_managed_revision_checked(tenant, agent, revision, yaml, None)
+    }
+
+    pub(super) fn create_managed_revision_checked(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+        yaml: &str,
+        admin_id: Option<&str>,
     ) -> Result<ManagedRevision> {
         ensure!(exact_id(revision), "invalid immutable revision");
         ensure!(
@@ -572,16 +627,21 @@ impl TenantStore {
         );
         AgentPolicySet::from_yaml(yaml).context("invalid AgentPolicySet YAML")?;
         let digest = hex(&Sha256::digest(yaml.as_bytes()));
-        let db = self.connection()?;
+        let mut db = self.connection()?;
         schema(&db)?;
-        eligible(&db, tenant, agent)?;
-        db.execute(
+        let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        eligible(&tx, tenant, agent)?;
+        if let Some(admin_id) = admin_id {
+            super::managed_idempotency::current_admin_may_deploy(&tx, admin_id)?;
+        }
+        tx.execute(
             "INSERT INTO managed_agent_revisions
               (tenant_id,agent_id,revision,policy_yaml,policy_sha256)
              VALUES (?1,?2,?3,?4,?5)",
             params![tenant, agent, revision, yaml, digest],
         )
         .context("revision exists or cannot be created")?;
+        tx.commit()?;
         Ok(ManagedRevision {
             tenant_id: tenant.into(),
             agent_id: agent.into(),
@@ -596,14 +656,29 @@ impl TenantStore {
         agent: &str,
         revision: &str,
     ) -> Result<bool> {
-        let db = self.connection()?;
+        self.approve_managed_revision_checked(tenant, agent, revision, None)
+    }
+
+    pub(super) fn approve_managed_revision_checked(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+        admin_id: Option<&str>,
+    ) -> Result<bool> {
+        let mut db = self.connection()?;
         schema(&db)?;
-        eligible(&db, tenant, agent)?;
-        let changed = db.execute(
+        let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        eligible(&tx, tenant, agent)?;
+        if let Some(admin_id) = admin_id {
+            super::managed_idempotency::current_admin_may_deploy(&tx, admin_id)?;
+        }
+        let changed = tx.execute(
             "UPDATE managed_agent_revisions SET approved_at_unix=?4
              WHERE tenant_id=?1 AND agent_id=?2 AND revision=?3 AND approved_at_unix IS NULL",
             params![tenant, agent, revision, now_unix()],
         )?;
+        tx.commit()?;
         Ok(changed == 1)
     }
     /// New signed, monotonically numbered deployment. Rollback reuses only

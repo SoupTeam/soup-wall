@@ -1,0 +1,109 @@
+[
+  {
+    "label": "compile",
+    "command": [
+      "/opt/homebrew/bin/cargo",
+      "check",
+      "--offline",
+      "--locked",
+      "-p",
+      "llm-firewall",
+      "--all-targets"
+    ],
+    "exit_code": 0,
+    "source_sha256": "dbfbcb796e2f3ff4b1f748e037471df4d14f8601064c65d18e0f83de5cf11dbc",
+    "log_sha256": "b4030e44068972fc0f5b95aeae8e797c2f3bd866271b01e7679ea80d7239086d",
+    "elapsed_seconds": 44.99
+  },
+  {
+    "label": "api-controls",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo test --offline --locked -p llm-firewall --test managed_deployment_idempotency && cargo clippy --offline --locked -p llm-firewall --all-targets -- -D warnings"
+    ],
+    "exit_code": 0,
+    "source_sha256": "d233c289428ea5348c56f8540cc413fe3bf6530f9962a0e1ca23c5cf4cc2bc7c",
+    "log_sha256": "c2189d951cae14356450d671389d527e2a23f079f9001e6bf5237932c506f9c8",
+    "elapsed_seconds": 70.68
+  },
+  {
+    "label": "final-controls",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo fmt --all --check && cargo test --offline --locked -p llm-firewall && cargo clippy --offline --locked -p llm-firewall --all-targets -- -D warnings && node --check crates/proxy/src/single_agent_policy.js && python3 -B -c \"import ast,pathlib; [ast.parse(pathlib.Path(p).read_text()) for p in [\\\"scripts/console-single-policy-acceptance.py\\\",\\\"scripts/tests/test_console_single_policy_browser.py\\\"]]\""
+    ],
+    "exit_code": 1,
+    "source_sha256": "69dda8ffda43a66df5cbdd792a7981fdb175840afa61144350e8f2a28cde4446",
+    "log_sha256": "8248bac88ca2f3fba700579a010a6c0dbcf7ee18ab7f12f9dfa2b134a7186a17",
+    "elapsed_seconds": 1.63
+  },
+  {
+    "label": "final-controls",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo fmt --all --check && cargo test --offline --locked -p llm-firewall && cargo clippy --offline --locked -p llm-firewall --all-targets -- -D warnings && node --check crates/proxy/src/single_agent_policy.js && python3 -B -c \"import ast,pathlib; [ast.parse(pathlib.Path(p).read_text()) for p in [\\\"scripts/console-single-policy-acceptance.py\\\",\\\"scripts/tests/test_console_single_policy_browser.py\\\"]]\""
+    ],
+    "exit_code": 0,
+    "source_sha256": "4e55dd2da8bbec54a4e0d76f3d658725c56d19c3d0ce88512549256e1597ba8a",
+    "log_sha256": "590affafed5844c57004edb6a20c216ea61cdbe58b82e8f7cd8fa49b48a25a65",
+    "elapsed_seconds": 86.64
+  },
+  {
+    "label": "generate-components",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "python3",
+      "-B",
+      "-c",
+      "import sys,pathlib;sys.path.insert(0,\"scripts\");import ci_components;pathlib.Path(\"/private/tmp/sou227-qualification/scratch/ci-components.yml\").write_text(ci_components.generated())"
+    ],
+    "exit_code": 0,
+    "source_sha256": "c6def8b678a4a37720105b99cc4b8199dae4a7ee38477acb90795b27fa9d60ca",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "elapsed_seconds": 0.07
+  },
+  {
+    "label": "browser-local",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "/private/tmp/claude-501/-Users-sidzuya--gemini-antigravity-ide-scratch-soup-wall/1eba219e-fc5e-4ed1-bbe0-6daf352928ff/scratchpad/pw220/bin/python",
+      "/private/tmp/sou227-review/browser.py"
+    ],
+    "exit_code": 1,
+    "source_sha256": "f503632633b01a2a1dfec63e46ab7e1d0a76650600793b0d78df327592e36ddf",
+    "log_sha256": "b2e1dfdc3fd22da18944fc3fd6c27f629b4efd2346a781988f98e5f58685a39b",
+    "elapsed_seconds": 0.12
+  },
+  {
+    "label": "browser-local",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "/private/tmp/claude-501/-Users-sidzuya--gemini-antigravity-ide-scratch-soup-wall/1eba219e-fc5e-4ed1-bbe0-6daf352928ff/scratchpad/pw220/bin/python",
+      "/private/tmp/sou227-review/browser.py"
+    ],
+    "exit_code": 1,
+    "source_sha256": "f503632633b01a2a1dfec63e46ab7e1d0a76650600793b0d78df327592e36ddf",
+    "log_sha256": "dbdf91beb1cf5ed234e862f62f4189273d0c12c160fe0f2045122d644e9460d4",
+    "elapsed_seconds": 0.9
+  },
+  {
+    "label": "final-api-contracts",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "/bin/sh",
+      "-c",
+      "cargo fmt --all --check && cargo test --offline --locked -p llm-firewall --test managed_deployment_idempotency && cargo clippy --offline --locked -p llm-firewall --all-targets -- -D warnings && node --check crates/proxy/src/single_agent_policy.js && python3 -B -m unittest discover -s scripts/tests -p \"test_ci_components.py\" && python3 -B scripts/check_docs.py"
+    ],
+    "exit_code": 0,
+    "source_sha256": "7c069dae781e569431f32b80e574402f069ddc0d8471f6a81ea2d531b0910f6e",
+    "log_sha256": "419d0023f6173ddf11789f35e7bfd1169a574fd83b98908b79e78d53679e54b3",
+    "elapsed_seconds": 18.79
+  }
+]

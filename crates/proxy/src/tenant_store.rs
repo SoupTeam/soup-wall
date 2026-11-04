@@ -35,13 +35,13 @@ pub use managed_confirmation::{
     StartGuard, CONFIRMATION_TTL_SECS, MAX_PREVIEW_AGENTS,
 };
 pub use managed_idempotency::{
-    valid_idempotency_key, DeploymentIdempotency, IdempotencyConflict, KeyedDeployment,
-    MAX_IDEMPOTENCY_KEY_BYTES, MIN_IDEMPOTENCY_KEY_BYTES,
+    valid_idempotency_key, DeploymentIdempotency, DeploymentPreconditionFailed,
+    IdempotencyConflict, KeyedDeployment, MAX_IDEMPOTENCY_KEY_BYTES, MIN_IDEMPOTENCY_KEY_BYTES,
 };
 pub use managed_policy::{
     AppliedReport, ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
-    ManagedGroupRollout, ManagedIssuer, ManagedRevision, ManagedRolloutAgentStatus, RolloutPhase,
-    SignedManagedBundle,
+    ManagedGroupRollout, ManagedIssuer, ManagedRevision, ManagedRevisionDocument,
+    ManagedRolloutAgentStatus, RolloutPhase, SignedManagedBundle,
 };
 mod postgres;
 pub use agent_enrollment::{
