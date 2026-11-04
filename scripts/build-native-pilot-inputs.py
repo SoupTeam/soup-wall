@@ -465,6 +465,24 @@ def result(status, generation, seconds):
             "active_protection": False}
 
 
+def verify_existing(root, output, expected_commit):
+    """Read and verify an already selected build; never create or rebuild it."""
+    require(output is not None and output.is_dir() and (output / "current.json").exists(),
+            "selected_build_missing", "reuse")
+    source = source_identity(root, expected_commit)
+    plan = inventory(root, output, expected_commit)
+    require(not plan["missing"], "missing_inputs: " + "; ".join(plan["missing"])[:300])
+    tools = tool_identity(plan["tools"])
+    output = native.output_root(output)
+    receipt, generation = selected(output, source, tools)
+    require(source_identity(root, expected_commit) == source and
+            tool_identity(plan["tools"]) == tools,
+            "input_changed_during_verification", "reuse")
+    answer = result("verified-reuse", generation, 0)
+    answer["receipt_sha256"] = native.digest(generation / "receipt.json")
+    return answer
+
+
 def run_build(root, output, expected_commit, *, rebuild=False, wait_seconds=0):
     wait_seconds = coordination.bounded_wait(wait_seconds)
     source = source_identity(root, expected_commit)
@@ -543,12 +561,16 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     capacity.add_arguments(parser)
     parser.add_argument("--build", action="store_true")
+    parser.add_argument("--verify-existing", action="store_true",
+                        help="verify the selected immutable build without creating or rebuilding")
     parser.add_argument("--rebuild", action="store_true")
     parser.add_argument("--wait-seconds", type=float, default=0,
                         help="explicit bounded wait for an owned same-root build (max 2700)")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--expected-commit")
     args = parser.parse_args(argv)
+    if args.build and args.verify_existing:
+        parser.error("--verify-existing and --build are mutually exclusive")
     if args.capacity_plan:
         if args.build or args.guard_capacity:
             parser.error("--capacity-plan is read-only; use it without --build or --guard-capacity")
@@ -560,10 +582,14 @@ def main(argv=None):
         require(not args.rebuild or args.build, "rebuild_requires_build")
         coordination.bounded_wait(args.wait_seconds)
         require(args.build or args.wait_seconds == 0, "wait_requires_build")
+        require(not args.verify_existing or not args.guard_capacity,
+                "verify_existing_cannot_build")
         with capacity.checked("source", args):
             value = (run_build(ROOT, args.output, args.expected_commit,
                                rebuild=args.rebuild, wait_seconds=args.wait_seconds)
-                     if args.build else inventory(ROOT, args.output, args.expected_commit))
+                     if args.build else (verify_existing(ROOT, args.output, args.expected_commit)
+                                         if args.verify_existing else
+                                         inventory(ROOT, args.output, args.expected_commit)))
             print(json.dumps(value, sort_keys=True))
         return 0
     except capacity.Refusal as error:
