@@ -1,5 +1,9 @@
 """Focused audit qualification must never replace the full prepared pilot gate."""
 import ast
+import json
+import os
+import textwrap
+from unittest.mock import patch
 import re
 from pathlib import Path
 import unittest
@@ -176,6 +180,31 @@ class PreparedQualificationCoverage(unittest.TestCase):
                     }))
                 self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
                 self.assertIn("--project-presets-only", body)
+
+    def test_actual_project_dispatch_guards_accept_normal_and_recovery_and_refuse_mixes(self):
+        def validate(body, inputs):
+            # Execute only the repository-owned Python guard, never input as code.
+            program=body.split("python3 -B - <<'PYCODE'\n",1)[1].split('          PYCODE',1)[0]
+            with patch.dict(os.environ, {'DISPATCH_INPUTS':json.dumps(inputs)}):
+                exec(compile(textwrap.dedent(program), '<owned dispatch guard>', 'exec'), {})
+        baseline={'native_preparation_only':'true','project_presets_only':'true',
+                  'stability_mode':'off','provider_ca_only':'false','ask_series':''}
+        for workflow,text in self.workflows():
+            old=step(text,'Validate focused project preset dispatch')
+            new=step(text,'Validate focused project recovery dispatch')
+            for mode in ('off','project-recovery'):
+                inputs=dict(baseline,installed_focus=mode)
+                with self.subTest(workflow=workflow,mode=mode):
+                    validate(old,inputs)
+                    if mode=='project-recovery':validate(new,inputs)
+            for changed in ({'native_preparation_only':'false'},{'stability_mode':'soak'},
+                            {'provider_ca_only':'true'},{'ask_series':'cold,warm'},
+                            {'installed_focus':'maintenance'}):
+                inputs=dict(baseline,installed_focus='project-recovery');inputs.update(changed)
+                with self.subTest(workflow=workflow,conflict=changed):
+                    with self.assertRaises(AssertionError):validate(old,inputs)
+            with self.assertRaises(AssertionError):
+                validate(new,dict(baseline,installed_focus='project-recovery',project_presets_only='false'))
 
     def test_provider_ca_dispatch_is_separate_from_full_qualification(self):
         context = {"github.event_name": "workflow_dispatch",
