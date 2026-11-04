@@ -2,7 +2,7 @@
   "backend": "sqlite",
   "binaries": {
     "agentfw": "a7a39a87bef4f241cca094300162f1f4d57ddc43bef427ff819ad5358561cf3e",
-    "llm-firewall": "8198698e9706986dcd9dd382d81c7af610415c990017fcb7f989d9ca208e66f6"
+    "llm-firewall": "3364be4ff60a5807e9f7d4c8745a04842523443f4371378aa6721dc11d33a83c"
   },
   "checks": {
     "explicit-retry-same-issuance": true,
@@ -26,7 +26,7 @@
     "viewer-server-mutation-refused": true
   },
   "config_sha256": {
-    "console": "e2c9e8757bd8e920f410edb1999dae1b343d80821410b690760fc61e2f02c139"
+    "console": "0791a1737a17752bc9623a1ca79f1e604bef26e8786021c16294a18b9fa0e8f0"
   },
   "format": "sw-console-single-policy-acceptance/1",
   "scope": "one disposable private Linux deployment with one real Agent, a browser and Console; synthetic tenants; not production, multi-host or runtime attestation",
@@ -34,7 +34,7 @@
     "recorded_deployments": [
       {
         "action": "rollback",
-        "applied_at_unix": 1793804414,
+        "applied_at_unix": 1793807932,
         "deployment_sequence": 3,
         "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
         "revision": "r1",
@@ -42,7 +42,7 @@
       },
       {
         "action": "activate",
-        "applied_at_unix": 1793804412,
+        "applied_at_unix": 1793807930,
         "deployment_sequence": 2,
         "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
         "revision": "r2",
@@ -50,7 +50,7 @@
       },
       {
         "action": "activate",
-        "applied_at_unix": 1793804410,
+        "applied_at_unix": 1793807928,
         "deployment_sequence": 1,
         "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
         "revision": "r1",
@@ -58,7 +58,7 @@
       }
     ]
   },
-  "source_commit": "2332a752f225a7dcc528041ce9c5ca18af82acdb",
+  "source_commit": "4a27a93019180697a6dd8064b766365b66b3eee6",
   "source_dirty": false,
   "source_sha256": {
     "Cargo.lock": "f4bd80d40a0408145a11bae4c91324ff954cdd59ee8172ce1f0a6e22b161f6c2",
@@ -107,7 +107,7 @@
     "crates/proxy/src/tenant_store/managed_async.rs": "8c243af669a8355d8c4ca079a2511a415ff37adf10420a3f2c694834620d3445",
     "crates/proxy/src/tenant_store/managed_confirmation.rs": "45994b69bd64adc5b29a8178f134fc214d7cbefaee64e3f64099850a792fade7",
     "crates/proxy/src/tenant_store/managed_idempotency.rs": "8b0217312648eb33cb53ba428b2ffb0d04fb1aaba400203be763bce5689f83f8",
-    "crates/proxy/src/tenant_store/managed_policy.rs": "cce6d66469977e86162923426959acec8bbe73939e9a754f880fb9688042fb43",
+    "crates/proxy/src/tenant_store/managed_policy.rs": "c066788ee53ec7a4611f99c803389b7f4625e4a656291973d3a953408317b48c",
     "crates/proxy/src/tenant_store/managed_postgres.rs": "3481d222365de7594ea9de216de75b6dda40f4ca7a1f08bf8cbbf3345baaf336",
     "crates/proxy/src/tenant_store/postgres.rs": "8578aa493a0c4d260e9fb79e4992346bd1a9f2e62b53b8fbe02697def36d1bd9",
     "crates/proxy/src/tenant_store/recovery_outbox_fixture.rs": "4c6c656c98dc80c34716607de047ca7a1cfbf0bcbffb5c9708fcd8b9ae62cb2e",
@@ -117,6 +117,6 @@
     "crates/proxy/src/usage.rs": "5d663ab2df48fd3b3c68d16563b458b8acec723480bf4be03dd9144ff1d0d7e8",
     "scripts/console-single-policy-acceptance.py": "b0ebd1bfa5fc05946a5614aacf0293afb4595cdfc964c565e8f87b42cbbbad71"
   },
-  "source_tree": "077c27639329372d1c609487c55c1bfa551f0f6c",
+  "source_tree": "0badbb9c5bc43d0610f2571583814005cdd454a9",
   "status": "passed"
 }

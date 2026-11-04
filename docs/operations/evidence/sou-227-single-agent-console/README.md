@@ -1,65 +1,61 @@
-# SOU-227 evidence
+# SOU-227 acceptance evidence
 
-Local proxy tests, fmt, all-target Clippy and JS/Python syntax checks are recorded
-with exact snapshot and log hashes in `local-attempts.json`. Failed formatting
-and browser-driver attempts are retained. The browser runtime could not launch
-under the macOS scratch-only Seatbelt boundary (Chrome ProcessSingleton/socket
-and crashpad attempted writes outside scratch); zero browser tests ran locally.
-This is explicitly not a browser acceptance pass. PostgreSQL requires the native
-PostgreSQL 16 fixture and is explicitly ignored locally, not replaced with 14.
+Implementation source: 4a27a93019180697a6dd8064b766365b66b3eee6. Both final
+native workflows succeeded at this exact source; the retained reports are
+independently verified against Git rather than trusted solely from job status.
 
-Exact committed-source browser, real Console/Agent and PostgreSQL qualification
-will be linked after completion. Reports contain sanitized checks and identities;
-no credentials, raw private process logs or database URLs are published.
+- [Browser/Console/Agent run 41862618813](https://github.com/SoupTeam/soup-wall/actions/runs/41862618813):
+  11 individual policy browser tests, zero skips and zero callback/page errors;
+  real SQLite lifecycle 19/19 and PostgreSQL lifecycle 20/20 checks.
+- [HTTP/PostgreSQL/recovery run 41862617056](https://github.com/SoupTeam/soup-wall/actions/runs/41862617056):
+  shared immutable readback, cold/partial read-only schema, current authorization,
+  sequence/group-ownership conflicts and durable retry controls. The required
+  PostgreSQL HTTP test ran with one pass and zero ignores. Real encrypted
+  recovery demos passed 31/31 checks on each backend.
+- Final local workspace: 2024 passed, 0 failed, 15 explicit environment-dependent
+  ignores; workspace/all-target Clippy -D warnings and fmt passed. No required
+  native PostgreSQL/browser control was substituted with a local ignore.
 
-Initial Linux qualification at 32946036 passed both runs: 41848642387
-(browser/real Console/Agent) and 41848649060 (SQLite/PostgreSQL HTTP controls and
-recovery). The new browser suite ran 9 assertions without skips. Both backend
-reports are retained and every recorded source-file hash was independently
-matched against that exact Git commit. The real-process reports passed 16
-SQLite and 17 PostgreSQL checks. They prove actual signed-policy application,
-exact ACKs, lost-response reconciliation without additional sequence and
-higher-sequence rollback. This evidence is attributed only to 32946036.
+The real browser authoring cycle creates and reviews exact immutable YAML and
+server digest, approves it, issues a signed policy and independently observes
+real Agent application. It loses a committed response, retries the same key
+without an extra sequence, and rolls back through a higher-sequence baseline
+with its matching applied acknowledgement. Real hook effects are deny → allow
+→ deny. Role/Agent revocation and unrelated tenant isolation remain enforced.
 
-Inspection of the successful browser log found duplicate dialog-listener
-callback exceptions in the fixture on repeated login. Registration is now once
-per page and callback/page errors are hard failures. Requalification also checks
-real hook deny/allow/deny effects and a duplicated initial deployment click.
+## Current retained proof
 
-The full workspace initially hit EAGAIN creating a process in unchanged
-agentfw offline CLI controls. A sequential retry passed the entire workspace
-and all-target workspace Clippy; both attempts and exact snapshots are retained.
-No production source was changed to accommodate this environmental failure.
+native-final.json binds both final run/artifact IDs, artifact SHA-256, all test
+names/counts, local qualification identity and report hashes. Both artifact ZIPs
+were checked for CRC, duplicate/path traversal entries and bounded sizes. Every
+reported source-file hash was independently matched through git show at the
+qualified commit: 55 browser source files and 287 backend source files.
+final-sqlite-report.json and final-postgres-report.json retain the exact clean
+source/tree, synthetic recorded deployment identities, all checks, configuration
+hashes and actual binary hashes. No credential, signing seed, raw private log or
+database connection string is published.
 
-## Final browser and real-effect qualification
+The managed-group demo's legacy recovery_schema:28 report label is stale. The
+strict inventory at the exact qualified commit declares PostgreSQL schema 30
+and recovery executes against that inventory. The stale label is disclosed in
+the final ledger; it is not used as the schema authority. This task adds no
+persistent table, migration or recovery inventory entry.
 
-[Run 41851423556](https://github.com/SoupTeam/soup-wall/actions/runs/41851423556)
-passed at exact source 2332a752f225a7dcc528041ce9c5ca18af82acdb: 11 new browser
-tests, zero skips, zero callback/page errors; real browser/Console/Agent cycles
-on SQLite and PostgreSQL with observed hook deny → allow → deny effects,
-matching applied ACKs, same-sequence lost-response retry and higher-sequence
-rollback. Final reports and source/configuration/binary identities are retained;
-all 55 reported source-file hashes independently match that Git commit.
+## Retained attempts and limitations
 
-PostgreSQL HTTP/recovery run 41848649060 passed at 32946036. All Rust source,
-Cargo manifests/lockfile and toolchain inputs are byte-identical between that
-qualified server implementation and 2332a752; the later changes are UI/fixtures
-and evidence and are exercised by the final browser run. The full workspace
-passed 2024 tests with 15 explicit environment-dependent ignores; workspace
-all-target Clippy -D warnings and fmt passed. The final update changes evidence
-only. Final current-main Ready/security/admission and merge remain TL-owned.
+local-attempts.json includes failed formatting/driver attempts, the macOS
+scratch-only Chrome launch failure, EAGAIN failures in unchanged agentfw CLI
+fixtures and subsequent passing sequential workspace runs. Local browser launch
+ran zero tests and is not claimed as acceptance. No guard or target test was
+weakened to accommodate those environmental failures.
 
-The final cold-store parity review found that SQLite's lazily created managed
-revision table could make a pre-enrollment GET return 503 while PostgreSQL
-returned an empty inventory/404. SQLite now probes only sqlite_master and returns
-the same empty results without DDL. The shared HTTP controls run this case first
-on each backend and assert schema-object counts do not change. Local controls,
-Clippy and fmt pass. The updated exact-source native qualification is recorded
-separately from the earlier 2332a752 proof.
+native-attempt-1.json, sqlite-report.json and postgres-report.json retain
+initial source 32946036 proof. native-qualified-2332a752.json and the two
+qualified-2332a752-*-report.json files preserve the subsequent source 2332a752
+proof after the duplicate dialog-listener fixture error was fixed. These older
+reports are historical only; they are not substituted for final source 4a27a930.
+The final source also distinguishes entirely cold SQLite (empty/404 with no DDL)
+from partial schema (explicit 503, no repair or false empty-history claim).
 
-Cold-store GET handling now also distinguishes a completely absent managed
-schema from a partial managed schema: partial schema returns explicit 503
-without repair or a false empty-history claim. The shared HTTP fixture asserts
-both responses and unchanged schema-object counts; SQLite regression, all-target
-proxy Clippy -D warnings and fmt pass. Final exact-source qualification follows
-this last read-only boundary refinement.
+The last update changes documentation/evidence only. Final current-main Ready,
+security/admission and merge remain maintainer-owned.

@@ -219,5 +219,31 @@
     "source_sha256": "75bf3b0189b3144e91aed98dfb1269e2ee6913fd89852c1c2cf4fd6f64452789",
     "log_sha256": "7181c7b24afe36c6baf8b6cd202319202335e03d68019be2f72e0cf21ab1c1b0",
     "elapsed_seconds": 16.76
+  },
+  {
+    "label": "last-source-workspace",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo test --offline --locked --workspace -- --test-threads=1 && cargo clippy --offline --locked --workspace --all-targets -- -D warnings && cargo fmt --all --check"
+    ],
+    "exit_code": 0,
+    "source_sha256": "a3bdde36c82676db5dac32902c403e581346e4deeead37b9fb99962d85fb8f22",
+    "log_sha256": "26628d33ee2a18ed21ed2715820ff3e9c2cfdaca415cce3a1c9960ae154bebd2",
+    "elapsed_seconds": 244.63
+  },
+  {
+    "label": "final-native-evidence-docs",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "python3",
+      "-B",
+      "scripts/check_docs.py"
+    ],
+    "exit_code": 0,
+    "source_sha256": "95c304c0e65a44a40a76a41a8cd7e2b45fe5e0cabbdb71c143453030ef051737",
+    "log_sha256": "0348a1742be9b133e2fbfa8fe2e2c7b2a841c5a131feea7aebfa0eddc04dc0e6",
+    "elapsed_seconds": 0.41
   }
 ]

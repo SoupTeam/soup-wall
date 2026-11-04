@@ -1,38 +1,108 @@
 {
   "format": "sou-227-native-qualification/1",
-  "implementation_source": "2332a752f225a7dcc528041ce9c5ca18af82acdb",
-  "browser_run": 41851423556,
-  "browser_tests": 11,
-  "browser_skips": 0,
-  "callback_errors": 0,
-  "source_files_verified": 55,
-  "backend_http_controls_run": 41848649060,
-  "backend_http_source": "32946036387032f59458a61a44c261182e97990f",
-  "backend_rust_source_unchanged": true,
-  "reports": [
+  "implementation_source": "4a27a93019180697a6dd8064b766365b66b3eee6",
+  "source_tree": "0badbb9c5bc43d0610f2571583814005cdd454a9",
+  "browser_run": 41862618813,
+  "browser_artifact_id": 13339944134,
+  "browser_artifact_sha256": "d7562fc5f1075fc9a9da6dcd8c38f35533fb843358ad64dac8e0976ff57fe364",
+  "browser_archive_members": 60,
+  "browser_archive_crc_verified": true,
+  "browser_source_files_verified": 55,
+  "browser_tests": {
+    "passed": 11,
+    "skipped": 0,
+    "callback_errors": 0,
+    "tests": [
+      "test_403_and_overlap_conflict_leave_explicit_refusal",
+      "test_agent_switch_clears_review_and_draft",
+      "test_changed_intent_requires_new_confirmation_and_key",
+      "test_exact_yaml_create_approve_and_deploy",
+      "test_inconsistent_yaml_digest_blocks_approval_and_deploy",
+      "test_initial_duplicate_submission_issues_once",
+      "test_lost_response_retry_and_duplicate_submit_reuse_key",
+      "test_revocation_and_rejection_are_distinct_from_applied",
+      "test_rollback_to_current_revision_is_disabled",
+      "test_stale_reply_after_tenant_switch_cannot_restore_review",
+      "test_viewer_operator_and_live_role_change_cannot_mutate"
+    ]
+  },
+  "backend_run": 41862617056,
+  "backend_artifact_id": 13341261403,
+  "backend_artifact_sha256": "b2ea3268f638228f718680f2be0d69c20a6b9a6eeb1641e284557519c54a535d",
+  "backend_source_files_verified": 287,
+  "postgres_http_controls": {
+    "test": "postgres_deployment_idempotency_over_http",
+    "passed": 1,
+    "failed": 0,
+    "ignored": 0
+  },
+  "browser_reports": [
+    {
+      "file": "final-sqlite-report.json",
+      "sha256": "dba9d5ddcd307635a0ba825c28e0a89758c920e893cd9c4452837e157aa358b8",
+      "checks": 19,
+      "backend": "sqlite",
+      "passed": true
+    },
     {
       "file": "final-postgres-report.json",
-      "raw_sha256": "3a2d7b1a82c54613dbc6fc710078901cb47515558c8d8dd5a067f7043ce950c7",
+      "sha256": "2905d36d93068ab6c92b82e8adb965f0bc311d1db7c6ae2d7100e9425c5640cf",
       "checks": 20,
-      "binaries": {
-        "agentfw": "a7a39a87bef4f241cca094300162f1f4d57ddc43bef427ff819ad5358561cf3e",
-        "llm-firewall": "8198698e9706986dcd9dd382d81c7af610415c990017fcb7f989d9ca208e66f6"
+      "backend": "postgres",
+      "passed": true
+    }
+  ],
+  "backend_reports": [
+    {
+      "report": "group-postgres.json",
+      "sha256": "fb6f78f2a796b98df3e5c5ae772846693fdd4b0ec77634756541d1cb2f2b3c1f",
+      "checks": 31,
+      "passed": true,
+      "configuration": {
+        "transport": "literal loopback HTTP",
+        "agents": 4,
+        "pilots": 1,
+        "external_provider_calls": 0,
+        "recovery_schema": 28
       },
-      "config_sha256": {
-        "console": "2b15d84c7d279d2a6ad1099b52d58c384e69266da9cccb9fddcfe2e0d4ae1962"
+      "binary_sha256": {
+        "llm-firewall": "29067af966ab8ef96cf2a536ec4dde41e2ffabb9ca31282afb7efce6dc427fff",
+        "agentfw": "a7a39a87bef4f241cca094300162f1f4d57ddc43bef427ff819ad5358561cf3e"
       }
     },
     {
-      "file": "final-sqlite-report.json",
-      "raw_sha256": "d8f42f5f0e80fd06a23915f7b68e0c6555b14af3ea86296f3b175db012980879",
-      "checks": 19,
-      "binaries": {
-        "agentfw": "a7a39a87bef4f241cca094300162f1f4d57ddc43bef427ff819ad5358561cf3e",
-        "llm-firewall": "8198698e9706986dcd9dd382d81c7af610415c990017fcb7f989d9ca208e66f6"
+      "report": "group-sqlite.json",
+      "sha256": "8af74feeb1496af001668a12493ea93d8487e5b3a8ba58b8a660840cbd7bb554",
+      "checks": 31,
+      "passed": true,
+      "configuration": {
+        "transport": "literal loopback HTTP",
+        "agents": 4,
+        "pilots": 1,
+        "external_provider_calls": 0,
+        "recovery_schema": 28
       },
-      "config_sha256": {
-        "console": "e2c9e8757bd8e920f410edb1999dae1b343d80821410b690760fc61e2f02c139"
+      "binary_sha256": {
+        "llm-firewall": "29067af966ab8ef96cf2a536ec4dde41e2ffabb9ca31282afb7efce6dc427fff",
+        "agentfw": "a7a39a87bef4f241cca094300162f1f4d57ddc43bef427ff819ad5358561cf3e"
       }
     }
+  ],
+  "local_workspace": {
+    "passed": 2024,
+    "failed": 0,
+    "ignored": 15,
+    "source_snapshot_sha256": "a3bdde36c82676db5dac32902c403e581346e4deeead37b9fb99962d85fb8f22",
+    "log_sha256": "26628d33ee2a18ed21ed2715820ff3e9c2cfdaca415cce3a1c9960ae154bebd2",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo test --offline --locked --workspace -- --test-threads=1 && cargo clippy --offline --locked --workspace --all-targets -- -D warnings && cargo fmt --all --check"
+    ]
+  },
+  "notes": [
+    "Native workflows succeeded at the exact implementation commit; subsequent evidence/docs changes do not substitute a new runtime source.",
+    "Managed-group legacy reports carry a stale recovery_schema:28 label; their exact committed strict recovery inventory is schema 30. This label is recorded as a report limitation and is not treated as the schema authority.",
+    "Local environment-dependent ignores are explicit; required PostgreSQL/browser native controls were executed without ignores/skips."
   ]
 }

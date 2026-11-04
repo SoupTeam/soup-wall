@@ -57,6 +57,9 @@ latest 50 records. Revision discovery is keyset-paged with 1–100 summaries
 - `GET /admin/v1/tenants/:tenant/agents/:agent/revisions?limit=50&after=ID`
 - `GET /admin/v1/tenants/:tenant/agents/:agent/revisions/:revision`
 
+A fully cold SQLite store returns an empty inventory or absent revision without
+creating tables; a partial schema returns explicit unavailable evidence.
+
 These authorized GETs allocate no issuance/key and introduce no new schema,
 migration or recovery inventory entry.
 
