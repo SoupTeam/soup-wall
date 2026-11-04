@@ -284,6 +284,14 @@ class ProductionComposeControls(unittest.TestCase):
         self.assertNotIn("OPENAI_API_KEY", environment)
         self.assertNotIn("LLM_FW_ADMIN_TOKEN", environment)
 
+    def test_windows_native_command_resolution_prerequisites_are_retained(self):
+        # Without PATHEXT, PowerShell can select Docker Desktop's extensionless
+        # Unix launcher instead of docker.exe and never obtain an exit code.
+        required = {"PATHEXT": ".COM;.EXE;.BAT;.CMD", "SYSTEMDRIVE": "C:",
+                    "PROGRAMDATA": "C:/ProgramData", "ALLUSERSPROFILE": "C:/ProgramData"}
+        with patch.dict(os.environ, required, clear=True):
+            self.assertEqual(MODULE.docker_environment(), required)
+
     def test_gateway_requires_immutable_local_id(self):
         with self.assertRaisesRegex(MODULE.ClosureError, "invalid_project_or_gateway_image_id"):
             MODULE.ProductionCompose(self.root, "owned-test", self.env_file, "soup-wall:production", self.docker)

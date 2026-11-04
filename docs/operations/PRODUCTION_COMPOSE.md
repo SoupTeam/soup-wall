@@ -52,6 +52,8 @@ names `postgres` and `redis` for this isolated single-host network. The
 [production runbook](PRODUCTION_RUNBOOK.md#before-first-deployment) describes
 runtime/migration roles and cross-host PostgreSQL TLS. Never print the file or
 retain expanded `docker compose config`, `docker inspect` or environment output.
+The OIDC state and webhook signing keys must each encode exactly 32 independent
+random bytes as unpadded base64url, rather than arbitrary password text.
 
 ## Check and start
 
@@ -93,6 +95,10 @@ model and secrets are not written to a configuration file or report. Literal
 dollar characters are escaped for the second Compose parse. Inherited Compose
 files/profiles and provider/deployment environment overrides are not forwarded.
 Only the specified protected environment file supplies deployment values.
+On Windows the filtered child environment preserves native command-resolution
+and system-directory variables, including `PATHEXT`, so PowerShell invokes
+`docker.exe` rather than an extensionless Unix launcher. Deployment/provider
+overrides are still excluded.
 
 The nonsecret mounted policy is retained under ignored
 `target/production-compose/<project>/<policy-sha256>.yaml`. Keep this file while

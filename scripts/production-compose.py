@@ -147,7 +147,8 @@ def compose_dollars(value, *, escape):
 def docker_environment():
     # Preserve Docker's selected endpoint/credentials, not Compose overrides,
     # provider keys, deployment secrets, or inherited dotenv variables.
-    allowed = {"PATH", "SYSTEMROOT", "WINDIR", "HOME", "USERPROFILE", "APPDATA",
+    allowed = {"PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR",
+               "PROGRAMDATA", "ALLUSERSPROFILE", "HOME", "USERPROFILE", "APPDATA",
                "LOCALAPPDATA", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL",
                "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG", "DOCKER_TLS_VERIFY",
                "DOCKER_CERT_PATH", "SSH_AUTH_SOCK"}
