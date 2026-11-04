@@ -164,6 +164,7 @@ impl Root {
         let result = (|| {
             file.write_all(bytes)?;
             file.sync_all()?;
+            let staged_metadata = file.metadata()?;
             #[cfg(test)]
             super::tests::at_publication_boundary();
             validate()?;
@@ -171,8 +172,13 @@ impl Root {
             let selected = open(&self.dir, OsStr::new(&leaf), libc::O_RDONLY, 0)?
                 .context("managed_connection_stage_disappeared")?;
             ensure!(
-                stable(&file.metadata()?, &selected.metadata()?),
+                stable(&staged_metadata, &selected.metadata()?),
                 "managed_connection_stage_changed"
+            );
+            let staged = snapshot_at(&self.dir, OsStr::new(&leaf), bytes.len(), true)?;
+            ensure!(
+                super::equal(&super::hash(&staged.bytes), &super::hash(bytes)),
+                "managed_connection_stage_bytes_changed"
             );
             ensure!(
                 unsafe {

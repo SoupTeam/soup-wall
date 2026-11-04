@@ -342,6 +342,26 @@ impl ManagedSync {
         probe.verify_connection().await
     }
 
+    #[cfg(unix)]
+    fn bound_probe_audience(
+        &self,
+        headers: &reqwest::header::HeaderMap,
+    ) -> Result<bool, &'static str> {
+        let tenant: Vec<_> = headers.get_all("x-soup-agent-tenant").iter().collect();
+        let agent: Vec<_> = headers.get_all("x-soup-agent-id").iter().collect();
+        if tenant.is_empty() && agent.is_empty() {
+            return Ok(false);
+        }
+        if tenant.len() != 1
+            || agent.len() != 1
+            || tenant[0].to_str().ok() != Some(self.tenant.as_str())
+            || agent[0].to_str().ok() != Some(self.agent.as_str())
+        {
+            return Err("authenticated_audience_mismatch");
+        }
+        Ok(true)
+    }
+
     /// Non-mutating verification: a signed candidate is not evidence of application.
     #[cfg(unix)]
     pub(crate) async fn verify_connection(&self) -> serde_json::Value {
@@ -351,7 +371,11 @@ impl ManagedSync {
             let mut response = client.get(self.endpoint("agent/v1/policy").map_err(|_| "invalid_origin")?)
                 .bearer_auth(token).send().await.map_err(|_| "transport_unavailable")?;
             if matches!(response.status(), reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN) {return Err("auth_unavailable");}
-            if response.status() == reqwest::StatusCode::NO_CONTENT {return Ok(serde_json::json!({"state":"authenticated_no_policy","enrollment":"credential_accepted","audience_verified":false,"applied":false}));}
+            let audience_bound=self.bound_probe_audience(response.headers())?;
+            if response.status() == reqwest::StatusCode::NO_CONTENT {
+                return Ok(if audience_bound {serde_json::json!({"state":"authenticated_bound_no_policy","enrollment":"authenticated","audience_verified":true,"applied":false})}
+                else {serde_json::json!({"state":"authenticated_no_policy","enrollment":"credential_accepted","audience_verified":false,"applied":false})});
+            }
             if !response.status().is_success() {return Err("console_unavailable_or_rejected");}
             let mut body = Vec::new();
             while let Some(chunk) = response.chunk().await.map_err(|_| "transport_unavailable")? {
@@ -748,6 +772,34 @@ impl ManagedSync {
 #[cfg(test)]
 mod https_transport_tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn probe_audience_requires_one_exact_authenticated_pair() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = crate::managed_connection::Settings {
+            console: "http://127.0.0.1:12345/".into(),
+            tenant: "tenant".into(),
+            agent: "agent".into(),
+            credential_file: dir.path().join("credential"),
+            issuer_keyring: dir.path().join("issuer"),
+            ca_file: None,
+        };
+        let sync = ManagedSync::from_connection(dir.path(), &settings, false).unwrap();
+        let mut headers = reqwest::header::HeaderMap::new();
+        assert!(!sync.bound_probe_audience(&headers).unwrap());
+        headers.insert("x-soup-agent-tenant", "tenant".parse().unwrap());
+        assert!(sync.bound_probe_audience(&headers).is_err());
+        headers.insert("x-soup-agent-id", "agent".parse().unwrap());
+        assert!(sync.bound_probe_audience(&headers).unwrap());
+        headers.append("x-soup-agent-id", "agent".parse().unwrap());
+        assert!(sync.bound_probe_audience(&headers).is_err());
+        headers.insert("x-soup-agent-id", "other-agent".parse().unwrap());
+        assert!(sync.bound_probe_audience(&headers).is_err());
+        headers.insert("x-soup-agent-id", "agent".parse().unwrap());
+        headers.insert("x-soup-agent-tenant", "other-tenant".parse().unwrap());
+        assert!(sync.bound_probe_audience(&headers).is_err());
+    }
 
     #[test]
     fn accepts_https_remote_and_existing_loopback_http() {

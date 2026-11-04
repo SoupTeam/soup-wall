@@ -6,7 +6,7 @@
 //! tenant proxy token, admin token, browser session or provider credential.
 
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Extension;
 use axum::Json;
@@ -445,7 +445,18 @@ pub async fn fetch_policy(State(state): State<Shared>, headers: HeaderMap) -> Re
     let Some((db, who, bearer)) = principal(&state, &headers).await else {
         return failure(StatusCode::UNAUTHORIZED, "Agent authentication required");
     };
-    match tokio::task::spawn(async move {
+    // Credential scope is available even after the pending inbox becomes empty.
+    // These public identifiers come from authenticated enrollment, never request headers.
+    let (Ok(tenant), Ok(agent)) = (
+        HeaderValue::from_str(&who.tenant_id),
+        HeaderValue::from_str(&who.agent_id),
+    ) else {
+        return failure(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Agent identity unavailable",
+        );
+    };
+    let mut response = match tokio::task::spawn(async move {
         db.deliver_authorized_managed_bundle_async(&who.tenant_id, &who.agent_id, &bearer)
             .await
     })
@@ -464,7 +475,12 @@ pub async fn fetch_policy(State(state): State<Shared>, headers: HeaderMap) -> Re
             StatusCode::SERVICE_UNAVAILABLE,
             "policy delivery unavailable",
         ),
+    };
+    if response.status().is_success() {
+        response.headers_mut().insert("x-soup-agent-tenant", tenant);
+        response.headers_mut().insert("x-soup-agent-id", agent);
     }
+    response
 }
 
 /// Agent MUST call this only after inspecting its own active runtime policy.

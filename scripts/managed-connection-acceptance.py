@@ -57,7 +57,7 @@ def main():
               "source_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT)),
               "source_sha256": {}, "scope": "one installed Linux Agent, disposable Console and independently provisioned fixture trust; no production credentials"}
     for name in subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True).splitlines():
-        if name.startswith("crates/agentfw/") or name in ("Cargo.lock", "scripts/managed-connection-acceptance.py", "scripts/managed-credential-rotation-demo.py", "scripts/console-enrollment-acceptance.py", "scripts/console-rollout-acceptance.py", "scripts/managed-policy-demo.py", ".github/workflows/managed-credential-rotation.yml"):
+        if name.startswith("crates/agentfw/") or name in ("crates/proxy/src/managed_agent_api.rs","Cargo.lock", "scripts/managed-connection-acceptance.py", "scripts/managed-credential-rotation-demo.py", "scripts/console-enrollment-acceptance.py", "scripts/console-rollout-acceptance.py", "scripts/managed-policy-demo.py", ".github/workflows/managed-credential-rotation.yml"):
             path = ROOT / name
             if path.is_file(): report["source_sha256"][name] = sha(path.read_bytes())
 
@@ -171,6 +171,18 @@ def main():
                 consent = preview(bad)
                 managed("apply",[*bad,"--confirm",consent],False)
                 check("wrong_"+label+"_preserves_previous_connection", not selector.exists())
+            other = D.expect(201, "POST", console + f"/admin/v1/tenants/{tenant}/agents", {"agent_id":"empty-inbox-other"}, admin)
+            hidden.append(other["token"])
+            import urllib.request
+            metadata_request=urllib.request.Request(console+"/agent/v1/policy",headers={"Authorization":"Bearer "+other["token"],"x-soup-agent-tenant":tenant,"x-soup-agent-id":"installed-231"})
+            with urllib.request.urlopen(metadata_request,timeout=5) as metadata_response:
+                check("authenticated_scope_ignores_forged_request_metadata",metadata_response.status==204 and metadata_response.headers.get("x-soup-agent-tenant")==tenant and metadata_response.headers.get("x-soup-agent-id")=="empty-inbox-other")
+            foreign = profile / "foreign-credential"
+            private(foreign, other["token"])
+            wrong_scope = settings.copy()
+            wrong_scope[wrong_scope.index("--credential-file")+1] = str(foreign)
+            managed("apply",[*wrong_scope,"--confirm",preview(wrong_scope)],False)
+            check("empty_inbox_foreign_credential_cannot_bind_wrong_audience",not selector.exists())
             forwarded = edge_counts["forwarded"]
             D.replace_secret(credential, secret)
             managed("apply",[*settings,"--confirm",c],False)
@@ -209,6 +221,8 @@ def main():
             after = selector.read_bytes()
             check("interrupted_apply_resumes_and_exact_retry_is_idempotent", managed("apply",[*interrupted,"--confirm",consent])["status"]=="already_committed" and after==selector.read_bytes())
             settings, credential = interrupted, next_credential
+            before_start=managed("verify")
+            check("fresh_candidate_verification_is_not_application",before_start["verification"]["state"]=="verified_candidate" and not before_start["verification"]["applied"] and before_start["recorded_application"] is None)
             run(["lifecycle","start"])
             def active(sequence):
                 return D.await_result("actual policy application", lambda: (lambda h:h if (h.get("managed_policy") or {}).get("deployment_sequence")==sequence else None)(D.call("GET",agent+"/health")[1]))
@@ -225,7 +239,7 @@ def main():
             observed = managed("inspect")
             check("configured_and_authenticated_running_identities_distinguished", observed["runtime_authenticated"] and observed["running_matches_configured"] and observed["recorded_application"]["managed_sequence"]==1 and observed["transport"]["state"]=="online")
             verified = managed("verify")
-            check("verification_never_claims_application", verified["verification"]["state"]=="verified_candidate" and verified["verification"]["applied"] is False)
+            check("verification_never_claims_application", verified["verification"]["state"]=="authenticated_bound_no_policy" and verified["verification"]["audience_verified"] and verified["verification"]["applied"] is False)
             process = run(["lifecycle","status"])["process"]
             cmdline = Path(f'/proc/{process["pid"]}/cmdline').read_bytes()
             check("running_process_argv_contains_no_secrets", all(v.encode() not in cmdline for v in hidden if v!=str(temp)))
@@ -291,7 +305,14 @@ def main():
             check("legacy_running_state_does_not_claim_profile_identity_match",legacy_inspection["runtime_authenticated"] and legacy_inspection["configured"] is None and not legacy_inspection["running_matches_configured"] and not legacy_inspection["pending_restart"])
             D.stop(legacy_process)
             check("environment_only_startup_preserved",not (legacy_profile / "managed-console.json").exists())
-            raw = b"\n".join(outputs + [p.read_bytes() for p in temp.glob("*.log")])
+            log_bytes=[]
+            for logfile in temp.rglob("*.log"):
+                with logfile.open("rb") as stream:
+                    value=stream.read(8*1024*1024+1)
+                assert len(value)<=8*1024*1024,"owned log cap exceeded"
+                log_bytes.append(value)
+            raw = b"\n".join(outputs + log_bytes)
+            assert len(raw)<=64*1024*1024,"owned diagnostic cap exceeded"
             check("ordinary_cli_outputs_and_logs_redact_tokens_and_key_material",all(v.encode() not in raw for v in hidden if v!=str(temp)))
             report["status"] = "passed"
             report["recorded_sequences"] = [first["deployment_sequence"],second["deployment_sequence"]]

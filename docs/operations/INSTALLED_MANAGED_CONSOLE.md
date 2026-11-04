@@ -49,9 +49,14 @@ Repeat the identical options with `managed-console apply --confirm DIGEST`,
 using exactly the confirmation returned by preview. No state is changed by
 preview. Apply sends a bounded, read-only policy request with the exact approved
 input bytes before publishing anything. Incorrect CA, issuer, audience,
-authentication, outage or stale inputs preserve the old connection. An enrolled
-Agent without a deployment may return `authenticated_no_policy`: configuration
-can be saved, but no signature, audience or application success is claimed.
+authentication, outage or stale inputs preserve the old connection. For an empty pending inbox, Console supplies `x-soup-agent-tenant` and
+`x-soup-agent-id` from its revalidated authenticated enrollment. Both must match
+the selected audience exactly. The result `authenticated_bound_no_policy`
+verifies connection scope, but claims no fresh signed policy or application.
+Older Consoles returning 204 without these fields report
+`authenticated_no_policy` and cannot complete setup verification; upgrade Console
+or provision an exact signed pending policy. Existing environment-only polling
+continues to work with older Consoles.
 
 ```sh
 agentfw lifecycle start
@@ -79,7 +84,9 @@ load the explicit profile without requiring managed environment variables.
   the running firewall. Confirm the corresponding `applied` record in Console.
 - `verification`: a fresh non-mutating authentication, audience and signature
   probe. `applied` is always false here; the probe never activates or acknowledges
-  a policy. Verify exits nonzero for failures or `authenticated_no_policy`.
+  a policy. Verify exits nonzero for failures or unbound `authenticated_no_policy`.
+  `authenticated_bound_no_policy` verifies enrollment scope while existing
+  application evidence remains separately attributed to the running firewall.
 
 Credential-file atomic rotation is reloaded by the running daemon. Existing
 independent issuer-keyring reload/revocation behavior remains in force. CA

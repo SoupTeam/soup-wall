@@ -569,7 +569,7 @@ pub fn run(home: &Path, command: Command) -> Result<()> {
                     ensure!(
                         matches!(
                             probe["state"].as_str(),
-                            Some("verified_candidate" | "authenticated_no_policy")
+                            Some("verified_candidate" | "authenticated_bound_no_policy")
                         ),
                         "managed_connection_verification_failed_previous_connection_preserved"
                     );
@@ -596,7 +596,10 @@ pub fn run(home: &Path, command: Command) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&report)?);
         if report.get("verification").is_some_and(|v| !v.is_null()) {
             ensure!(
-                report["verification"]["state"] == "verified_candidate",
+                matches!(
+                    report["verification"]["state"].as_str(),
+                    Some("verified_candidate" | "authenticated_bound_no_policy")
+                ),
                 "managed_connection_verification_incomplete_or_failed"
             );
         }

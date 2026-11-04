@@ -2,7 +2,7 @@
   "format": "sw-managed-connection-local-qualification/1",
   "platform": "aarch64-apple-darwin",
   "scope": "Unix descriptor/transaction controls and full host workspace; Linux installed/TLS PostgreSQL acceptance remains separate",
-  "workspace_passed": 2038,
+  "workspace_passed": 2039,
   "explicit_ignores": 15,
   "ignored_tests": [
     {
@@ -66,7 +66,7 @@
       "reason": "requires a disposable SOUP_GROUP_TEST_POSTGRES_URL database"
     }
   ],
-  "connection_adversarial_tests": 14,
+  "connection_adversarial_tests": 15,
   "workspace_all_target_clippy_warnings_denied": "passed",
   "fmt": "passed",
   "ci_components_tests": 13,
@@ -149,8 +149,30 @@
       "source_sha256": "a90a2519b12997bfc3ee6d3d5ee5c969178c29c601ed4044d83cddfb66484cef",
       "log_sha256": "8f33b2ef5a9fdc499c8d3bd84d32576d99e5c5f357a1a7875adce80b91bb4a47",
       "elapsed_seconds": 0.11
+    },
+    {
+      "label": "bound-audience",
+      "exit_code": 0,
+      "source_sha256": "e55a9987c4a418cafecd1512330a16dda09e332659a71bdf4dfada6698c7e922",
+      "log_sha256": "98abe423a437a32bdf67762776c6e43947df5a311d934dcc5cf5b6f80895de37",
+      "elapsed_seconds": 16.76
+    },
+    {
+      "label": "publication-final",
+      "exit_code": 0,
+      "source_sha256": "d1999182d02c57daae390a99aaee9477d962ebd70caa6339173ab38e204c2561",
+      "log_sha256": "9e445a9fc8b5b85971b9a99fca1035141e9ac46874de2dcd002c44351717c78c",
+      "elapsed_seconds": 19.35
     }
   ],
-  "note": "Initial failed development attempts retained by outcome and hashes; Python 3.9 component failure was requalified with supported Python 3.14. Last change after final Rust qualification is acceptance-driver positional lifecycle-install arguments; no Rust source change.",
-  "driver_private_publication_controls": "passed: 0600 creation, atomic replacement and substituted pending-file refusal"
+  "note": "Full source-bound workspace after authenticated-scope integration passed 2039/15 explicit ignores. Subsequent in-place staging tamper regression passed with all 15 connection tests; workspace/all-target Clippy and fmt passed on those final Rust bytes. Full native Linux acceptance remains separately attributed.",
+  "driver_private_publication_controls": "passed: 0600 creation, atomic replacement and substituted pending-file refusal",
+  "authenticated_audience_controls": "passed: empty/partial/duplicate/mismatched tenant and Agent headers",
+  "scope_followup": {
+    "label": "scope-final-workspace",
+    "exit_code": 0,
+    "source_sha256": "19a971c649c5964fecef9f4792afacfceb459f07fbdcfd0ee0320c2785c332a1",
+    "log_sha256": "702a1c2d80e72f99fd7d917cc2ad3cd02fecc54ae18f0f944ccf593f64c15280",
+    "elapsed_seconds": 303.95
+  }
 }

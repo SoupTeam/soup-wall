@@ -439,3 +439,25 @@ fn recorded_unresponsive_process_and_registered_service_block_changes() {
         assert!(!f.home.join(PROFILE).exists());
     }
 }
+
+#[test]
+fn in_place_stage_tampering_cannot_publish_unapproved_bytes() {
+    let f = Fixture::new();
+    let consent = f.preview();
+    let home = f.home.clone();
+    boundary(move || {
+        let stage = stdfs::read_dir(&home)
+            .unwrap()
+            .map(|p| p.unwrap().path())
+            .find(|p| {
+                p.file_name()
+                    .unwrap()
+                    .as_encoded_bytes()
+                    .starts_with(b".managed-console-stage-")
+            })
+            .unwrap();
+        private(&stage, b"in-place substitution");
+    });
+    assert!(apply(&f.home, &f.settings, true, &consent).is_err());
+    assert!(!f.home.join(PROFILE).exists());
+}
