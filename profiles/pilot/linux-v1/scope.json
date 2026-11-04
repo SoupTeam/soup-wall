@@ -1,0 +1,347 @@
+{
+  "format": "sw-pilot-scope/1",
+  "id": "linux-v1",
+  "title": "Linux pilot v1: native Ubuntu 24.04 x86_64, pinned Claude Code, original reviewed filesystem and Git servers, explicit enforcement",
+  "claim": "Selects the supported v1 pilot configuration over the existing installed entry points and states what is conditional or excluded. It grants no authority, adds no capability and never certifies acceptance; qualification evidence is separate and bound to exact source.",
+  "acceptance": "not-claimed-by-this-document",
+  "bindings": {
+    "policy": {
+      "selected_by_installed_entry_points": "scripts/qualify-installed-pilot.py:PILOT_POLICY",
+      "sha256": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc"
+    },
+    "classifiers": {
+      "filesystem": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+      "git": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474"
+    },
+    "filesystem_profile": {
+      "id": "filesystem-readonly-v1",
+      "format": "sw-mcp/filesystem-readonly/1",
+      "upstream_tools_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+      "upstream_identity_sha256": "bd2b235f11e4e3ccd31467185b33b26751a626ed23e499ca72392b56dc9849ca",
+      "profile_policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+      "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7"
+    },
+    "git_profile": {
+      "id": "git-readonly-v1",
+      "format": "sw-mcp/git-readonly/1",
+      "selection_binding_sha256": "ed1f8950b821adf7da39c8057f4809add335fee662819ec50df0c02bc46ab13c",
+      "profile_policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+      "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+      "classifier_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474"
+    },
+    "host": {
+      "name": "Claude Code",
+      "version": "2.1.251",
+      "lockfile_sha256": "6eb6fd9ccda39b10b4cd21e3236fa179330ce4252a3405f193093722be3668e6"
+    },
+    "runtime": {
+      "node_version": "22.22.0",
+      "node_archive_sha256": "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37"
+    },
+    "other_documented_policy_presets_not_selected_by_installed_entry_points": {
+      "linux-readonly-v1": {
+        "manifest_sha256": "21eb1ab90cafd69e53a9b6afdf251c5027577b56d22efbc085979c37b8a3b12b",
+        "policy_sha256": "8a8a8f7e7147a977f9d268091152bfd424fe6e61531a313c66eae1bc1fa46f5a"
+      }
+    }
+  },
+  "platform": {
+    "supported": "native Ubuntu 24.04 x86_64, ordinary non-root user",
+    "unsupported": [
+      "WSL2",
+      "macOS",
+      "Windows",
+      "other distributions or architectures",
+      "root"
+    ]
+  },
+  "enforcement": {
+    "mode": "enforce",
+    "ask": "opt-in single-use exact-call approvals only",
+    "shadow": "outside v1; never selected and never reported as protection"
+  },
+  "status_model": {
+    "enforce": "Reported only when a run of this exact selection answers an authenticated status query that requires enforcement.",
+    "shadow": "Not part of this scope. A daemon that is not enforcing fails the enforce-requiring query and is reported unavailable.",
+    "unavailable": "A run or selection exists but cannot protect now: stale selection, drifted scope or an unanswered query.",
+    "unqualified": "No exact-source acceptance is claimed by this scope; Missing external acceptance remains NOT_READY, not a release approval."
+  },
+  "supported_operations": {
+    "filesystem": [
+      "get_file_info",
+      "list_allowed_directories",
+      "list_directory",
+      "list_directory_with_sizes",
+      "read_file",
+      "read_multiple_files",
+      "read_text_file",
+      "search_files"
+    ],
+    "git": [
+      "git_diff",
+      "git_diff_staged",
+      "git_diff_unstaged",
+      "git_log",
+      "git_show",
+      "git_status"
+    ]
+  },
+  "refused_operations": [
+    {
+      "server": "filesystem",
+      "tools": [
+        "create_directory",
+        "edit_file",
+        "move_file",
+        "write_file"
+      ],
+      "why": "The selected read-only profile has no dispatch for effect tools; policy additionally hard-denies the recognized effect classes before execution."
+    },
+    {
+      "server": "filesystem",
+      "tools": [
+        "read_media_file"
+      ],
+      "why": "Media reads have no result profile in the selected registry; unsupported by the selected profile."
+    },
+    {
+      "server": "filesystem",
+      "tools": [
+        "directory_tree"
+      ],
+      "why": "Known classifier-coverage gap: the call is unknown, policy Ask, and the collector refuses it. It is not an authorized operation."
+    },
+    {
+      "server": "git",
+      "tools": [
+        "git_add",
+        "git_branch",
+        "git_checkout",
+        "git_commit",
+        "git_create_branch",
+        "git_reset"
+      ],
+      "why": "Git mutation and branch enumeration have no dispatch in the selected read-only profile; policy additionally hard-denies the recognized effect classes."
+    }
+  ],
+  "matrix": [
+    {
+      "id": "platform-ubuntu-2404-x86-64",
+      "area": "platform",
+      "item": "Native Ubuntu 24.04 x86_64, ordinary non-root user",
+      "state": "supported",
+      "fail_mode": "refused-before-execution",
+      "entry": "agentfw pilot preview|prepare|run|status"
+    },
+    {
+      "id": "platform-wsl2",
+      "area": "platform",
+      "item": "WSL2 Ubuntu",
+      "state": "unsupported",
+      "fail_mode": "refused-before-execution",
+      "entry": "native_ubuntu_required_wsl_is_separate; a separate WSL flow has its own scope"
+    },
+    {
+      "id": "platform-macos-windows",
+      "area": "platform",
+      "item": "macOS and Windows",
+      "state": "unsupported",
+      "fail_mode": "refused-before-execution",
+      "entry": "Separate native guides; the Linux pilot refuses them"
+    },
+    {
+      "id": "platform-other-linux",
+      "area": "platform",
+      "item": "Other distributions, architectures or root",
+      "state": "unsupported",
+      "fail_mode": "refused-before-execution",
+      "entry": "ubuntu_24_04_required, non_root_operator_required"
+    },
+    {
+      "id": "host-claude-code-2-1-251",
+      "area": "host",
+      "item": "Claude Code 2.1.251 from the locked package (npm ci --ignore-scripts)",
+      "state": "supported",
+      "fail_mode": "refused-before-execution",
+      "entry": "pilot prepare pins and verifies the host image; version mismatch refuses"
+    },
+    {
+      "id": "host-other-agents",
+      "area": "host",
+      "item": "Other Claude Code versions and other agent hosts",
+      "state": "unsupported",
+      "fail_mode": "not-selected-by-this-scope",
+      "entry": "Never selected; no authority is inferred"
+    },
+    {
+      "id": "transport-stdio-original-servers",
+      "area": "transport",
+      "item": "stdio MCP through the original reviewed filesystem and Git servers",
+      "state": "supported",
+      "fail_mode": "refused-before-execution",
+      "entry": "Selected profiles with pinned package, runtime and library identities"
+    },
+    {
+      "id": "transport-other-mcp",
+      "area": "transport",
+      "item": "Other MCP transports and unreviewed servers",
+      "state": "unsupported",
+      "fail_mode": "not-selected-by-this-scope",
+      "entry": "Not part of the selection; unknown tools are refused"
+    },
+    {
+      "id": "tools-filesystem-reads",
+      "area": "tool-family",
+      "item": "Filesystem reads and listings (8 operations)",
+      "state": "supported",
+      "fail_mode": "hard-deny-before-execution",
+      "entry": "Allow only after pinned schema, bounded arguments, workspace, classification and result inspection"
+    },
+    {
+      "id": "tools-git-reads",
+      "area": "tool-family",
+      "item": "Git status, log, diff and show (6 operations)",
+      "state": "supported",
+      "fail_mode": "hard-deny-before-execution",
+      "entry": "Same conditional Allow with the exact bounded Git arguments"
+    },
+    {
+      "id": "tools-effects",
+      "area": "tool-family",
+      "item": "Filesystem writes and Git mutations",
+      "state": "unsupported",
+      "fail_mode": "hard-deny-before-execution",
+      "entry": "Refused before execution; no approval downgrade"
+    },
+    {
+      "id": "tools-network-effects",
+      "area": "tool-family",
+      "item": "Network, delete and privilege-changing actions",
+      "state": "unsupported",
+      "fail_mode": "hard-deny-before-execution",
+      "entry": "Hard Deny before execution"
+    },
+    {
+      "id": "enforcement-enforce",
+      "area": "enforcement",
+      "item": "Explicit enforcement",
+      "state": "supported",
+      "fail_mode": "reports-unavailable-never-protection",
+      "entry": "Reported only by an authenticated enforce-requiring query of a live run of this selection"
+    },
+    {
+      "id": "enforcement-shadow",
+      "area": "enforcement",
+      "item": "Shadow (observe-only) mode",
+      "state": "unsupported",
+      "fail_mode": "not-selected-by-this-scope",
+      "entry": "The pilot is never prepared in shadow mode and shadow is never reported as protection"
+    },
+    {
+      "id": "enforcement-ask",
+      "area": "enforcement",
+      "item": "Single-use exact-call Ask approval",
+      "state": "conditional",
+      "fail_mode": "opt-in-restricts-or-operates-only",
+      "entry": "--ask-wait-seconds (up to 25) with agentfw pilot-approval inspect, then one exact decision"
+    },
+    {
+      "id": "provider-scripted-loopback",
+      "area": "provider",
+      "item": "Owned scripted loopback provider for qualification",
+      "state": "supported",
+      "fail_mode": "not-selected-by-this-scope",
+      "entry": "Synthetic data; no model account or paid call"
+    },
+    {
+      "id": "provider-live-model",
+      "area": "provider",
+      "item": "Operator-supplied live provider",
+      "state": "conditional",
+      "fail_mode": "opt-in-restricts-or-operates-only",
+      "entry": "Named provider profiles; live-model effectiveness is not measured or claimed"
+    },
+    {
+      "id": "conditional-operator-controls",
+      "area": "operator-controls",
+      "item": "Project presets, maintenance mode, resource-budget presets, policy candidates and activation, configuration recovery, update coordination",
+      "state": "conditional",
+      "fail_mode": "opt-in-restricts-or-operates-only",
+      "entry": "Opt-in lifecycle or restriction-only controls with their own focused qualification; none widens the v1 authority"
+    },
+    {
+      "id": "capability-git-profiles",
+      "area": "capability",
+      "item": "Other Git capability profiles (file revisions, local refs, shallow, local clone, tracked symlinks)",
+      "state": "unsupported",
+      "fail_mode": "refused-before-execution",
+      "entry": "--git-profile other than git-readonly-v1 is refused when this scope is selected"
+    },
+    {
+      "id": "capability-linked-worktree",
+      "area": "capability",
+      "item": "Linked-worktree Git profile",
+      "state": "unsupported",
+      "fail_mode": "refused-before-execution",
+      "entry": "--git-worktree-binding is refused when this scope is selected"
+    },
+    {
+      "id": "capability-multi-root-filesystem",
+      "area": "capability",
+      "item": "Multi-root read-only filesystem profiles",
+      "state": "unsupported",
+      "fail_mode": "refused-before-execution",
+      "entry": "--filesystem-roots-binding is refused when this scope is selected"
+    },
+    {
+      "id": "capability-workspace-snapshot",
+      "area": "capability",
+      "item": "Private workspace snapshots and file links",
+      "state": "unsupported",
+      "fail_mode": "refused-before-execution",
+      "entry": "--workspace-snapshot is refused when this scope is selected"
+    },
+    {
+      "id": "capability-private-edit",
+      "area": "capability",
+      "item": "Private edit, create-file and HTTPS executors",
+      "state": "unsupported",
+      "fail_mode": "not-selected-by-this-scope",
+      "entry": "Separate opt-in profiles; never selected by the pilot front door"
+    },
+    {
+      "id": "surface-gateway-console",
+      "area": "surface",
+      "item": "Gateway, Console, identity and storage backends",
+      "state": "unsupported",
+      "fail_mode": "not-selected-by-this-scope",
+      "entry": "Outside the local Linux pilot"
+    }
+  ],
+  "exclusions": [
+    {
+      "id": "capability-git-profiles",
+      "option": "git_profile",
+      "applies": "non-default",
+      "reason": "Only the reviewed read-only git-readonly-v1 profile is in v1."
+    },
+    {
+      "id": "capability-linked-worktree",
+      "option": "git_worktree_binding",
+      "applies": "present",
+      "reason": "The linked-worktree profile and its binding are outside v1."
+    },
+    {
+      "id": "capability-multi-root-filesystem",
+      "option": "filesystem_roots_binding",
+      "applies": "present",
+      "reason": "Multi-root filesystem profiles are outside v1."
+    },
+    {
+      "id": "capability-workspace-snapshot",
+      "option": "workspace_snapshot",
+      "applies": "present",
+      "reason": "Workspace snapshots and file links are outside v1."
+    }
+  ]
+}
