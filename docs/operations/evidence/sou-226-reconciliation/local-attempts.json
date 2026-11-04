@@ -72,5 +72,48 @@
     "source_sha256": "8a87426ef8badd360574b5074fae2bd13aa4da983196fdbc062b27c4f7f71dc1",
     "log_sha256": "1e137fe63a7e2a2d0d75b8d2c0682f6ee6d07ddd8d915ed2d6b68911bf46b3aa",
     "elapsed_seconds": 88.74
+  },
+  {
+    "label": "generate-components",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "python3",
+      "-B",
+      "-c",
+      "import sys,pathlib;sys.path.insert(0,\"scripts\");import ci_components;pathlib.Path(\"/private/tmp/sou226-qualification/scratch/ci-components.yml\").write_text(ci_components.generated())"
+    ],
+    "exit_code": 0,
+    "source_sha256": "2d59b7bac1a1d5d8d0c575699e61c836704cb6f608cbb345bd84ae63857e169e",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "elapsed_seconds": 0.08
+  },
+  {
+    "label": "ci-contracts",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "/bin/sh",
+      "-c",
+      "python3 -B -m unittest discover -s scripts/tests -p \"test_ci_*.py\" && python3 -B -m unittest discover -s scripts/tests -p \"test_check_docs.py\" && python3 -B scripts/check_docs.py"
+    ],
+    "exit_code": 1,
+    "source_sha256": "87d5d1118c9f7d423f3f5c0d2227d50ea58589a0f1ed48ce4419085a66379a72",
+    "log_sha256": "d5ab93741fa66be36c902a80b74a684465499715cf8de69e2db9345b1017002d",
+    "elapsed_seconds": 18.69
+  },
+  {
+    "label": "component-doc-contracts",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "/bin/sh",
+      "-c",
+      "python3 -B -m unittest discover -s scripts/tests -p \"test_ci_components.py\" && python3 -B -m unittest discover -s scripts/tests -p \"test_check_docs.py\" && python3 -B scripts/check_docs.py"
+    ],
+    "exit_code": 0,
+    "source_sha256": "87d5d1118c9f7d423f3f5c0d2227d50ea58589a0f1ed48ce4419085a66379a72",
+    "log_sha256": "6b38bcc8ba9ae4716d18fc5f44bb2b866adb9daf1bf75a903758ecbee7201595",
+    "elapsed_seconds": 3.1
   }
 ]
