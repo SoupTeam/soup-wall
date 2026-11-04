@@ -912,8 +912,9 @@ jobs:
           inputs = json.loads(os.environ['DISPATCH_INPUTS'])
           assert inputs.get('native_preparation_only') == 'true'
           assert inputs.get('stability_mode', 'off') == 'off'
+          assert inputs.get('installed_focus', 'off') in {'off', 'project-recovery'}
           assert all(value in ('', 'false') for key, value in inputs.items()
-                     if key not in {'project_presets_only', 'native_preparation_only', 'stability_mode'})
+                     if key not in {'installed_focus', 'project_presets_only', 'native_preparation_only', 'stability_mode'})
           PYCODE
       - name: Validate focused provider CA dispatch
         if: github.event.inputs.provider_ca_only == 'true'
