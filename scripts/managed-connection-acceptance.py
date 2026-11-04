@@ -298,9 +298,20 @@ def main():
             legacy_profile.mkdir(parents=True,mode=0o700)
             lp = D.port()
             private(legacy_profile / "config.yaml",f"port: {lp}\nenforce: true\n")
-            legacy_env = dict(env,HOME=str(legacy_home),SOUP_MANAGED_AGENT_CONSOLE=origin,SOUP_MANAGED_AGENT_TOKEN_FILE=str(credential),SOUP_MANAGED_AGENT_TENANT=tenant,SOUP_MANAGED_AGENT_ID="installed-231",SOUP_MANAGED_AGENT_KEY_ID="operator-231",SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX=public,SOUP_MANAGED_AGENT_TLS_CA_FILE=str(edge_ca))
+            # A fresh environment-only home has no cached policy. Give it its own
+            # pending deployment instead of expecting redelivery of an applied inbox.
+            legacy_id="legacy-231"
+            legacy_base=console+f"/admin/v1/tenants/{tenant}/agents/{legacy_id}"
+            legacy_enrollment=D.expect(201,"POST",console+f"/admin/v1/tenants/{tenant}/agents",{"agent_id":legacy_id},admin)
+            hidden.append(legacy_enrollment["token"])
+            legacy_credential=legacy_profile/"credential"
+            private(legacy_credential,legacy_enrollment["token"])
+            D.expect(201,"POST",legacy_base+"/revisions",{"revision":"legacy-deny","policy_yaml":"default: deny\n"},admin)
+            D.expect(204,"POST",legacy_base+"/revisions/legacy-deny/approve",{},admin)
+            legacy_deployment=D.expect(201,"POST",legacy_base+"/revisions/legacy-deny/deploy",{"rollback":False},admin)
+            legacy_env = dict(env,HOME=str(legacy_home),SOUP_MANAGED_AGENT_CONSOLE=origin,SOUP_MANAGED_AGENT_TOKEN_FILE=str(legacy_credential),SOUP_MANAGED_AGENT_TENANT=tenant,SOUP_MANAGED_AGENT_ID=legacy_id,SOUP_MANAGED_AGENT_KEY_ID="operator-231",SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX=public,SOUP_MANAGED_AGENT_TLS_CA_FILE=str(edge_ca))
             legacy_process = D.run_process(stack,[str(binary),"serve"],temp,legacy_env,temp / "legacy.log")
-            D.await_result("legacy environment startup",lambda:True if (D.call("GET",f"http://127.0.0.1:{lp}/health")[1].get("managed_policy") or {}).get("deployment_sequence")==2 else None)
+            D.await_result("legacy environment startup",lambda:True if (D.call("GET",f"http://127.0.0.1:{lp}/health")[1].get("managed_policy") or {}).get("deployment_sequence")==legacy_deployment["deployment_sequence"] else None)
             legacy_inspection = run(["managed-console","inspect"], environment=legacy_env)
             check("legacy_running_state_does_not_claim_profile_identity_match",legacy_inspection["runtime_authenticated"] and legacy_inspection["configured"] is None and not legacy_inspection["running_matches_configured"] and not legacy_inspection["pending_restart"])
             D.stop(legacy_process)

@@ -47,7 +47,7 @@ agentfw managed-console preview \
 Review the origin, audience, references, previous connection and confirmation.
 Repeat the identical options with `managed-console apply --confirm DIGEST`,
 using exactly the confirmation returned by preview. No state is changed by
-preview. Apply sends a bounded, read-only policy request with the exact approved
+preview. Apply fetches a bounded policy response with the exact approved
 input bytes before publishing anything. Incorrect CA, issuer, audience,
 authentication, outage or stale inputs preserve the old connection. For an empty pending inbox, Console supplies `x-soup-agent-tenant` and
 `x-soup-agent-id` from its revalidated authenticated enrollment. Both must match
@@ -84,7 +84,8 @@ load the explicit profile without requiring managed environment variables.
   the running firewall. Confirm the corresponding `applied` record in Console.
 - `verification`: a fresh non-mutating authentication, audience and signature
   probe. `applied` is always false here; the probe never activates or acknowledges
-  a policy. Verify exits nonzero for failures or unbound `authenticated_no_policy`.
+  a policy. Console may record delivery of an existing pending deployment on
+  this GET; delivery is distinct from application. Verify exits nonzero for failures or unbound `authenticated_no_policy`.
   `authenticated_bound_no_policy` verifies enrollment scope while existing
   application evidence remains separately attributed to the running firewall.
 
