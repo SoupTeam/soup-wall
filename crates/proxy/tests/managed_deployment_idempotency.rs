@@ -182,27 +182,31 @@ struct Audience {
 }
 
 async fn audience(store: &TenantStore, name: &str) -> Audience {
+    audience_for_agent(store, name, "agent-a").await
+}
+
+async fn audience_for_agent(store: &TenantStore, name: &str, agent: &str) -> Audience {
     let tenant = store
         .create_tenant_async(&format!("{name} {}", rand::random::<u64>()))
         .await
         .unwrap();
     let credential = store
-        .enroll_managed_agent_async(&tenant.id, "agent-a")
+        .enroll_managed_agent_async(&tenant.id, agent)
         .await
         .unwrap();
     for (revision, yaml) in [("r1", "default: allow\n"), ("r2", "default: deny\n")] {
         store
-            .create_managed_revision_async(&tenant.id, "agent-a", revision, yaml)
+            .create_managed_revision_async(&tenant.id, agent, revision, yaml)
             .await
             .unwrap();
         store
-            .approve_managed_revision_async(&tenant.id, "agent-a", revision)
+            .approve_managed_revision_async(&tenant.id, agent, revision)
             .await
             .unwrap();
     }
     Audience {
         tenant: tenant.id,
-        agent: "agent-a".into(),
+        agent: agent.into(),
         token: credential.token,
     }
 }
@@ -1171,9 +1175,15 @@ async fn cold_revision_gets_are_read_only_and_backend_equivalent(f: &Fixture) {
 }
 
 async fn query_addressed_dot_revisions_preserve_authority(f: &Fixture) {
+    for agent in ["agent-a", ".", ".."] {
+        query_addressed_identifiers_preserve_authority(f, agent).await;
+    }
+}
+
+async fn query_addressed_identifiers_preserve_authority(f: &Fixture, agent: &str) {
     let store = f.store().await;
-    let a = audience(&store, "Dot revision compatibility").await;
-    let other = audience(&store, "Other dot audience").await;
+    let a = audience_for_agent(&store, "Dot revision compatibility", agent).await;
+    let other = audience_for_agent(&store, "Other dot audience", agent).await;
     let viewer = store
         .create_admin_async(&unique("Dot revision viewer"), AdminRole::Viewer)
         .await
@@ -1181,25 +1191,33 @@ async fn query_addressed_dot_revisions_preserve_authority(f: &Fixture) {
     let view = format!("Bearer {}", viewer.token);
     let server = Server::start(store).await;
     let client = reqwest::Client::new();
-    let base = format!(
-        "{}/admin/v1/tenants/{}/agents/{}",
-        server.base, a.tenant, a.agent
-    );
-    let other_base = format!(
-        "{}/admin/v1/tenants/{}/agents/{}",
-        server.base, other.tenant, other.agent
-    );
+    let base = format!("{}/admin/v1/tenants/{}/agents", server.base, a.tenant);
+    let other_base = format!("{}/admin/v1/tenants/{}/agents", server.base, other.tenant);
     for (offset, revision) in [".", ".."].into_iter().enumerate() {
         let expected = offset as u64;
+        assert_eq!(
+            client
+                .post(format!("{base}/policy-revisions"))
+                .query(&[("agent_id", a.agent.as_str())])
+                .header("x-llm-firewall-admin-token", &view)
+                .json(&json!({"revision":revision,"policy_yaml":"default: deny\n"}))
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            403
+        );
         let create = client
-            .post(format!("{base}/revisions"))
+            .post(format!("{base}/policy-revisions"))
+            .query(&[("agent_id", a.agent.as_str())])
             .header("x-llm-firewall-admin-token", OWNER)
             .json(&json!({"revision":revision,"policy_yaml":"default: deny\n"}))
             .send()
             .await
             .unwrap();
         assert_eq!(create.status().as_u16(), 201);
-        let query = [("revision", revision)];
+        let query = [("agent_id", a.agent.as_str()), ("revision", revision)];
         let read_url = format!("{base}/policy-revision");
         assert_eq!(
             client
@@ -1231,7 +1249,8 @@ async fn query_addressed_dot_revisions_preserve_authority(f: &Fixture) {
             format!("{:x}", Sha256::digest(b"default: deny\n"))
         );
         let changed = client
-            .post(format!("{base}/revisions"))
+            .post(format!("{base}/policy-revisions"))
+            .query(&[("agent_id", a.agent.as_str())])
             .header("x-llm-firewall-admin-token", OWNER)
             .json(&json!({"revision":revision,"policy_yaml":"default: allow\n"}))
             .send()
@@ -1242,6 +1261,23 @@ async fn query_addressed_dot_revisions_preserve_authority(f: &Fixture) {
             400,
             "immutable dot revision changed"
         );
+        let page = client
+            .get(format!("{base}/policy-revisions"))
+            .query(&[
+                ("agent_id", a.agent.as_str()),
+                ("limit", "1"),
+                ("after", revision),
+            ])
+            .header("x-llm-firewall-admin-token", &view)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(page.status().as_u16(), 200);
+        let page: Value = page.json().await.unwrap();
+        assert_eq!(page.as_array().unwrap().len(), 1);
+        assert_eq!(page[0]["agent_id"], a.agent);
+        assert_eq!(page[0]["tenant_id"], a.tenant);
+        assert!(page[0].get("policy_yaml").is_none());
         let approve_url = format!("{base}/policy-revision/approve");
         assert_eq!(
             client
@@ -1360,6 +1396,21 @@ async fn query_addressed_dot_revisions_preserve_authority(f: &Fixture) {
         assert_eq!(f.deployments(&a.tenant).await, (expected + 1) as i64);
         assert_eq!(f.keys(&a.tenant).await, (expected + 1) as i64);
     }
+    let deployments = client
+        .get(format!("{base}/policy-deployments"))
+        .query(&[("agent_id", a.agent.as_str())])
+        .header("x-llm-firewall-admin-token", &view)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(deployments.status().as_u16(), 200);
+    let deployments: Value = deployments.json().await.unwrap();
+    assert_eq!(deployments.as_array().unwrap().len(), 2);
+    assert!(deployments
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|row| row["agent_id"] == a.agent && row["tenant_id"] == a.tenant));
     assert_eq!(f.deployments(&other.tenant).await, 0);
     assert_eq!(f.keys(&other.tenant).await, 0);
     let oversized = "a".repeat(129);
@@ -1374,6 +1425,8 @@ async fn query_addressed_dot_revisions_preserve_authority(f: &Fixture) {
     ];
     for suffix in ["", "/approve", "/deploy"] {
         for query in &invalid_queries {
+            let mut selected_query = vec![("agent_id", a.agent.as_str())];
+            selected_query.extend(query.iter().copied());
             let path = format!("{base}/policy-revision{suffix}");
             let request = if suffix.is_empty() {
                 client.get(path)
@@ -1383,7 +1436,34 @@ async fn query_addressed_dot_revisions_preserve_authority(f: &Fixture) {
             assert_eq!(
                 request
                     .header("x-llm-firewall-admin-token", OWNER)
-                    .query(query)
+                    .query(&selected_query)
+                    .send()
+                    .await
+                    .unwrap()
+                    .status()
+                    .as_u16(),
+                400
+            );
+        }
+    }
+    for invalid_agent in ["", "a/b", "é", oversized.as_str()] {
+        for (suffix, create) in [
+            ("policy-revisions", false),
+            ("policy-revisions", true),
+            ("policy-deployments", false),
+        ] {
+            let path = format!("{base}/{suffix}");
+            let request = if create {
+                client
+                    .post(path)
+                    .json(&json!({"revision":"rejected","policy_yaml":"default: deny\n"}))
+            } else {
+                client.get(path)
+            };
+            assert_eq!(
+                request
+                    .query(&[("agent_id", invalid_agent)])
+                    .header("x-llm-firewall-admin-token", OWNER)
                     .send()
                     .await
                     .unwrap()

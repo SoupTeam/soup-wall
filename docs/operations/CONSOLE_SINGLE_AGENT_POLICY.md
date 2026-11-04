@@ -57,13 +57,17 @@ latest 50 records. Revision discovery is keyset-paged with 1–100 summaries
 - `GET /admin/v1/tenants/:tenant/agents/:agent/revisions?limit=50&after=ID`
 - `GET /admin/v1/tenants/:tenant/agents/:agent/revisions/:revision`
 
-The panel addresses an exact revision through
-`GET .../agents/:agent/policy-revision?revision=ID` and the matching
-`POST .../policy-revision/approve?revision=ID` and
-`POST .../policy-revision/deploy?revision=ID` routes. Query addressing preserves
-valid revision IDs `.` and `..` that browsers normalize inside URL paths.
-These routes use the same authorization, immutable revision, sequence guard and
-idempotency handlers. The existing path-addressed APIs remain available.
+The panel selects an Agent using the query-addressed aliases
+`.../agents/policy-revisions?agent_id=ID` for list/create and
+`.../agents/policy-deployments?agent_id=ID` for recorded deployments.
+Exact revision readback uses
+`GET .../agents/policy-revision?agent_id=ID&revision=ID`; matching
+`POST .../agents/policy-revision/approve?agent_id=ID&revision=ID` and
+`POST .../agents/policy-revision/deploy?agent_id=ID&revision=ID` preserve the
+same authorization, immutable revision, sequence guard and idempotency handlers.
+Query addressing preserves valid Agent and revision IDs `.` and `..` that
+browsers normalize inside URL paths. The existing path-addressed APIs remain
+available.
 
 A fully cold SQLite store returns an empty inventory or absent revision without
 creating tables; a partial schema returns explicit unavailable evidence.

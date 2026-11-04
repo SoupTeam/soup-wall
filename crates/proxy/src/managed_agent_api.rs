@@ -1116,48 +1116,111 @@ pub async fn read_revision(
     }
 }
 
-/// Query addressing preserves valid `.` and `..` revision names, which URL
-/// clients normalize when placed in a path segment. Existing routes remain.
+/// Query addressing preserves valid `.` and `..` Agent/revision identifiers,
+/// which URL clients normalize in path segments. Existing routes remain.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SelectedAgent {
+    #[serde(deserialize_with = "selected_identifier")]
+    pub agent_id: String,
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SelectedRevision {
-    #[serde(deserialize_with = "selected_revision_id")]
+    #[serde(deserialize_with = "selected_identifier")]
+    pub agent_id: String,
+    #[serde(deserialize_with = "selected_identifier")]
     pub revision: String,
 }
 
-fn selected_revision_id<'de, D: serde::Deserializer<'de>>(
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SelectedRevisionPage {
+    #[serde(deserialize_with = "selected_identifier")]
+    pub agent_id: String,
+    #[serde(default)]
+    pub after: String,
+    pub limit: Option<usize>,
+}
+
+fn selected_identifier<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<String, D::Error> {
-    let revision = String::deserialize(deserializer)?;
-    if revision.is_empty()
-        || revision.len() > 128
-        || !revision
+    let value = String::deserialize(deserializer)?;
+    if value.is_empty()
+        || value.len() > 128
+        || !value
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
     {
-        return Err(serde::de::Error::custom("invalid revision selector"));
+        return Err(serde::de::Error::custom("invalid identifier selector"));
     }
-    Ok(revision)
+    Ok(value)
+}
+
+pub async fn list_selected_revisions(
+    State(state): State<Shared>,
+    Path(tenant): Path<String>,
+    axum::extract::Query(selected): axum::extract::Query<SelectedRevisionPage>,
+) -> Response {
+    list_revisions(
+        State(state),
+        Path((tenant, selected.agent_id)),
+        axum::extract::Query(RevisionPage {
+            after: selected.after,
+            limit: selected.limit,
+        }),
+    )
+    .await
+}
+
+pub async fn create_selected_revision(
+    State(state): State<Shared>,
+    Extension(identity): Extension<AdminIdentity>,
+    Path(tenant): Path<String>,
+    axum::extract::Query(selected): axum::extract::Query<SelectedAgent>,
+    Json(input): Json<NewRevisionRequest>,
+) -> Response {
+    create_revision(
+        State(state),
+        Extension(identity),
+        Path((tenant, selected.agent_id)),
+        Json(input),
+    )
+    .await
+}
+
+pub async fn selected_deployments(
+    State(state): State<Shared>,
+    Path(tenant): Path<String>,
+    axum::extract::Query(selected): axum::extract::Query<SelectedAgent>,
+) -> Response {
+    deployments(State(state), Path((tenant, selected.agent_id))).await
 }
 
 pub async fn read_selected_revision(
     State(state): State<Shared>,
-    Path((tenant, agent)): Path<(String, String)>,
+    Path(tenant): Path<String>,
     axum::extract::Query(selected): axum::extract::Query<SelectedRevision>,
 ) -> Response {
-    read_revision(State(state), Path((tenant, agent, selected.revision))).await
+    read_revision(
+        State(state),
+        Path((tenant, selected.agent_id, selected.revision)),
+    )
+    .await
 }
 
 pub async fn approve_selected_revision(
     State(state): State<Shared>,
     Extension(identity): Extension<AdminIdentity>,
-    Path((tenant, agent)): Path<(String, String)>,
+    Path(tenant): Path<String>,
     axum::extract::Query(selected): axum::extract::Query<SelectedRevision>,
 ) -> Response {
     approve_revision(
         State(state),
         Extension(identity),
-        Path((tenant, agent, selected.revision)),
+        Path((tenant, selected.agent_id, selected.revision)),
     )
     .await
 }
@@ -1166,7 +1229,7 @@ pub async fn deploy_selected_revision(
     State(state): State<Shared>,
     Extension(identity): Extension<AdminIdentity>,
     headers: HeaderMap,
-    Path((tenant, agent)): Path<(String, String)>,
+    Path(tenant): Path<String>,
     axum::extract::Query(selected): axum::extract::Query<SelectedRevision>,
     Json(input): Json<NewDeploymentRequest>,
 ) -> Response {
@@ -1174,7 +1237,7 @@ pub async fn deploy_selected_revision(
         State(state),
         Extension(identity),
         headers,
-        Path((tenant, agent, selected.revision)),
+        Path((tenant, selected.agent_id, selected.revision)),
         Json(input),
     )
     .await

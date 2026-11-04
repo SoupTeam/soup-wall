@@ -9,8 +9,8 @@ const singlePolicy = (() => {
   const enc = encodeURIComponent;
   const owner = () => currentAdmin?.role === "owner";
   const scope = () => JSON.stringify([tenant, agent]);
-  const url = suffix => `/admin/v1/tenants/${enc(tenant)}/agents/${enc(agent)}${suffix}`;
-  const revisionUrl = (revision, action = "") => url(`/policy-revision${action}?revision=${enc(revision)}`);
+  const agentUrl = (kind, query = "") => `/admin/v1/tenants/${enc(tenant)}/agents/policy-${kind}?agent_id=${enc(agent)}${query}`;
+  const revisionUrl = (revision, action = "") => agentUrl(`revision${action}`, `&revision=${enc(revision)}`);
   const say = text => { $("single-policy-status").textContent = text; };
   const same = stamp => stamp === epoch && tenant && agent;
   const identity = row => row?.tenant_id === tenant && row?.agent_id === agent;
@@ -52,7 +52,7 @@ const singlePolicy = (() => {
     try {
       const [inventory, revs, deps] = await Promise.all([
         read(`/admin/v1/tenants/${enc(tenant)}/agents`),
-        read(url(`/revisions?limit=50&after=${enc(after)}`)), read(url("/deployments"))
+        read(agentUrl("revisions", `&limit=50&after=${enc(after)}`)), read(agentUrl("deployments"))
       ]);
       if (!same(stamp)) return;
       if (!Array.isArray(inventory) || inventory.some(a => a.tenant_id !== tenant) || !inventory.some(a => a.agent_id === agent)) throw new Error("Agent identity mismatch");
@@ -141,7 +141,7 @@ const singlePolicy = (() => {
   $("single-refresh").addEventListener("click", () => agent ? load() : select(tenant));
   $("single-next").addEventListener("click", () => { after = next; load(); });
   $("single-first").addEventListener("click", () => { after = ""; load(); });
-  $("single-create-form").addEventListener("submit", e => { e.preventDefault(); mutate(url("/revisions"), {revision: $("single-new-revision").value, policy_yaml: $("single-yaml").value}); });
+  $("single-create-form").addEventListener("submit", e => { e.preventDefault(); mutate(agentUrl("revisions"), {revision: $("single-new-revision").value, policy_yaml: $("single-yaml").value}); });
   $("single-approve").addEventListener("click", () => { if (document && confirm(`Approve exact revision ${document.revision}\nSHA-256 ${document.policy_sha256}?`)) mutate(revisionUrl(document.revision, "/approve"), {}); });
   $("single-deploy").addEventListener("click", () => confirmIssue(false));
   $("single-rollback").addEventListener("click", () => confirmIssue(true));

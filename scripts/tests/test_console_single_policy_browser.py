@@ -20,6 +20,7 @@ class SinglePolicyBrowserTests(unittest.TestCase):
         Base.setUp(self)
         self.documents = {"r1": {"revision": "r1", "policy_sha256": DIGEST, "policy_yaml": YAML, "approved": True}}
         self.issuances, self.keys, self.calls = [], {}, []
+        self.agent_ids = ("agent-a", "agent-b")
         self.lose, self.hold, self.mismatch = False, False, False
         self.deploy_status = None
         self.revoked = False
@@ -43,13 +44,16 @@ class SinglePolicyBrowserTests(unittest.TestCase):
             return Base.route(self, route)
         tenant = parts[4]
         if len(parts) == 6:
-            return self.json(route, [{"tenant_id": tenant, "agent_id": a, "revoked_at_unix": 1 if self.revoked else None} for a in ("agent-a", "agent-b")])
+            return self.json(route, [{"tenant_id": tenant, "agent_id": a, "revoked_at_unix": 1 if self.revoked else None} for a in self.agent_ids])
+        if len(parts) >= 7 and parts[6].startswith("policy-"):
+            query = parse_qs(urlsplit(req.url).query)
+            parts = parts[:6] + [query["agent_id"][0], parts[6].removeprefix("policy-")] + parts[7:]
         if len(parts) < 8:
             return self.json(route, {"error": "unexpected path"}, 404)
         agent = parts[6]
         decorate = lambda value: dict(copy.deepcopy(value), tenant_id=tenant, agent_id=agent)
         if parts[7] == "deployments":
-            return self.json(route, [decorate(d) for d in self.issuances])
+            return self.json(route, [decorate(d) for d in self.issuances if d.get("tenant_id", tenant) == tenant and d.get("agent_id", agent) == agent])
         if parts[7] == "revisions" and len(parts) == 8 and req.method == "GET":
             if self.hold:
                 self.held.append(route)
@@ -59,7 +63,7 @@ class SinglePolicyBrowserTests(unittest.TestCase):
             value = req.post_data_json
             self.documents[value["revision"]] = dict(value, policy_sha256=hashlib.sha256(value["policy_yaml"].encode()).hexdigest(), approved=False)
             return self.json(route, decorate(self.documents[value["revision"]]), 201)
-        revision = parse_qs(urlsplit(req.url).query)["revision"][0] if parts[7] == "policy-revision" else parts[8]
+        revision = parse_qs(urlsplit(req.url).query)["revision"][0] if parts[7] == "revision" else parts[8]
         if req.method == "GET":
             doc = decorate(self.documents[revision])
             if self.mismatch:
@@ -74,7 +78,7 @@ class SinglePolicyBrowserTests(unittest.TestCase):
             key = req.headers.get("idempotency-key")
             self.calls.append((key, req.post_data_json))
             if key not in self.keys:
-                d = decorate({"deployment_sequence": len(self.issuances) + 1, "revision": revision,
+                d = decorate({"deployment_sequence": 1 + max((d["deployment_sequence"] for d in self.issuances if d["tenant_id"] == tenant and d["agent_id"] == agent), default=0), "revision": revision,
                     "policy_sha256": self.documents[revision]["policy_sha256"], "action": "rollback" if req.post_data_json["rollback"] else "activate",
                     "status": "issued", "issued_at_unix": 1800000000, "applied_at_unix": None,
                     "idempotency": {"key": key, "envelope_sha256": "e" * 64, "replayed": False, "issuer_key_id": "fixture-key", "expires_at_unix": 1800003600}})
@@ -86,14 +90,28 @@ class SinglePolicyBrowserTests(unittest.TestCase):
             return self.json(route, self.keys[key], 201)
         self.json(route, {"error": "unexpected request"}, 418)
 
-    def open(self):
+    def open(self, agent="agent-a"):
         Base.open(self, group=False)
-        self.page.locator("#single-agent").select_option("agent-a")
+        self.page.locator("#single-agent").select_option(agent)
         self.page.wait_for_function("!document.getElementById('single-create').disabled || document.body.classList.contains('role-viewer') || document.body.classList.contains('role-operator')")
 
     def review(self, revision="r1"):
         self.page.locator("#single-revision").select_option(revision)
         self.page.wait_for_function("document.getElementById('single-document').textContent.includes('Server SHA-256')")
+
+    def test_dot_agent_identities_are_preserved_through_review_and_issuance(self):
+        self.agent_ids = (".", "..")
+        for agent in self.agent_ids:
+            with self.subTest(agent=agent):
+                self.open(agent)
+                self.review()
+                self.page.locator("#single-deploy").click()
+                self.page.wait_for_function(
+                    "document.getElementById('single-intent').textContent.includes('sequence 1')")
+                self.assertEqual(self.issuances[-1]["agent_id"], agent)
+                self.assertEqual(self.issuances[-1]["deployment_sequence"], 1)
+        self.assertEqual(len(self.issuances), 2)
+        self.assertNotEqual(self.calls[0][0], self.calls[1][0])
 
     def test_dot_revisions_can_be_reviewed_approved_deployed_and_rolled_back(self):
         self.documents = {
