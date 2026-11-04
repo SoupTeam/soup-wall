@@ -6,7 +6,7 @@ on:
       installed_focus:
         description: Focus one installed qualification; linked/filesystem/configuration also require native_preparation_only
         type: choice
-        options: ['off', linked-worktrees, filesystem-roots, filesystem-links, workspace-snapshot, clean-user, clean-user-processes, clean-user-session, proxy-preflight, configuration-recovery, maintenance, policy-activation, budget-presets, pilot-scope]
+        options: ['off', linked-worktrees, filesystem-roots, filesystem-links, workspace-snapshot, clean-user, clean-user-processes, clean-user-session, proxy-preflight, configuration-recovery, project-recovery, maintenance, policy-activation, budget-presets, pilot-scope]
         default: 'off'
       project_presets_only:
         description: Focus installed SOU-197 project presets (use with native_preparation_only)
@@ -764,6 +764,22 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Validate focused project recovery dispatch
+        if: github.event.inputs.installed_focus == 'project-recovery'
+        shell: bash
+        env:
+          DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PYCODE'
+          import json, os
+          inputs = json.loads(os.environ['DISPATCH_INPUTS'])
+          assert inputs.get('native_preparation_only') == 'true'
+          assert inputs.get('project_presets_only') == 'true'
+          assert inputs.get('stability_mode', 'off') == 'off'
+          assert all(value in ('', 'false') for key, value in inputs.items()
+                     if key not in {'installed_focus', 'native_preparation_only', 'project_presets_only', 'stability_mode'})
+          PYCODE
       - name: Validate focused configuration recovery dispatch
         if: github.event.inputs.installed_focus == 'configuration-recovery'
         shell: bash
@@ -2348,7 +2364,10 @@ jobs:
           set -euo pipefail
           asset="$RUNNER_TEMP/sou111-assets"
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_project_presets.py -v
-          python3 -B scripts/qualify-installed-front-door.py --run --project-presets-only \
+          python3 -B -m unittest scripts.tests.test_pilot_project_recovery scripts.tests.test_pilot_configuration_backup
+          focus=--project-presets-only
+          if [ "${{ github.event.inputs.installed_focus }}" = project-recovery ]; then focus=--project-recovery-only; fi
+          python3 -B scripts/qualify-installed-front-door.py --run "$focus" \
             --output "$RUNNER_TEMP/installed-project-presets" --expected-commit "$(git rev-parse HEAD)" \
             --component-python /usr/bin/python3.12 \
             --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
