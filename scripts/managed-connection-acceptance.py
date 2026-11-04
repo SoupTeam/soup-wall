@@ -34,8 +34,9 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 def private(path, data):
-    path.write_bytes(data if isinstance(data, bytes) else data.encode())
-    path.chmod(0o600)
+    # Use the accepted credential-file publication primitive: O_EXCL, mode 0600
+    # before any bytes, fsync and atomic replace. Never write then chmod.
+    D.replace_secret(path, data.decode("utf-8") if isinstance(data, bytes) else data)
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -142,6 +143,7 @@ def main():
                 check("no_credential_or_key_material_in_argv", not any(secret in " ".join(command) for secret in hidden if len(secret)>40))
                 r = subprocess.run(command, cwd=temp, env=environment or agent_env, capture_output=True, timeout=60)
                 outputs.append(r.stdout + r.stderr)
+                report["last_cli"]={"command":words[:2],"exit_code":r.returncode}
                 if success: assert r.returncode == 0, "installed CLI failed; private output suppressed"
                 else: assert r.returncode != 0, "unsafe transition unexpectedly succeeded"
                 return json.loads(r.stdout) if r.stdout.startswith(b"{") else None
@@ -200,7 +202,9 @@ def main():
             consent = preview(interrupted)
             trace = subprocess.run(["strace","--quiet","-e","trace=renameat","-e","inject=renameat:error=EINTR:signal=SIGKILL:when=1","-o",str(temp / "interrupt.trace"),str(binary),"managed-console","apply",*interrupted,"--confirm",consent],cwd=temp,env=agent_env,capture_output=True,timeout=60)
             outputs.append(trace.stdout+trace.stderr)
-            check("real_sigkill_before_commit_preserves_previous_selector", trace.returncode!=0 and selector.read_bytes()==old and all(marker in (temp / "interrupt.trace").read_text() for marker in ("renameat(","managed-console.json","INJECTED","SIGKILL")))
+            trace_text=(temp / "interrupt.trace").read_text() if (temp / "interrupt.trace").exists() else ""
+            report["interruption"]={"exit_code":trace.returncode,"rename_observed":"renameat(" in trace_text,"selected_filename_observed":"managed-console.json" in trace_text,"injection_annotation_observed":"INJECTED" in trace_text,"sigkill_observed":"SIGKILL" in trace_text,"previous_selector_preserved":selector.read_bytes()==old,"ptrace_denied":b"Operation not permitted" in trace.stderr}
+            check("real_sigkill_before_commit_preserves_previous_selector", trace.returncode!=0 and selector.read_bytes()==old and all(marker in trace_text for marker in ("renameat(","managed-console.json","SIGKILL")))
             managed("apply",[*interrupted,"--confirm",consent])
             after = selector.read_bytes()
             check("interrupted_apply_resumes_and_exact_retry_is_idempotent", managed("apply",[*interrupted,"--confirm",consent])["status"]=="already_committed" and after==selector.read_bytes())

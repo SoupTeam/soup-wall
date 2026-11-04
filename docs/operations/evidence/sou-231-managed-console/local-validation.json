@@ -142,7 +142,15 @@
       "source_sha256": "62831f0df42e94a16eacf18dcc848db2d96d4944b03f1914c34af47a6ae9eb58",
       "log_sha256": "280864d22b906e422dd514d4626b977200a2efb5ca19112a93b6e43af782d319",
       "elapsed_seconds": 250.57
+    },
+    {
+      "label": "driver-private-files",
+      "exit_code": 0,
+      "source_sha256": "a90a2519b12997bfc3ee6d3d5ee5c969178c29c601ed4044d83cddfb66484cef",
+      "log_sha256": "8f33b2ef5a9fdc499c8d3bd84d32576d99e5c5f357a1a7875adce80b91bb4a47",
+      "elapsed_seconds": 0.11
     }
   ],
-  "note": "Initial failed development attempts retained by outcome and hashes; Python 3.9 component failure was requalified with supported Python 3.14. Last change after final Rust qualification is acceptance-driver positional lifecycle-install arguments; no Rust source change."
+  "note": "Initial failed development attempts retained by outcome and hashes; Python 3.9 component failure was requalified with supported Python 3.14. Last change after final Rust qualification is acceptance-driver positional lifecycle-install arguments; no Rust source change.",
+  "driver_private_publication_controls": "passed: 0600 creation, atomic replacement and substituted pending-file refusal"
 }
