@@ -239,10 +239,7 @@ mod native {
             },
             Err(e)
                 if e.downcast_ref::<std::io::Error>()
-                    .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
-            {
-                ()
-            }
+                    .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound) => {}
             Err(e) => return Err(e),
         }
         report.add(
@@ -390,6 +387,67 @@ mod native {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pilot_lifecycle_preflight_support_export_preserves_the_finite_contract() {
+        use sha2::Digest;
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        let report = crate::doctor::Report {
+            schema: "sw-agent-doctor/1",
+            observed_at_ms: 42,
+            setup: crate::doctor::Outcome::Unknown,
+            active_host_call_protection: "unknown",
+            scope: "local_setup_and_authenticated_runtime_not_active_host_execution",
+            checks: vec![],
+            pilot: None,
+            lifecycle: Some(inspect()),
+        };
+        let output = root.path().join("support");
+        crate::support_bundle::export(&report, &output).unwrap();
+        let raw = std::fs::read(output.join("report.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+        let allowed = [
+            "format",
+            "scope",
+            "setup",
+            "protected_run",
+            "removal",
+            "active_protection",
+            "removal_authorized",
+            "future_inactivity",
+            "checks",
+            "guidance",
+            "limits",
+        ];
+        let lifecycle = value["lifecycle"].as_object().unwrap();
+        assert_eq!(lifecycle.len(), allowed.len());
+        assert!(lifecycle.keys().all(|k| allowed.contains(&k.as_str())));
+        assert_eq!(lifecycle["removal_authorized"], false);
+        assert_eq!(lifecycle["active_protection"], "not_measured");
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(output.join("manifest.json")).unwrap()).unwrap();
+        assert_eq!(
+            manifest["lifecycle_schema"],
+            "sw-pilot-lifecycle-preflight/1"
+        );
+        assert_eq!(
+            manifest["files"][0]["sha256"],
+            format!("{:x}", sha2::Sha256::digest(&raw))
+        );
+        for key in [
+            "pid",
+            "argv",
+            "environ",
+            "maps",
+            "workspace_path",
+            "credentials",
+        ] {
+            assert!(!lifecycle.contains_key(key));
+        }
+    }
+
     #[test]
     fn removal_limitation_does_not_relabel_setup_or_protection() {
         let mut r = Report::new();
