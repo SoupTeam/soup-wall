@@ -454,28 +454,31 @@ async fn main() -> anyhow::Result<()> {
             let config = cfg.rollout_reconciliation.clone();
             tokio::spawn(async move { store.run_rollout_reconciliation(config, shutdown).await })
         });
-    let shutdown_stop = stop.clone();
-    let result = axum::serve(listener, app(state))
-        .with_graceful_shutdown(async move {
-            let ctrl_c = async {
-                let _ = tokio::signal::ctrl_c().await;
-            };
-            #[cfg(unix)]
-            let terminate = async {
-                if let Ok(mut signal) =
-                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                {
-                    signal.recv().await;
-                } else {
-                    std::future::pending::<()>().await;
-                }
-            };
-            #[cfg(not(unix))]
-            let terminate = std::future::pending::<()>();
-            tokio::select! { _ = ctrl_c => {}, _ = terminate => {} }
-            let _ = shutdown_stop.send(true);
-        })
-        .await;
+    let shutdown_signal = async {
+        let ctrl_c = async {
+            let _ = tokio::signal::ctrl_c().await;
+        };
+        #[cfg(unix)]
+        let terminate = async {
+            if let Ok(mut signal) =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            {
+                signal.recv().await;
+            } else {
+                std::future::pending::<()>().await;
+            }
+        };
+        #[cfg(not(unix))]
+        let terminate = std::future::pending::<()>();
+        tokio::select! { _ = ctrl_c => {}, _ = terminate => {} }
+    };
+    // Stop accepting on shutdown without waiting for unrelated incomplete HTTP
+    // bodies or streams. The worker is joined separately so its current durable
+    // transition finishes before the runtime exits.
+    let result = tokio::select! {
+        result = async { axum::serve(listener, app(state)).await } => result,
+        _ = shutdown_signal => Ok(()),
+    };
     let _ = stop.send(true);
     if let Some(worker) = worker {
         worker.await??;

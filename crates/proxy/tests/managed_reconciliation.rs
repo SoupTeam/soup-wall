@@ -527,9 +527,20 @@ fn reconciliation_configuration_is_explicit_and_bounded() {
 #[cfg(unix)]
 #[test]
 fn disabled_worker_preserves_console_sigterm_lifecycle() {
+    use std::os::unix::process::ExitStatusExt;
+    assert_eq!(console_sigterm_with_pending_body(false).signal(), Some(15));
+}
+
+#[cfg(unix)]
+#[test]
+fn enabled_worker_joins_without_waiting_for_incomplete_http_body() {
+    assert!(console_sigterm_with_pending_body(true).success());
+}
+
+#[cfg(unix)]
+fn console_sigterm_with_pending_body(enabled: bool) -> std::process::ExitStatus {
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
-    use std::os::unix::process::ExitStatusExt;
     use std::process::{Command, Stdio};
     use std::time::Instant;
     struct Guard(std::process::Child);
@@ -546,7 +557,7 @@ fn disabled_worker_preserves_console_sigterm_lifecycle() {
     std::fs::write(
         dir.path().join("firewall.yaml"),
         format!(
-            "bind: '{address}'\ntenant_store:\n  enabled: true\n  database_path: console.sqlite\n"
+            "bind: '{address}'\ntenant_store:\n  enabled: true\n  database_path: console.sqlite\nrollout_reconciliation:\n  enabled: {enabled}\n"
         ),
     )
     .unwrap();
@@ -587,24 +598,37 @@ fn disabled_worker_preserves_console_sigterm_lifecycle() {
         std::thread::sleep(Duration::from_millis(25));
     }
     let mut pending = TcpStream::connect(address).unwrap();
-    pending.write_all(b"POST /admin/v1/tenants HTTP/1.1\r\nHost: localhost\r\nx-llm-firewall-admin-token: Bearer disposable-signal-test-token\r\nContent-Type: application/json\r\nContent-Length: 1000\r\n\r\n{").unwrap();
-    std::thread::sleep(Duration::from_millis(100));
+    pending
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    pending.write_all(b"POST /admin/v1/tenants HTTP/1.1\r\nHost: localhost\r\nx-llm-firewall-admin-token: Bearer disposable-signal-test-token\r\nContent-Type: application/json\r\nContent-Length: 1000\r\nExpect: 100-continue\r\n\r\n").unwrap();
+    // The interim response proves the authenticated route is polling its body.
+    // Keep that body incomplete while the worker receives the shutdown signal.
+    let mut interim = Vec::new();
+    while !interim.ends_with(b"\r\n\r\n") {
+        let mut byte = [0; 1];
+        pending.read_exact(&mut byte).unwrap();
+        interim.push(byte[0]);
+        assert!(interim.len() <= 128);
+    }
+    assert!(interim.starts_with(b"HTTP/1.1 100 Continue\r\n"));
+    pending.write_all(b"{").unwrap();
     assert!(Command::new("/bin/kill")
         .args(["-TERM", &child.0.id().to_string()])
         .status()
         .unwrap()
         .success());
     let deadline = Instant::now() + Duration::from_secs(2);
-    loop {
+    let status = loop {
         if let Some(status) = child.0.try_wait().unwrap() {
-            assert_eq!(status.signal(), Some(15));
-            break;
+            break status;
         }
         assert!(
             Instant::now() < deadline,
-            "disabled worker installed a graceful-drain handler"
+            "Console shutdown waited for an incomplete HTTP body (reconciliation enabled: {enabled})"
         );
         std::thread::sleep(Duration::from_millis(10));
-    }
+    };
     drop(pending);
+    status
 }
