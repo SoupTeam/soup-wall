@@ -136,11 +136,48 @@ The updated browser assertion checks the visible actual key ID and fingerprint.
 Local browser execution is **not claimed**: Chrome could not create its process
 singleton socket under the scratch-only enclosure; the required runner rejected
 the skip. No host browser security or user-profile permissions were relaxed.
-PostgreSQL 16 review-correction evidence is pending the focused native workflow;
-the earlier November 3 run above does not cover these new signer controls.
+PostgreSQL 16 and Linux browser evidence for the review correction are recorded
+below; the earlier November 3 run does not cover these new signer controls.
 
 Final focused rerun (including fresh rotated-key previews): passed SQLite HTTP
 controls, formatting, strict all-target Clippy, generated-workflow consistency
 and 425 Markdown files / 1354 local links. Snapshot
 `f989aa83cb8a32d64115dd774530d8e262579935040fde9703f1ef6c4ee16dff`, log
 `875c5476554b7fbd5a34deb6e2e12d89fa953dcb2b30bc51d481ecb512a25f96`.
+
+### Corrected-source native qualification
+
+Exact implementation source: `54e9663ed8f7115356f6bf3d338ba5acef7d571a`.
+
+- [Managed group rollout run 41801008661](https://github.com/SoupTeam/soup-wall/actions/runs/41801008661):
+  **passed**, including the updated real-HTTP confirmation/rotation fixture on
+  SQLite and PostgreSQL 16, existing PostgreSQL fault/concurrency controls, and
+  both four-real-Agent encrypted recovery demos. The two retained demo reports
+  were independently checked: each has `passed: true` and all 31 checks true.
+  Artifact `13307512745`, two unique safe CRC-valid members, ZIP SHA-256
+  `fd9a55c8b563588184a318618d6d8c08264cadf49e89a41387ffe18ec53a22ed`.
+  Complete job log SHA-256
+  `4f9009e0c9d9ee413c5c1c5d7b334b439f8d97a5e2df81088697d632df4d9a61`.
+- [Agent fleet run 41801017361](https://github.com/SoupTeam/soup-wall/actions/runs/41801017361):
+  **passed**, including all 17 rollout-panel Playwright regressions with the new
+  visible key-ID/fingerprint assertion, real SQLite/PostgreSQL Console/Agent
+  witnesses, and the real HTTPS rollout scenario. Artifact `13308181049`, 56
+  unique safe CRC-valid members, ZIP SHA-256
+  `1453dbfe8810daf05c89ede8c76812e024551ebc9b89716620662b0c89b6bcf3`.
+  Rollout report SHA-256
+  `b380ea9b96f413bdad47905073cf9028b2fae2d9a52b4f9d1498b4cf3cc215c7`;
+  complete job log SHA-256
+  `1ca31707db0f7a173cd5c2b788be1c193fdcb169bf1b32aca4c42aff57837bbb`.
+
+Two separate disposable mutation controls failed as required: reloading the
+environment instead of checking the actual issuer allowed the wrong captured
+issuer through; omitting public-key material from the snapshot reproduced
+HTTP 201 instead of 409 on same-ID key rotation. Neither mutation was published.
+Mutation log hashes, respectively:
+`c61feefc3c8ebffa06ea2fc50e58d64334d63fabf14a872a1a08d8400a094a8b`,
+`afb9d16ba61cc2f04b30054036b738ed7e4b91773abc81b618c617378c6cacc4`.
+
+This subsequent ledger-only commit changes no implementation or test bytes.
+These focused runs do not replace maintainer-owned final Ready CI, all CodeQL
+analyses, exact-current-base candidate admission, re-review or merge. The
+migration-29 collision with #350 remains an integration note, not a new migration.
