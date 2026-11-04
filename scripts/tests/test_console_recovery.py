@@ -417,6 +417,61 @@ class RecoveryTests(unittest.TestCase):
             with self.assertRaises(recovery.RecoveryError):
                 backend.require_empty()
 
+    def pg_backend(self):
+        return recovery.PostgresBackend('postgresql://owned:private@127.0.0.1:5555/source?sslmode=disable', directory=self.work)
+
+    def test_pg_catalog_accepts_only_the_exact_observation_schema(self):
+        backend = self.pg_backend()
+        plain = json.dumps({'tables': ['tenants'], 'sequences': [], 'unexpected': 0})
+        def answers(present, unexpected=0):
+            def sql(query):
+                if query.startswith("SELECT json_build_object('tables'"):
+                    return json.dumps({'tables': ['tenants'], 'sequences': [], 'unexpected': unexpected})
+                if 'FROM pg_namespace WHERE nspname=' in query:
+                    return '1' if present else '0'
+                raise AssertionError('unexpected query')
+            return sql
+        # No observation schema: unchanged behavior.
+        with patch.object(backend, 'sql', side_effect=answers(False)):
+            self.assertEqual(backend.catalog(), json.loads(plain))
+        # Exactly the reviewed observation schema is accepted.
+        with patch.object(backend, 'sql', side_effect=answers(True)), \
+             patch.object(backend, 'logical_schema', return_value=recovery.OBSERVATION_CATALOG) as schema:
+            self.assertEqual(backend.catalog(), json.loads(plain))
+            schema.assert_called_once_with(recovery.OBSERVATION_SCHEMA)
+        # Any deviation in that schema refuses (an extra table here).
+        changed = json.loads(json.dumps(recovery.OBSERVATION_CATALOG))
+        changed['tables'].append(dict(changed['tables'][0], name='extra'))
+        with patch.object(backend, 'sql', side_effect=answers(True)), \
+             patch.object(backend, 'logical_schema', return_value=changed):
+            with self.assertRaisesRegex(recovery.RecoveryError, 'Unsupported PostgreSQL schema catalog'):
+                backend.catalog()
+        # Any other schema still refuses, with or without observations.
+        for present in (False, True):
+            with patch.object(backend, 'sql', side_effect=answers(present, unexpected=1)), \
+                 patch.object(backend, 'logical_schema', return_value=recovery.OBSERVATION_CATALOG):
+                with self.assertRaisesRegex(recovery.RecoveryError, 'Unsupported PostgreSQL schema catalog'):
+                    backend.catalog()
+        with self.assertRaisesRegex(recovery.RecoveryError, 'Unsupported PostgreSQL schema catalog'):
+            backend.logical_schema('rogue')
+
+    def test_pg_restore_target_with_observations_is_not_empty(self):
+        backend = self.pg_backend()
+        with patch.object(backend, 'catalog', return_value={'tables': [], 'sequences': [], 'unexpected': 0}), \
+             patch.object(backend, 'sql', side_effect=lambda q: '1' if 'nspname=' in q and 'COUNT(*) FROM pg_namespace' in q else '0'):
+            with self.assertRaisesRegex(recovery.RecoveryError, 'contains schema objects'):
+                backend.require_empty()
+
+    def test_pg_archive_with_observations_is_refused(self):
+        backend = self.pg_backend()
+        listing = b"; Archive\n215; 2615 16385 SCHEMA - agent_observations owned\n"
+        with patch.object(backend, 'invoke', return_value=listing):
+            with self.assertRaisesRegex(recovery.RecoveryError, 'volatile Agent observations'):
+                recovery.require_no_observations(backend, self.work / 'database.dump')
+        with patch.object(backend, 'invoke', return_value=b"; Archive\n200; 1259 16390 TABLE public tenants owned\n") as invoke:
+            recovery.require_no_observations(backend, self.work / 'database.dump', '/usr/bin/pg_restore')
+            invoke.assert_called_once_with(['/usr/bin/pg_restore', '--list', self.work / 'database.dump'])
+
 
 if __name__ == '__main__':
     unittest.main()

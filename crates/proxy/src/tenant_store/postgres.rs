@@ -6,6 +6,8 @@
 //! client handle in memory: tenants, hashed tokens, policies, and audit events
 //! live in PostgreSQL and are therefore shared by every proxy instance.
 
+#[path = "agent_heartbeat_postgres.rs"]
+mod agent_heartbeat;
 #[path = "fleet_postgres.rs"]
 mod fleet;
 #[path = "fleet_triage_postgres.rs"]
@@ -1433,6 +1435,7 @@ impl PostgresTenantStore {
         // checks out its connection (also works with a one-connection pool).
         drop(client);
         self.migrate_managed_agents().await?;
+        self.migrate_agent_heartbeats().await?;
         Ok(())
     }
 

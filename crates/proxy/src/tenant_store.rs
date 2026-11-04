@@ -23,6 +23,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 
 mod agent_enrollment;
+pub mod agent_heartbeat;
 pub mod fleet;
 pub mod fleet_triage;
 mod managed_async;
