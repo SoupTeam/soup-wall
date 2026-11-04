@@ -77,6 +77,10 @@ jobs:
         run: cargo build --locked -p llm-firewall -p agentfw
       - name: Prepare isolated browser driver
         run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends age
+          age --version
+          age-keygen --version
           python3 -m venv "$RUNNER_TEMP/fleet-driver"
           "$RUNNER_TEMP/fleet-driver/bin/python" -m pip install playwright==1.55.0 cryptography==50.0.2
           "$RUNNER_TEMP/fleet-driver/bin/python" -m playwright install --with-deps chromium
