@@ -6,9 +6,9 @@ use crate::tenant_store::{
     agent_enrollment::{credential_hash, valid_id, validated_rotation},
     managed_confirmation::{
         assemble, classify, ensure_preview_input, id_hash, intent_digest, new_confirmation_id,
-        signer_available, valid_confirmation_id, AgentFacts, CohortFacts, ConfirmationFailure,
-        ConfirmationRefused, Disposition, GroupStartPreview, GuardedStart, LatestRollout,
-        StartConfirmation, StartGuard, StoredConfirmation, CONFIRMATION_TTL_SECS,
+        resolved_signer, signer_identity, valid_confirmation_id, AgentFacts, CohortFacts,
+        ConfirmationFailure, ConfirmationRefused, Disposition, GroupStartPreview, GuardedStart,
+        LatestRollout, StartConfirmation, StartGuard, StoredConfirmation, CONFIRMATION_TTL_SECS,
         CONFIRMATION_VERSION, MAX_PREVIEW_AGENTS,
     },
     managed_policy::{
@@ -1440,7 +1440,7 @@ impl PostgresTenantStore {
             group,
             revision,
             requested_issuer,
-            signer_available(requested_issuer),
+            resolved_signer(requested_issuer),
         );
         let confirmation = if preview.startable {
             let now = now_unix();
@@ -1547,7 +1547,7 @@ impl PostgresTenantStore {
             group,
             revision,
             guard.requested_issuer_key,
-            signer_available(guard.requested_issuer_key),
+            issuer.map(signer_identity),
         );
         ensure!(
             now_preview.startable && Some(&now_preview.snapshot_sha256) == expected.as_ref(),

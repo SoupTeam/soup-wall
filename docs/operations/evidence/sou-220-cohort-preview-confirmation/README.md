@@ -95,3 +95,52 @@ start, and a lost start response reconciles with no resubmission.
 The bounded preview describes at most 500 Agents. A confirmation does not cover the signing key's trust in the Agent keyring.
 The Console cannot detect a rollout that finished between preview and start except through the server's refusal. The legacy
 unguarded start remains available by design; the guarantee exists only for callers that send the confirmation.
+
+## Review correction: resolved signing identity (November 4)
+
+Review 5765415019 at source `d4019bbc` reproduced an old preview being accepted
+after a default signer rotation. Requested `issuer_key_id: null` and
+`signer_available: true` were insufficient to freeze the signing identity.
+
+The authoritative preview now includes `resolved_signer.issuer_key_id` and
+`resolved_signer.public_key_sha256` (SHA-256 of raw Ed25519 public-key bytes),
+covered by `snapshot_sha256` and shown in the Console confirmation. SQLite and
+PostgreSQL derive the start snapshot from the actual `ManagedIssuer` reference
+used for issuance inside their existing transaction/lease. They do not re-read
+an unrelated environment signer to validate a different signing instance.
+No new migration or seed/publication surface is introduced. Previously unconsumed
+confirmations without the new binding fail stale; consumed confirmations retain
+their reconciliation behavior, including after signer rotation/removal.
+
+The shared real-TCP fixture now covers default ID rotation, same-ID key-material
+rotation, explicit default selection, and a named non-default key rotation after
+server shutdown and storage reopen. Each old confirmation returns 409
+`confirmation_stale` with no change to deployments, revisions, sequences or
+rollouts and no confirmation consumption. A fresh preview can start using the
+rotated identity; restoring the exact old signer also proves the refused
+confirmation was not consumed. A consumed confirmation replays its original
+rollout after restart without a signing seed. A direct store witness passes a
+different actual issuer while the environment still matches the preview and
+requires the same zero-write refusal, covering a capture/recheck race.
+
+Local macOS checks use read-only source, scratch-only writes and loopback-only
+Seatbelt. All 357 proxy tests passed (10 explicit environment-dependent ignores);
+all-target proxy Clippy with `-D warnings` passed. Full-suite snapshot
+`8ea9c5b24957e51a42b3a91a92f3356890edaee86ef5e1c0c00ad8d0894749fc`, log
+`07772959e4f115747cbcf40fbd4ce66823c16226ec2136af2fdfde963c6fa227`.
+Clippy log `ceeb9751d8e4973de28a50d91dfd58fba8851db26a8e7659d388a0a94eec7e92`.
+The final subsequent test-only extension additionally checks fresh rotated-key
+preview/start; its focused rerun is recorded separately.
+
+The updated browser assertion checks the visible actual key ID and fingerprint.
+Local browser execution is **not claimed**: Chrome could not create its process
+singleton socket under the scratch-only enclosure; the required runner rejected
+the skip. No host browser security or user-profile permissions were relaxed.
+PostgreSQL 16 review-correction evidence is pending the focused native workflow;
+the earlier November 3 run above does not cover these new signer controls.
+
+Final focused rerun (including fresh rotated-key previews): passed SQLite HTTP
+controls, formatting, strict all-target Clippy, generated-workflow consistency
+and 425 Markdown files / 1354 local links. Snapshot
+`f989aa83cb8a32d64115dd774530d8e262579935040fde9703f1ef6c4ee16dff`, log
+`875c5476554b7fbd5a34deb6e2e12d89fa953dcb2b30bc51d481ecb512a25f96`.

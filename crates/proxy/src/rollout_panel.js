@@ -270,6 +270,8 @@ const rollout = (() => {
     box.append(make("p", `Policy SHA-256: ${p.policy_sha256 ?? "unknown"}`, "note"),
                make("p", `Server preview pilots: ${list(p.pilots)}`, "note"),
                make("p", `Server preview workers: ${list(p.workers)}`, "note"));
+    if (p.resolved_signer) box.append(make("p",
+      `Signing key: ${p.resolved_signer.issuer_key_id}; public key SHA-256: ${p.resolved_signer.public_key_sha256}`, "note"));
     p.agents.forEach(a => box.append(make("p",
       `${a.agent_id} (${a.wave}): baseline ${a.baseline_revision ?? "none"}, latest sequence ${a.latest_sequence}${a.latest_status ? ` (${a.latest_status})` : ""}${a.authorized ? "" : ", NOT AUTHORIZED"}`, "note")));
     box.append(make("p", `Snapshot SHA-256: ${p.snapshot_sha256}`, "note"));
@@ -283,7 +285,7 @@ const rollout = (() => {
     root.replaceChildren(box);
     say("Review the server preview, then confirm. Nothing has been issued.");
     confirmAction({ title: `Start pilot deployment of ${revision}`,
-      lines: [`Confirmation expires ${when(p.confirmation.expires_at_unix)}. The server rechecks the cohort, authorization, revision, baselines and sequences when you confirm and refuses with zero deployments if anything differs.`,
+      lines: [`Confirmation expires ${when(p.confirmation.expires_at_unix)}. The server rechecks the cohort, authorization, revision, baselines, sequences and signing key when you confirm and refuses with zero deployments if anything differs.`,
               "Only pilots receive the policy now. The server issues the worker wave only after every pilot's exact applied acknowledgement is recorded (when it arrives, or when an Owner evaluates the gate). Pause first to hold workers."],
       expected: revision, keep: box,
       run: async () => {

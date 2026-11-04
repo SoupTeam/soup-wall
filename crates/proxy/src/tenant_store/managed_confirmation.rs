@@ -68,6 +68,21 @@ pub struct LatestRollout {
     pub policy_sha256: String,
 }
 
+/// Actual public signing identity, independent of the requested default/alias.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ResolvedSigner {
+    pub issuer_key_id: String,
+    /// SHA-256 of the raw Ed25519 public-key bytes; never a seed fingerprint.
+    pub public_key_sha256: String,
+}
+
+pub(super) fn signer_identity(issuer: &ManagedIssuer) -> ResolvedSigner {
+    ResolvedSigner {
+        issuer_key_id: issuer.key_id().to_owned(),
+        public_key_sha256: issuer.public_key_sha256(),
+    }
+}
+
 /// The server's view of what a start would do right now. Contains no secret and no authority.
 #[derive(Clone, Debug, Serialize)]
 pub struct CohortPreview {
@@ -81,6 +96,7 @@ pub struct CohortPreview {
     /// Exactly as requested; `None` means the Console default signer.
     pub issuer_key_id: Option<String>,
     pub signer_available: bool,
+    pub resolved_signer: Option<ResolvedSigner>,
     pub pilots: Vec<String>,
     pub workers: Vec<String>,
     pub agents: Vec<CohortAgent>,
@@ -213,8 +229,9 @@ pub(super) fn assemble(
     group: &str,
     revision: &str,
     requested_issuer: Option<&str>,
-    signer_available: bool,
+    resolved_signer: Option<ResolvedSigner>,
 ) -> CohortPreview {
+    let signer_available = resolved_signer.is_some();
     let mut blockers = Vec::new();
     let mut block = |code: &'static str, agent: Option<&str>, detail: String| {
         blockers.push(CohortBlocker {
@@ -361,6 +378,7 @@ pub(super) fn assemble(
         approved,
         issuer_key_id: requested_issuer.map(str::to_owned),
         signer_available,
+        resolved_signer,
         pilots,
         workers,
         agents,
@@ -374,8 +392,11 @@ pub(super) fn assemble(
     preview
 }
 
-pub(super) fn signer_available(requested: Option<&str>) -> bool {
-    ManagedIssuer::from_environment_for_key(requested).is_ok()
+pub(super) fn resolved_signer(requested: Option<&str>) -> Option<ResolvedSigner> {
+    ManagedIssuer::from_environment_for_key(requested)
+        .ok()
+        .as_ref()
+        .map(signer_identity)
 }
 
 pub(super) fn new_confirmation_id() -> String {
@@ -479,7 +500,7 @@ impl TenantStore {
             group,
             revision,
             requested_issuer,
-            signer_available(requested_issuer),
+            resolved_signer(requested_issuer),
         );
         let confirmation = if preview.startable {
             let now = now_unix();
@@ -591,7 +612,7 @@ impl TenantStore {
             group,
             revision,
             guard.requested_issuer_key,
-            signer_available(guard.requested_issuer_key),
+            issuer.map(signer_identity),
         );
         ensure!(
             now_preview.startable && Some(&now_preview.snapshot_sha256) == expected.as_ref(),
@@ -773,6 +794,13 @@ mod tests {
         facts
     }
 
+    fn test_signer() -> Option<ResolvedSigner> {
+        Some(ResolvedSigner {
+            issuer_key_id: "test-key".into(),
+            public_key_sha256: "ab".repeat(32),
+        })
+    }
+
     #[test]
     fn snapshot_ignores_member_order_but_not_any_fact() {
         let a = assemble(
@@ -781,7 +809,7 @@ mod tests {
             "g",
             "r",
             None,
-            true,
+            test_signer(),
         );
         let b = assemble(
             &facts(&[("w2", false), ("p", true), ("w1", false)]),
@@ -789,20 +817,20 @@ mod tests {
             "g",
             "r",
             None,
-            true,
+            test_signer(),
         );
         assert!(a.startable);
         assert_eq!(a.snapshot_sha256, b.snapshot_sha256);
         let mut changed = facts(&[("p", true), ("w1", false), ("w2", false)]);
         changed.agents.get_mut("w1").unwrap().baseline = Some("other".into());
         assert_ne!(
-            assemble(&changed, "t", "g", "r", None, true).snapshot_sha256,
+            assemble(&changed, "t", "g", "r", None, test_signer()).snapshot_sha256,
             a.snapshot_sha256
         );
         let mut sequence = facts(&[("p", true), ("w1", false), ("w2", false)]);
         sequence.agents.get_mut("w2").unwrap().latest = Some((2, "base".into(), "applied".into()));
         assert_ne!(
-            assemble(&sequence, "t", "g", "r", None, true).snapshot_sha256,
+            assemble(&sequence, "t", "g", "r", None, test_signer()).snapshot_sha256,
             a.snapshot_sha256
         );
         assert_ne!(
@@ -812,7 +840,7 @@ mod tests {
                 "g",
                 "r",
                 Some("k"),
-                true
+                test_signer()
             )
             .snapshot_sha256,
             a.snapshot_sha256,
@@ -825,7 +853,7 @@ mod tests {
                 "g",
                 "r",
                 None,
-                true
+                test_signer()
             )
             .snapshot_sha256,
             a.snapshot_sha256
@@ -833,10 +861,41 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_binds_resolved_key_id_and_public_key_material() {
+        let facts = facts(&[("p", true)]);
+        let old = test_signer().unwrap();
+        let baseline = assemble(&facts, "t", "g", "r", None, Some(old.clone()));
+        for changed in [
+            ResolvedSigner {
+                issuer_key_id: "rotated".into(),
+                ..old.clone()
+            },
+            ResolvedSigner {
+                public_key_sha256: "cd".repeat(32),
+                ..old.clone()
+            },
+        ] {
+            let new = assemble(&facts, "t", "g", "r", None, Some(changed.clone()));
+            assert_eq!(new.issuer_key_id, baseline.issuer_key_id);
+            assert_eq!(new.signer_available, baseline.signer_available);
+            assert_ne!(new.snapshot_sha256, baseline.snapshot_sha256);
+            assert_eq!(new.resolved_signer, Some(changed));
+        }
+        assert!(!assemble(&facts, "t", "g", "r", None, None).startable);
+    }
+
+    #[test]
     fn every_blocker_withholds_the_start() {
         let base = facts(&[("p", true), ("w", false)]);
         let codes = |facts: &CohortFacts, signer: bool| -> Vec<&'static str> {
-            let preview = assemble(facts, "t", "g", "r", None, signer);
+            let preview = assemble(
+                facts,
+                "t",
+                "g",
+                "r",
+                None,
+                signer.then(test_signer).flatten(),
+            );
             assert_eq!(preview.startable, preview.blockers.is_empty());
             preview.blockers.iter().map(|b| b.code).collect()
         };
@@ -895,7 +954,7 @@ mod tests {
             .map(|n| (format!("a{n:04}"), n == 0))
             .collect();
         let refs: Vec<(&str, bool)> = members.iter().map(|(a, p)| (a.as_str(), *p)).collect();
-        let preview = assemble(&facts(&refs), "t", "g", "r", None, true);
+        let preview = assemble(&facts(&refs), "t", "g", "r", None, test_signer());
         assert!(!preview.startable);
         assert!(preview
             .blockers

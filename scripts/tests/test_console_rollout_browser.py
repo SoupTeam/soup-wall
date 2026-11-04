@@ -251,7 +251,7 @@ class RolloutPanelBrowserTests(unittest.TestCase):
         agents = [("pilot", "pilot"), ("worker-1", "worker")]
         value = {"contract_version": "sw-group-rollout-preview/1", "executed": False, "tenant_id": TENANT, "group_id": "fleet",
                  "revision": "baseline", "policy_sha256": "b" * 64, "approved": True, "issuer_key_id": None,
-                 "signer_available": True, "pilots": ["pilot"], "workers": ["worker-1"],
+                 "signer_available": True, "resolved_signer": {"issuer_key_id": "reviewed-key", "public_key_sha256": "e" * 64}, "pilots": ["pilot"], "workers": ["worker-1"],
                  "agents": [{"agent_id": a, "wave": w, "authorized": True, "baseline_revision": "old", "latest_sequence": 7,
                              "latest_revision": "old", "latest_status": "applied"} for a, w in agents],
                  "latest_rollout": None, "blockers": [], "startable": True, "snapshot_sha256": "d" * 64,
@@ -284,7 +284,7 @@ class RolloutPanelBrowserTests(unittest.TestCase):
         self.open()
         self.start_review()
         text = self.page.locator("#rollout-confirm").inner_text()
-        for fragment in ("Server preview pilots: pilot", "Server preview workers: worker-1", "b" * 64, "d" * 64,
+        for fragment in ("Server preview pilots: pilot", "Server preview workers: worker-1", "Signing key: reviewed-key", "e" * 64, "b" * 64, "d" * 64,
                          "worker-1 (worker): baseline old, latest sequence 7 (applied)"):
             self.assertIn(fragment, text)
         self.assertIn("Nothing has been issued", self.page.locator("#rollout-status").inner_text())

@@ -24,7 +24,13 @@ sequence/status, the latest rollout of the group, and a list of `blockers` (not 
 already completed rollout, an Agent in another group's active rollout, an unacknowledged deployment, a revoked Agent, a revision
 collision on an Agent, no usable signer, more than 500 Agents). `startable` is true only without blockers, and only then is a
 `confirmation` returned: a versioned identity (`swc1_...`), valid for five minutes, with `snapshot_sha256`, a digest of every fact
-listed. The preview issues no deployment and changes no membership, revision or rollout; the only row it writes is the
+listed. `issuer_key_id` retains the requested signer (`null` means default); `resolved_signer`
+exposes the actual `issuer_key_id` and `public_key_sha256` (SHA-256 of raw Ed25519 public-key bytes).
+Both are included in the snapshot. Default-key rotation, a changed ID, or changed key material under
+an unchanged ID invalidates an unconsumed confirmation. Guarded start compares the actual signer
+used for issuance, not a separate environment lookup. An already consumed confirmation still
+reconciles its original rollout without signing again, including after rotation or signer removal.
+The preview issues no deployment and changes no membership, revision or rollout; the only row it writes is the
 confirmation (one outstanding per administrator and group; asking again replaces it). It is information, never authorization.
 
 `POST .../rollout` with `{"revision":"candidate","confirmation_id":"swc1_..."}` is the guarded start. Inside the same transaction
@@ -35,7 +41,7 @@ authenticated administrator and the canonical intent (revision, requested signer
 
 | `code` | Meaning |
 | --- | --- |
-| `confirmation_stale` | membership, pilot flag, an Agent's authorization, the revision, a baseline, a sequence or another rollout changed after the preview; request a new preview |
+| `confirmation_stale` | membership, pilot flag, an Agent's authorization, the revision, a baseline, a sequence, another rollout or the resolved signing identity changed after the preview; request a new preview |
 | `confirmation_expired` | older than five minutes |
 | `confirmation_invalid` | unknown, forged, malformed, for another tenant, group, administrator, revision or signer, or superseded by a newer preview or rollout |
 

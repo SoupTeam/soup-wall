@@ -374,6 +374,10 @@ impl ManagedIssuer {
         );
     }
 
+    pub(super) fn public_key_sha256(&self) -> String {
+        hex(&Sha256::digest(self.pair.public_key().as_ref()))
+    }
+
     pub fn public_key_hex(&self) -> String {
         hex(self.pair.public_key().as_ref())
     }

@@ -372,6 +372,8 @@ async fn controls(f: &Fixture) {
     confirmations_are_bound_and_cannot_be_forged_expired_or_reused(f).await;
     authorization_and_unavailable_store(f).await;
     concurrency_and_restart(f).await;
+    signer_rotation_requires_a_fresh_preview(f).await;
+    actual_issuer_is_checked_inside_guarded_start(f).await;
     legacy_start_is_unchanged(f).await;
 }
 
@@ -1114,6 +1116,163 @@ async fn concurrency_and_restart(f: &Fixture) {
     assert_eq!(again["rollout_id"], started["rollout_id"]);
     assert_eq!(f.deployments(&restarted_world).await, count);
     server.kill().await;
+}
+
+/// Exercise the original review reproduction over TCP and a reopened persistent store.
+/// Include same-ID key material rotation and explicitly selected non-default issuers.
+async fn signer_rotation_requires_a_fresh_preview(f: &Fixture) {
+    for (label, requested, next_id, next_seed) in [
+        ("default-id", None, "new-unpreviewed-key", "0d"),
+        ("default-material", None, "cohort-key", "0d"),
+        ("explicit-default", Some("cohort-key"), "cohort-key", "0d"),
+        ("named-material", Some("named-key"), "cohort-key", "0c"),
+    ] {
+        set_signers();
+        std::env::set_var("SOUP_AGENT_POLICY_SEED_HEX_NAMED_KEY", "0e".repeat(32));
+        let store = f.store().await;
+        let w = world(&store, label).await;
+        let server = Server::start(store).await;
+        let body = json!({"revision": "candidate", "issuer_key_id": requested});
+        let (status, original) = call(&server, &w, "/preview", body.clone(), OWNER).await;
+        assert_eq!(status, StatusCode::OK, "{original}");
+        let selected_id = requested.unwrap_or("cohort-key");
+        assert_eq!(original["resolved_signer"]["issuer_key_id"], selected_id);
+        let original_issuer = ManagedIssuer::new(
+            selected_id.into(),
+            &if requested == Some("named-key") {
+                "0e"
+            } else {
+                "0c"
+            }
+            .repeat(32),
+        )
+        .unwrap();
+        let expected_sha = {
+            use sha2::{Digest, Sha256};
+            // Decode only the public key. Secret material must never enter the preview.
+            let public = original_issuer.public_key_hex();
+            let bytes: Vec<u8> = (0..public.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&public[i..i + 2], 16).unwrap())
+                .collect();
+            format!("{:x}", Sha256::digest(bytes))
+        };
+        assert_eq!(
+            original["resolved_signer"]["public_key_sha256"],
+            expected_sha
+        );
+        let id = confirmation(&original);
+        let before = f.scope_state(&w).await;
+        server.kill().await;
+        std::env::set_var("SOUP_AGENT_POLICY_KEY_ID", next_id);
+        std::env::set_var("SOUP_AGENT_POLICY_SEED_HEX", next_seed.repeat(32));
+        if requested == Some("named-key") {
+            std::env::set_var("SOUP_AGENT_POLICY_SEED_HEX_NAMED_KEY", "0f".repeat(32));
+        }
+        let server = Server::start(f.store().await).await;
+        let guarded =
+            json!({"revision": "candidate", "issuer_key_id": requested, "confirmation_id": id});
+        let (status, rejected) = call(&server, &w, "", guarded.clone(), OWNER).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{label}: {rejected}");
+        assert_eq!(rejected["code"], "confirmation_stale", "{rejected}");
+        assert_eq!(
+            f.scope_state(&w).await,
+            before,
+            "no issuance/revision/sequence/rollout drift"
+        );
+        assert_eq!(f.confirmations(&w, true).await, 0);
+        assert_eq!(f.confirmations(&w, false).await, 1);
+        // A fresh preview authorizes the newly selected public identity; it
+        // must not silently fall back to the previous/default signer.
+        let fresh_world = world(&f.store().await, "Fresh signer preview").await;
+        let (status, fresh) = call(&server, &fresh_world, "/preview", body.clone(), OWNER).await;
+        assert_eq!(status, StatusCode::OK, "{fresh}");
+        assert_ne!(fresh["resolved_signer"], original["resolved_signer"]);
+        let (status, fresh_started) = call(&server, &fresh_world, "",
+            json!({"revision": "candidate", "issuer_key_id": requested, "confirmation_id": confirmation(&fresh)}), OWNER).await;
+        assert_eq!(status, StatusCode::CREATED, "{fresh_started}");
+        let fresh_envelope = fetch(&server, &fresh_world, "p1").await.unwrap();
+        assert_eq!(
+            fresh_envelope["issuer_key_id"],
+            fresh["resolved_signer"]["issuer_key_id"]
+        );
+        assert_eq!(f.rollouts(&fresh_world).await, 1);
+        // Staleness does not consume the confirmation: restoring the exact old
+        // signer still allows it, without issuing a new preview.
+        set_signers();
+        std::env::set_var("SOUP_AGENT_POLICY_SEED_HEX_NAMED_KEY", "0e".repeat(32));
+        let (status, started) = call(&server, &w, "", guarded.clone(), OWNER).await;
+        assert_eq!(status, StatusCode::CREATED, "{label}: {started}");
+        let envelope = fetch(&server, &w, "p1").await.unwrap();
+        assert_eq!(envelope["issuer_key_id"], selected_id, "{envelope}");
+        assert_eq!(f.deployments(&w).await, before[0] + 1);
+        let issued = f.deployments(&w).await;
+        server.kill().await;
+        // A consumed confirmation is reconciliation, not issuance: no signer
+        // is necessary, even after expiry or a restart/rotation.
+        std::env::remove_var("SOUP_AGENT_POLICY_SEED_HEX");
+        std::env::remove_var("SOUP_AGENT_POLICY_SEED_HEX_NAMED_KEY");
+        let server = Server::start(f.store().await).await;
+        let (status, replayed) = call(&server, &w, "", guarded, OWNER).await;
+        assert_eq!(status, StatusCode::CREATED, "{replayed}");
+        assert_eq!(replayed["confirmation"]["replayed"], true);
+        assert_eq!(replayed["rollout_id"], started["rollout_id"]);
+        assert_eq!(f.deployments(&w).await, issued);
+        server.kill().await;
+    }
+    set_signers();
+}
+
+/// The caller may have captured an issuer before acquiring the store lease.
+/// Guard the actual issuer reference, never an unrelated re-read of environment.
+async fn actual_issuer_is_checked_inside_guarded_start(f: &Fixture) {
+    set_signers();
+    let store = f.store().await;
+    let w = world(&store, "Actual issuer").await;
+    let p = store
+        .preview_managed_group_start_async(&w.tenant, "fleet", "candidate", "bootstrap_owner", None)
+        .await
+        .unwrap();
+    let id = p.confirmation.unwrap().id;
+    let before = f.scope_state(&w).await;
+    let guard = StartGuard {
+        confirmation_id: &id,
+        admin_id: "bootstrap_owner",
+        requested_issuer_key: None,
+    };
+    for actual in [
+        ManagedIssuer::new("cohort-key".into(), &"0d".repeat(32)).unwrap(),
+        ManagedIssuer::new("other-key".into(), &"0c".repeat(32)).unwrap(),
+    ] {
+        let error = store
+            .start_managed_group_rollout_guarded_async(
+                &w.tenant,
+                "fleet",
+                "candidate",
+                Some(&actual),
+                &guard,
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error
+                .downcast_ref::<llm_firewall::tenant_store::ConfirmationRefused>()
+                .unwrap()
+                .code(),
+            "confirmation_stale"
+        );
+        assert_eq!(f.scope_state(&w).await, before);
+    }
+    assert!(store
+        .start_managed_group_rollout_guarded_async(
+            &w.tenant,
+            "fleet",
+            "candidate",
+            Some(&issuer()),
+            &guard
+        )
+        .await
+        .is_ok());
 }
 
 async fn legacy_start_is_unchanged(f: &Fixture) {
