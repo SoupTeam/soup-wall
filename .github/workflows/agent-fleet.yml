@@ -43,6 +43,7 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/fleet-driver"
           "$RUNNER_TEMP/fleet-driver/bin/python" -m pip install playwright==1.55.0 cryptography==50.0.2
           "$RUNNER_TEMP/fleet-driver/bin/python" -m playwright install --with-deps chromium
+          "$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts.tests.test_fleet_acceptance_read_accounting
       - name: SQLite real processes and browser
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" scripts/fleet-console-acceptance.py --backend sqlite --output target/fleet-evidence/sqlite'
       - name: PostgreSQL TLS real processes and browser
