@@ -78,6 +78,83 @@ protection; only `agentfw pilot status` reports it, with the same meanings.
 are recomputed from the installed files, and a component whose descriptor differs from a prefix's recorded scope
 refuses before any launch.
 
+## Read-only lifecycle preflight
+
+Before acquiring or compiling pilot inputs, inspect the current environment:
+
+```bash
+agentfw doctor --lifecycle --json
+agentfw pilot preflight --json
+# Optional: require the current environment prerequisites for later removal.
+agentfw doctor --lifecycle --require-removal-eligible --json
+agentfw pilot preflight --require-removal-eligible --json
+```
+
+`doctor --lifecycle` needs no component, configured home or selected project.
+`pilot preflight` runs the same pre-build diagnosis from the verified installed
+component, outside a checkout. The additive `lifecycle` field also accompanies
+`doctor --pilot`; existing report schemas and protection meanings remain intact.
+The new nested schema is `sw-pilot-lifecycle-preflight/1`.
+
+The report distinguishes three phases using `satisfied`, `blocked` and `unknown`:
+
+- `setup`: native Ubuntu 24.04 x86-64, ordinary operator and observable static
+  user-namespace controls. A disabled namespace limit blocks preparation; missing
+  or inconsistent required setup evidence refuses before preparation effects.
+- `protected_run`: the exact selected namespace/runtime admission remains
+  **unknown** until the existing protected-launch checks run. A readable sysctl,
+  successful setup or preflight is not proof of bubblewrap admission, active
+  protection or an AppArmor exception. Existing runtime checks remain required.
+- `removal`: current host-user-namespace and same-UID process-evidence
+  prerequisites. EACCES is `blocked`; hidden/inaccessible inventory, PID reuse,
+  inconsistent identity and exhausted inspection limits cannot be positive.
+  This does not inspect selected retained-run inactivity or issue consent.
+
+Preview and preparation expose this report before downloads, compilation or
+selected-runtime execution. Setup prerequisites are required for preparation.
+An environment limitation confined to removal is reported separately and does
+not relabel every protected run as unsupported. To require removal prerequisites
+before spending preparation resources, select the explicit option:
+
+```bash
+agentfw pilot prepare --apply --prefix /absolute/private/pilot \
+  --require-removal-eligible [same pinned inputs]
+# Direct existing preparation entry has the same explicit option.
+python3 -B scripts/prepare-installed-pilot.py --prepare \
+  --require-removal-eligible [same preparation inputs]
+```
+
+A required-prerequisite refusal occurs before state creation, downloads,
+compilation or selected-runtime execution. An installed invocation still
+verifies its component and execs its recorded interpreter. The inspection itself
+launches no child. It reads at most 4096 processes, 1024 fds per process, 1 MiB
+per content read (8 KiB stat and 16 KiB status records), 64 MiB total content/link bytes and
+checks a ten-second inspection budget between kernel operations. Reports and
+support exports contain fixed phase/reason codes and guidance, never raw PIDs,
+argv, environment values, maps, project paths or credentials.
+
+The scan checks bounded kernel UID records as well as directory identities:
+[Linux proc ownership can change with dumpability](https://www.man7.org/linux/man-pages/man5/proc_pid.5.html),
+so a root-owned proc object alone does not establish an unrelated process.
+For same-UID EACCES, privately review the operator-owned session/services or use
+a clean environment with complete process visibility. Diagnosis stops nothing
+and changes no credentials, namespace, permissions, ptrace/AppArmor settings or
+host configuration. Do not ignore unreadable processes or use sudo to manufacture
+a positive result. A good result is a point-in-time prerequisite observation:
+removal still independently rechecks its exact current scope, process evidence,
+retained runs, fresh confirmation and journal before applying anything.
+
+The explicit WSL2 preparation path retains its existing opt-in validation and
+qualification boundary. Native Linux observations do not qualify WSL2. This
+feature uses no SOU-216 CI session-preparation helper and adds no service control.
+The opt-in workflow focus `lifecycle-preflight` runs ordinary and installed
+observations in separate disposable native jobs; only sanitized original reports
+are uploaded. [Exact-source observations and original failed attempts,
+2026-11-04](evidence/LINUX_LIFECYCLE_PREFLIGHT_2026-11-04.md) retain the conditional
+results: seven diagnosis/refusal cases passed, while removal stayed blocked. The
+disposable installed-component environment does not qualify a fully prepared
+protected MCP runtime, applying removal, live inference or WSL2.
+
 ## Named project presets
 
 `agentfw pilot project` keeps up to 16 explicit operator shortcuts under the

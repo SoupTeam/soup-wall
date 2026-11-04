@@ -234,7 +234,7 @@ class ImpactTests(unittest.TestCase):
             if filename == "mcp-real-filesystem.yml":
                 auxiliary.update({"manual-long-session", "manual-native-result-profile",
                                   "sou193-provider-preflight", "sou205-proxy-preflight",
-                                  "manual-sou194-cache-exchange", "manual-sou216-process-probe"})
+                                  "manual-sou194-cache-exchange", "manual-sou216-process-probe", "manual-sou225-lifecycle-preflight"})
             if filename == "mcp-real-git.yml":
                 auxiliary.update({"manual-installed-git-profiles", "sou182-raw-boundary"})
             if filename == "mcp-create-file.yml":
@@ -270,6 +270,15 @@ class ImpactTests(unittest.TestCase):
         self.assertNotIn("needs: impact", body)
         self.assertNotIn("manual-sou216-process-probe", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
         self.assertNotIn("manual-sou216-process-probe", (ROOT / ".github/workflows/ci-components.yml").read_text())
+
+    def test_lifecycle_preflight_stays_explicit_manual_only(self):
+        text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
+        body = text.split("  manual-sou225-lifecycle-preflight:\n", 1)[1].split("  sou193-provider-preflight:\n", 1)[0]
+        self.assertIn("github.event_name == 'workflow_dispatch'", body)
+        self.assertIn("github.event.inputs.installed_focus == 'lifecycle-preflight'", body)
+        self.assertNotIn("needs: impact", body)
+        self.assertNotIn("manual-sou225-lifecycle-preflight", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
+        self.assertNotIn("manual-sou225-lifecycle-preflight", (ROOT / ".github/workflows/ci-components.yml").read_text())
         self.assertIn("native-ubuntu-2404", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
 
     def test_native_result_profile_remains_explicit_manual_only(self):

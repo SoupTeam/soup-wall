@@ -94,6 +94,7 @@ SCRIPTS = (
     "scripts/verify-sou68-real-mcp.py",
     "scripts/verify-sou79-resource-budgets.py",
     "scripts/wsl_preflight.py",
+    "scripts/pilot_lifecycle_preflight.py",
     "scripts/wsl_qualification.py",
 )
 DATA_FILES = (

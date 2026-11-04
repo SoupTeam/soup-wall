@@ -53,7 +53,7 @@ def generated() -> str:
         # enter ordinary component qualification or required admission.
         manual = {"mcp-real-filesystem.yml": {"manual-long-session", "manual-native-result-profile",
                                               "sou193-provider-preflight", "sou205-proxy-preflight",
-                                              "manual-sou194-cache-exchange", "manual-sou216-process-probe"},
+                                              "manual-sou194-cache-exchange", "manual-sou216-process-probe", "manual-sou225-lifecycle-preflight"},
                   "mcp-real-git.yml": {"manual-installed-git-profiles", "sou182-raw-boundary"},
                   "mcp-create-file.yml": {"reuse-plan", "reuse-qualification"}}.get(workflow, set())
         if set(jobs) != {*expected, "impact", *manual}:

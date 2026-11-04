@@ -32,6 +32,7 @@ pub mod pilot_component;
 pub mod pilot_doctor;
 mod pilot_host;
 pub mod pilot_launcher;
+pub mod pilot_lifecycle_preflight;
 pub mod pilot_observation;
 pub mod pilot_workspaces;
 #[cfg(target_os = "linux")]
