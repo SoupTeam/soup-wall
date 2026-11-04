@@ -186,3 +186,7 @@ between verification and use is outside this boundary; the next call refuses.
 Qualification: `scripts/qualify-installed-front-door.py` (native CI job,
 `mcp-real-filesystem.yml`). Evidence:
 [installed first use, 2026-10-27](evidence/PILOT_INSTALLED_FRONT_DOOR_2026-10-27.md).
+
+For the separately pinned current-source, two-clean-user measurement, see
+[clean-user acceptance](CLEAN_USER_PILOT_ACCEPTANCE.md). Historical results above
+are not relabeled as new acceptance.

@@ -1178,8 +1178,8 @@ def main(argv=None):
         except (OSError, ValueError, TypeError, KeyError):
             print(json.dumps({'status':'failed','reason':'filesystem_roots_selection_refused','executed':False}))
             return 2
-    if supplied and supplied[0] == "update":
-        return load("front_door_update", "pilot_update.py").main(supplied[1:])
+    if len(supplied) > at and supplied[at] == "update":
+        return load("front_door_update", "pilot_update.py").main(supplied[at + 1:])
     project_words = list(supplied)
     project_home = Path.home() / '.agentfw'
     installed_home = None

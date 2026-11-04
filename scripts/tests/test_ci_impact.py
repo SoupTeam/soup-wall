@@ -94,7 +94,7 @@ class ImpactTests(unittest.TestCase):
             if filename == "mcp-real-filesystem.yml":
                 auxiliary.update({"manual-long-session", "manual-native-result-profile",
                                   "sou193-provider-preflight", "sou205-proxy-preflight",
-                                  "manual-sou194-cache-exchange"})
+                                  "manual-sou194-cache-exchange", "manual-sou216-process-probe"})
             if filename == "mcp-real-git.yml":
                 auxiliary.update({"manual-installed-git-profiles", "sou182-raw-boundary"})
             if filename == "mcp-create-file.yml":
@@ -118,6 +118,19 @@ class ImpactTests(unittest.TestCase):
         self.assertIn("if: ${{ !inputs.raw_boundary_only }}", impact)
         self.assertIn("needs: impact", required)
         self.assertNotIn("sou182-raw-boundary", WORKFLOW_JOBS["mcp-real-git.yml"])
+
+    def test_sou216_process_diagnosis_is_explicit_manual_only(self):
+        text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
+        body = text.split("  manual-sou216-process-probe:\n", 1)[1].split("  sou193-provider-preflight:\n", 1)[0]
+        self.assertIn("github.event_name == 'workflow_dispatch'", body)
+        for focus in ("clean-user-processes", "clean-user-session"):
+            self.assertIn("github.event.inputs.installed_focus == '" + focus + "'", body)
+            impact = text.split("  impact:\n", 1)[1].split("  manual-sou216-process-probe:\n", 1)[0]
+            self.assertIn("github.event.inputs.installed_focus != '" + focus + "'", impact)
+        self.assertNotIn("needs: impact", body)
+        self.assertNotIn("manual-sou216-process-probe", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
+        self.assertNotIn("manual-sou216-process-probe", (ROOT / ".github/workflows/ci-components.yml").read_text())
+        self.assertIn("native-ubuntu-2404", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
 
     def test_native_result_profile_remains_explicit_manual_only(self):
         text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
