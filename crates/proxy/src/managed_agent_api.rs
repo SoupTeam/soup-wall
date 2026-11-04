@@ -1115,3 +1115,67 @@ pub async fn read_revision(
         Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "revision unavailable"),
     }
 }
+
+/// Query addressing preserves valid `.` and `..` revision names, which URL
+/// clients normalize when placed in a path segment. Existing routes remain.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SelectedRevision {
+    #[serde(deserialize_with = "selected_revision_id")]
+    pub revision: String,
+}
+
+fn selected_revision_id<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<String, D::Error> {
+    let revision = String::deserialize(deserializer)?;
+    if revision.is_empty()
+        || revision.len() > 128
+        || !revision
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+    {
+        return Err(serde::de::Error::custom("invalid revision selector"));
+    }
+    Ok(revision)
+}
+
+pub async fn read_selected_revision(
+    State(state): State<Shared>,
+    Path((tenant, agent)): Path<(String, String)>,
+    axum::extract::Query(selected): axum::extract::Query<SelectedRevision>,
+) -> Response {
+    read_revision(State(state), Path((tenant, agent, selected.revision))).await
+}
+
+pub async fn approve_selected_revision(
+    State(state): State<Shared>,
+    Extension(identity): Extension<AdminIdentity>,
+    Path((tenant, agent)): Path<(String, String)>,
+    axum::extract::Query(selected): axum::extract::Query<SelectedRevision>,
+) -> Response {
+    approve_revision(
+        State(state),
+        Extension(identity),
+        Path((tenant, agent, selected.revision)),
+    )
+    .await
+}
+
+pub async fn deploy_selected_revision(
+    State(state): State<Shared>,
+    Extension(identity): Extension<AdminIdentity>,
+    headers: HeaderMap,
+    Path((tenant, agent)): Path<(String, String)>,
+    axum::extract::Query(selected): axum::extract::Query<SelectedRevision>,
+    Json(input): Json<NewDeploymentRequest>,
+) -> Response {
+    deploy_revision(
+        State(state),
+        Extension(identity),
+        headers,
+        Path((tenant, agent, selected.revision)),
+        Json(input),
+    )
+    .await
+}

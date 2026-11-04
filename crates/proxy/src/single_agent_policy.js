@@ -10,6 +10,7 @@ const singlePolicy = (() => {
   const owner = () => currentAdmin?.role === "owner";
   const scope = () => JSON.stringify([tenant, agent]);
   const url = suffix => `/admin/v1/tenants/${enc(tenant)}/agents/${enc(agent)}${suffix}`;
+  const revisionUrl = (revision, action = "") => url(`/policy-revision${action}?revision=${enc(revision)}`);
   const say = text => { $("single-policy-status").textContent = text; };
   const same = stamp => stamp === epoch && tenant && agent;
   const identity = row => row?.tenant_id === tenant && row?.agent_id === agent;
@@ -70,7 +71,7 @@ const singlePolicy = (() => {
     controller?.abort(); controller = new AbortController(); loading = false; document = null; locked = true; render();
     if (!revision) return;
     try {
-      const row = await read(url(`/revisions/${enc(revision)}`));
+      const row = await read(revisionUrl(revision));
       const digest = typeof row?.policy_yaml === "string" ? await sha(row.policy_yaml) : null;
       if (!same(stamp)) return;
       if (!identity(row) || row.revision !== revision || row.policy_sha256 !== digest || typeof row.approved !== "boolean") throw new Error("Unverified revision");
@@ -109,7 +110,7 @@ const singlePolicy = (() => {
       intents.delete(removable[0]);
     }
     const intent = {tenant, agent, revision: document.revision, digest: document.policy_sha256, issuer, rollback,
-      expected: Math.max(0, ...deployments.map(d => d.deployment_sequence)), key: crypto.randomUUID(), url: url(`/revisions/${enc(document.revision)}/deploy`), unresolved: true, busy: false};
+      expected: Math.max(0, ...deployments.map(d => d.deployment_sequence)), key: crypto.randomUUID(), url: revisionUrl(document.revision, "/deploy"), unresolved: true, busy: false};
     intents.set(scope(), intent); await issue(intent);
   }
   async function mutate(path, body) {
@@ -141,7 +142,7 @@ const singlePolicy = (() => {
   $("single-next").addEventListener("click", () => { after = next; load(); });
   $("single-first").addEventListener("click", () => { after = ""; load(); });
   $("single-create-form").addEventListener("submit", e => { e.preventDefault(); mutate(url("/revisions"), {revision: $("single-new-revision").value, policy_yaml: $("single-yaml").value}); });
-  $("single-approve").addEventListener("click", () => { if (document && confirm(`Approve exact revision ${document.revision}\nSHA-256 ${document.policy_sha256}?`)) mutate(url(`/revisions/${enc(document.revision)}/approve`), {}); });
+  $("single-approve").addEventListener("click", () => { if (document && confirm(`Approve exact revision ${document.revision}\nSHA-256 ${document.policy_sha256}?`)) mutate(revisionUrl(document.revision, "/approve"), {}); });
   $("single-deploy").addEventListener("click", () => confirmIssue(false));
   $("single-rollback").addEventListener("click", () => confirmIssue(true));
   $("single-retry").addEventListener("click", () => { const intent = intents.get(scope()); if (intent && owner()) issue(intent); });

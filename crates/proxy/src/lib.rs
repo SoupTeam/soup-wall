@@ -227,6 +227,18 @@ pub fn app(state: Shared) -> Router {
                 post(managed_agent_api::deploy_revision),
             )
             .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/policy-revision",
+                get(managed_agent_api::read_selected_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/policy-revision/approve",
+                post(managed_agent_api::approve_selected_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/policy-revision/deploy",
+                post(managed_agent_api::deploy_selected_revision),
+            )
+            .route(
                 "/admin/v1/tenants/:tenant_id/agents/:agent_id/deployments",
                 get(managed_agent_api::deployments),
             )

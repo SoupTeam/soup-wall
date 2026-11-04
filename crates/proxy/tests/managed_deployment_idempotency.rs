@@ -280,6 +280,7 @@ async fn controls(f: &Fixture) {
     set_signers();
     cold_revision_gets_are_read_only_and_backend_equivalent(f).await;
     revision_readback_and_authoring_authorization(f).await;
+    query_addressed_dot_revisions_preserve_authority(f).await;
     guarded_console_issuance_conflicts_without_side_effects(f).await;
     lost_response_returns_original_and_delivers_once(f).await;
     parallel_callers_share_one_issuance(f).await;
@@ -1167,4 +1168,230 @@ async fn cold_revision_gets_are_read_only_and_backend_equivalent(f: &Fixture) {
         );
         f.sql("DROP TABLE managed_agent_enrollments", "").await;
     }
+}
+
+async fn query_addressed_dot_revisions_preserve_authority(f: &Fixture) {
+    let store = f.store().await;
+    let a = audience(&store, "Dot revision compatibility").await;
+    let other = audience(&store, "Other dot audience").await;
+    let viewer = store
+        .create_admin_async(&unique("Dot revision viewer"), AdminRole::Viewer)
+        .await
+        .unwrap();
+    let view = format!("Bearer {}", viewer.token);
+    let server = Server::start(store).await;
+    let client = reqwest::Client::new();
+    let base = format!(
+        "{}/admin/v1/tenants/{}/agents/{}",
+        server.base, a.tenant, a.agent
+    );
+    let other_base = format!(
+        "{}/admin/v1/tenants/{}/agents/{}",
+        server.base, other.tenant, other.agent
+    );
+    for (offset, revision) in [".", ".."].into_iter().enumerate() {
+        let expected = offset as u64;
+        let create = client
+            .post(format!("{base}/revisions"))
+            .header("x-llm-firewall-admin-token", OWNER)
+            .json(&json!({"revision":revision,"policy_yaml":"default: deny\n"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(create.status().as_u16(), 201);
+        let query = [("revision", revision)];
+        let read_url = format!("{base}/policy-revision");
+        assert_eq!(
+            client
+                .get(&read_url)
+                .query(&query)
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            401
+        );
+        let read = client
+            .get(&read_url)
+            .query(&query)
+            .header("x-llm-firewall-admin-token", &view)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(read.status().as_u16(), 200);
+        let document: Value = read.json().await.unwrap();
+        assert_eq!(document["revision"], revision);
+        assert_eq!(document["tenant_id"], a.tenant);
+        assert_eq!(document["agent_id"], a.agent);
+        assert_eq!(document["policy_yaml"], "default: deny\n");
+        assert_eq!(document["approved"], false);
+        assert_eq!(
+            document["policy_sha256"],
+            format!("{:x}", Sha256::digest(b"default: deny\n"))
+        );
+        let changed = client
+            .post(format!("{base}/revisions"))
+            .header("x-llm-firewall-admin-token", OWNER)
+            .json(&json!({"revision":revision,"policy_yaml":"default: allow\n"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            changed.status().as_u16(),
+            400,
+            "immutable dot revision changed"
+        );
+        let approve_url = format!("{base}/policy-revision/approve");
+        assert_eq!(
+            client
+                .post(&approve_url)
+                .query(&query)
+                .header("x-llm-firewall-admin-token", &view)
+                .json(&json!({}))
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            403
+        );
+        let approve = client
+            .post(&approve_url)
+            .query(&query)
+            .header("x-llm-firewall-admin-token", OWNER)
+            .json(&json!({}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(approve.status().as_u16(), 204);
+        assert_eq!(
+            client
+                .get(format!("{other_base}/policy-revision"))
+                .query(&query)
+                .header("x-llm-firewall-admin-token", &view)
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            404
+        );
+        assert_eq!(
+            client
+                .post(format!("{other_base}/policy-revision/approve"))
+                .query(&query)
+                .header("x-llm-firewall-admin-token", OWNER)
+                .json(&json!({}))
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            404
+        );
+        let deploy_url = format!("{base}/policy-revision/deploy");
+        let idempotency_key = key("dot-intent");
+        let body = json!({"rollback":offset == 1,"expected_sequence":expected});
+        assert_eq!(
+            client
+                .post(&deploy_url)
+                .query(&query)
+                .header("x-llm-firewall-admin-token", &view)
+                .header("Idempotency-Key", &idempotency_key)
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            403
+        );
+        assert_eq!(
+            client
+                .post(format!("{other_base}/policy-revision/deploy"))
+                .query(&query)
+                .header("x-llm-firewall-admin-token", OWNER)
+                .header("Idempotency-Key", &idempotency_key)
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            400
+        );
+        assert_eq!(f.deployments(&a.tenant).await, expected as i64);
+        assert_eq!(f.keys(&a.tenant).await, expected as i64);
+        let issued = client
+            .post(&deploy_url)
+            .query(&query)
+            .header("x-llm-firewall-admin-token", OWNER)
+            .header("Idempotency-Key", &idempotency_key)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(issued.status().as_u16(), 201);
+        let issued: Value = issued.json().await.unwrap();
+        assert_eq!(issued["revision"], revision);
+        assert_eq!(issued["deployment_sequence"], expected + 1);
+        assert_eq!(
+            issued["action"],
+            if offset == 1 { "rollback" } else { "activate" }
+        );
+        let replay = client
+            .post(&deploy_url)
+            .query(&query)
+            .header("x-llm-firewall-admin-token", OWNER)
+            .header("Idempotency-Key", &idempotency_key)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(replay.status().as_u16(), 201);
+        let replay: Value = replay.json().await.unwrap();
+        assert_eq!(replay["deployment_sequence"], issued["deployment_sequence"]);
+        assert_eq!(
+            idem(&replay)["envelope_sha256"],
+            idem(&issued)["envelope_sha256"]
+        );
+        assert_eq!(idem(&replay)["replayed"], true);
+        assert_eq!(f.deployments(&a.tenant).await, (expected + 1) as i64);
+        assert_eq!(f.keys(&a.tenant).await, (expected + 1) as i64);
+    }
+    assert_eq!(f.deployments(&other.tenant).await, 0);
+    assert_eq!(f.keys(&other.tenant).await, 0);
+    let oversized = "a".repeat(129);
+    let invalid_queries = [
+        vec![],
+        vec![("revision", "")],
+        vec![("revision", oversized.as_str())],
+        vec![("revision", "a/b")],
+        vec![("revision", "é")],
+        vec![("revision", "."), ("unexpected", "1")],
+        vec![("revision", "."), ("revision", "..")],
+    ];
+    for suffix in ["", "/approve", "/deploy"] {
+        for query in &invalid_queries {
+            let path = format!("{base}/policy-revision{suffix}");
+            let request = if suffix.is_empty() {
+                client.get(path)
+            } else {
+                client.post(path).json(&json!({}))
+            };
+            assert_eq!(
+                request
+                    .header("x-llm-firewall-admin-token", OWNER)
+                    .query(query)
+                    .send()
+                    .await
+                    .unwrap()
+                    .status()
+                    .as_u16(),
+                400
+            );
+        }
+    }
+    server.kill().await;
 }

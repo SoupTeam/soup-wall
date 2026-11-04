@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import unittest
+from urllib.parse import parse_qs, urlsplit
 from scripts.tests.test_console_rollout_browser import RolloutPanelBrowserTests as Base, ORIGIN, TENANT, OTHER
 
 YAML = "default: deny\n"
@@ -43,20 +44,22 @@ class SinglePolicyBrowserTests(unittest.TestCase):
         tenant = parts[4]
         if len(parts) == 6:
             return self.json(route, [{"tenant_id": tenant, "agent_id": a, "revoked_at_unix": 1 if self.revoked else None} for a in ("agent-a", "agent-b")])
+        if len(parts) < 8:
+            return self.json(route, {"error": "unexpected path"}, 404)
         agent = parts[6]
         decorate = lambda value: dict(copy.deepcopy(value), tenant_id=tenant, agent_id=agent)
         if parts[7] == "deployments":
             return self.json(route, [decorate(d) for d in self.issuances])
-        if len(parts) == 8 and req.method == "GET":
+        if parts[7] == "revisions" and len(parts) == 8 and req.method == "GET":
             if self.hold:
                 self.held.append(route)
                 return
             return self.json(route, [decorate({k: v for k, v in d.items() if k != "policy_yaml"}) for d in self.documents.values()])
-        if len(parts) == 8 and req.method == "POST":
+        if parts[7] == "revisions" and len(parts) == 8 and req.method == "POST":
             value = req.post_data_json
             self.documents[value["revision"]] = dict(value, policy_sha256=hashlib.sha256(value["policy_yaml"].encode()).hexdigest(), approved=False)
             return self.json(route, decorate(self.documents[value["revision"]]), 201)
-        revision = parts[8]
+        revision = parse_qs(urlsplit(req.url).query)["revision"][0] if parts[7] == "policy-revision" else parts[8]
         if req.method == "GET":
             doc = decorate(self.documents[revision])
             if self.mismatch:
@@ -91,6 +94,32 @@ class SinglePolicyBrowserTests(unittest.TestCase):
     def review(self, revision="r1"):
         self.page.locator("#single-revision").select_option(revision)
         self.page.wait_for_function("document.getElementById('single-document').textContent.includes('Server SHA-256')")
+
+    def test_dot_revisions_can_be_reviewed_approved_deployed_and_rolled_back(self):
+        self.documents = {
+            revision: {"revision": revision, "policy_sha256": DIGEST,
+                       "policy_yaml": YAML, "approved": False}
+            for revision in (".", "..")
+        }
+        self.open()
+        for sequence, revision in enumerate((".", ".."), start=1):
+            with self.subTest(revision=revision):
+                self.review(revision)
+                self.page.locator("#single-approve").click()
+                self.page.wait_for_function(
+                    "revision => [...document.getElementById('single-revision').options]"
+                    ".some(o => o.value === revision && o.textContent.endsWith('approved') "
+                    "&& !o.textContent.endsWith('unapproved'))", arg=revision)
+                self.review(revision)
+                button = "#single-deploy" if sequence == 1 else "#single-rollback"
+                self.page.locator(button).click()
+                self.page.wait_for_function(
+                    "sequence => document.getElementById('single-intent').textContent"
+                    ".includes('sequence ' + sequence)", arg=sequence)
+                self.assertEqual(len(self.issuances), sequence)
+                self.assertEqual(self.issuances[-1]["revision"], revision)
+                self.assertEqual(self.issuances[-1]["action"],
+                                 "activate" if sequence == 1 else "rollback")
 
     def test_exact_yaml_create_approve_and_deploy(self):
         self.open()
