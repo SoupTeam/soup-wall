@@ -37,3 +37,22 @@ recovery demo because the two demos reused one source database and the same
 unique synthetic tenant name. Reconciliation now has separate explicitly owned
 disposable source/restore databases; neither demo touches the other's state.
 This failed run remains a failed qualification, not an overall pass.
+
+## Final qualification
+
+[Native run 41850158512](https://github.com/SoupTeam/soup-wall/actions/runs/41850158512)
+passed at exact implementation source bb091dd30c9b3fd2bae11a9b94df796b30a55481:
+SQLite/PostgreSQL reconciliation controls (including two actual workers,
+finite scan ceilings, restart, Owner races, duplicate ACKs, missing signer,
+revocation and pause); both 305-second offline-gate witnesses (15/15 each);
+and both encrypted recovery witnesses (31/31 each). No required PostgreSQL
+control was skipped. Recovery inventory remains schema 30.
+
+`native-final.json` retains the common 288-file source/binary identity once,
+per-scenario configuration/checks and raw-report hashes. Every reported source
+hash was independently compared with that exact Git commit before retention.
+`native-attempt-1.json` permanently records the earlier failed run and its
+individual successful/failed scenarios. Raw logs remain private.
+
+This final update changes evidence only. Maintainer-owned current-main Ready,
+security/admission and merge have not been performed by the author.
