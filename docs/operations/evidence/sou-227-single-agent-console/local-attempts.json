@@ -105,5 +105,57 @@
     "source_sha256": "7c069dae781e569431f32b80e574402f069ddc0d8471f6a81ea2d531b0910f6e",
     "log_sha256": "419d0023f6173ddf11789f35e7bfd1169a574fd83b98908b79e78d53679e54b3",
     "elapsed_seconds": 18.79
+  },
+  {
+    "label": "workspace-checks",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo test --offline --locked --workspace && cargo clippy --offline --locked --workspace --all-targets -- -D warnings"
+    ],
+    "exit_code": 101,
+    "source_sha256": "49f6da5fb40183d3dacce7834649b4c54ac30e6022c5d9cadcb86ba1f7a39f27",
+    "log_sha256": "e40a9fa91c6ee265660fdcfaf9e065dfd1bfb2974c45216dda64747ab25c334a",
+    "elapsed_seconds": 127.43
+  },
+  {
+    "label": "workspace-serial-retry",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo test --offline --locked --workspace -- --test-threads=1 && cargo clippy --offline --locked --workspace --all-targets -- -D warnings"
+    ],
+    "exit_code": 0,
+    "source_sha256": "49f6da5fb40183d3dacce7834649b4c54ac30e6022c5d9cadcb86ba1f7a39f27",
+    "log_sha256": "46766e5d00343d713dd47428a4e3249e1eea95dfca0a92c1c964d72d5fdff3a1",
+    "elapsed_seconds": 259.73
+  },
+  {
+    "label": "fixture-refinement",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "/bin/sh",
+      "-c",
+      "cargo fmt --all --check && python3 -B -c \"import ast,pathlib; [ast.parse(pathlib.Path(p).read_text()) for p in [\\\"scripts/console-single-policy-acceptance.py\\\",\\\"scripts/tests/test_console_single_policy_browser.py\\\"]]\" && python3 -B scripts/check_docs.py"
+    ],
+    "exit_code": 0,
+    "source_sha256": "25123f0bfd464b6fd65f287a1be1f497771bc21ef5772c430e4c503151c29fe0",
+    "log_sha256": "0348a1742be9b133e2fbfa8fe2e2c7b2a841c5a131feea7aebfa0eddc04dc0e6",
+    "elapsed_seconds": 2.02
+  },
+  {
+    "label": "final-ui-boundaries",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "/bin/sh",
+      "-c",
+      "cargo fmt --all --check && node --check crates/proxy/src/single_agent_policy.js && python3 -B -c \"import ast,pathlib; [ast.parse(pathlib.Path(p).read_text()) for p in [\\\"scripts/console-single-policy-acceptance.py\\\",\\\"scripts/tests/test_console_single_policy_browser.py\\\"]]\" && python3 -B scripts/check_docs.py"
+    ],
+    "exit_code": 0,
+    "source_sha256": "9b86f49bea23eade5da1a1caf6ff26b0bf3e27caafc6e2b53c4fe8d120aad40f",
+    "log_sha256": "0348a1742be9b133e2fbfa8fe2e2c7b2a841c5a131feea7aebfa0eddc04dc0e6",
+    "elapsed_seconds": 2.14
   }
 ]

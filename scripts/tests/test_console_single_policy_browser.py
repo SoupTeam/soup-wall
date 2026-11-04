@@ -22,6 +22,17 @@ class SinglePolicyBrowserTests(unittest.TestCase):
         self.lose, self.hold, self.mismatch = False, False, False
         self.deploy_status = None
         self.revoked = False
+        self.callback_errors = []
+        self.page.on("pageerror", lambda error: self.callback_errors.append(str(error)))
+        def accept(dialog):
+            try:
+                dialog.accept()
+            except Exception as error:
+                self.callback_errors.append(str(error))
+        self.page.on("dialog", accept)
+
+    def tearDown(self):
+        self.assertEqual(self.callback_errors, [])
 
     def route(self, route):
         req = route.request
@@ -63,7 +74,7 @@ class SinglePolicyBrowserTests(unittest.TestCase):
                 d = decorate({"deployment_sequence": len(self.issuances) + 1, "revision": revision,
                     "policy_sha256": self.documents[revision]["policy_sha256"], "action": "rollback" if req.post_data_json["rollback"] else "activate",
                     "status": "issued", "issued_at_unix": 1800000000, "applied_at_unix": None,
-                    "idempotency": {"key": key, "envelope_sha256": "e" * 64, "replayed": False}})
+                    "idempotency": {"key": key, "envelope_sha256": "e" * 64, "replayed": False, "issuer_key_id": "fixture-key", "expires_at_unix": 1800003600}})
                 self.keys[key] = d
                 self.issuances.append(d)
             if self.lose:
@@ -76,7 +87,6 @@ class SinglePolicyBrowserTests(unittest.TestCase):
         Base.open(self, group=False)
         self.page.locator("#single-agent").select_option("agent-a")
         self.page.wait_for_function("!document.getElementById('single-create').disabled || document.body.classList.contains('role-viewer') || document.body.classList.contains('role-operator')")
-        self.page.on("dialog", lambda dialog: dialog.accept())
 
     def review(self, revision="r1"):
         self.page.locator("#single-revision").select_option(revision)
@@ -100,7 +110,9 @@ class SinglePolicyBrowserTests(unittest.TestCase):
         self.assertEqual(self.page.evaluate("localStorage.length+sessionStorage.length"), 0)
 
     def test_lost_response_retry_and_duplicate_submit_reuse_key(self):
-        self.open(); self.review(); self.lose = True
+        self.open()
+        self.review()
+        self.lose = True
         self.page.locator("#single-deploy").click()
         self.page.wait_for_function("document.getElementById('single-policy-status').textContent.includes('outcome unresolved')")
         self.assertTrue(self.page.locator("#single-deploy").is_disabled())
@@ -110,33 +122,58 @@ class SinglePolicyBrowserTests(unittest.TestCase):
         self.assertEqual(len(self.calls), 2)
         self.assertEqual(self.calls[0], self.calls[1])
 
+    def test_initial_duplicate_submission_issues_once(self):
+        self.open()
+        self.review()
+        self.page.evaluate("document.getElementById('single-deploy').click();document.getElementById('single-deploy').click()")
+        self.page.wait_for_function("document.getElementById('single-intent').textContent.includes('sequence 1')")
+        self.assertEqual(len(self.issuances),1)
+        self.assertEqual(len(self.calls),1)
+
+    def test_rollback_to_current_revision_is_disabled(self):
+        self.open()
+        self.issuances.append({"revision":"r1", "policy_sha256":DIGEST, "deployment_sequence":1, "action":"activate", "status":"applied", "issued_at_unix":1, "applied_at_unix":2})
+        self.page.locator("#single-refresh").click()
+        self.page.wait_for_function("document.getElementById('single-deployments').textContent.includes('applied')")
+        self.review()
+        self.assertTrue(self.page.locator("#single-rollback").is_disabled())
+        self.assertFalse(self.page.locator("#single-deploy").is_disabled())
+
     def test_changed_intent_requires_new_confirmation_and_key(self):
-        self.open(); self.review()
+        self.open()
+        self.review()
         self.page.locator("#single-deploy").click()
         self.page.wait_for_function("document.getElementById('single-intent').textContent.includes('sequence 1')")
-        self.review(); self.page.locator("#single-deploy").click()
+        self.review()
+        self.page.locator("#single-deploy").click()
         self.page.wait_for_function("document.getElementById('single-intent').textContent.includes('sequence 2')")
         self.assertNotEqual(self.calls[0][0], self.calls[1][0])
 
     def test_viewer_operator_and_live_role_change_cannot_mutate(self):
         for role in ("viewer", "operator"):
-            self.role = role; self.open()
+            self.role = role
+            self.open()
             self.assertEqual(self.page.locator("#single-policy-panel .owner-action:visible").count(), 0)
             self.assertTrue(self.page.locator("#single-deploy").is_disabled())
-        self.role = "owner"; self.open(); self.review(); self.role = "viewer"
+        self.role = "owner"
+        self.open()
+        self.review()
+        self.role = "viewer"
         self.page.locator("#single-deploy").click()
         self.page.wait_for_function("document.body.classList.contains('role-viewer')")
         self.assertEqual(self.calls, [])
 
     def test_inconsistent_yaml_digest_blocks_approval_and_deploy(self):
-        self.open(); self.mismatch = True
+        self.open()
+        self.mismatch = True
         self.page.locator("#single-revision").select_option("r1")
         self.page.wait_for_function("document.getElementById('single-policy-status').textContent.includes('inconsistent')")
         self.assertTrue(self.page.locator("#single-deploy").is_disabled())
         self.assertTrue(self.page.locator("#single-approve").is_disabled())
 
     def test_agent_switch_clears_review_and_draft(self):
-        self.open(); self.review()
+        self.open()
+        self.review()
         self.page.locator("#single-yaml").fill("private draft")
         self.page.locator("#single-agent").select_option("agent-b")
         self.assertEqual(self.page.locator("#single-yaml").input_value(), "")
@@ -144,7 +181,8 @@ class SinglePolicyBrowserTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
 
     def test_stale_reply_after_tenant_switch_cannot_restore_review(self):
-        self.open(); self.hold = True
+        self.open()
+        self.hold = True
         self.page.locator("#single-refresh").click()
         self.page.wait_for_timeout(50)
         self.page.locator("#tenant-list button").filter(has_text="Beta").click()
@@ -158,8 +196,10 @@ class SinglePolicyBrowserTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
 
     def test_403_and_overlap_conflict_leave_explicit_refusal(self):
-        for status, text in [(403, "Authorization refused"), (409, "Overlap conflict")]:
-            self.open(); self.review(); self.deploy_status = status
+        for status, text in [(401, "Authorization refused"), (403, "Authorization refused"), (409, "Overlap conflict")]:
+            self.open()
+            self.review()
+            self.deploy_status = status
             self.page.locator("#single-deploy").click()
             self.page.wait_for_function("text=>document.getElementById('single-policy-status').textContent.includes(text)", arg=text)
             self.assertTrue(self.page.locator("#single-deploy").is_disabled())

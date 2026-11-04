@@ -123,7 +123,8 @@ def main():
             path = f"/admin/v1/tenants/{alpha}/agents/edge-single"
             enrollment = req("POST", f"/admin/v1/tenants/{alpha}/agents", {"agent_id": "edge-single"})
             req("POST", f"/admin/v1/tenants/{beta}/agents", {"agent_id": "edge-single"})
-            token = enrollment["token"]; private.append(token)
+            token = enrollment["token"]
+            private.append(token)
             viewer = req("POST", "/admin/v1/admins", {"name": "Single viewer", "role": "viewer"})["token"]
             operator = req("POST", "/admin/v1/admins", {"name": "Single operator", "role": "operator"})["token"]
             private += [viewer, operator]
@@ -138,14 +139,24 @@ def main():
                 value=D.request("GET",f"http://127.0.0.1:{ap}/health")[1].get("managed_policy")
                 return value if value and value["revision"] == revision and value["deployment_sequence"] == sequence else None
             D.wait_for("Agent healthy", lambda: D.request("GET",f"http://127.0.0.1:{ap}/health")[0] == 200)
+            hook_token=(home/".agentfw/token").read_text().strip()
+            private.append(hook_token)
+            def hook(label):
+                value=D.request("POST",f"http://127.0.0.1:{ap}/hook",{"session_id":"sou227-"+label,"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo sou227-controlled"}},{"Authorization":"Bearer "+hook_token})[1]
+                return value.get("hookSpecificOutput",{}).get("permissionDecision","allow")
             with sync_playwright() as playwright, ExitStack() as browser_stack:
-                browser=playwright.chromium.launch(headless=True);browser_stack.callback(browser.close)
-                context=browser.new_context(viewport={"width":1366,"height":1200});page=context.new_page()
+                browser=playwright.chromium.launch(headless=True)
+                browser_stack.callback(browser.close)
+                context=browser.new_context(viewport={"width":1366,"height":1200})
+                page=context.new_page()
                 page.on("dialog",lambda dialog:dialog.accept())
-                errors=[];page.on("pageerror",lambda error:errors.append(str(error)))
+                errors=[]
+                page.on("pageerror",lambda error:errors.append(str(error)))
                 def login(target, credential):
-                    target.goto(console+"/admin");target.locator("#admin-token").fill(credential)
-                    target.locator("#unlock-form button").click();expect(target.locator("#console")).to_be_visible()
+                    target.goto(console+"/admin")
+                    target.locator("#admin-token").fill(credential)
+                    target.locator("#unlock-form button").click()
+                    expect(target.locator("#console")).to_be_visible()
                     target.locator("#tenant-list button").filter(has_text="Single policy Alpha").click()
                     expect(target.locator("#single-agent option[value='edge-single']")).to_have_count(1)
                     target.locator("#single-agent").select_option("edge-single")
@@ -155,7 +166,8 @@ def main():
                     page.locator("#single-revision").select_option(name)
                     expect(page.locator("#single-document")).to_contain_text("Server SHA-256")
                 def create(name,yaml):
-                    page.locator("#single-new-revision").fill(name);page.locator("#single-yaml").fill(yaml)
+                    page.locator("#single-new-revision").fill(name)
+                    page.locator("#single-yaml").fill(yaml)
                     page.locator("#single-create").click()
                     expect(page.locator(f"#single-revision option[value='{name}']")).to_have_count(1)
                     review(name)
@@ -168,10 +180,13 @@ def main():
                 expect(page.locator("#single-intent")).to_contain_text("sequence 1")
                 D.wait_for("real baseline applied",lambda:applied("r1",1))
                 check("real-agent-baseline-applied",True)
+                check("real-baseline-hook-deny",hook("baseline")=="deny")
                 create("r2","default: allow\n")
                 captured=[]
                 def lose_response(route):
-                    response=route.fetch();captured.append(response.json());route.abort("failed")
+                    response=route.fetch()
+                    captured.append(response.json())
+                    route.abort("failed")
                 page.route("**/revisions/r2/deploy",lose_response)
                 page.locator("#single-deploy").click()
                 expect(page.locator("#single-policy-status")).to_contain_text("outcome unresolved")
@@ -180,14 +195,17 @@ def main():
                 page.locator("#single-retry").click()
                 expect(page.locator("#single-intent")).to_contain_text("sequence 2")
                 D.wait_for("real candidate applied",lambda:applied("r2",2))
+                check("real-candidate-hook-allow",hook("candidate")=="allow")
                 recorded=req("GET",path+"/deployments")
                 check("lost-response-retry-no-additional-sequence",len(recorded)==2 and recorded[0]["deployment_sequence"]==2)
                 page.locator("#single-retry").click()
                 expect(page.locator("#single-intent")).to_contain_text("sequence 2")
                 check("explicit-retry-same-issuance",len(req("GET",path+"/deployments"))==2)
-                review("r1");page.locator("#single-rollback").click()
+                review("r1")
+                page.locator("#single-rollback").click()
                 expect(page.locator("#single-intent")).to_contain_text("sequence 3")
                 D.wait_for("real rollback baseline applied",lambda:applied("r1",3))
+                check("real-rollback-hook-deny",hook("rollback")=="deny")
                 page.locator("#single-refresh").click()
                 expect(page.locator("#single-deployments")).to_contain_text("rollback · applied")
                 final=req("GET",path+"/deployments")
@@ -195,7 +213,8 @@ def main():
                 snapshots["recorded_deployments"]=[{k:d[k] for k in ("deployment_sequence","revision","policy_sha256","action","status","applied_at_unix")} for d in final]
                 check("independent-tenant-same-agent-id-empty",req("GET",f"/admin/v1/tenants/{beta}/agents/edge-single/revisions")==[])
                 for role,credential in [("viewer",viewer),("operator",operator)]:
-                    other=context.new_page();login(other,credential)
+                    other=context.new_page()
+                    login(other,credential)
                     check(role+"-browser-read-only",other.locator("#single-policy-panel .owner-action:visible").count()==0)
                     auth={"x-llm-firewall-admin-token":"Bearer "+credential}
                     check(role+"-server-mutation-refused",code("POST",path+"/revisions/r1/deploy",auth,{})==403)

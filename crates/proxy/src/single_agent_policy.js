@@ -19,14 +19,15 @@ const singlePolicy = (() => {
   function controls() {
     const intent = intents.get(scope());
     const revoked = agents.find(a => a.agent_id === agent)?.revoked_at_unix != null;
+    const latest = deployments.reduce((a, b) => !a || b.deployment_sequence > a.deployment_sequence ? b : a, null);
     const disabled = !owner() || !agent || revoked || locked || loading || intent?.busy;
     $("single-create").disabled = disabled;
     $("single-approve").disabled = disabled || !document || document.approved;
     $("single-deploy").disabled = disabled || !document?.approved || intent?.unresolved;
-    $("single-rollback").disabled = disabled || !document?.approved || intent?.unresolved || !deployments.some(d => d.revision !== document.revision);
+    $("single-rollback").disabled = disabled || !document?.approved || intent?.unresolved || !latest || latest.revision === document.revision;
     $("single-retry").disabled = !owner() || !intent || intent.busy || revoked || loading;
     $("single-next").disabled = loading || !next;
-    $("single-intent").textContent = intent ? `${intent.unresolved ? "Unresolved" : "Recorded"} ${intent.rollback ? "rollback" : "deployment"} intent: ${intent.revision}; key ${intent.key}${intent.result ? `; sequence ${intent.result.deployment_sequence}; envelope SHA-256 ${intent.result.idempotency.envelope_sha256}` : ""}. Retry reconciles this exact intent; it never allocates another key.` : "No confirmed deployment intent in this tab.";
+    $("single-intent").textContent = intent ? `${intent.unresolved ? "Unresolved" : "Recorded"} ${intent.rollback ? "rollback" : "deployment"} intent: ${intent.revision}; key ${intent.key}${intent.result ? `; sequence ${intent.result.deployment_sequence}; signer ${intent.result.idempotency.issuer_key_id}; expires at ${intent.result.idempotency.expires_at_unix}; envelope SHA-256 ${intent.result.idempotency.envelope_sha256}` : ""}. Retry reconciles this exact intent; it never allocates another key.` : "No confirmed deployment intent in this tab.";
   }
   function render() {
     const chosen = $("single-revision").value;
@@ -88,7 +89,7 @@ const singlePolicy = (() => {
       await checkOwner();
       // Captured URL/body/key survive selection changes. Do not abort POSTs.
       const value = await request(intent.url, {method: "POST", headers: {"Idempotency-Key": intent.key}, body: JSON.stringify({rollback: intent.rollback, issuer_key_id: intent.issuer, expected_sequence: intent.expected})});
-      if (value?.tenant_id !== intent.tenant || value?.agent_id !== intent.agent || value?.revision !== intent.revision || value?.policy_sha256 !== intent.digest || value?.action !== (intent.rollback ? "rollback" : "activate") || value?.idempotency?.key !== intent.key || !/^[a-f0-9]{64}$/.test(value?.idempotency?.envelope_sha256) || !Number.isSafeInteger(value.deployment_sequence)) throw new Error("Issuance evidence mismatch");
+      if (value?.tenant_id !== intent.tenant || value?.agent_id !== intent.agent || value?.revision !== intent.revision || value?.policy_sha256 !== intent.digest || value?.action !== (intent.rollback ? "rollback" : "activate") || value?.idempotency?.key !== intent.key || !/^[a-f0-9]{64}$/.test(value?.idempotency?.envelope_sha256) || typeof value?.idempotency?.issuer_key_id !== "string" || !value.idempotency.issuer_key_id || !Number.isSafeInteger(value.idempotency.expires_at_unix) || !Number.isSafeInteger(value.deployment_sequence)) throw new Error("Issuance evidence mismatch");
       if (intent.result && (intent.result.deployment_sequence !== value.deployment_sequence || intent.result.idempotency.envelope_sha256 !== value.idempotency.envelope_sha256)) throw new Error("Retry changed issuance");
       intent.result = value; intent.unresolved = false;
       if (same(stamp)) { await load(); say("Issuance recorded. Refresh to observe delivery and the exact applied acknowledgement."); }

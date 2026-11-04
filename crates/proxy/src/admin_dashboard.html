@@ -133,8 +133,8 @@
 <p id="single-policy-status" role="status">Select a tenant.</p>
 <label>Revision<select id="single-revision"></select></label><button id="single-first" type="button">First revisions</button><button id="single-next" type="button">Next 50 revisions</button>
 <pre id="single-document"></pre>
-<form id="single-create-form" class="owner-action"><label>New immutable revision<input id="single-new-revision" maxlength="64" required autocomplete="off"></label><label>AgentPolicySet YAML<textarea id="single-yaml" maxlength="65536" required spellcheck="false"></textarea></label><button id="single-create">Create for review</button></form>
-<div class="owner-action"><label>Signer key ID (empty: configured default)<input id="single-issuer" maxlength="64" autocomplete="off"></label><button id="single-approve" type="button">Approve reviewed revision</button><button id="single-deploy" type="button">Confirm deployment</button><button id="single-rollback" type="button">Confirm historical rollback</button><button id="single-retry" type="button">Retry exact deployment intent</button></div>
+<form id="single-create-form" class="owner-action"><label>New immutable revision<input id="single-new-revision" maxlength="128" required autocomplete="off"></label><label>AgentPolicySet YAML<textarea id="single-yaml" maxlength="65536" required spellcheck="false"></textarea></label><button id="single-create">Create for review</button></form>
+<div class="owner-action"><label>Signer key ID (empty: configured default)<input id="single-issuer" maxlength="128" autocomplete="off"></label><button id="single-approve" type="button">Approve reviewed revision</button><button id="single-deploy" type="button">Confirm deployment</button><button id="single-rollback" type="button">Confirm historical rollback</button><button id="single-retry" type="button">Retry exact deployment intent</button></div>
 <p id="single-intent"></p><pre id="single-deployments"></pre>
 </section>
 <section id="rollout-panel" class="section" aria-labelledby="rollout-title">
