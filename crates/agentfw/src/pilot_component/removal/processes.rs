@@ -409,7 +409,7 @@ mod tests {
         let root = fixture();
         let path = root.path().join("41/environ");
         if unsafe { libc::geteuid() } != 0 {
-            fs::set_permissions(&path, fs::Permissions::from_mode(0)).unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
             assert_eq!(observe(root.path()), ["process_evidence_inaccessible"]);
             fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
         }
