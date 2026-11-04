@@ -1,6 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Installed declarative recovery controls, followed by the existing two-project runs."""
+import hashlib
 import json
+import os
+from pathlib import Path
+import re
+import stat
+import tempfile
+import time
 import signal
 import subprocess
 
@@ -8,6 +15,88 @@ CASES = ('private-export-consent', 'declarative-export', 'fresh-home-explicit-pr
          'unresolved-preview-inert', 'stale-plan-refused', 'tampered-archive-refused',
          'changed-destination-catalog-refused', 'two-record-atomic-import',
          'duplicate-import-explicit', 'native-interruption-recovery', 'source-sibling-state-preserved')
+
+
+def stage_fsync_observed(raw, stage):
+    for line in raw.decode('utf-8', 'replace').splitlines():
+        match = re.fullmatch(r'(?:[0-9]+\s+)?fsync\([0-9]+<([^>\n]+)>\)\s+= 0', line)
+        if match and match[1] == str(stage):
+            return True
+    return False
+
+
+def interrupt_before_publication(strace, command, trace, stage, catalog, *, cwd, env,
+                                 diagnostics, witness_factory=None, timeout_seconds=120):
+    """Observe durable staging, then kill only this owned fresh process group.
+
+    Delaying the publication syscall gives the observer a bounded interruption
+    window. Temporary output files avoid inherited-pipe EOF waits. Production
+    code has no pause/fault environment option and its timeouts are unchanged.
+    """
+    def require(ok, code):
+        if not ok:
+            raise ValueError('project_interruption_' + code)
+    def read_trace():
+        fd=os.open(trace,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+        try:
+            info=os.fstat(fd)
+            require(stat.S_ISREG(info.st_mode) and info.st_uid==os.getuid() and info.st_nlink==1
+                    and info.st_size<=256*1024,'trace_bound')
+            raw=os.read(fd,256*1024+1)
+            require(len(raw)<=256*1024,'trace_bound')
+            return raw
+        finally:os.close(fd)
+    require(not trace.exists() and not trace.is_symlink() and not stage.exists()
+            and not stage.is_symlink() and not catalog.exists() and not catalog.is_symlink(),'fresh_fixture_required')
+    words=[str(strace),'-f','-qq','-yy','-s','256','-e','trace=execve,execveat,fsync,renameat',
+           '-e','inject=renameat:delay_enter=20000000:when=1','-o',str(trace),*map(str,command)]
+    diagnostics.update(phase='starting',stage_fsynced=False,publication_observed=False)
+    with tempfile.TemporaryFile(dir=trace.parent)as out,tempfile.TemporaryFile(dir=trace.parent)as err:
+        process=subprocess.Popen(words,cwd=cwd,env=env,stdin=subprocess.DEVNULL,
+                                 stdout=out,stderr=err,start_new_session=True)
+        witness=None
+        try:
+            if witness_factory is not None:witness=witness_factory(process.pid)
+            diagnostics['phase']='waiting_for_stage_fsync'
+            deadline=time.monotonic()+timeout_seconds
+            seen_size=-1;fsynced=False
+            while time.monotonic()<deadline and process.poll()is None:
+                if trace.exists():
+                    size=trace.stat().st_size
+                    require(size<=256*1024,'trace_bound')
+                    if size!=seen_size:
+                        seen_size=size;fsynced=fsynced or stage_fsync_observed(read_trace(),stage)
+                if fsynced and stage.exists() and not catalog.exists() and not catalog.is_symlink():
+                    info=stage.lstat()
+                    require(stat.S_ISREG(info.st_mode)and info.st_uid==os.getuid()
+                            and info.st_nlink==1 and 0<info.st_size<=128*1024,'stage_unsafe')
+                    diagnostics['stage_fsynced']=True
+                    break
+                time.sleep(.02)
+            require(diagnostics['stage_fsynced'],'stage_fsync_unobserved')
+            require(process.poll()is None and os.getpgid(process.pid)==process.pid,'owned_group_changed')
+            diagnostics['phase']='terminating_owned_group'
+            os.killpg(process.pid,signal.SIGKILL)
+            try:process.wait(timeout=10)
+            except subprocess.TimeoutExpired:raise ValueError('project_interruption_exit_timeout')from None
+            require(process.returncode==-signal.SIGKILL,'signal_not_observed')
+            require(stage.is_file()and not catalog.exists()and not catalog.is_symlink(),'publication_raced')
+            diagnostics.update(phase='terminated_before_publication',initial_exit=process.returncode)
+        finally:
+            if process.poll()is None:
+                try:os.killpg(process.pid,signal.SIGKILL)
+                except ProcessLookupError:pass
+                process.wait(timeout=10)
+            diagnostics['stdout_bytes']=os.fstat(out.fileno()).st_size
+            diagnostics['stderr_bytes']=os.fstat(err.fileno()).st_size
+            if trace.exists():
+                raw=read_trace();diagnostics.update(trace_bytes=len(raw),trace_sha256=hashlib.sha256(raw).hexdigest(),
+                    observed_fsync_calls=sum(re.match(rb'^(?:[0-9]+\s+)?fsync\(',line)is not None for line in raw.splitlines()),
+                    stage_present=stage.exists(),catalog_present=catalog.exists())
+            if witness is not None:diagnostics['owned_processes_stopped']=witness.finish()['all_stopped']
+        require(diagnostics['stdout_bytes']<=65536 and diagnostics['stderr_bytes']<=16384,'output_bound')
+        require(witness is None or diagnostics['owned_processes_stopped'],'cleanup_unconfirmed')
+    return dict(diagnostics)
 
 
 def qualify(args, door, source_home, env, report, selections, states, versions, bindings, models, canaries, installed):
@@ -122,30 +211,21 @@ def qualify(args, door, source_home, env, report, selections, states, versions, 
     common_interrupted=['--archive',archive,'--bindings',interrupted_bindings]
     plan=call(['import-preview',*common_interrupted],target=interrupted_home)
     trace=args.output/'project-import-interruption.trace.private'
-    command=[str(args.strace),'-f','-qq','-s','256','-e','trace=execve,execveat,renameat',
-             '-e','inject=renameat:signal=SIGKILL:when=1','-o',str(trace),
-             str(args.agentfw),'pilot','--home',str(interrupted_home),'project','import',
+    directory=interrupted_home/presets.DIRECTORY
+    command=[str(args.agentfw),'pilot','--home',str(interrupted_home),'project','import',
              *map(str,common_interrupted),'--confirm-plan',plan['plan_sha256'],'--apply']
-    process=subprocess.Popen(command,cwd=door.cwd,env=env,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-    witness=base.ProcessWitness(process.pid)
-    try:
-        out,err=process.communicate(timeout=180)
-        require(len(out)<=65536 and len(err)<=16384,'project_interruption_output_bound')
-        require(process.returncode in (-signal.SIGKILL,128+signal.SIGKILL),'project_import_not_interrupted')
-        require(trace.stat().st_size<=256*1024 and b'.import-next-'in trace.read_bytes(),'project_import_interruption_not_calibrated')
-        directory=interrupted_home/presets.DIRECTORY
-        require(not(directory/'catalog.json').exists()and(directory/('.import-next-'+plan['plan_sha256'])).is_file(),
-                'project_import_interruption_not_atomic')
-        recovered=call(['import-recover',*common_interrupted,'--confirm-plan',plan['plan_sha256'],'--apply'],target=interrupted_home)
-        require(recovered['status']=='imported'and recovered['recovered'],'project_import_recovery_failed')
-        require(sorted(p.name for p in directory.iterdir())==['catalog.json'],'project_import_recovery_left_stage')
-        for name in ('one','two'):call(['check','--name',name],target=interrupted_home)
-        require(witness.finish()['all_stopped'],'project_interruption_process_remained')
-        finish('native-interruption-recovery',initial_exit=process.returncode,
-               initial_status='terminated_before_publication',recovered=True,owned_processes_stopped=True)
-    finally:
-        if process.poll()is None:process.kill();process.wait(timeout=10)
-        witness.finish()
+    diagnostics={};evidence['interruption_witness']=diagnostics
+    observed=interrupt_before_publication(args.strace,command,trace,
+        directory/('.import-next-'+plan['plan_sha256']),directory/'catalog.json',cwd=door.cwd,env=env,
+        diagnostics=diagnostics,witness_factory=base.ProcessWitness)
+    recovered=call(['import-recover',*common_interrupted,'--confirm-plan',plan['plan_sha256'],'--apply'],target=interrupted_home)
+    require(recovered['status']=='imported'and recovered['recovered'],'project_import_recovery_failed')
+    require(sorted(p.name for p in directory.iterdir())==['catalog.json'],'project_import_recovery_left_stage')
+    for name in ('one','two'):call(['check','--name',name],target=interrupted_home)
+    finish('native-interruption-recovery',initial_exit=observed['initial_exit'],
+           initial_status='terminated_after_staged_fsync_before_publication',recovered=True,
+           owned_processes_stopped=observed['owned_processes_stopped'],stage_fsynced=True,
+           trace_sha256=observed['trace_sha256'])
     begin('source-sibling-state-preserved')
     require((source_home/presets.DIRECTORY/'catalog.json').read_bytes()==source_catalog,'project_export_changed_source_catalog')
     require(sentinel.read_text()=='owned sibling must stay\n'and not(home/'owned-authority-marker').exists(),'project_import_changed_sibling_or_restored_authority')
