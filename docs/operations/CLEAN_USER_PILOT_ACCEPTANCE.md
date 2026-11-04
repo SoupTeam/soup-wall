@@ -144,6 +144,15 @@ personal desktop or an arbitrary host with unreadable processes.
 
 ## Reproduce
 
+For a newly reviewed integration candidate, pass
+`--runtime-source-commit FULL_SOURCE_COMMIT` with a clean runtime checkout and
+source-build receipt for that exact commit. The current focused CI path derives
+this value from its dispatched commit, checks the driver checkout against that
+identity before cloning, and verifies the runtime source again after execution.
+Retain the new source, environment and result alongside its own report. The
+default runtime commit remains the historical SOU-216 product candidate used by
+the frozen reproduction below.
+
 Check out frozen driver `9ecc23806afc8bf22bd06dca8761c50edec6662f` in a clean
 measurement checkout. Use the existing
 [installed producer](PILOT_INSTALLED_FRONT_DOOR.md). Supply inputs emitted by the

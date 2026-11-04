@@ -778,7 +778,7 @@ jobs:
       - name: Build and run SQLite regressions
         run: |
           cargo build --locked -p llm-firewall -p agentfw
-          cargo test --locked -p llm-firewall --test managed_group_rollout --test managed_group_atomic --test managed_deployment_idempotency
+          cargo test --locked -p llm-firewall --test managed_group_rollout --test managed_group_atomic --test managed_deployment_idempotency --test managed_cohort_confirmation
       - name: Run the same fault and concurrency controls on PostgreSQL
         env:
           SOUP_GROUP_TEST_POSTGRES_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_controls?sslmode=disable
@@ -787,6 +787,10 @@ jobs:
         env:
           SOUP_DEPLOY_TEST_POSTGRES_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_controls?sslmode=disable
         run: cargo test --locked -p llm-firewall --test managed_deployment_idempotency postgres_deployment_idempotency_over_http -- --ignored
+      - name: Run cohort preview and guarded start controls over HTTP on PostgreSQL
+        env:
+          SOUP_COHORT_TEST_POSTGRES_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_controls?sslmode=disable
+        run: cargo test --locked -p llm-firewall --test managed_cohort_confirmation postgres_cohort_confirmation_over_http -- --ignored
       - name: Four real Agents with encrypted SQLite recovery
         run: python3 scripts/managed-group-rollout-demo.py --no-build --output target/group-sqlite.json
       - name: Four real Agents with encrypted PostgreSQL recovery
@@ -2371,9 +2375,12 @@ jobs:
           umask 077
           runtime="$RUNNER_TEMP/sou216-accepted-source"
           test ! -e "$runtime"
+          runtime_commit="$(git rev-parse HEAD)"
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$runtime_commit" = "$GITHUB_SHA"
           git clone --quiet --no-hardlinks --no-checkout "$GITHUB_WORKSPACE" "$runtime"
-          git -C "$runtime" checkout --quiet --detach 62b9e69a449c0372ac5226f9e0545d888d4ea1f7
-          test "$(git -C "$runtime" rev-parse HEAD)" = 62b9e69a449c0372ac5226f9e0545d888d4ea1f7
+          git -C "$runtime" checkout --quiet --detach "$runtime_commit"
+          test "$(git -C "$runtime" rev-parse HEAD)" = "$runtime_commit"
           test -z "$(git -C "$runtime" status --porcelain)"
           printf 'SOU216_RUNTIME_SOURCE=%s\n' "$runtime" >> "$GITHUB_ENV"
       - name: Build pinned selected runtimes without global installation
@@ -3392,6 +3399,7 @@ jobs:
           receipt="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["receipt"])' "$asset/source-first.json")"
           python3 -B scripts/qualify-installed-front-door.py --run --clean-user-only \
             --runtime-source "$SOU216_RUNTIME_SOURCE" --source-build-receipt "$receipt" \
+            --runtime-source-commit "$GITHUB_SHA" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou216-clean-user" \
             --component-python /usr/bin/python3.12 --strace "$(command -v strace)" \
             --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \

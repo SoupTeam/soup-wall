@@ -305,6 +305,46 @@ impl TenantStore {
             None => self.start_managed_group_rollout(tenant, group_id, revision, issuer),
         }
     }
+    pub async fn preview_managed_group_start_async(
+        &self,
+        tenant: &str,
+        group: &str,
+        revision: &str,
+        admin_id: &str,
+        requested_issuer: Option<&str>,
+    ) -> anyhow::Result<GroupStartPreview> {
+        match &self.postgres {
+            Some(pg) => {
+                pg.preview_managed_group_start(tenant, group, revision, admin_id, requested_issuer)
+                    .await
+            }
+            None => self.preview_managed_group_start(
+                tenant,
+                group,
+                revision,
+                admin_id,
+                requested_issuer,
+            ),
+        }
+    }
+    pub async fn start_managed_group_rollout_guarded_async(
+        &self,
+        tenant: &str,
+        group: &str,
+        revision: &str,
+        issuer: Option<&ManagedIssuer>,
+        guard: &StartGuard<'_>,
+    ) -> anyhow::Result<GuardedStart> {
+        match &self.postgres {
+            Some(pg) => {
+                pg.start_managed_group_rollout_guarded(tenant, group, revision, issuer, guard)
+                    .await
+            }
+            None => {
+                self.start_managed_group_rollout_guarded(tenant, group, revision, issuer, guard)
+            }
+        }
+    }
     pub async fn get_managed_group_rollout_async(
         &self,
         tenant: &str,

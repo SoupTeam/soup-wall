@@ -81,6 +81,7 @@ def git(root, *words, env=None):
 
 
 def source(root, expected):
+    require(isinstance(expected, str) and re.fullmatch(r"[0-9a-f]{40}", expected), "source_commit_invalid")
     require(root.is_absolute() and root.resolve(strict=True) == root, "canonical_source_required")
     require(git(root, "rev-parse", "HEAD") == expected, "source_commit_mismatch")
     require(not git(root, "status", "--porcelain", "--untracked-files=all"), "source_not_clean")
@@ -221,7 +222,7 @@ def coordinated_update(a, env, archive, built, fixture, installed, q, report):
     controller = a.output / "coordinator"
     paths, candidates = [], []
     for label, prefix in (("a", chosen.prefix), ("b", second.prefix)):
-        value = update.make_inventory(prefix, archive, built["archive_sha256"], PRODUCT, "candidate-" + label)
+        value = update.make_inventory(prefix, archive, built["archive_sha256"], a.runtime_source_commit, "candidate-" + label)
         path = a.output / ("update-" + label + ".private.json")
         save(path, value)
         paths.append(path); candidates.append(value)
@@ -443,14 +444,14 @@ def qualify(a, report):
             "native_ubuntu_24_04_required")
     require("microsoft" not in platform.release().lower(), "wsl_is_separate")
     driver_identity = source(DRIVER, a.expected_commit)
-    runtime_identity = source(a.runtime_source, PRODUCT)
+    runtime_identity = source(a.runtime_source, a.runtime_source_commit)
     require(not a.output.exists() and a.output.is_absolute()
             and not a.output.is_relative_to(DRIVER) and not a.output.is_relative_to(a.runtime_source),
             "new_external_output_required")
     os.umask(0o077)
     a.output.mkdir(mode=0o700)
     report.update(driver_source=driver_identity, source_before=runtime_identity,
-                  accepted_baseline=BASELINE, runtime_source=PRODUCT, runtime_review_status="author candidate; not merge approval", scope="two-new-projects-one-clean-user-environment",
+                  accepted_baseline=BASELINE, runtime_source=a.runtime_source_commit, runtime_review_status="author candidate; not merge approval", scope="two-new-projects-one-clean-user-environment",
                   full_product_acceptance="not_established", novice_human_evidence="not_measured",
                   live_model_effectiveness="not_tested", paid_api_calls=0,
                   useful_latency_threshold="unapproved; observations only",
@@ -482,14 +483,14 @@ def qualify(a, report):
             "explicit_pinned_inputs_required")
     receipt = json.loads(a.source_build_receipt.read_bytes())
     require(receipt.get("format") == "sw-native-pilot-agent-source-build/1"
-            and receipt.get("source", {}).get("commit") == PRODUCT, "accepted_build_receipt_required")
+            and receipt.get("source", {}).get("commit") == a.runtime_source_commit, "accepted_build_receipt_required")
     for role in ("agentfw", "git_launcher", "sandbox_tests"):
         require(receipt["binaries"][role]["sha256"] == sha(getattr(a, role)), "accepted_binary_receipt_mismatch")
     report["source_build_receipt_sha256"] = sha(a.source_build_receipt)
     report["build_source"] = receipt["source"]
     report["compiler_inputs"] = receipt["tools"]
     report["native_source_build_seconds"] = receipt["build_seconds"]
-    a.expected_commit = PRODUCT
+    a.expected_commit = a.runtime_source_commit
     a.agent_output = None
     home = a.output / "user-home"; home.mkdir(mode=0o700)
     a.agent_home = a.output / "agent-home"; a.agent_home.mkdir(mode=0o700)
@@ -541,7 +542,7 @@ def qualify(a, report):
     started = begin("component-install")
     archive = a.output / "component.tar"
     built = installed.build(a.runtime_source, archive, env)
-    require(built["commit"] == PRODUCT, "accepted_component_identity_mismatch")
+    require(built["commit"] == a.runtime_source_commit, "accepted_component_identity_mismatch")
     a.component_python = a.component_python.resolve(strict=True)
     installed.install_component(a, a.agent_home, archive, built["archive_sha256"], built["component"], env, report)
     code, verified, _ = installed.component(a, a.agent_home, None, None, "verify", env=env)
@@ -631,7 +632,7 @@ def qualify(a, report):
         selection = Path(prepared["selection"])
         report["walkthrough_selection_sha256"] = sha(selection)
         process = subprocess.run([str(a.component_python), "-I", "-B", str(a.runtime_source / "scripts/pilot-demo.py"),
-            "--run", "--selection", str(selection), "--expected-commit", PRODUCT,
+            "--run", "--selection", str(selection), "--expected-commit", a.runtime_source_commit,
             "--strace", str(a.strace), "--output", str(a.output / "walkthrough")],
             cwd=a.work, env=env, capture_output=True, timeout=1800)
         demo = json.loads((a.output / "walkthrough/report.json").read_bytes())
@@ -745,7 +746,7 @@ def qualify(a, report):
         done("remove-preserves-user-data", started, user_files_preserved=True, selections_preserved=True)
     finally:
         receiver.close()
-    report["source_after"] = source(a.runtime_source, PRODUCT)
+    report["source_after"] = source(a.runtime_source, a.runtime_source_commit)
     require(report["source_after"] == report["source_before"], "accepted_source_changed")
     require(source(DRIVER, driver_identity["commit"]) == driver_identity, "driver_source_changed")
     report["clean_user"]["status"] = "passed" if all(row["status"] == "passed" for row in rows.values()) else "failed"
@@ -764,6 +765,8 @@ def main(argv=None):
     parser.add_argument("--run", action="store_true", required=True)
     parser.add_argument("--clean-user-only", action="store_true", required=True)
     parser.add_argument("--runtime-source", type=Path, required=True)
+    parser.add_argument("--runtime-source-commit", default=PRODUCT,
+                        help="exact product source commit; defaults to the historical SOU-216 candidate")
     parser.add_argument("--source-build-receipt", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True, help="measurement driver commit, distinct from accepted product source")
     parser.add_argument("--output", type=Path, required=True)
