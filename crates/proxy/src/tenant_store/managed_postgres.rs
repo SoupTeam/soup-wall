@@ -77,6 +77,51 @@ impl PostgresTenantStore {
         Ok(self.bounded(client.query_opt("SELECT policy_yaml,policy_sha256,approved_at_unix IS NOT NULL FROM managed_agent_revisions WHERE tenant_id=$1 AND agent_id=$2 AND revision=$3", &[&tenant,&agent,&revision])).await?.map(|r|ManagedRevisionDocument{identity:ManagedRevision{tenant_id:tenant.into(),agent_id:agent.into(),revision:revision.into(),policy_sha256:r.get(1),approved:r.get(2)},policy_yaml:r.get(0)}))
     }
 
+    pub(in crate::tenant_store) async fn discover_active_rollouts(
+        &self,
+        after: Option<&crate::rollout_reconciliation::RolloutCursor>,
+        until: Option<&crate::rollout_reconciliation::RolloutCursor>,
+        limit: usize,
+    ) -> Result<Vec<crate::rollout_reconciliation::RolloutCursor>> {
+        let (tenant, group, rollout) = after
+            .map(|a| {
+                (
+                    a.tenant_id.as_str(),
+                    a.group_id.as_str(),
+                    a.rollout_id.as_str(),
+                )
+            })
+            .unwrap_or(("", "", ""));
+        let (end_tenant, end_group, end_rollout) = until
+            .map(|a| {
+                (
+                    a.tenant_id.as_str(),
+                    a.group_id.as_str(),
+                    a.rollout_id.as_str(),
+                )
+            })
+            .unwrap_or(("", "", ""));
+        let client = self.checkout().await?;
+        let rows = self.bounded(client.query(
+            "SELECT r.tenant_id,r.group_id,r.rollout_id FROM managed_group_rollouts r JOIN tenants t ON t.id=r.tenant_id WHERE t.active=TRUE AND r.phase IN ('pilot','standard','rolling_back') AND (r.tenant_id,r.group_id,r.rollout_id)>($1,$2,$3) AND (NOT $5 OR (r.tenant_id,r.group_id,r.rollout_id)<=($6,$7,$8)) ORDER BY r.tenant_id,r.group_id,r.rollout_id LIMIT $4",
+            &[&tenant, &group, &rollout, &(limit as i64), &until.is_some(), &end_tenant, &end_group, &end_rollout]
+        )).await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| crate::rollout_reconciliation::RolloutCursor {
+                tenant_id: r.get(0),
+                group_id: r.get(1),
+                rollout_id: r.get(2),
+            })
+            .collect())
+    }
+
+    pub(in crate::tenant_store) async fn active_rollout_ceiling(
+        &self,
+    ) -> Result<Option<crate::rollout_reconciliation::RolloutCursor>> {
+        let client = self.checkout().await?;
+        Ok(self.bounded(client.query_opt("SELECT r.tenant_id,r.group_id,r.rollout_id FROM managed_group_rollouts r JOIN tenants t ON t.id=r.tenant_id WHERE t.active=TRUE AND r.phase IN ('pilot','standard','rolling_back') ORDER BY r.tenant_id DESC,r.group_id DESC,r.rollout_id DESC LIMIT 1",&[])).await?.map(|r|crate::rollout_reconciliation::RolloutCursor{tenant_id:r.get(0),group_id:r.get(1),rollout_id:r.get(2)}))
+    }
     pub(super) async fn migrate_managed_agents(&self) -> Result<()> {
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
@@ -1898,6 +1943,17 @@ impl PostgresTenantStore {
         group_id: &str,
         issuer: Option<&ManagedIssuer>,
     ) -> Result<Option<ManagedGroupRollout>> {
+        self.advance_managed_group_rollout_checked(tenant, group_id, issuer, None)
+            .await
+    }
+
+    pub(in crate::tenant_store) async fn advance_managed_group_rollout_checked(
+        &self,
+        tenant: &str,
+        group_id: &str,
+        issuer: Option<&ManagedIssuer>,
+        expected: Option<&str>,
+    ) -> Result<Option<ManagedGroupRollout>> {
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
         self.bounded(tx.query_one(
@@ -1905,7 +1961,20 @@ impl PostgresTenantStore {
             &[&tenant],
         ))
         .await?;
-
+        if let Some(expected) = expected {
+            let current = self
+                .get_managed_group_rollout_query(&*tx, tenant, group_id)
+                .await?;
+            if !current.is_some_and(|plan| {
+                plan.rollout_id == expected
+                    && matches!(
+                        plan.phase,
+                        RolloutPhase::Pilot | RolloutPhase::Standard | RolloutPhase::RollingBack
+                    )
+            }) {
+                return Ok(None);
+            }
+        }
         let result = self
             .advance_managed_group_rollout_tx(&tx, tenant, group_id, issuer)
             .await?;

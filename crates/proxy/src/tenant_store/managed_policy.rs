@@ -1729,9 +1729,32 @@ impl TenantStore {
         group_id: &str,
         issuer: Option<&ManagedIssuer>,
     ) -> Result<Option<ManagedGroupRollout>> {
+        self.advance_managed_group_rollout_checked(tenant, group_id, issuer, None)
+    }
+
+    pub(super) fn advance_managed_group_rollout_checked(
+        &self,
+        tenant: &str,
+        group_id: &str,
+        issuer: Option<&ManagedIssuer>,
+        expected: Option<&str>,
+    ) -> Result<Option<ManagedGroupRollout>> {
         let mut db = self.connection()?;
         group_schema(&db)?;
         let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        eligible_group(&tx, tenant, group_id)?;
+        if let Some(expected) = expected {
+            let current = self.get_managed_group_rollout_conn(&tx, tenant, group_id)?;
+            if !current.is_some_and(|plan| {
+                plan.rollout_id == expected
+                    && matches!(
+                        plan.phase,
+                        RolloutPhase::Pilot | RolloutPhase::Standard | RolloutPhase::RollingBack
+                    )
+            }) {
+                return Ok(None);
+            }
+        }
         let result = self.advance_managed_group_rollout_conn(&tx, tenant, group_id, issuer)?;
         let result = if result.is_some() {
             self.get_managed_group_rollout_conn(&tx, tenant, group_id)?

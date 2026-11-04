@@ -788,11 +788,13 @@ jobs:
           CREATE DATABASE group_controls OWNER rollout_owner;
           CREATE DATABASE group_source OWNER rollout_owner;
           CREATE DATABASE group_restored OWNER rollout_owner;
+          CREATE DATABASE group_reconciliation_source OWNER rollout_owner;
+          CREATE DATABASE group_reconciliation_restored OWNER rollout_owner;
           SQL
       - name: Build and run SQLite regressions
         run: |
           cargo build --locked -p llm-firewall -p agentfw
-          cargo test --locked -p llm-firewall --test managed_group_rollout --test managed_group_atomic --test managed_deployment_idempotency --test managed_cohort_confirmation
+          cargo test --locked -p llm-firewall --test managed_group_rollout --test managed_group_atomic --test managed_reconciliation --test managed_deployment_idempotency --test managed_cohort_confirmation
       - name: Run the same fault and concurrency controls on PostgreSQL
         env:
           SOUP_GROUP_TEST_POSTGRES_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_controls?sslmode=disable
@@ -805,6 +807,17 @@ jobs:
         env:
           SOUP_COHORT_TEST_POSTGRES_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_controls?sslmode=disable
         run: cargo test --locked -p llm-firewall --test managed_cohort_confirmation postgres_cohort_confirmation_over_http -- --ignored
+      - name: Reconciliation restart, replicas, ACKs, pause, revocation and fairness on PostgreSQL
+        env:
+          SOUP_RECONCILIATION_TEST_POSTGRES_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_controls?sslmode=disable
+        run: cargo test --locked -p llm-firewall --test managed_reconciliation postgres_reconciliation_controls -- --ignored
+      - name: Offline fleet gate after real downtime, SQLite
+        run: python3 scripts/managed-group-rollout-demo.py --no-build --reconciliation --output target/group-reconciliation-sqlite.json
+      - name: Offline fleet gate after real downtime, PostgreSQL
+        env:
+          SOUP_GROUP_DEMO_DATABASE_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_reconciliation_source?sslmode=disable
+          SOUP_GROUP_DEMO_RESTORED_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_reconciliation_restored?sslmode=disable
+        run: python3 scripts/managed-group-rollout-demo.py --no-build --reconciliation --backend postgres --output target/group-reconciliation-postgres.json
       - name: Four real Agents with encrypted SQLite recovery
         run: python3 scripts/managed-group-rollout-demo.py --no-build --output target/group-sqlite.json
       - name: Four real Agents with encrypted PostgreSQL recovery
