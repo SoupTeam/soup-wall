@@ -121,7 +121,7 @@ A required-prerequisite refusal occurs before state creation, downloads,
 compilation or selected-runtime execution. An installed invocation still
 verifies its component and execs its recorded interpreter. The inspection itself
 launches no child. It reads at most 4096 processes, 1024 fds per process, 1 MiB
-per content read (8 KiB process identity), 64 MiB total content/link bytes and
+per content read (8 KiB stat and 16 KiB status records), 64 MiB total content/link bytes and
 checks a ten-second inspection budget between kernel operations. Reports and
 support exports contain fixed phase/reason codes and guidance, never raw PIDs,
 argv, environment values, maps, project paths or credentials.
@@ -142,8 +142,11 @@ qualification boundary. Native Linux observations do not qualify WSL2. This
 feature uses no SOU-216 CI session-preparation helper and adds no service control.
 The opt-in workflow focus `lifecycle-preflight` runs ordinary and installed
 observations in separate disposable native jobs; only sanitized original reports
-are uploaded. Actual source pins, conditional outcomes and unavailable
-observations are retained with the evidence below once measured.
+are uploaded. [Exact-source observations and original failed attempts,
+2026-11-04](evidence/LINUX_LIFECYCLE_PREFLIGHT_2026-11-04.md) retain the conditional
+results: seven diagnosis/refusal cases passed, while removal stayed blocked. The
+disposable installed-component environment does not qualify a fully prepared
+protected MCP runtime, applying removal, live inference or WSL2.
 
 ## Named project presets
 
