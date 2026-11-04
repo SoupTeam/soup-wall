@@ -75,15 +75,29 @@ def observe(command, expected_images, work, env, label):
 
 def audit(trace, expected_images):
     raw = trace.read_text()
-    attempts = [line for line in raw.splitlines() if re.search(r'\b(?:execve|execveat)\(', line)]
+    events = []
+    for line in raw.splitlines():
+        matched = re.match(r'^(?:[0-9]+\s+)?([a-z0-9_]+)\(', line)
+        if matched:
+            events.append((matched.group(1), line))
+    attempts = [line for operation, line in events if operation in ('execve', 'execveat')]
     require(len(attempts) == len(expected_images), 'unexpected_program_execution')
     for line, image in zip(attempts,expected_images):
         require(re.search(r'\bexecve\(' + re.escape(json.dumps(str(image))) + r',.*\)\s*= 0$', line), 'unexpected_program_execution')
-    for line in raw.splitlines():
-        require(not re.search(r'\b(?:fork|vfork)\(',line), 'diagnosis_spawned_child')
-        if re.search(r'\b(?:clone|clone3)\(',line): require('CLONE_THREAD' in line and 'CLONE_NEW' not in line, 'diagnosis_spawned_child')
-        require(not re.search(r'\b(?:socket|socketpair|connect|accept|accept4|bind|listen|sendto|sendmsg|sendmmsg|recvfrom|recvmsg|recvmmsg|shutdown|setuid|setgid|setresuid|setresgid|mount|umount2|unshare|setns|kill|tgkill|mkdir|mkdirat|unlink|unlinkat|rename|renameat|renameat2|chmod|fchmod|fchmodat|chown|fchown|symlink|link|truncate|ftruncate)\(',line), 'diagnosis_effect_attempt')
-        if re.search(r'\b(?:open|openat|openat2)\(',line):
+    forbidden = {'socket', 'socketpair', 'connect', 'accept', 'accept4', 'bind', 'listen',
+        'sendto', 'sendmsg', 'sendmmsg', 'recvfrom', 'recvmsg', 'recvmmsg', 'shutdown',
+        'setuid', 'setgid', 'setresuid', 'setresgid', 'mount', 'umount2', 'unshare', 'setns',
+        'kill', 'tgkill', 'mkdir', 'mkdirat', 'unlink', 'unlinkat', 'rename', 'renameat',
+        'renameat2', 'chmod', 'fchmod', 'fchmodat', 'chown', 'fchown', 'symlink', 'link',
+        'truncate', 'ftruncate'}
+    # Only syscall syntax at the start, never names inside returned paths.
+    for operation, line in events:
+        require(operation not in ('fork', 'vfork'), 'diagnosis_spawned_child')
+        if operation in ('clone', 'clone3'):
+            require('CLONE_THREAD' in line and 'CLONE_NEW' not in line, 'diagnosis_spawned_child')
+        if operation in forbidden:
+            raise ValueError('diagnosis_effect_attempt_' + operation)
+        if operation in ('open', 'openat', 'openat2'):
             require(not re.search(r'O_(?:WRONLY|RDWR|CREAT|TRUNC|APPEND)',line), 'diagnosis_write_open_attempt')
     return {'trace_sha256': sha(trace), 'allowed_entry_images':len(expected_images),
             'extra_execution_attempts':0,'non_thread_children':0,'network_effect_attempts':0,'host_mutation_attempts':0}
@@ -116,6 +130,7 @@ def main():
                 require(result.returncode==0,'component_install_failed')
             # Reports are decoded only after the existing stream/trace bounds.
             def call(label,command,images,expected_exit=0):
+                report['attempted_case'] = label
                 result,trace=observe(command,images,work,env,label)
                 code,out,err=result.returncode,result.stdout,result.stderr
                 require(code==expected_exit,'unexpected_diagnostic_exit')
@@ -158,7 +173,7 @@ def main():
     raw=json.dumps(report,sort_keys=True,indent=2)
     require(not any(token in raw for token in ('/home/','/Users/','PRIVATE_CREDENTIAL','secret-value-canary')),'published_private_data')
     (args.output/'report.json').write_text(raw+'\n')
-    print(json.dumps({'status':report['status'],'cases':len(report['cases'])}))
+    print(json.dumps({'status':report['status'],'cases':len(report['cases']), **({'reason':report['reason']} if 'reason' in report else {})}))
     return 0 if report['status']=='passed' else 1
 
 if __name__=='__main__': raise SystemExit(main())
