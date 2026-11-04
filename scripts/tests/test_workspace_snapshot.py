@@ -185,6 +185,38 @@ class Snapshot(unittest.TestCase):
             self.assertEqual(b'keep partial data', marker.read_bytes())
         self.assertEqual('snapshot-recovered', M.recovery_apply(self.base, name, confirmation)['status'])
 
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux capture required')
+    def test_recovery_refuses_changed_mount_and_device_binding(self):
+        name = '.snapshot-' + '2' * 32
+        stage = self.base / name
+        stage.mkdir(mode=0o700)
+        marker = stage / 'partial'
+        marker.write_bytes(b'keep partial data')
+        with M.IO.Directory(self.base) as parent, M.IO.Directory(stage) as directory:
+            owner = M.capture_owner(parent.fd, directory.fd, name, self.dest)
+            owner['creator']['start'] += 1
+            M.write_record(directory.fd, M.CAPTURE_OWNER, owner)
+            stage_inode = os.fstat(directory.fd).st_ino
+        confirmation = M.recovery_preview(self.base, name)['confirmation']
+        mount = M.mount
+
+        def changed_mount(fd):
+            if os.fstat(fd).st_ino == stage_inode:
+                return 'replacement-mount'
+            return mount(fd)
+
+        with patch.object(M, 'mount', side_effect=changed_mount):
+            with self.assertRaisesRegex(ValueError, 'recovery_identity_changed'):
+                M.recovery_apply(self.base, name, confirmation)
+        self.assertEqual(b'keep partial data', marker.read_bytes())
+        with M.IO.Directory(stage) as directory:
+            os.unlink(M.CAPTURE_OWNER, dir_fd=directory.fd)
+            owner['stage_identity']['device'] += 1
+            M.write_record(directory.fd, M.CAPTURE_OWNER, owner)
+        with self.assertRaisesRegex(ValueError, 'recovery_identity_changed'):
+            M.recovery_apply(self.base, name, confirmation)
+        self.assertEqual(b'keep partial data', marker.read_bytes())
+
     def test_preview_is_metadata_only_and_zero_effect(self):
         read=os.read
         def no_content(fd,n):
