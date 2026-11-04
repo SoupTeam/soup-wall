@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Real SQLite/age controls plus pre-execution PostgreSQL target guards."""
+import importlib.util
 import io
 import json
 from contextlib import contextmanager
@@ -12,7 +13,8 @@ import sys
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import console_recovery as recovery
@@ -471,6 +473,45 @@ class RecoveryTests(unittest.TestCase):
         with patch.object(backend, 'invoke', return_value=b"; Archive\n200; 1259 16390 TABLE public tenants owned\n") as invoke:
             recovery.require_no_observations(backend, self.work / 'database.dump', '/usr/bin/pg_restore')
             invoke.assert_called_once_with(['/usr/bin/pg_restore', '--list', self.work / 'database.dump'])
+
+
+class PostgresToolSelection(unittest.TestCase):
+    def load(self, filename):
+        spec = importlib.util.spec_from_file_location('recovery_tool_selection', ROOT / 'scripts' / filename)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_public_backup_cli_preserves_default_and_explicit_pg_restore(self):
+        cli = self.load('console-recovery.py')
+        for selected in (None, '/owned/postgres16/bin/pg_restore'):
+            with self.subTest(selected=selected):
+                words = ['backup', '--backend', 'postgres', '--archive', '/owned/archive.age',
+                         '--workdir', '/owned/private', '--database-url-env', 'OWNED_RECOVERY_URL',
+                         '--recipient', 'owned-recipient', '--source-quiesced']
+                if selected is not None:
+                    words += ['--pg-restore', selected]
+                with patch.dict(os.environ, {'OWNED_RECOVERY_URL': 'postgresql://owned@127.0.0.1:5555/source?sslmode=disable'}), \
+                     patch.object(cli, 'backup_postgres', return_value={'status': 'passed'}) as backup, \
+                     patch('sys.stdout', new_callable=io.StringIO):
+                    self.assertEqual(cli.main(words), 0)
+                self.assertEqual(backup.call_args.kwargs['pg_restore'], selected or 'pg_restore')
+
+    def test_acceptance_backup_passes_its_selected_pg_restore(self):
+        acceptance = self.load('console-recovery-acceptance.py')
+        run = acceptance.Run.__new__(acceptance.Run)
+        run.args = SimpleNamespace(backend='postgres', age='/owned/age', psql='/owned/psql',
+                                   pg_dump='/owned/pg_dump', pg_restore='/owned/pg_restore')
+        run.directory = Path('/owned/recovery')
+        run.console = Mock()
+        run.console.poll.return_value = 0
+        run.check = Mock()
+        run.backup_module = SimpleNamespace(backup_postgres=Mock())
+        run.databases = {'source': 'postgresql://owned@127.0.0.1:5555/source?sslmode=disable'}
+        run.recipient = 'owned-recipient'
+        self.assertEqual(run.backup('explicit'), run.directory / 'explicit.age')
+        run.check.assert_called_once_with('source-stopped-before-backup-explicit', True)
+        self.assertEqual(run.backup_module.backup_postgres.call_args.kwargs['pg_restore'], run.args.pg_restore)
 
 
 if __name__ == '__main__':

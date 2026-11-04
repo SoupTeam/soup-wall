@@ -498,7 +498,7 @@ class Run:
         else:
             self.backup_module.backup_postgres(self.databases["source"], archive, self.recipient,
                 workdir=self.directory, age=self.args.age, source_quiesced=True,
-                psql=self.args.psql, pg_dump=self.args.pg_dump)
+                psql=self.args.psql, pg_dump=self.args.pg_dump, pg_restore=self.args.pg_restore)
         return archive
 
     def restore(self, archive, name):
