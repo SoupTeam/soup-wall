@@ -99,7 +99,8 @@ One row per Agent, outside the recoverable control-plane schema:
 - **PostgreSQL**: table `agent_observations.heartbeats`, created by
   `llm-firewall migrate` (migration role) and deleted with its enrollment.
   The runtime role needs `USAGE` on the schema and `SELECT, INSERT, UPDATE`
-  on the table. Accepted public-schema migrations stay 1 to 28.
+  on the table. The public schema follows the
+  [versioned recovery inventory](../../scripts/fixtures/console_recovery_inventory_v1.json).
 
 ## Backup and restore
 
