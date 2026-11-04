@@ -1315,9 +1315,10 @@ fn parse(body: &str) -> Result<Request, &'static str> {
 
 #[derive(Serialize)]
 struct Response {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    // Control-side diagnostics are not fields of the strict MCP receipt.
+    #[serde(skip)]
     quarantine_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip)]
     quarantine_error: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     publication_ttl_ms: Option<u64>,

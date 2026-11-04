@@ -216,8 +216,10 @@ This increment implements two components in their existing entry points.
   and audit, a refused original response can enter daemon-owned quarantine. The
   record retains exact content, consumed execution metadata, source grant, epoch,
   invocation binding, policy digest/generation, source events, findings and scoped
-  session/shared-host provenance. Only opaque record IDs and static failure codes
-  appear in the native response. Original verdicts and reason codes are preserved.
+  session/shared-host provenance. Opaque record IDs and static failure codes stay
+  in private control-side state. They are excluded from serialization because the
+  MCP collector validates an exact receipt field set. Original wire receipts,
+  verdicts and reason codes are preserved.
 - The store holds at most 32 records and 8 MiB of serialized retained bytes.
   Encoding stops at the remaining byte budget. The original call deadline governs
   expiry; expired entries are reclaimed on the next capture. Retirement marks

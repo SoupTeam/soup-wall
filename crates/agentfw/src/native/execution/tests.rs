@@ -284,6 +284,9 @@ fn refused_original_quarantine_preserves_source_after_retirement_and_spends_call
     let wire = serde_json::to_string(&reply).unwrap();
     assert!(!wire.contains("Ignore previous"));
     assert!(!wire.contains("fingerprints"));
+    assert!(!wire.contains("quarantine_id"));
+    assert!(!wire.contains("quarantine_error"));
+    assert!(!wire.contains(id));
 }
 
 #[test]
@@ -315,6 +318,9 @@ fn quarantine_requires_private_custody_and_complete_source_context() {
         let reply = env.finish(source).unwrap();
         assert!(!reply.release);
         assert!(reply.quarantine_id.is_none(), "mode {mode}");
+        let wire = serde_json::to_value(&reply).unwrap();
+        assert!(wire.get("quarantine_id").is_none());
+        assert!(wire.get("quarantine_error").is_none());
     }
     let env = Env::new();
     purpose_fixture_grant(&env);
