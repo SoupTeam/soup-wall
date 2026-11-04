@@ -300,20 +300,8 @@ async fn diagnose(args: &DoctorArgs) -> Report {
         pilot: None,
         lifecycle: None,
     };
-    if args.lifecycle || args.pilot.enabled {
+    if args.pilot.enabled {
         report.lifecycle = Some(crate::pilot_lifecycle_preflight::inspect());
-    }
-    if args.lifecycle {
-        let environment = report
-            .lifecycle
-            .as_ref()
-            .expect("requested lifecycle diagnosis");
-        report.setup = match environment.setup {
-            crate::pilot_lifecycle_preflight::Outcome::Satisfied => Outcome::Ready,
-            crate::pilot_lifecycle_preflight::Outcome::Blocked => Outcome::Failed,
-            crate::pilot_lifecycle_preflight::Outcome::Unknown => Outcome::Unknown,
-        };
-        return report;
     }
     if !cfg!(target_os = "linux") {
         checks.push(check(
@@ -686,29 +674,54 @@ async fn diagnose(args: &DoctorArgs) -> Report {
     report
 }
 
+// Environment-only diagnosis is synchronous. Creating Tokio's I/O/signal
+// driver would allocate a Unix socketpair before the read-only observation.
+fn lifecycle_report() -> Report {
+    let environment = crate::pilot_lifecycle_preflight::inspect();
+    let setup = match environment.setup {
+        crate::pilot_lifecycle_preflight::Outcome::Satisfied => Outcome::Ready,
+        crate::pilot_lifecycle_preflight::Outcome::Blocked => Outcome::Failed,
+        crate::pilot_lifecycle_preflight::Outcome::Unknown => Outcome::Unknown,
+    };
+    Report {
+        schema: "sw-agent-doctor/1",
+        observed_at_ms: protection_status::now_ms(),
+        setup,
+        active_host_call_protection: "unknown",
+        scope: "local_setup_and_authenticated_runtime_not_active_host_execution",
+        checks: vec![],
+        pilot: None,
+        lifecycle: Some(environment),
+    }
+}
+
 pub fn run(args: DoctorArgs) -> i32 {
-    let report = match tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    {
-        Ok(runtime) => runtime.block_on(diagnose(&args)),
-        Err(_) => Report {
-            schema: "sw-agent-doctor/1",
-            observed_at_ms: protection_status::now_ms(),
-            setup: Outcome::Unknown,
-            active_host_call_protection: "unknown",
-            scope: "local_setup_and_authenticated_runtime_not_active_host_execution",
-            pilot: None,
-            lifecycle: None,
-            checks: vec![check(
-                "runtime",
-                "local_process",
-                Outcome::Unknown,
-                "diagnostics_unavailable",
-                "Could not create bounded diagnostic runtime.",
-                "Try a known good installed Agent executable.",
-            )],
-        },
+    let report = if args.lifecycle {
+        lifecycle_report()
+    } else {
+        match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(runtime) => runtime.block_on(diagnose(&args)),
+            Err(_) => Report {
+                schema: "sw-agent-doctor/1",
+                observed_at_ms: protection_status::now_ms(),
+                setup: Outcome::Unknown,
+                active_host_call_protection: "unknown",
+                scope: "local_setup_and_authenticated_runtime_not_active_host_execution",
+                pilot: None,
+                lifecycle: None,
+                checks: vec![check(
+                    "runtime",
+                    "local_process",
+                    Outcome::Unknown,
+                    "diagnostics_unavailable",
+                    "Could not create bounded diagnostic runtime.",
+                    "Try a known good installed Agent executable.",
+                )],
+            },
+        }
     };
     let bundle_error = args.support_bundle.as_ref().and_then(|path| {
         if args
