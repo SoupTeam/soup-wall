@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import base64
 import json
 import os
@@ -152,6 +153,24 @@ class ImpactTests(unittest.TestCase):
                          "head_content": original + b"\n# Clarify the documented-only output.\n"}}
         self.assertEqual(plan([path], change_details=detail)["workflows"]["ci.yml"],
                          ["documentation", "test"])
+
+    def test_source_encoding_cookie_cannot_hide_an_executable_consumer(self):
+        path = "scripts/check_docs.py"
+        original = subprocess.check_output(["git", "show", "HEAD:" + path], cwd=ROOT)
+        candidate = (b"# coding: raw_unicode_escape\n" + original
+                     + b'\n# \\u000a__import__("subprocess").run(["python3", "scripts/qualify-installed-front-door.py", "--help"])\n')
+        # Explicit UTF-8 decoding sees a comment, whereas Python byte-source
+        # compilation sees a new call. Neither candidate is executed here.
+        self.assertEqual(ast.dump(ast.parse(original.decode("utf-8")), include_attributes=False),
+                         ast.dump(ast.parse(candidate.decode("utf-8")), include_attributes=False))
+        runtime = compile(candidate, "review-candidate", "exec", ast.PyCF_ONLY_AST)
+        self.assertIsInstance(runtime.body[-1], ast.Expr)
+        self.assertIsInstance(runtime.body[-1].value, ast.Call)
+        self.assertEqual(runtime.body[-1].value.func.attr, "run")
+        detail = {path: {"status": "modified", "base_content": original, "head_content": candidate}}
+        result = plan([path], change_details=detail)
+        self.assertEqual(result["mode"], "full")
+        self.assertEqual(result["workflows"], {name: list(jobs) for name, jobs in WORKFLOW_JOBS.items()})
 
     def test_scheduler_reads_exact_merge_parents_and_change_statuses(self):
         base, head, merge = "a" * 40, "b" * 40, "c" * 40
@@ -531,6 +550,15 @@ class AdmissionTests(unittest.TestCase):
                     "encoding": "base64", "content": base64.b64encode(alias).decode()}
                 self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "pending",
                                  "trusted admission must require the full suite for an alias consumer")
+                encoded = (b"# coding: raw_unicode_escape\n" + original_script
+                           + b'\n# \\u000a__import__("subprocess").run(["python3", "scripts/qualify-installed-front-door.py", "--help"])\n')
+                encoded_blob = git_blob_sha(encoded)
+                api.files[0]["sha"] = encoded_blob
+                api.contents["/contents/" + path + "?ref=" + "c" * 40] = {
+                    "type": "file", "sha": encoded_blob, "size": len(encoded),
+                    "encoding": "base64", "content": base64.b64encode(encoded).decode()}
+                self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "pending",
+                                 "an encoding cookie cannot give executable changes narrow admission")
                 api.files[0]["sha"] = blob
                 api.contents["/contents/" + path + "?ref=" + "c" * 40] = {
                     "type": "file", "sha": blob, "size": len(candidate),

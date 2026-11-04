@@ -180,7 +180,8 @@ def dependency_signature(body: bytes) -> str | None:
     if len(body) > MAX_REVIEWED_SCRIPT_BYTES:
         return None
     try:
-        tree = ast.parse(body.decode("utf-8"), type_comments=True)
+        # Parse bytes so Python's encoding cookie has its actual runtime meaning.
+        tree = ast.parse(body, type_comments=True)
         if sum(1 for _ in ast.walk(tree)) > 20000:
             return None
         return ast.dump(tree, annotate_fields=True, include_attributes=False)
