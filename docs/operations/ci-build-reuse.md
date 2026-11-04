@@ -2,9 +2,25 @@
 
 The first shared tuple is Ubuntu 24.04, x86_64 GNU/Linux, Rust **1.99.1**,
 Agent default features and the checked-in dev/test profiles. Its consumers are
-`mcp-create-file / linux-create-file` and `mcp-create-file / linux-installed-edit`.
+`mcp-create-file / linux-create-file`, `mcp-create-file / linux-installed-edit`,
+`mcp-https-post / linux-https-post`, and
+`mcp-windows-create / linux-read-create-https-regressions`.
 Ubuntu 22.04, the native pilot's Rust 1.94.1, other targets, features and profiles,
 Windows and macOS remain separate builds.
+
+The HTTPS POST consumer reuses the Agent executable, complete library harness
+and complete `native_endpoint` harness. Its full native tests, Clippy compilation
+and independent HTTPS receiver ledger still run. The Linux read/create/HTTPS
+compatibility consumer reuses only the Agent executable; both original real
+server scripts and evidence grading still run. The Windows job in that workflow
+continues to build independently. Source-mode manual dispatches still compile
+locally. Neither reused job is counted as a cold build observation.
+For a focused manual shared probe, dispatch `mcp-create-file.yml` at the exact
+candidate SHA with `build_mode=shared` and `sou222_consumers=true`. This invokes
+one producer and the four finite consumers in the same run. The new option is
+false by default, preserving the earlier two-consumer comparison. Dispatching
+`mcp-https-post.yml` or `mcp-windows-create.yml` directly remains explicit
+source mode. These development dispatches do not issue admission evidence.
 
 ## Build and custody
 
@@ -137,6 +153,40 @@ seconds and mixed build/test/runtime step seconds are not pure compiler time,
 billable minutes or dollar savings. No billing claim follows without actual
 billing data. Final current-source CI, all CodeQL and admission remain required;
 the shared final qualification and merge remain owned by the technical lead.
+
+## SOU-222 comparison
+
+The accepted Ready run [41609665048](https://github.com/SoupTeam/soup-wall/actions/runs/41609665048)
+at source `ad504ed83f8857f76accc148120b5b81c0f9603e`, attempt 1,
+provides a pre-change **step elapsed** baseline. The POST build step was 45 s,
+its combined native test and Clippy step 154 s, and the compatibility build step
+66 s. These steps ran after `Swatinem/rust-cache`, so their cache warmth and
+individual rustc CPU times are not established. They cannot be added to claim
+compilation savings, since test and Clippy work remain required. The producer
+build step in the same run was 134 s, already required by the existing consumers.
+
+For an exact-source post-change comparison, retain the producer and both
+consumer job IDs, run attempts, source SHA, each build-use record, archive
+transfer metrics and step timestamps. Report the observed download plus
+verification duration alongside avoided consumer compilation. Count actual
+fresh Cargo compiler artifacts from build records; do not substitute step time
+for CPU time or call a cache hit a cold qualification. Any failed or incomplete
+job stays incomplete. The technical lead coordinates the final Ready run; no
+post-change elapsed or billing saving is asserted until that run exists.
+
+The first focused run [41784105012](https://github.com/SoupTeam/soup-wall/actions/runs/41784105012)
+on `a339a07b66e48f29e51ce0796e3baa327dd33831` remains a failed attempt:
+the Linux compatibility job refused `ambient_build_override` before its runtime
+tests because `actions/setup-python` populated `LD_LIBRARY_PATH`. The custody
+rule was retained. The Linux job now requires the host's Python 3.12 and an
+empty loader override; the separate Windows setup remains unchanged. This
+attempt is not post-change acceptance or a savings measurement.
+The same run's POST job passed the reused full library and native-endpoint
+harnesses (1199 and 158 inventoried tests) but failed its required source
+Clippy because the shared consumer had not fetched locked Cargo dependencies.
+The POST job now fetches them after artifact verification and before Clippy;
+this is source-check preparation, not a binary fallback. Both original
+failures remain attributable to this first attempt.
 
 The installed-edit driver passes opaque pending IDs after `--`, with approval
 options before the separator. URL-safe IDs can start with `-`; treating such an
