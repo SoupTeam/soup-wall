@@ -55,6 +55,7 @@ impl PostgresTenantStore {
     pub(in crate::tenant_store) async fn discover_active_rollouts(
         &self,
         after: Option<&crate::rollout_reconciliation::RolloutCursor>,
+        until: Option<&crate::rollout_reconciliation::RolloutCursor>,
         limit: usize,
     ) -> Result<Vec<crate::rollout_reconciliation::RolloutCursor>> {
         let (tenant, group, rollout) = after
@@ -66,10 +67,19 @@ impl PostgresTenantStore {
                 )
             })
             .unwrap_or(("", "", ""));
+        let (end_tenant, end_group, end_rollout) = until
+            .map(|a| {
+                (
+                    a.tenant_id.as_str(),
+                    a.group_id.as_str(),
+                    a.rollout_id.as_str(),
+                )
+            })
+            .unwrap_or(("", "", ""));
         let client = self.checkout().await?;
         let rows = self.bounded(client.query(
-            "SELECT r.tenant_id,r.group_id,r.rollout_id FROM managed_group_rollouts r JOIN tenants t ON t.id=r.tenant_id WHERE t.active=TRUE AND r.phase IN ('pilot','standard','rolling_back') AND (r.tenant_id,r.group_id,r.rollout_id)>($1,$2,$3) ORDER BY r.tenant_id,r.group_id,r.rollout_id LIMIT $4",
-            &[&tenant, &group, &rollout, &(limit as i64)]
+            "SELECT r.tenant_id,r.group_id,r.rollout_id FROM managed_group_rollouts r JOIN tenants t ON t.id=r.tenant_id WHERE t.active=TRUE AND r.phase IN ('pilot','standard','rolling_back') AND (r.tenant_id,r.group_id,r.rollout_id)>($1,$2,$3) AND (NOT $5 OR (r.tenant_id,r.group_id,r.rollout_id)<=($6,$7,$8)) ORDER BY r.tenant_id,r.group_id,r.rollout_id LIMIT $4",
+            &[&tenant, &group, &rollout, &(limit as i64), &until.is_some(), &end_tenant, &end_group, &end_rollout]
         )).await?;
         Ok(rows
             .into_iter()
@@ -81,6 +91,12 @@ impl PostgresTenantStore {
             .collect())
     }
 
+    pub(in crate::tenant_store) async fn active_rollout_ceiling(
+        &self,
+    ) -> Result<Option<crate::rollout_reconciliation::RolloutCursor>> {
+        let client = self.checkout().await?;
+        Ok(self.bounded(client.query_opt("SELECT r.tenant_id,r.group_id,r.rollout_id FROM managed_group_rollouts r JOIN tenants t ON t.id=r.tenant_id WHERE t.active=TRUE AND r.phase IN ('pilot','standard','rolling_back') ORDER BY r.tenant_id DESC,r.group_id DESC,r.rollout_id DESC LIMIT 1",&[])).await?.map(|r|crate::rollout_reconciliation::RolloutCursor{tenant_id:r.get(0),group_id:r.get(1),rollout_id:r.get(2)}))
+    }
     pub(super) async fn migrate_managed_agents(&self) -> Result<()> {
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;

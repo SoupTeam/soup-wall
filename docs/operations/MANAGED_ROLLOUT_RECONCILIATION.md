@@ -12,7 +12,8 @@ rollout_reconciliation:
 
 Enable only with `tenant_store.enabled: true`. Intervals are 1–300 seconds;
 pages contain 1–100 plans. Startup scans immediately. Each tick reads one
-ordered keyset page across active tenants, wraps after an empty page, and
+ordered keyset page across active tenants, freezes the current maximum key for
+each scan cycle, wraps after an empty page, and
 attempts each plan independently. A blocked early plan cannot starve later
 plans. Detection latency depends on the active fleet size and configured page
 and interval; this is not an immediate-deadline guarantee.

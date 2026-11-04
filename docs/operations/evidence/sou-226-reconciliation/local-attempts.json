@@ -115,5 +115,29 @@
     "source_sha256": "87d5d1118c9f7d423f3f5c0d2227d50ea58589a0f1ed48ce4419085a66379a72",
     "log_sha256": "6b38bcc8ba9ae4716d18fc5f44bb2b866adb9daf1bf75a903758ecbee7201595",
     "elapsed_seconds": 3.1
+  },
+  {
+    "label": "workspace-checks",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo test --offline --locked --workspace && cargo clippy --offline --locked --workspace --all-targets -- -D warnings"
+    ],
+    "exit_code": 0,
+    "source_sha256": "d01ea1ed95738b19de520db20d89bf67a6c836ddbc1267f222294f55c0f0d55f",
+    "log_sha256": "5ec2e6794aaafa526709719369bae28a1c172abc5d2ee5b25960ca3fb899f851",
+    "elapsed_seconds": 161.35
+  },
+  {
+    "label": "bounded-cycle-controls",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo fmt --all --check && cargo test --offline --locked -p llm-firewall --test managed_reconciliation --test managed_group_atomic && cargo clippy --offline --locked -p llm-firewall --all-targets -- -D warnings"
+    ],
+    "exit_code": 0,
+    "source_sha256": "d38c73ca9ee04bdaf43a51060ec3475f24e406e680ff23398aed46efaaed1c2b",
+    "log_sha256": "3e61493921782c72bbf16696d076186733036427331f585e3c63dbd9add9daba",
+    "elapsed_seconds": 25.03
   }
 ]

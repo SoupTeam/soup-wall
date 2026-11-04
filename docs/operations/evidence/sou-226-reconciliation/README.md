@@ -23,3 +23,10 @@ locally, with 432 documents/1371 links checked. The complete CI Python suite
 was also attempted locally; Linux child-process/subreaper controls do not pass
 under macOS Seatbelt (7 failures, 4 skips), retained as an environment limitation.
 The full CI Python suite must be confirmed on Linux, not reported green locally.
+
+The entire workspace test suite and workspace/all-target Clippy -D warnings
+passed at the recorded workspace-checks snapshot. A subsequent bounded-cycle
+refinement pins a scan ceiling and is separately verified by SQLite controls
+including two actual worker loops, shutdown and atomic restart regressions.
+The updated PostgreSQL controls and real-process witness run on the final
+implementation commit before acceptance is claimed.

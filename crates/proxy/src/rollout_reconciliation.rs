@@ -71,16 +71,19 @@ impl TenantStore {
         cursor: Option<&RolloutCursor>,
         limit: usize,
     ) -> anyhow::Result<Option<RolloutCursor>> {
-        self.reconcile_page_until(cursor, limit, None).await
+        self.reconcile_page_until(cursor, None, limit, None).await
     }
 
     async fn reconcile_page_until(
         &self,
         cursor: Option<&RolloutCursor>,
+        until: Option<&RolloutCursor>,
         limit: usize,
         stop: Option<&watch::Receiver<bool>>,
     ) -> anyhow::Result<Option<RolloutCursor>> {
-        let page = self.discover_active_rollouts_async(cursor, limit).await;
+        let page = self
+            .discover_active_rollouts_window_async(cursor, until, limit)
+            .await;
         {
             let mut status = self
                 .reconciliation
@@ -137,6 +140,7 @@ impl TenantStore {
             .unwrap_or_else(|p| p.into_inner())
             .running = true;
         let mut cursor = None;
+        let mut ceiling = None;
         let mut timer = tokio::time::interval(Duration::from_secs(config.interval_seconds));
         timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
@@ -148,13 +152,41 @@ impl TenantStore {
                 _ = shutdown.changed() => break,
                 _ = timer.tick() => {}
             }
+            if ceiling.is_none() {
+                let result = self.active_rollout_ceiling_async().await;
+                {
+                    let mut status = self
+                        .reconciliation
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner());
+                    status.last_scan_unix = Some(
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs() as i64,
+                    );
+                    status.discovery_unavailable = result.is_err();
+                }
+                match result {
+                    Ok(Some(end)) => ceiling = Some(end),
+                    _ => continue,
+                }
+            }
             // Shutdown cannot discard an in-flight page. Error retries retain
             // the last successful cursor, rather than restarting at the front.
             if let Ok(next) = self
-                .reconcile_page_until(cursor.as_ref(), config.batch_size, Some(&shutdown))
+                .reconcile_page_until(
+                    cursor.as_ref(),
+                    ceiling.as_ref(),
+                    config.batch_size,
+                    Some(&shutdown),
+                )
                 .await
             {
                 cursor = next;
+                if cursor.is_none() {
+                    ceiling = None;
+                }
             }
         }
         self.reconciliation

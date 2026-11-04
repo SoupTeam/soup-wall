@@ -393,6 +393,86 @@ async fn controls(postgres: Option<String>) {
         .await
         .unwrap()
         .is_none());
+    // A finite scan ceiling forces a wrap even when later keys remain active.
+    let all = a.discover_active_rollouts_async(None, 100).await.unwrap();
+    let boundary = &all[0];
+    let bounded = a
+        .discover_active_rollouts_window_async(None, Some(boundary), 100)
+        .await
+        .unwrap();
+    assert_eq!(bounded, vec![boundary.clone()]);
+    assert!(a
+        .discover_active_rollouts_window_async(Some(boundary), Some(boundary), 1)
+        .await
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        a.active_rollout_ceiling_async().await.unwrap(),
+        all.last().cloned()
+    );
+    // Two actual scheduling loops, then graceful stop between transactions.
+    expire(&f, &first).await;
+    expire(&f, &second).await;
+    let worker_a = f.reopen().await;
+    let worker_b = f.reopen().await;
+    let (stop_a, rx_a) = tokio::sync::watch::channel(false);
+    let (stop_b, rx_b) = tokio::sync::watch::channel(false);
+    let ca = llm_firewall::rollout_reconciliation::ReconciliationConfig {
+        enabled: true,
+        interval_seconds: 1,
+        batch_size: 100,
+    };
+    let cb = ca.clone();
+    let aa = worker_a.clone();
+    let bb = worker_b.clone();
+    let loop_a = tokio::spawn(async move { aa.run_rollout_reconciliation(ca, rx_a).await });
+    let loop_b = tokio::spawn(async move { bb.run_rollout_reconciliation(cb, rx_b).await });
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if worker_a
+                .get_managed_group_rollout_async(&first, "group")
+                .await
+                .unwrap()
+                .unwrap()
+                .phase
+                == RolloutPhase::RollingBack
+                && worker_b
+                    .get_managed_group_rollout_async(&second, "group")
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .phase
+                    == RolloutPhase::RollingBack
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    stop_a.send(true).unwrap();
+    stop_b.send(true).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop_a.await.unwrap().unwrap();
+        loop_b.await.unwrap().unwrap();
+    })
+    .await
+    .unwrap();
+    for tenant in [&first, &second] {
+        assert_eq!(
+            worker_a
+                .list_managed_deployments_async(tenant, "p1")
+                .await
+                .unwrap()
+                .len(),
+            3
+        );
+    }
+    assert_eq!(
+        worker_a.reconciliation_status(&first, "group")["worker"]["running"],
+        false
+    );
     // Shutdown before startup performs no scan or issuance.
     let (stop, rx) = tokio::sync::watch::channel(true);
     a.run_rollout_reconciliation(
