@@ -183,5 +183,41 @@
     "source_sha256": "fd4633dc536cef30020919b30e88547e34a61904fea41e24ae4f0c1ec9322ff8",
     "log_sha256": "a4e528e76acabe29fe49df815b633aa45e6b661a3058104238fa4b3ea392e1e1",
     "elapsed_seconds": 18.98
+  },
+  {
+    "label": "final-cold-workspace",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo test --offline --locked --workspace && cargo clippy --offline --locked --workspace --all-targets -- -D warnings && cargo fmt --all --check"
+    ],
+    "exit_code": 101,
+    "source_sha256": "5db9c9d1abc9c285dd9b55a50546e19a224362f322629cac7debfde65fb37a45",
+    "log_sha256": "cba1f5636012c57aa28ec4d1b7df8707a603259b7ae83220b53c7e76048f8603",
+    "elapsed_seconds": 75.39
+  },
+  {
+    "label": "final-cold-workspace-serial",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo test --offline --locked --workspace -- --test-threads=1 && cargo clippy --offline --locked --workspace --all-targets -- -D warnings && cargo fmt --all --check"
+    ],
+    "exit_code": 0,
+    "source_sha256": "5db9c9d1abc9c285dd9b55a50546e19a224362f322629cac7debfde65fb37a45",
+    "log_sha256": "5e9112d716ca37e0d453b6535eef9b57244ecd92595c337538f3527838a7ccb9",
+    "elapsed_seconds": 237.79
+  },
+  {
+    "label": "partial-schema-refusal",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo test --offline --locked -p llm-firewall --test managed_deployment_idempotency && cargo clippy --offline --locked -p llm-firewall --all-targets -- -D warnings && cargo fmt --all --check"
+    ],
+    "exit_code": 0,
+    "source_sha256": "75bf3b0189b3144e91aed98dfb1269e2ee6913fd89852c1c2cf4fd6f64452789",
+    "log_sha256": "7181c7b24afe36c6baf8b6cd202319202335e03d68019be2f72e0cf21ab1c1b0",
+    "elapsed_seconds": 16.76
   }
 ]

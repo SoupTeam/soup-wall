@@ -1136,4 +1136,35 @@ async fn cold_revision_gets_are_read_only_and_backend_equivalent(f: &Fixture) {
         before,
         "GET allocated managed schema"
     );
+    if f.postgres.is_none() {
+        f.sql(
+            "CREATE TABLE managed_agent_enrollments (placeholder TEXT)",
+            "",
+        )
+        .await;
+        let response = client
+            .get(&url)
+            .header("x-llm-firewall-admin-token", OWNER)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status().as_u16(),
+            503,
+            "partial schema reported empty history"
+        );
+        let response = client
+            .get(format!("{url}/absent"))
+            .header("x-llm-firewall-admin-token", OWNER)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status().as_u16(), 503);
+        assert_eq!(
+            f.count(sqlite, postgres).await,
+            before,
+            "GET repaired partial schema"
+        );
+        f.sql("DROP TABLE managed_agent_enrollments", "").await;
+    }
 }

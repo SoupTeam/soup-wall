@@ -557,6 +557,20 @@ pub(super) fn eligible(db: &rusqlite::Connection, tenant: &str, agent: &str) -> 
     Ok(())
 }
 
+// A completely cold SQLite store has no managed schema. A partial schema is
+// unavailable evidence, not an empty revision history. Neither case runs DDL.
+fn revision_schema_present(db: &rusqlite::Connection) -> Result<bool> {
+    let (revisions, other_managed): (bool, bool) = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_agent_revisions'), EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name IN ('managed_agent_enrollments','managed_agent_deployments'))",
+        [], |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    ensure!(
+        revisions || !other_managed,
+        "managed revision schema unavailable"
+    );
+    Ok(revisions)
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct ManagedRevisionDocument {
     #[serde(flatten)]
@@ -577,7 +591,7 @@ impl TenantStore {
             "invalid revision page"
         );
         let db = self.connection()?;
-        let exists: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_agent_revisions')", [], |r| r.get(0))?;
+        let exists = revision_schema_present(&db)?;
         if !exists {
             return Ok(Vec::new());
         }
@@ -603,7 +617,7 @@ impl TenantStore {
     ) -> Result<Option<ManagedRevisionDocument>> {
         ensure!(exact_id(revision), "invalid revision");
         let db = self.connection()?;
-        let exists: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_agent_revisions')", [], |r| r.get(0))?;
+        let exists = revision_schema_present(&db)?;
         if !exists {
             return Ok(None);
         }

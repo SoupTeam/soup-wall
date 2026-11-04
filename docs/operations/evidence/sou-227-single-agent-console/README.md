@@ -56,3 +56,10 @@ the same empty results without DDL. The shared HTTP controls run this case first
 on each backend and assert schema-object counts do not change. Local controls,
 Clippy and fmt pass. The updated exact-source native qualification is recorded
 separately from the earlier 2332a752 proof.
+
+Cold-store GET handling now also distinguishes a completely absent managed
+schema from a partial managed schema: partial schema returns explicit 503
+without repair or a false empty-history claim. The shared HTTP fixture asserts
+both responses and unchanged schema-object counts; SQLite regression, all-target
+proxy Clippy -D warnings and fmt pass. Final exact-source qualification follows
+this last read-only boundary refinement.
