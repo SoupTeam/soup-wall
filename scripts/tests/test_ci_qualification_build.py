@@ -307,6 +307,19 @@ class Custody(unittest.TestCase):
 
 
 class Dependency(unittest.TestCase):
+    def test_new_consumers_select_only_existing_default_build_roles(self):
+        prefix = ["test", "--locked", "--offline", "-p", "agentfw"]
+        self.assertEqual(B.parse_cargo(["build", "--locked", "--offline", "-p", "agentfw", "--bin", "agentfw"]),
+                         ("agentfw", None))
+        self.assertEqual(B.parse_cargo(prefix + ["--lib", "--", "--nocapture"]), ("library", ""))
+        self.assertEqual(B.parse_cargo(prefix + ["--test", "native_endpoint", "--", "--nocapture"]),
+                         ("native_endpoint", ""))
+        for changed in (prefix + ["--test", "unknown", "--", "--nocapture"],
+                        prefix + ["--lib", "--all-features", "--", "--nocapture"],
+                        ["build", "--locked", "-p", "agentfw", "--bin", "agentfw"]):
+            with self.subTest(command=changed), self.assertRaises(ValueError):
+                B.parse_cargo(changed)
+
     def test_stop_filters_use_existing_pinned_test_roles_without_widening_commands(self):
         prefix = ["test", "--locked", "--offline", "-p", "agentfw"]
         for selection, expected in ((["--lib", "pilot_approval"], ("library", "pilot_approval")),
@@ -334,6 +347,17 @@ class Dependency(unittest.TestCase):
         self.assertEqual(B.producer_identity(self.env, "1")["run_attempt"], 1)
         rerun = dict(self.env, SOU166_PRODUCER_ATTEMPT="2", SOU166_ARCHIVE_NAME="build-r123-a2.tar.gz", SOU166_ARTIFACT_ID="789")
         self.assertNotEqual(old, B.dependency_context(rerun))
+
+    def test_manual_consumer_workflow_context_is_finite_and_run_bound(self):
+        prefix = "SoupTeam/soup-wall/.github/workflows/"
+        for filename in sorted(B.BUILD_CONSUMER_WORKFLOWS):
+            with self.subTest(filename=filename):
+                env = dict(self.env, GITHUB_WORKFLOW_REF=prefix + filename + "@refs/heads/main")
+                self.assertEqual(B.dependency_context(env)["artifact_id"], "456")
+        for filename in ("unrelated.yml", "mcp-windows-read.yml"):
+            env = dict(self.env, GITHUB_WORKFLOW_REF=prefix + filename + "@refs/heads/main")
+            with self.subTest(filename=filename), self.assertRaisesRegex(ValueError, "unsupported_producer_workflow"):
+                B.dependency_context(env)
 
     def test_missing_failed_skipped_future_and_unbound_producer_cannot_download(self):
         faults = {"SOU166_PRODUCER_RESULT": ["", "failure", "skipped", "cancelled"],

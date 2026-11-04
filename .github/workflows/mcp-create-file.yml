@@ -12,6 +12,10 @@ on:
         description: Run only the two measured Ubuntu 24.04 consumers
         type: boolean
         default: false
+      sou222_consumers:
+        description: Include HTTPS POST and Linux compatibility consumers in the shared build comparison
+        type: boolean
+        default: false
       edit_only:
         description: Focus on installed edit, stop, refresh and cumulative quota qualification
         type: boolean
@@ -456,6 +460,8 @@ jobs:
         with:
           persist-credentials: false
       - id: plan
+        env:
+          SOU222_CONSUMERS: ${{ inputs.sou222_consumers }}
         run: |
           python3 -B - <<'PYCODE'
           import json, os, sys
@@ -464,6 +470,9 @@ jobs:
           selected = {name: [] for name in WORKFLOW_JOBS}
           selected['ci-builds.yml'] = ['agent-default-ubuntu2404']
           selected['mcp-create-file.yml'] = ['linux-create-file', 'linux-installed-edit']
+          if os.environ['SOU222_CONSUMERS'] == 'true':
+              selected['mcp-https-post.yml'] = ['linux-https-post']
+              selected['mcp-windows-create.yml'] = ['linux-read-create-https-regressions']
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('plan=' + json.dumps({'workflows': selected}, separators=(',', ':')) + '\n')
           PYCODE
