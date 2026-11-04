@@ -30,6 +30,7 @@ import pilot_git_profiles as GIT_PROFILES
 import pilot_filesystem_roots as FS_ROOTS
 import pilot_workspace_snapshot as SNAPSHOTS
 import wsl_preflight
+import pilot_lifecycle_preflight as lifecycle_preflight
 from pilot_provider import utility_environment
 MAX_JSON = 65536
 NODE_ARCHIVE_SHA256 = "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37"
@@ -531,7 +532,10 @@ def prepare(args):
     GIT_PROFILES.binding(getattr(args, "git_profile", GIT_PROFILES.DEFAULT))
     if getattr(args, "wsl_root", None) is None:
         supported_platform()
+        lifecycle_preflight.require_preparation(lifecycle_preflight.inspect(), removal=getattr(args, "require_removal_eligible", False))
     else:
+        if getattr(args, "require_removal_eligible", False):
+            lifecycle_preflight.require_preparation(lifecycle_preflight.inspect(), removal=True)
         wsl_preparation_preflight(args)
     before = PILOT.source()
     require(not before["dirty"] and before["commit"] == args.expected_commit,
@@ -728,6 +732,7 @@ def prepare_locked(args, output, requested, linked_binding=None, fs_roots=None, 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     capacity.add_arguments(parser)
+    parser.add_argument("--require-removal-eligible", action="store_true", help="require current native removal environment prerequisites before preparation; never removal authority")
     parser.add_argument("--prepare", action="store_true", help="explicitly prepare and select a verified generation")
     parser.add_argument("--rebuild", action="store_true", help="prepare a new generation and retain the old one")
     parser.add_argument("--stage-only", action="store_true", help=argparse.SUPPRESS)
@@ -761,6 +766,7 @@ def main():
         parser.error("--stage-only requires --prepare --rebuild")
     if args.guard_capacity and not args.prepare:
         parser.error("--guard-capacity requires --prepare")
+    environment = lifecycle_preflight.inspect()
     if not args.prepare:
         try:
             workspaces = requested_workspaces(args)
@@ -799,6 +805,10 @@ def main():
                    if args.node_archive is None and (args.node is None or args.npm is None) else None,
                    "--python-archive PINNED_TAR_GZ --npm-cache DIR --wheelhouse DIR, or --allow-download"
                    if not args.allow_download and not (args.python_archive and args.npm_cache and args.wheelhouse) else None]
+        if args.wsl_root is None and environment["setup"] != "satisfied":
+            missing.append("resolve required setup lifecycle prerequisites")
+        if args.require_removal_eligible and environment["removal"] != "satisfied":
+            missing.append("resolve required removal environment prerequisites")
         for role in PILOT.ROLES:
             path = getattr(args, role)
             if path is not None and (not path.is_absolute() or not path.is_file()):
@@ -814,7 +824,7 @@ def main():
         for program in ("ldd", "readelf"):
             if shutil.which(program) is None:
                 missing.append(f"provide {program} in PATH for native dependency checks")
-        print(json.dumps({"status": "plan", "executed": False, "missing": [item for item in missing if item],
+        print(json.dumps({"status": "plan", "executed": False, "lifecycle_preflight": environment, "missing": [item for item in missing if item],
                           "workspaces": workspaces or {"mode": "generated-demo"},
                           "git_selection": git_selection,
                           **({"filesystem_roots": fs_roots} if fs_roots is not None else {}),
@@ -842,10 +852,15 @@ def main():
                           "next": "supply listed inputs, then add --prepare; qualification is a separate command"}))
         return 0
     try:
+        if args.wsl_root is None or args.require_removal_eligible:
+            lifecycle_preflight.require_preparation(environment, removal=args.require_removal_eligible)
         require(re.fullmatch(r"[0-9a-f]{40}", args.expected_commit or ""), "full_expected_commit_required")
         with capacity.checked("assets", args):
             print(json.dumps(prepare(args)))
         return 0
+    except lifecycle_preflight.Refusal as error:
+        print(json.dumps(error.report, sort_keys=True))
+        return 2
     except capacity.Refusal as error:
         print(json.dumps(error.report, sort_keys=True))
         return 2

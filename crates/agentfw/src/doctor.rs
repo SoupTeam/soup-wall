@@ -14,6 +14,12 @@ use crate::Config;
 
 #[derive(Args, Debug, Clone)]
 pub struct DoctorArgs {
+    /// Inspect only current native Linux lifecycle environment prerequisites.
+    #[arg(long, conflicts_with = "enabled")]
+    pub lifecycle: bool,
+    /// Require current removal environment evidence; never removal consent.
+    #[arg(long, requires = "lifecycle")]
+    pub require_removal_eligible: bool,
     #[command(flatten)]
     pub pilot: crate::pilot_doctor::PilotArgs,
     /// Explicit installed profile; defaults to ~/.agentfw, without creating it.
@@ -73,6 +79,8 @@ pub struct Report {
     pub checks: Vec<Check>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pilot: Option<crate::pilot_doctor::PilotReport>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lifecycle: Option<crate::pilot_lifecycle_preflight::Report>,
 }
 
 pub(crate) fn check(
@@ -290,7 +298,23 @@ async fn diagnose(args: &DoctorArgs) -> Report {
         scope: "local_setup_and_authenticated_runtime_not_active_host_execution",
         checks: Vec::new(),
         pilot: None,
+        lifecycle: None,
     };
+    if args.lifecycle || args.pilot.enabled {
+        report.lifecycle = Some(crate::pilot_lifecycle_preflight::inspect());
+    }
+    if args.lifecycle {
+        let environment = report
+            .lifecycle
+            .as_ref()
+            .expect("requested lifecycle diagnosis");
+        report.setup = match environment.setup {
+            crate::pilot_lifecycle_preflight::Outcome::Satisfied => Outcome::Ready,
+            crate::pilot_lifecycle_preflight::Outcome::Blocked => Outcome::Failed,
+            crate::pilot_lifecycle_preflight::Outcome::Unknown => Outcome::Unknown,
+        };
+        return report;
+    }
     if !cfg!(target_os = "linux") {
         checks.push(check(
             "platform",
@@ -675,6 +699,7 @@ pub fn run(args: DoctorArgs) -> i32 {
             active_host_call_protection: "unknown",
             scope: "local_setup_and_authenticated_runtime_not_active_host_execution",
             pilot: None,
+            lifecycle: None,
             checks: vec![check(
                 "runtime",
                 "local_process",
@@ -720,6 +745,23 @@ pub fn run(args: DoctorArgs) -> i32 {
         }
     }
     if !args.json {
+        if let Some(environment) = &report.lifecycle {
+            println!(
+                "Lifecycle setup: {:?}. {}",
+                environment.setup,
+                crate::pilot_lifecycle_preflight::SETUP_GUIDANCE
+            );
+            println!(
+                "Lifecycle protected run: {:?}. {}",
+                environment.protected_run,
+                crate::pilot_lifecycle_preflight::RUN_GUIDANCE
+            );
+            println!(
+                "Lifecycle removal prerequisites: {:?}. {}",
+                environment.removal,
+                crate::pilot_lifecycle_preflight::REMOVAL_GUIDANCE
+            );
+        }
         if let Some(incident) = report.pilot.as_ref().and_then(|p| p.incident.as_ref()) {
             println!(
                 "Incident: {} ({}); source {}; completeness {}.\n  {}\n  Next: {}",
@@ -735,6 +777,13 @@ pub fn run(args: DoctorArgs) -> i32 {
     if bundle_error.is_some() {
         eprintln!("support bundle not written: unsafe destination or I/O failure (no existing output replaced)");
         return 4;
+    }
+    if args.require_removal_eligible {
+        match report.lifecycle.as_ref().map(|r| r.removal) {
+            Some(crate::pilot_lifecycle_preflight::Outcome::Satisfied) => (),
+            Some(crate::pilot_lifecycle_preflight::Outcome::Blocked) => return 3,
+            _ => return 4,
+        }
     }
     match report.setup {
         Outcome::Ready => 0,

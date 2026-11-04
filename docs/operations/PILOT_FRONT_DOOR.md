@@ -17,6 +17,13 @@ Each step keeps its own verification, receipts, transactions and failure codes.
 Supported platform: native Ubuntu 24.04 x86_64, as an ordinary (non-root) user.
 WSL and other platforms are not supported by this flow.
 
+Before preparation, `pilot.py preflight --json` reports current setup,
+protected-run and removal prerequisites separately. Preview/prepare include the
+same bounded diagnosis; `--require-removal-eligible` makes removal prerequisites
+an explicit preparation requirement. See the
+[installed lifecycle preflight](PILOT_INSTALLED_FRONT_DOOR.md#read-only-lifecycle-preflight)
+for phase meanings, privacy, limits and unchanged removal rechecks.
+
 ## 1. Preview (no effects)
 
 Use a clean reviewed checkout and an absolute private prefix outside the

@@ -106,6 +106,7 @@ def provider_preflight():
 
 
 PREP = load("front_door_preparation", "prepare-installed-pilot.py")
+LIFECYCLE = load("front_door_lifecycle_preflight", "pilot_lifecycle_preflight.py")
 SOURCE_IDENTITY = load("front_door_source_identity", "pilot_source_identity.py")
 # Inside a component verified by `agentfw pilot` there is no Git
 # checkout: the identity is the recorded clean commit of the component.
@@ -287,13 +288,17 @@ def prepare_words(args, inputs, paths, commit, produced):
               "--policy", paths["inputs"] / "policy.yaml"]
     if args.allow_download:
         words.append("--allow-download")
+    if getattr(args, "require_removal_eligible", False):
+        words.append("--require-removal-eligible")
     return words
 
 
 def plan(args):
     """Read-only inventory composed from the accepted plans."""
+    environment = LIFECYCLE.inspect()
     state = None
-    report = {"format": FORMAT, "command": "preview", "executed": False, "never": NEVER}
+    report = {"format": FORMAT, "command": "preview", "executed": False, "never": NEVER,
+              "lifecycle_preflight": environment}
     reason = platform_reason()
     report["platform"] = {"supported": reason is None, "reason": reason,
                           "required": "native Ubuntu 24.04 x86_64, non-root"}
@@ -387,6 +392,10 @@ def plan(args):
                   stages=stages, recorded_selection=state and state.get("selection"),
                   downloads_allowed_on_apply=bool(args.allow_download))
     report["missing"] = [item for row in stages for item in row.get("missing", []) if item]
+    if environment["setup"] != "satisfied":
+        report["missing"].insert(0, "resolve required setup lifecycle prerequisites; run preflight --json")
+    if getattr(args, "require_removal_eligible", False) and environment["removal"] != "satisfied":
+        report["missing"].insert(0, "resolve required removal environment prerequisites; run preflight --require-removal-eligible --json")
     if reason:
         report["missing"].insert(0, "run on native Ubuntu 24.04 x86_64 as a non-root user")
     if current["dirty"]:
@@ -403,6 +412,7 @@ def plan(args):
 
 
 def prepare(args):
+    LIFECYCLE.require_preparation(LIFECYCLE.inspect(), removal=getattr(args, "require_removal_eligible", False))
     report = plan(args)
     report.update(command="prepare", executed=True, steps=[])
     require(not report["missing"], "missing_inputs")
@@ -878,6 +888,8 @@ def provider_command(args):
 
 def human(report):
     lines = []
+    if report.get("lifecycle_preflight"):
+        lines.append(LIFECYCLE.human(report["lifecycle_preflight"]))
     if report.get("command") in ("preview", "prepare"):
         platform = report["platform"]
         lines.append("Platform: " + ("supported" if platform["supported"] else "NOT supported (" + str(platform["reason"]) + ")"))
@@ -921,6 +933,11 @@ def parser():
     shared.add_argument("--prefix", type=Path, required=True, help="absolute private directory for all pilot state")
     shared.add_argument("--json", action="store_true", help="print the JSON report only")
     inputs = argparse.ArgumentParser(add_help=False)
+    inputs.add_argument("--require-removal-eligible", action="store_true",
+                        help="refuse preparation unless current removal environment prerequisites are satisfied; never authorizes removal")
+    preflight = commands.add_parser("preflight", help="bounded read-only native Linux lifecycle prerequisites; no selected code runs")
+    preflight.add_argument("--json", action="store_true")
+    preflight.add_argument("--require-removal-eligible", action="store_true")
     inputs.add_argument("--expected-commit", help="assert the clean checkout commit")
     inputs.add_argument("--allow-download", action="store_true", help="prepare may download pinned public inputs")
     inputs.add_argument("--git-profile", action=PREP.GIT_PROFILES.SingleProfile,
@@ -1076,6 +1093,13 @@ def main(argv=None):
         return module.main(project_words[1:], front)
     top = parser()
     args = top.parse_args(supplied)
+    if args.command == "preflight":
+        report = LIFECYCLE.inspect()
+        print(json.dumps(report, sort_keys=True))
+        if not args.json:
+            print(LIFECYCLE.human(report), file=sys.stderr)
+        return 0 if report["setup"] == "satisfied" and (not args.require_removal_eligible or report["removal"] == "satisfied") else 2
+
     if args.command in (None, "help"):
         top.print_help()
         return 0
@@ -1168,6 +1192,9 @@ def main(argv=None):
         else:
             report = status(args)
         code = 0
+    except LIFECYCLE.Refusal as error:
+        report = dict(error.report, format=FORMAT, command=args.command)
+        code = 2
     except KeyboardInterrupt:
         report = {"format": FORMAT, "command": args.command, "status": "failed", "reason": "cancelled",
                   "hint": HINTS["cancelled"]}
@@ -1186,6 +1213,8 @@ def main(argv=None):
         summary = human(report) if report.get("status") != "failed" else (
             "pilot: " + str(report.get("reason")) + (" (stage " + str(report["stage"]) + ")" if report.get("stage") else "")
             + ". " + str(report.get("hint", "")))
+        if report.get("status") == "failed" and report.get("lifecycle_preflight"):
+            summary += "\n" + LIFECYCLE.human(report["lifecycle_preflight"])
         if summary:
             print(summary, file=sys.stderr)
     return code
