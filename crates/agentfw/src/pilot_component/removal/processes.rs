@@ -211,7 +211,7 @@ fn scan_observed(
                 }
                 for leaf in ["cmdline", "environ"] {
                     let raw = bounded(&p.join(leaf), 1024 * 1024, b)?;
-                    if referenced(&raw, &roots) {
+                    if referenced(&raw, roots) {
                         return Ok(true);
                     }
                 }
@@ -238,7 +238,7 @@ fn scan_observed(
                         }
                     }
                     if let Some(i) = line.find('/') {
-                        if referenced(&line.as_bytes()[i..], &roots) {
+                        if referenced(&line.as_bytes()[i..], roots) {
                             return Ok(true);
                         }
                     }
