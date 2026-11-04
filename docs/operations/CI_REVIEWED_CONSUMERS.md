@@ -1,7 +1,7 @@
 # Reviewed selective CI consumers (SOU-221)
 
 This is a closed registration in `scripts/ci_impact.py`, based on accepted main
-`2a5bf6771c63c6ccf2c55d07dede512a72f26481`. The two Python files are
+`2a5bf6771c63c6ccf2c55d07dede512a72f26481`. The three Python files are
 pinned to their reviewed base Git blobs. A later base revision requires a new
 registration review. All paths outside the table retain the existing planner
 classification, including full qualification for shared helpers, CI and
@@ -9,9 +9,9 @@ registry changes, generated evidence, unknown paths, and ambiguous consumers.
 
 | Exact changed path | Executing consumers selected | Reviewed dependency boundary |
 | --- | --- | --- |
-| `scripts/check_docs.py` | `ci.yml` documentation and test | Both jobs run the checker and its unit tests. `scripts/local_pr_verify.py` and `scripts/ci/wall_python_linux.py` also call it as local feedback, without GitHub qualification authority. Its reviewed imports and process/file access expressions are frozen. |
-| `scripts/tests/test_check_docs.py` | `ci.yml` documentation and test | Both jobs discover the tests; they execute `check_docs.py` against owned Markdown fixtures. Its reviewed imports and process/file access expressions are frozen. |
-| `scripts/tests/test_macos_relay_headers.py` | `ci.yml` test | The general `scripts/tests/test_*.py` discovery executes its HTTP-header refusal witness. It imports `macos-file-acceptance.py`; that dependency's reviewed base blob is pinned. The macOS acceptance harness itself remains full when changed. |
+| `scripts/check_docs.py` | `ci.yml` documentation and test | Both jobs run the checker and its unit tests. `scripts/local_pr_verify.py` and `scripts/ci/wall_python_linux.py` also call it as local feedback, without GitHub qualification authority. Only edits preserving the complete executable AST retain this reviewed closure. |
+| `scripts/tests/test_check_docs.py` | `ci.yml` documentation and test | Both jobs discover the tests; they execute `check_docs.py` against owned Markdown fixtures. Only edits preserving the complete executable AST retain this reviewed closure. |
+| `scripts/tests/test_macos_relay_headers.py` | `ci.yml` test | The general `scripts/tests/test_*.py` discovery executes its HTTP-header refusal witness. It imports `macos-file-acceptance.py`; that dependency's reviewed base blob is pinned. Only edits preserving the complete executable AST keep this plan. The macOS acceptance harness itself remains full when changed. |
 | `docs/operations/ASK_INBOX.md` | `ci.yml` documentation | Non-executable operator guidance; the documentation job checks links and anchors. No workflow or source script reads it as a runtime input. |
 | `docs/operations/GIT_LOCAL_REFERENCES.md` | `ci.yml` documentation | Same documented-only boundary. |
 | `docs/operations/PILOT_PROVIDER_PROFILES.md` | `ci.yml` documentation | Same documented-only boundary. |
@@ -39,8 +39,12 @@ the base-to-merge change status. Trusted admission reads the current PR's
 base/head/merge parents and the GitHub file status separately. Any added,
 deleted, renamed, type-changed, duplicate, mixed unknown or incompletely
 reported file requires the full registered plan. For the Python family, both
-paths verify the reviewed base blob and compare imports plus process/file
-access expressions against the exact candidate. Admission reads the candidate
+paths verify the reviewed base blob and compare the entire parsed executable
+AST against the exact candidate. A changed assignment, alias, call, dynamic
+lookup, import, control-flow expression or test assertion requires full CI;
+only non-executable edits such as comments or formatting can keep the narrow
+script plan. This deliberately avoids claiming static proof of Python's
+indirect dependency closure. Admission reads the candidate
 merge blob as bounded inert bytes and checks its Git blob digest. Absent,
 oversized, malformed or inconsistent blob evidence requires full CI. A PR's
 own scheduler output cannot narrow trusted admission.

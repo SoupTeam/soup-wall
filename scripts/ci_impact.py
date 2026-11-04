@@ -165,30 +165,23 @@ def git_tree_blob_sha(revision: str, path: str) -> str | None:
         return None
 
 
-def dependency_signature(body: bytes) -> tuple[str, ...] | None:
-    """Freeze imports and process/file access expressions for reviewed Python."""
+def dependency_signature(body: bytes) -> str | None:
+    """Require semantic AST equivalence before narrowing a reviewed Python edit.
+
+    Python names can be rebound to a process or file operation through aliases,
+    containers, descriptors and dynamic access. A list of known call spellings
+    cannot prove that an edited script has no new executable consumer. Only a
+    non-executable edit (such as a comment) can retain the reviewed closure.
+    """
     if len(body) > MAX_REVIEWED_SCRIPT_BYTES:
         return None
     try:
-        tree = ast.parse(body.decode("utf-8"))
-    except (SyntaxError, UnicodeError, ValueError):
+        tree = ast.parse(body.decode("utf-8"), type_comments=True)
+        if sum(1 for _ in ast.walk(tree)) > 20000:
+            return None
+        return ast.dump(tree, annotate_fields=True, include_attributes=False)
+    except (SyntaxError, UnicodeError, ValueError, RecursionError):
         return None
-    found = []
-    try:
-        for index, node in enumerate(ast.walk(tree)):
-            if index >= 20000:
-                return None
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                found.append("import:" + ast.dump(node, include_attributes=False))
-            elif isinstance(node, ast.Call):
-                name = ast.unparse(node.func)
-                if (name in {"eval", "exec", "compile", "open", "__import__", "getattr", "git"}
-                        or name.startswith(("subprocess.", "importlib.", "os.system", "os.popen"))
-                        or name.rsplit(".", 1)[-1] in {"open", "read_text", "read_bytes", "glob", "rglob"}):
-                    found.append("call:" + ast.dump(node, include_attributes=False))
-    except (RecursionError, ValueError):
-        return None
-    return tuple(sorted(found))
 
 
 def reviewed_change_safe(path: str, detail: dict[str, object]) -> bool:

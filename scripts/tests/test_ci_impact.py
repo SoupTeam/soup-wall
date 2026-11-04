@@ -126,6 +126,33 @@ class ImpactTests(unittest.TestCase):
             "scripts/macos-file-acceptance.py": "0" * 40}
         self.assertEqual(plan([security_test], change_details=reviewed)["mode"], "full")
 
+    def test_alias_and_dynamic_dispatch_cannot_escape_reviewed_dependency_closure(self):
+        path = "scripts/check_docs.py"
+        original = subprocess.check_output(["git", "show", "HEAD:" + path], cwd=ROOT)
+        payloads = (
+            b"\nlaunch = subprocess.run\nlaunch([sys.executable, 'scripts/qualify-installed-front-door.py', '--help'], check=True)\n",
+            b"\nlaunchers = {'later': subprocess.run}\nlaunchers['later']([sys.executable, 'scripts/qualify-installed-front-door.py'])\n",
+            b"\nlaunch = getattr(subprocess, 'run')\nlaunch([sys.executable, 'scripts/qualify-installed-front-door.py'])\n",
+            b"\nfrom subprocess import run as launch\nlaunch([sys.executable, 'scripts/qualify-installed-front-door.py'])\n",
+            b"\nreader = Path.read_text\nreader(Path('scripts/qualify-installed-front-door.py'))\n",
+        )
+        for payload in payloads:
+            with self.subTest(payload=payload):
+                detail = {path: {"status": "modified", "base_content": original,
+                                 "head_content": original + payload}}
+                result = plan([path], change_details=detail)
+                self.assertEqual(result["mode"], "full")
+                self.assertEqual(result["workflows"],
+                                 {name: list(jobs) for name, jobs in WORKFLOW_JOBS.items()})
+
+    def test_nonsemantic_python_edit_retains_reviewed_consumer_plan(self):
+        path = "scripts/check_docs.py"
+        original = subprocess.check_output(["git", "show", "HEAD:" + path], cwd=ROOT)
+        detail = {path: {"status": "modified", "base_content": original,
+                         "head_content": original + b"\n# Clarify the documented-only output.\n"}}
+        self.assertEqual(plan([path], change_details=detail)["workflows"]["ci.yml"],
+                         ["documentation", "test"])
+
     def test_scheduler_reads_exact_merge_parents_and_change_statuses(self):
         base, head, merge = "a" * 40, "b" * 40, "c" * 40
         with tempfile.TemporaryDirectory() as temporary:
@@ -473,6 +500,19 @@ class AdmissionTests(unittest.TestCase):
                 self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "pending",
                                  "forged narrow scheduling cannot satisfy trusted consumer map")
                 api.jobs[1] = [*original_jobs, extra]
+                alias = (original_script + b"\nlaunch = subprocess.run\n"
+                         b"launch([sys.executable, 'scripts/qualify-installed-front-door.py'])\n")
+                alias_blob = git_blob_sha(alias)
+                api.files[0]["sha"] = alias_blob
+                api.contents["/contents/" + path + "?ref=" + "c" * 40] = {
+                    "type": "file", "sha": alias_blob, "size": len(alias),
+                    "encoding": "base64", "content": base64.b64encode(alias).decode()}
+                self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "pending",
+                                 "trusted admission must require the full suite for an alias consumer")
+                api.files[0]["sha"] = blob
+                api.contents["/contents/" + path + "?ref=" + "c" * 40] = {
+                    "type": "file", "sha": blob, "size": len(candidate),
+                    "encoding": "base64", "content": base64.b64encode(candidate).decode()}
                 api.contents["/contents/" + path + "?ref=" + "c" * 40]["sha"] = "d" * 40
                 self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "pending",
                                  "inconsistent exact-merge blob must require full CI")
