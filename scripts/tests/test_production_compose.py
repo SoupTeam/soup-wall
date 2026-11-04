@@ -118,7 +118,8 @@ class FakeDocker:
             result = self.model()
             if self.after_render:
                 self.after_render()
-            return json.dumps(result)
+            # Real Compose config emits escaped values, not runtime strings.
+            return json.dumps(result).replace("$", "$$")
         if "ps" in args:
             row = self.containers.get(args[-1])
             return row["Id"] + "\n" if row else ""
@@ -221,6 +222,25 @@ class ProductionComposeControls(unittest.TestCase):
             self.assertIn("fixture-password-$$should-not-interpolate", closure.frozen)
             self.assertEqual(closure.configuration["services"]["firewall"]["environment"]["TEST_PASSWORD"], SECRET)
         self.assertIsNone(closure.frozen)
+
+    def test_rendered_shell_healthcheck_and_literal_password_keep_runtime_values(self):
+        password = "owned-$TOKEN-$$PAIR-${BRACED}"
+        command = ["redis-server", "--requirepass", password]
+        healthcheck = ["CMD-SHELL", 'redis-cli -a "$REDIS_PASSWORD" ping | grep PONG']
+        def configure(model):
+            model["services"]["redis"].update(command=command,
+                environment={"REDIS_PASSWORD": password}, healthcheck={"test": healthcheck})
+        self.docker.model_override = configure
+        closure = self.closure()
+        with closure.freeze():
+            service = closure.configuration["services"]["redis"]
+            self.assertEqual(service["command"], command)
+            self.assertEqual(service["environment"]["REDIS_PASSWORD"], password)
+            self.assertEqual(service["healthcheck"]["test"], healthcheck)
+            serialized = json.loads(closure.frozen)["services"]["redis"]
+            self.assertEqual(serialized["healthcheck"]["test"][1],
+                             'redis-cli -a "$$REDIS_PASSWORD" ping | grep PONG')
+            self.assertEqual(serialized["command"][-1], "owned-$$TOKEN-$$$$PAIR-$${BRACED}")
 
     def test_inherited_compose_overrides_and_provider_keys_are_not_forwarded(self):
         with patch.dict(os.environ, {"COMPOSE_FILE": "unrelated.yaml", "COMPOSE_PROFILES": "other",

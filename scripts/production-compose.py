@@ -127,6 +127,23 @@ def decode(data):
         fail("invalid_json")
 
 
+def compose_dollars(value, *, escape):
+    """Convert Compose's serialized dollar escapes and runtime values.
+
+    `compose config` already escapes every value's literal dollar characters,
+    including shell health checks and resolved environment/command values.
+    Keys are not interpolated. Keep that representation out of comparisons
+    against the actual container's unescaped configuration.
+    """
+    if isinstance(value, str):
+        return value.replace("$", "$$") if escape else value.replace("$$", "$")
+    if isinstance(value, list):
+        return [compose_dollars(item, escape=escape) for item in value]
+    if isinstance(value, dict):
+        return {key: compose_dollars(item, escape=escape) for key, item in value.items()}
+    return value
+
+
 def docker_environment():
     # Preserve Docker's selected endpoint/credentials, not Compose overrides,
     # provider keys, deployment secrets, or inherited dotenv variables.
@@ -335,6 +352,7 @@ class ProductionCompose:
                 "config", "--format", "json"]
         model = self.docker.json(args, environment={"SOUP_WALL_IMAGE": self.gateway_image,
                                                   "SOUP_WALL_PLATFORM": self.platform})
+        model = compose_dollars(model, escape=False)
         self._validate_model(model)
         self.unchanged()
         # Only the nonsecret policy is copied. Expanded credentials stay in the
@@ -350,9 +368,9 @@ class ProductionCompose:
         self.unchanged()
         model["services"]["firewall"]["volumes"][0]["source"] = str(policy)
         self.configuration = model
-        # A Compose config result has resolved dollar characters. Escape them
-        # for the second parse; never interpolate secret values twice.
-        self.frozen = json.dumps(model).replace("$", "$$")
+        # Serialize runtime values once. Doubling the already escaped config
+        # output again changes shell health checks (and passwords) at runtime.
+        self.frozen = json.dumps(compose_dollars(model, escape=True))
         try:
             yield self
         finally:
