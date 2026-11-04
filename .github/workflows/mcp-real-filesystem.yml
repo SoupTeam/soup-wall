@@ -123,6 +123,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'lifecycle-preflight'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: 1.94.1
     strategy:
       fail-fast: false
       matrix:
@@ -135,6 +137,8 @@ jobs:
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: Check bounded lifecycle and existing installed contracts
         shell: bash
