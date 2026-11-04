@@ -91,6 +91,15 @@ class KernelControls(unittest.TestCase):
     def codes(self, report):
         return {r['reason_code'] for r in report['checks']}
 
+    def test_unsupported_platform_needs_no_unix_identity_or_process_reader(self):
+        with mock.patch.object(M.os, 'geteuid', create=True, side_effect=AssertionError('Unix identity unavailable')), \
+                mock.patch.object(M.Reader, 'read', side_effect=AssertionError('Kernel evidence unavailable')):
+            report = M.inspect(_system='Windows', _machine='AMD64')
+        self.assertEqual((report['setup'], report['protected_run'], report['removal']),
+                         ('blocked', 'unknown', 'unknown'))
+        self.assertIn('native_linux_x86_64_required', self.codes(report))
+        self.assertFalse(report['removal_authorized'])
+
     def test_complete_current_visibility_is_never_runtime_or_removal_authority(self):
         report = observe(self.kernel)
         self.assertEqual((report['setup'], report['protected_run'], report['removal']),

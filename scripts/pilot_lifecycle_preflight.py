@@ -203,7 +203,9 @@ def proc_mount(reader):
 def inspect(*, _reader=None, _system=None, _machine=None, _uid=None, _pid=None):
     r = _reader or Reader()
     system, machine = _system or platform.system(), _machine or platform.machine()
-    uid = os.geteuid() if _uid is None else _uid
+    uid = _uid
+    if system == 'Linux' and uid is None:
+        uid = os.geteuid()
     pid = os.getpid() if _pid is None else _pid
     checks = []
     setup, protected, removal = [], [], []
