@@ -1,0 +1,272 @@
+{
+  "active_protection": "not_measured",
+  "agent_sha256": "614b083845161ea3ea8a48b21a4f24abf3582758f249e2d6fde1c530e24b619e",
+  "attempted_case": "early-required-refusal",
+  "cases": [
+    {
+      "case": "ordinary-current-environment",
+      "original": {
+        "active_host_call_protection": "unknown",
+        "checks": [],
+        "lifecycle": {
+          "active_protection": "not_measured",
+          "checks": [
+            {
+              "id": "native_platform",
+              "outcome": "satisfied",
+              "phase": "setup",
+              "reason_code": "native_ubuntu_24_04_x86_64"
+            },
+            {
+              "id": "ordinary_operator",
+              "outcome": "satisfied",
+              "phase": "setup",
+              "reason_code": "ordinary_operator"
+            },
+            {
+              "id": "namespace_controls",
+              "outcome": "satisfied",
+              "phase": "setup",
+              "reason_code": "namespace_controls_observed"
+            },
+            {
+              "id": "selected_namespace_admission",
+              "outcome": "unknown",
+              "phase": "protected_run",
+              "reason_code": "selected_runtime_admission_unmeasured"
+            },
+            {
+              "id": "host_user_namespace",
+              "outcome": "satisfied",
+              "phase": "removal",
+              "reason_code": "host_user_namespace_observed"
+            },
+            {
+              "id": "same_uid_process_evidence",
+              "outcome": "blocked",
+              "phase": "removal",
+              "reason_code": "process_evidence_inaccessible"
+            },
+            {
+              "id": "same_uid_process_evidence",
+              "outcome": "unknown",
+              "phase": "removal",
+              "reason_code": "process_identity_inconsistent"
+            }
+          ],
+          "format": "sw-pilot-lifecycle-preflight/1",
+          "future_inactivity": "not_proven",
+          "guidance": {
+            "protected_run": "The existing exact selected bubblewrap/runtime admission must still succeed before a protected host starts. Static controls do not prove admission or active protection.",
+            "removal": "Use an operator-owned environment with complete same-user visibility in the host user namespace. Review owned services privately or choose a clean environment. Do not use sudo, ignore EACCES or relax ptrace/AppArmor. Preview removal again in its actual current state.",
+            "setup": "Use an ordinary native Ubuntu 24.04 x86-64 session with readable kernel namespace controls. Diagnosis changes no settings."
+          },
+          "limits": {
+            "fds_per_process": 1024,
+            "individual_bytes": 1048576,
+            "processes": 4096,
+            "seconds": 10,
+            "total_bytes": 67108864
+          },
+          "protected_run": "unknown",
+          "removal": "blocked",
+          "removal_authorized": false,
+          "scope": "current_environment_prerequisites_only",
+          "setup": "satisfied"
+        },
+        "observed_at_ms": 1793790908290,
+        "schema": "sw-agent-doctor/1",
+        "scope": "local_setup_and_authenticated_runtime_not_active_host_execution",
+        "setup": "ready"
+      },
+      "passed": true,
+      "witness": {
+        "allowed_entry_images": 1,
+        "extra_execution_attempts": 0,
+        "host_mutation_attempts": 0,
+        "network_effect_attempts": 0,
+        "non_thread_children": 0,
+        "trace_sha256": "a7db98f86a6af1576d13f8b70df6541596a96d402039107ff54b3dfd1ca6baa3"
+      }
+    },
+    {
+      "case": "owned-eacces-doctor",
+      "original": {
+        "active_host_call_protection": "unknown",
+        "checks": [],
+        "lifecycle": {
+          "active_protection": "not_measured",
+          "checks": [
+            {
+              "id": "native_platform",
+              "outcome": "satisfied",
+              "phase": "setup",
+              "reason_code": "native_ubuntu_24_04_x86_64"
+            },
+            {
+              "id": "ordinary_operator",
+              "outcome": "satisfied",
+              "phase": "setup",
+              "reason_code": "ordinary_operator"
+            },
+            {
+              "id": "namespace_controls",
+              "outcome": "satisfied",
+              "phase": "setup",
+              "reason_code": "namespace_controls_observed"
+            },
+            {
+              "id": "selected_namespace_admission",
+              "outcome": "unknown",
+              "phase": "protected_run",
+              "reason_code": "selected_runtime_admission_unmeasured"
+            },
+            {
+              "id": "host_user_namespace",
+              "outcome": "satisfied",
+              "phase": "removal",
+              "reason_code": "host_user_namespace_observed"
+            },
+            {
+              "id": "same_uid_process_evidence",
+              "outcome": "blocked",
+              "phase": "removal",
+              "reason_code": "process_evidence_inaccessible"
+            },
+            {
+              "id": "same_uid_process_evidence",
+              "outcome": "unknown",
+              "phase": "removal",
+              "reason_code": "process_identity_inconsistent"
+            }
+          ],
+          "format": "sw-pilot-lifecycle-preflight/1",
+          "future_inactivity": "not_proven",
+          "guidance": {
+            "protected_run": "The existing exact selected bubblewrap/runtime admission must still succeed before a protected host starts. Static controls do not prove admission or active protection.",
+            "removal": "Use an operator-owned environment with complete same-user visibility in the host user namespace. Review owned services privately or choose a clean environment. Do not use sudo, ignore EACCES or relax ptrace/AppArmor. Preview removal again in its actual current state.",
+            "setup": "Use an ordinary native Ubuntu 24.04 x86-64 session with readable kernel namespace controls. Diagnosis changes no settings."
+          },
+          "limits": {
+            "fds_per_process": 1024,
+            "individual_bytes": 1048576,
+            "processes": 4096,
+            "seconds": 10,
+            "total_bytes": 67108864
+          },
+          "protected_run": "unknown",
+          "removal": "blocked",
+          "removal_authorized": false,
+          "scope": "current_environment_prerequisites_only",
+          "setup": "satisfied"
+        },
+        "observed_at_ms": 1793790908635,
+        "schema": "sw-agent-doctor/1",
+        "scope": "local_setup_and_authenticated_runtime_not_active_host_execution",
+        "setup": "ready"
+      },
+      "passed": true,
+      "witness": {
+        "allowed_entry_images": 1,
+        "extra_execution_attempts": 0,
+        "host_mutation_attempts": 0,
+        "network_effect_attempts": 0,
+        "non_thread_children": 0,
+        "trace_sha256": "f88488e19ea4e04ad0bf6ef4caaf771fe7724cb63f0a1f233e53673584278768"
+      }
+    },
+    {
+      "case": "required-removal-prerequisite-before-preparation",
+      "original": {
+        "executed": false,
+        "lifecycle_preflight": {
+          "active_protection": "not_measured",
+          "checks": [
+            {
+              "id": "native_platform",
+              "outcome": "satisfied",
+              "phase": "setup",
+              "reason_code": "native_ubuntu_24_04_x86_64"
+            },
+            {
+              "id": "ordinary_operator",
+              "outcome": "satisfied",
+              "phase": "setup",
+              "reason_code": "ordinary_operator"
+            },
+            {
+              "id": "namespace_controls",
+              "outcome": "satisfied",
+              "phase": "setup",
+              "reason_code": "namespace_controls_observed"
+            },
+            {
+              "id": "selected_namespace_admission",
+              "outcome": "unknown",
+              "phase": "protected_run",
+              "reason_code": "selected_runtime_admission_unmeasured"
+            },
+            {
+              "id": "host_user_namespace",
+              "outcome": "satisfied",
+              "phase": "removal",
+              "reason_code": "host_user_namespace_observed"
+            },
+            {
+              "id": "same_uid_process_evidence",
+              "outcome": "blocked",
+              "phase": "removal",
+              "reason_code": "process_evidence_inaccessible"
+            },
+            {
+              "id": "same_uid_process_evidence",
+              "outcome": "unknown",
+              "phase": "removal",
+              "reason_code": "process_identity_inconsistent"
+            }
+          ],
+          "format": "sw-pilot-lifecycle-preflight/1",
+          "future_inactivity": "not_proven",
+          "guidance": {
+            "protected_run": "The existing exact selected bubblewrap/runtime admission must still succeed before a protected host starts. Static controls do not prove namespace admission or active protection.",
+            "removal": "Use an operator-owned environment with complete same-user process visibility in the host user namespace. Review owned services privately or choose a clean environment. Do not use sudo, ignore EACCES, or relax ptrace/AppArmor. Preview removal again in its actual current state.",
+            "setup": "Use an ordinary native Ubuntu 24.04 x86-64 session with readable kernel namespace controls. An operator must select a supported environment; diagnosis changes no settings."
+          },
+          "limits": {
+            "fds_per_process": 1024,
+            "individual_bytes": 1048576,
+            "processes": 4096,
+            "seconds": 10,
+            "total_bytes": 67108864
+          },
+          "protected_run": "unknown",
+          "removal": "blocked",
+          "removal_authorized": false,
+          "scope": "current_environment_prerequisites_only",
+          "setup": "satisfied"
+        },
+        "reason": "lifecycle_prerequisite_unavailable",
+        "status": "failed"
+      },
+      "passed": true,
+      "witness": {
+        "allowed_entry_images": 1,
+        "extra_execution_attempts": 0,
+        "host_mutation_attempts": 0,
+        "network_effect_attempts": 0,
+        "non_thread_children": 0,
+        "trace_sha256": "38a7dd35559c89bf082ad3ab3f334a8607e4ac3f56c0969ff2668322dc73647f"
+      }
+    }
+  ],
+  "component_sha256": "12124e2e20b56b21187ab11fa0fb739494af7b52c5a1b9207c92b6dcef187ad5",
+  "environment": "ordinary native Ubuntu 24.04 GitHub-hosted x86-64",
+  "environment_preservation": "no diagnostic host mutation, namespace change or service control attempted",
+  "format": "sw-lifecycle-preflight-observation/1",
+  "mode": "ordinary",
+  "owned_fixture_cleanup_confirmed": true,
+  "python_sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+  "removal_authorized": false,
+  "source": "1b459b5e373240f60d4305dc7b91cd79e3a5ae28",
+  "status": "passed"
+}
