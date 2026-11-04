@@ -206,5 +206,57 @@
     "source_sha256": "8de2a73c1749fb21d64e8ce8ada4898e45e1064831a1d15c4f48c2952d888e10",
     "log_sha256": "aca258c358f7ea2237a27ba83d751ddc7af54a917160413c8e1bbe3f7a5b8e26",
     "elapsed_seconds": 8.37
+  },
+  {
+    "label": "negative-disabled-lifecycle",
+    "command": [
+      "/opt/homebrew/bin/cargo",
+      "test",
+      "--offline",
+      "--locked",
+      "-p",
+      "llm-firewall",
+      "--test",
+      "managed_reconciliation",
+      "disabled_worker_preserves_console_sigterm_lifecycle",
+      "--",
+      "--exact"
+    ],
+    "exit_code": 101,
+    "source_sha256": "2c3f4d6c6be954edeb9379b61d617a98104498e8ffd1d6e72c94191c0cef4543",
+    "log_sha256": "9f2fba91e850c15d397bfa5dfbc0d77d377d072e324b9b8d639d91c47e86ad9b",
+    "elapsed_seconds": 6.09
+  },
+  {
+    "label": "restored-disabled-lifecycle",
+    "command": [
+      "/opt/homebrew/bin/cargo",
+      "test",
+      "--offline",
+      "--locked",
+      "-p",
+      "llm-firewall",
+      "--test",
+      "managed_reconciliation",
+      "disabled_worker_preserves_console_sigterm_lifecycle",
+      "--",
+      "--exact"
+    ],
+    "exit_code": 0,
+    "source_sha256": "ae2ae9366adcd04df9cf456bf627bd2b4a4d320f2e1015009af87b9e990af054",
+    "log_sha256": "29273dcf8df67036f45d2d70169f1c05726ecfd30943d60c3b2447ed15fcd1b6",
+    "elapsed_seconds": 3.77
+  },
+  {
+    "label": "final-workspace",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo test --offline --locked --workspace && cargo clippy --offline --locked --workspace --all-targets -- -D warnings && cargo fmt --all --check"
+    ],
+    "exit_code": 0,
+    "source_sha256": "ae2ae9366adcd04df9cf456bf627bd2b4a4d320f2e1015009af87b9e990af054",
+    "log_sha256": "4cd6ced7eb0dbd3350d3b743aff8060e0e3d03d22720928e42d2828f543fd105",
+    "elapsed_seconds": 132.6
   }
 ]

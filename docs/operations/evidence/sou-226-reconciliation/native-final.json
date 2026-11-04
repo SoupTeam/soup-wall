@@ -1,13 +1,13 @@
 {
   "binary_sha256": {
     "agentfw": "a7a39a87bef4f241cca094300162f1f4d57ddc43bef427ff819ad5358561cf3e",
-    "llm-firewall": "6e57916340041aa4f918cb5ce8f017e10a8ff85a257374d548f5a3c311eecffe"
+    "llm-firewall": "082988480b84a1f6dc7f389815c1444d8da90dfe018ee5e84eecb774dd6c88e4"
   },
   "conclusion": "success",
   "format": "sou-226-native-qualification/1",
-  "implementation_source": "bb091dd30c9b3fd2bae11a9b94df796b30a55481",
+  "implementation_source": "759f43e82677fce8eb7f9c3beb95d945d2425bf3",
   "independently_verified_source_files": 288,
-  "run": 41850158512,
+  "run": 41855697991,
   "scenarios": [
     {
       "checks": {
@@ -52,7 +52,7 @@
         "transport": "literal loopback HTTP"
       },
       "passed": true,
-      "raw_report_sha256": "f3bc867595922fff1601235c018a8422ecba7997366a5709f96b11988abc30bb",
+      "raw_report_sha256": "0d7c589d2a305851a5a204530f3e824742f1e55062104e61b3936b421dc20002",
       "report": "group-postgres.json"
     },
     {
@@ -77,7 +77,7 @@
       "configuration": {
         "agents": 4,
         "batch_size": 2,
-        "config_sha256": "df7284f9e3c69899e4ef586b1a8dd380064de77c978e035948067270a69f8c62",
+        "config_sha256": "5444e5cbe3e95947480bf7330efd1540d48e2c5a4fb9051b073b4a48fde6005c",
         "external_provider_calls": 0,
         "interval_seconds": 1,
         "pilots": 1,
@@ -87,7 +87,7 @@
         "transport": "literal loopback HTTP"
       },
       "passed": true,
-      "raw_report_sha256": "73fd4237895b173ccfe40be2e3538c1a1f32a5d997cc65dba9c1ec933ac9d503",
+      "raw_report_sha256": "2d254b44d584ee4438ceb7ea26527d88d9bc74a9c2635a60f7c3b7de27ddfdea",
       "report": "group-reconciliation-postgres.json"
     },
     {
@@ -112,7 +112,7 @@
       "configuration": {
         "agents": 4,
         "batch_size": 2,
-        "config_sha256": "621b35a801b908520b315d955da4bdcd24ad50e753d19f59184142bf1ea7eec5",
+        "config_sha256": "a7397e8edf3d5e572aa908178dc56505437d2a774b6fc980dc8c30b9ef3f392e",
         "external_provider_calls": 0,
         "interval_seconds": 1,
         "pilots": 1,
@@ -122,7 +122,7 @@
         "transport": "literal loopback HTTP"
       },
       "passed": true,
-      "raw_report_sha256": "d8f1ce67ac7e31d6cb65742d91f89fca76a4b5f451ee4f187194181e124b65ea",
+      "raw_report_sha256": "dc0e45e2a81e2133c0318e2fd6e01de997a64da88a1e6e08b42ae2e656a52164",
       "report": "group-reconciliation-sqlite.json"
     },
     {
@@ -168,7 +168,7 @@
         "transport": "literal loopback HTTP"
       },
       "passed": true,
-      "raw_report_sha256": "8eef171bcf7f79754e2a93ce54763e4628d2f7e1e82db09ee1101fdf70f7eece",
+      "raw_report_sha256": "ea197c9bb3bb185a820b752db827aeb08bc3e7e330c114b7068cebaec9051aba",
       "report": "group-sqlite.json"
     }
   ],
@@ -426,7 +426,7 @@
     "crates/proxy/src/handlers.rs": "194deec8895b5328d3266094d5b0cb3bb690b1c63230d5a530d57a8f1413c577",
     "crates/proxy/src/invitation_ui.rs": "845193abd430dbb89058dee6ada6e1fc87ecfba6f224a702457b6c8566b004bb",
     "crates/proxy/src/lib.rs": "2a052a4a5b4a61261c6be8a948b116fd36b1110171ced43e79f662cebb25f041",
-    "crates/proxy/src/main.rs": "80f680262940b8b9b6063868792625ec1445eadf5ea0c9a587fe180679a9342a",
+    "crates/proxy/src/main.rs": "1958dca692e151e08dffd5cd7f9cf72647358ea61f3be28132c0b4d01e93381d",
     "crates/proxy/src/managed_agent_api.rs": "c4906987616253369ad418c21204d91b3b5d111d83eb3849d29241e4be4c6d87",
     "crates/proxy/src/moderation.rs": "317fcbb279ee6f7d21ae997d9294775d218b76d601601ef6ed3f56ff9dda36e3",
     "crates/proxy/src/oidc.rs": "e0cb21fa426fdb8bc13cbb01795adce5ac06cf5f61e7389f9dc37d63f4e1a53e",

@@ -64,3 +64,20 @@ SIGTERM and verifies the original disabled-mode signal exit, with child cleanup.
 All reconciliation controls, fmt and Clippy pass after this change. Qualification
 on this last runtime revision is recorded separately from the earlier bb091dd3
 proof above.
+
+## Last runtime revision qualified
+
+[Run 41855697991](https://github.com/SoupTeam/soup-wall/actions/runs/41855697991)
+passed at 759f43e82677fce8eb7f9c3beb95d945d2425bf3, including the real-process
+disabled-worker SIGTERM regression, all SQLite/PostgreSQL controls, 15/15
+real-offline checks per backend and 31/31 recovery checks per backend. The
+current `native-final.json` binds this source and its binary/configuration
+identities. The earlier successful bb091dd3 packet is retained separately as
+`native-qualified-bb091dd3.json`; it is not substituted for the final source.
+All 288 final source hashes were independently checked against Git.
+
+The last runtime also passed the entire workspace and workspace/all-target
+Clippy -D warnings and fmt. The SIGTERM witness was independently checked with
+the compatibility guard removed: it fails with the expected graceful-drain
+regression, then passes after restoring the exact committed source. That exit
+101 is an expected negative mutation, not an unresolved test failure.
