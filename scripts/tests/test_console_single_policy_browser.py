@@ -5,12 +5,13 @@ import hashlib
 import json
 import unittest
 from urllib.parse import parse_qs, urlsplit
-from scripts.tests.test_console_rollout_browser import RolloutPanelBrowserTests as Base, ORIGIN, TENANT, OTHER
+from scripts.tests.test_console_rollout_browser import RolloutPanelBrowserTests as Base, AVAILABLE, ORIGIN, TENANT, OTHER
 
 YAML = "default: deny\n"
 DIGEST = hashlib.sha256(YAML.encode()).hexdigest()
 
 
+@unittest.skipUnless(AVAILABLE, "optional Playwright browser fixture dependency unavailable")
 class SinglePolicyBrowserTests(unittest.TestCase):
     setUpClass = classmethod(Base.setUpClass.__func__)
     tearDownClass = classmethod(Base.tearDownClass.__func__)
