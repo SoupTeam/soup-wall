@@ -48,6 +48,8 @@ pub struct Identity {
     pub binary_sha256: Option<String>,
     pub loaded_config_sha256: String,
     pub lifecycle: Option<ManagedHealth>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_connection: Option<crate::managed_connection::ConnectionIdentity>,
 }
 
 /// Fixed-size transport observations, with no session IDs, arguments or content.
@@ -73,11 +75,19 @@ impl Runtime {
                 binary_sha256: None,
                 loaded_config_sha256: config_digest(config),
                 lifecycle: None,
+                managed_connection: None,
             },
             activity: Mutex::new(Default::default()),
         }
     }
 
+    pub fn with_managed_connection(
+        mut self,
+        identity: Option<crate::managed_connection::ConnectionIdentity>,
+    ) -> Self {
+        self.identity.managed_connection = identity;
+        self
+    }
     pub fn with_binary(mut self, digest: Option<String>) -> Self {
         self.identity.binary_sha256 = digest.filter(|s| is_digest(s));
         self
@@ -150,6 +160,15 @@ pub struct Snapshot {
     pub policy: PolicyIdentity,
     pub registry: RegistryIdentity,
     pub paths: Vec<PathCoverage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_transport: Option<TransportObservation>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TransportObservation {
+    pub state: String,
+    pub observed_at_unix: i64,
 }
 
 fn safe_id(s: &str) -> bool {
@@ -297,6 +316,10 @@ fn snapshot(st: &Shared, rt: &Runtime, nonce: String) -> Result<Snapshot, &'stat
         },
         registry,
         paths,
+        managed_transport: fw.managed_transport_status().map(|t| TransportObservation {
+            state: t.state,
+            observed_at_unix: t.observed_at_unix,
+        }),
     })
 }
 
@@ -382,6 +405,25 @@ pub fn validate(
         || s.runtime.started_at_ms > s.captured_at_ms
         || s.captured_at_ms > now.saturating_add(1000)
         || now.saturating_sub(s.captured_at_ms) > 10_000
+        || s.runtime.managed_connection.as_ref().is_some_and(|c| {
+            !is_nonce(&c.generation)
+                || !is_digest(&c.settings_sha256)
+                || c.ca_sha256.as_deref().is_some_and(|d| !is_digest(d))
+        })
+        || s.managed_transport.as_ref().is_some_and(|t| {
+            !matches!(
+                t.state.as_str(),
+                "online"
+                    | "offline"
+                    | "rejected"
+                    | "stale"
+                    | "restored_offline"
+                    | "auth_unavailable"
+                    | "activation_pending"
+                    | "disconnected"
+                    | "configuration_changed"
+            )
+        })
         || s.policy.digest_format != "agent-policy-json/1"
         || !is_digest(&s.policy.sha256)
         || !is_digest(&s.runtime.loaded_config_sha256)

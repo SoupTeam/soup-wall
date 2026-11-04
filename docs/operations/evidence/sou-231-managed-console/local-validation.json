@@ -1,0 +1,148 @@
+{
+  "format": "sw-managed-connection-local-qualification/1",
+  "platform": "aarch64-apple-darwin",
+  "scope": "Unix descriptor/transaction controls and full host workspace; Linux installed/TLS PostgreSQL acceptance remains separate",
+  "workspace_passed": 2038,
+  "explicit_ignores": 15,
+  "ignored_tests": [
+    {
+      "test": "policy_transition::tests::boundary_process_child",
+      "reason": "subprocess helper, invoked by the process-death test"
+    },
+    {
+      "test": "latency_evidence",
+      "reason": ""
+    },
+    {
+      "test": "prepared_latency_evidence",
+      "reason": ""
+    },
+    {
+      "test": "judge_corpus_evaluation",
+      "reason": "requires a live local model (LM Studio); run with --ignored"
+    },
+    {
+      "test": "redis_limits::tests::redis_shares_rate_and_spend_windows",
+      "reason": "requires LLM_FW_TEST_REDIS_URL pointing at a disposable Redis instance"
+    },
+    {
+      "test": "tenant_store::recovery_outbox_fixture::restored_outbox_claim_send_and_fenced_finish",
+      "reason": "requires an explicitly owned restored database and private fixture config"
+    },
+    {
+      "test": "tenant_store::tests::postgres_control_plane_persists_tenants_tokens_policies_and_audit",
+      "reason": "requires LLM_FW_TEST_POSTGRES_URL pointing at a disposable PostgreSQL instance"
+    },
+    {
+      "test": "tenant_store::webhook_delivery_tests::webhook_receiver_demo_worker",
+      "reason": "child-process fixture; run webhook_receiver_recovery_demo instead"
+    },
+    {
+      "test": "tenant_store::webhook_delivery_tests::webhook_receiver_recovery_demo",
+      "reason": "disposable receiver, child interruption and real retry/lease delays (~45 seconds)"
+    },
+    {
+      "test": "tenant_store::webhook_recovery_tests::postgres_webhook_recovery_and_fenced_completion",
+      "reason": "requires LLM_FW_TEST_POSTGRES_URL pointing at a dedicated disposable database; do not share with other test suites"
+    },
+    {
+      "test": "real_oidc_discovery_and_jwks_are_accepted",
+      "reason": "requires an operator-selected real OIDC issuer"
+    },
+    {
+      "test": "real_signed_saml_metadata_is_accepted",
+      "reason": "requires an operator-selected real SAML metadata URL"
+    },
+    {
+      "test": "postgres_cohort_confirmation_over_http",
+      "reason": "requires a disposable SOUP_COHORT_TEST_POSTGRES_URL database"
+    },
+    {
+      "test": "postgres_deployment_idempotency_over_http",
+      "reason": "requires a disposable SOUP_DEPLOY_TEST_POSTGRES_URL database"
+    },
+    {
+      "test": "postgres_atomic_restart_and_concurrency",
+      "reason": "requires a disposable SOUP_GROUP_TEST_POSTGRES_URL database"
+    }
+  ],
+  "connection_adversarial_tests": 14,
+  "workspace_all_target_clippy_warnings_denied": "passed",
+  "fmt": "passed",
+  "ci_components_tests": 13,
+  "ci_components_drift": "passed",
+  "execution": "read-only source, scratch-only writes, loopback-only Seatbelt",
+  "attempts": [
+    {
+      "label": "check-first",
+      "exit_code": 101,
+      "source_sha256": "dd615059afc8f58990ae9dff51eb822900ded003ef474e9020a170dbba7db9d7",
+      "log_sha256": "cda9588f090b4bd4950c888d297942707061c7fbb2c36901787f239a3c086aa0",
+      "elapsed_seconds": 48.79
+    },
+    {
+      "label": "focused-2",
+      "exit_code": 101,
+      "source_sha256": "9003bab745b15f72f69e8ce087ed3658fef8201d02dc80acff08998f2c4e16a1",
+      "log_sha256": "353aad05b9c81917a462a9e942a66c1369b749c645e145e2afe3575dbf03d430",
+      "elapsed_seconds": 10.31
+    },
+    {
+      "label": "focused-3",
+      "exit_code": 101,
+      "source_sha256": "0c6d6a86546246de4eedb3443a62e4e796746e1e25c70a126357f33e998bd4a8",
+      "log_sha256": "e765aae5b498127314aa46fdc483e5171556262c0a07aa2d68543eaadb749bf1",
+      "elapsed_seconds": 22.56
+    },
+    {
+      "label": "focused-4",
+      "exit_code": 101,
+      "source_sha256": "e1729b43ececd947d9c9e2878105e8d96558f8d2d46fc9c76d94bd753570e7d0",
+      "log_sha256": "71847bf5dba38e23f52d3e9a276c3ac602a80775f19d6386630e1a9f6db7f505",
+      "elapsed_seconds": 0.33
+    },
+    {
+      "label": "focused-5",
+      "exit_code": 0,
+      "source_sha256": "1f15e2f5cc0dc11742d6502f3c0684b5c67c14a91cc5bbef891326294ad8ea6f",
+      "log_sha256": "5149dc53432a66cda9b6e0e7655e754a4af315913460a5a05c04b678a8da14e3",
+      "elapsed_seconds": 13.16
+    },
+    {
+      "label": "focused-6",
+      "exit_code": 0,
+      "source_sha256": "fe4a4845ef2c877129bfd1d80149866d1ee9efa846b61776d7650a8c6aac1ff6",
+      "log_sha256": "468f98dde1606b947c61641d3a19a7193d66aed964734bd31c2f3d10bffdd2a7",
+      "elapsed_seconds": 10.65
+    },
+    {
+      "label": "agent-clippy",
+      "exit_code": 101,
+      "source_sha256": "987ca456fb3fe41edda2ceabf2fe02f2f65cf6e6ef25b263ec78902bb2e05c83",
+      "log_sha256": "f2064a2e31b7303019bec537107365262840e442cf55aa37eff3ad15621a94d1",
+      "elapsed_seconds": 32.98
+    },
+    {
+      "label": "local-final",
+      "exit_code": 1,
+      "source_sha256": "b144ded0a76c07e5a527a81024b2504092ae8260c02d65607b6a99a9340284eb",
+      "log_sha256": "5ed7b9291c1f487605b4355caefbe96af4687e440ce06a1837f433548700ab61",
+      "elapsed_seconds": 163.32
+    },
+    {
+      "label": "workspace-final",
+      "exit_code": 1,
+      "source_sha256": "a56a609024fd7489801d971cb02952221d89dfbae4d84d68cbf304cafee25ec3",
+      "log_sha256": "03bd32ef95ead21352e5ea36bb32c58c5f7e1052c3665d35eb9eacce26966386",
+      "elapsed_seconds": 314.71
+    },
+    {
+      "label": "complete-final",
+      "exit_code": 0,
+      "source_sha256": "62831f0df42e94a16eacf18dcc848db2d96d4944b03f1914c34af47a6ae9eb58",
+      "log_sha256": "280864d22b906e422dd514d4626b977200a2efb5ca19112a93b6e43af782d319",
+      "elapsed_seconds": 250.57
+    }
+  ],
+  "note": "Initial failed development attempts retained by outcome and hashes; Python 3.9 component failure was requalified with supported Python 3.14. Last change after final Rust qualification is acceptance-driver positional lifecycle-install arguments; no Rust source change."
+}

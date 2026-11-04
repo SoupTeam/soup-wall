@@ -10,6 +10,8 @@ use std::path::PathBuf;
 pub enum CredentialSource {
     Environment(String),
     File(PathBuf),
+    /// Profile-selected input: every path component is opened without following links.
+    PrivateFile(PathBuf),
 }
 
 impl CredentialSource {
@@ -32,11 +34,18 @@ impl CredentialSource {
         match self {
             Self::Environment(token) => Ok(token.clone()),
             Self::File(path) => load_private_token(path),
+            Self::PrivateFile(path) => {
+                let bytes = crate::managed_connection::read_private_reference(path, 64)?;
+                let token =
+                    String::from_utf8(bytes).context("invalid managed credential encoding")?;
+                validate_token(&token)?;
+                Ok(token)
+            }
         }
     }
 }
 
-fn validate_token(value: &str) -> Result<()> {
+pub(crate) fn validate_token(value: &str) -> Result<()> {
     ensure!(
         value.len() == 52
             && value.starts_with("sw_agent_")
