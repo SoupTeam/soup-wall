@@ -548,7 +548,7 @@ async fn restart_and_failure_boundaries(f: &Fixture) {
     );
     f.sql(
         "DROP TRIGGER fail_key;",
-        "DROP TRIGGER fail_key ON managed_agent_deployment_keys;",
+        "DROP TRIGGER fail_key ON managed_agent_deployment_keys; DROP FUNCTION public.fail_key();",
     )
     .await;
 

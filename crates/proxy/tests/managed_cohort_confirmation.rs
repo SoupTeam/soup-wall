@@ -1011,7 +1011,7 @@ async fn authorization_and_unavailable_store(f: &Fixture) {
     assert!(status.is_client_error() || status.is_server_error());
     f.sql(
         "DROP TRIGGER fail_confirmation;",
-        "DROP TRIGGER fail_confirmation ON managed_group_start_confirmations;",
+        "DROP TRIGGER fail_confirmation ON managed_group_start_confirmations; DROP FUNCTION public.fail_confirmation();",
     )
     .await;
     assert_eq!(f.confirmations(&w, false).await, outstanding);
@@ -1034,7 +1034,7 @@ async fn authorization_and_unavailable_store(f: &Fixture) {
     assert!(fetch(&server, &w, "p1").await.is_none());
     f.sql(
         "DROP TRIGGER fail_consume;",
-        "DROP TRIGGER fail_consume ON managed_group_start_confirmations;",
+        "DROP TRIGGER fail_consume ON managed_group_start_confirmations; DROP FUNCTION public.fail_consume();",
     )
     .await;
     let (status, started) = start(&server, &w, Some(&id), OWNER).await;
