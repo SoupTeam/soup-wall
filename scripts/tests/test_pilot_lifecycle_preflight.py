@@ -251,6 +251,15 @@ class ObservationWitness(unittest.TestCase):
         self.assertIs(actual, expected)
         self.assertEqual(trace.name, 'case.trace')
 
+    def test_syscall_names_inside_readlink_results_are_not_effects(self):
+        driver = load('native_preflight_trace_path_controls', 'verify-sou225-lifecycle-preflight.py')
+        import tempfile
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'trace'
+            path.write_text('123 execve("/owned/agentfw", ["agentfw"], 0x0) = 0\n'
+                            '123 readlink("/proc/41/cwd", "/private/connect(owned-execve(x", 4096) = 31\n')
+            self.assertEqual(driver.audit(path, [Path('/owned/agentfw')])['host_mutation_attempts'], 0)
+
     def test_syscall_witness_rejects_failed_exec_write_network_and_signal_attempts(self):
         driver = load('native_preflight_trace_controls', 'verify-sou225-lifecycle-preflight.py')
         import tempfile
