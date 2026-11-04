@@ -141,7 +141,7 @@ class HeartbeatPanelBrowserTests(unittest.TestCase):
             "registered_no_report": ("no self-report received yet", "outcome-other"),
             "credential_changed": ("credential changed after the last self-report", "outcome-other"),
             "revoked": ("Credential revoked", "outcome-block"),
-            "unsupported": ("Not opted in", "note"),
+            "unsupported": ("No heartbeat registration", "note"),
             "unavailable": ("not migrated", "outcome-other"),
         }
         self.open()
@@ -164,7 +164,7 @@ class HeartbeatPanelBrowserTests(unittest.TestCase):
     def test_unopted_agent_stays_unknown(self):
         self.open()
         self.pick("legacy")
-        self.wait_status("Not opted in")
+        self.wait_status("No heartbeat registration")
         self.assertIn("Liveness and protection are unknown", self.text())
         self.assertNotIn("Self-reported loaded policy", self.text())
 
@@ -184,11 +184,11 @@ class HeartbeatPanelBrowserTests(unittest.TestCase):
         self.pick()
         self.page.wait_for_function("() => document.getElementById('heartbeat-status').textContent.includes('Loading')")
         self.pick("legacy")
-        self.wait_status("Not opted in")
+        self.wait_status("No heartbeat registration")
         route, key = self.held.pop()
         self.json(route, self.states[key])
         self.page.wait_for_timeout(200)
-        self.assertIn("Not opted in", self.page.locator("#heartbeat-status").inner_text())
+        self.assertIn("No heartbeat registration", self.page.locator("#heartbeat-status").inner_text())
         self.page.locator("#tenant-list button").filter(has_text="Beta").click()
         self.wait_status("Select an Agent")
         self.assertEqual(self.page.locator("#heartbeat-detail").inner_text(), "")

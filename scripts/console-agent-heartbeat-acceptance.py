@@ -91,6 +91,37 @@ def main():
             if args.backend == "postgres":
                 url, ca, password, binaries = PG.postgres(stack, temp, PG.pg_bin(args.pg_bin))
                 private += [password, url]
+                # Console recovery requires a non-superuser database owner:
+                # one owner role, a source and an empty restore target.
+                pg_port = int(url.rsplit(":", 1)[1].split("/", 1)[0])
+                owner_password = secrets.token_urlsafe(24)
+                private.append(owner_password)
+
+                def superuser_sql(sql, **variables):
+                    words = [str(binaries / "psql"), "-h", "127.0.0.1", "-p", str(pg_port), "-U", "enrollment_owner",
+                             "-d", "console", "-v", "ON_ERROR_STOP=1", "-q", "-At"]
+                    for key, value in variables.items():
+                        words += ["-v", f"{key}={value}"]
+                    return subprocess.run(words, input=sql.encode(), check=True, capture_output=True, timeout=60,
+                                          env=dict(os.environ, PGPASSWORD=password, PGSSLMODE="verify-full", PGSSLROOTCERT=str(ca))).stdout.decode().strip()
+
+                superuser_sql("CREATE ROLE hb_owner LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD :'pw';", pw=owner_password)
+                superuser_sql("CREATE DATABASE hb_source OWNER hb_owner;")
+                superuser_sql("CREATE DATABASE hb_restored OWNER hb_owner;")
+                with open(temp / "pgdata" / "pg_hba.conf", "a", encoding="utf-8") as hba:
+                    hba.write("hostssl all hb_owner 127.0.0.1/32 scram-sha-256\n")
+                subprocess.run([str(binaries / "pg_ctl"), "-D", str(temp / "pgdata"), "reload"], check=True, capture_output=True, timeout=60)
+                database = lambda name, mode="require": (f"postgresql://hb_owner:{owner_password}@127.0.0.1:{pg_port}/{name}?sslmode={mode}"
+                                                          + ("" if mode == "require" else f"&sslrootcert={ca}"))
+                url = database("hb_source")
+                private += [url, database("hb_restored"), database("hb_source", "verify-full"), database("hb_restored", "verify-full")]
+
+                def owner_sql(name, sql):
+                    words = [str(binaries / "psql"), "-h", "127.0.0.1", "-p", str(pg_port), "-U", "hb_owner", "-d", name,
+                             "-v", "ON_ERROR_STOP=1", "-q", "-At"]
+                    return subprocess.run(words, input=sql.encode(), check=True, capture_output=True, timeout=60,
+                                          env=dict(os.environ, PGPASSWORD=owner_password, PGSSLMODE="verify-full",
+                                                   PGSSLROOTCERT=str(ca))).stdout.decode().strip()
                 env.update(LLM_FW_POSTGRES_URL=url, LLM_FW_POSTGRES_CA_CERT_FILE=str(ca))
                 store = "  backend: postgres\n  postgres_command_timeout_ms: 30000\n  postgres_pool_wait_timeout_ms: 10000\n"
                 report["postgres"] = {"server": subprocess.run([str(binaries / "postgres"), "--version"], capture_output=True, text=True).stdout.strip(),
@@ -272,6 +303,63 @@ def main():
             check("reconnect-after-console-restart", reconnected["status"] == "fresh")
             snapshots["after_console_restart"] = {"status": reconnected["status"], "store": args.backend}
 
+            if args.backend == "postgres":
+                # Console recovery with the observation schema present: strict
+                # catalog, observations never archived, never restored fresh.
+                recovery = module("heartbeat_console_recovery", "console_recovery.py")
+                identity_file, recipient = temp / "recovery.key", None
+                generated = subprocess.run(["age-keygen", "-o", str(identity_file)], check=True, capture_output=True, timeout=30)
+                recipient = next(line.split(": ", 1)[1] for line in generated.stderr.decode().splitlines() if line.startswith("Public key:"))
+                os.chmod(identity_file, 0o600)
+                work = temp / "recovery"
+                work.mkdir(mode=0o700)
+                check("source-has-opted-in-observation", owner_sql("hb_source",
+                      "SELECT count(*) FROM agent_observations.heartbeats WHERE agent_id='edge-hb' AND received_at_unix IS NOT NULL;") == "1")
+                console_process.terminate()
+                console_process.wait(timeout=15)
+
+                def backup(label):
+                    archive = work / f"{label}.age"
+                    try:
+                        recovery.backup_postgres(database("hb_source", "verify-full"), archive, recipient, workdir=work,
+                                                 source_quiesced=True, psql=str(binaries / "psql"),
+                                                 pg_dump=str(binaries / "pg_dump"), pg_restore=str(binaries / "pg_restore"))
+                        return archive
+                    except recovery.RecoveryError as error:
+                        return str(error)
+                owner_sql("hb_source", "CREATE SCHEMA rogue_extra;")
+                check("recovery-refuses-unknown-schema", backup("rogue") == "Unsupported PostgreSQL schema catalog.")
+                owner_sql("hb_source", "DROP SCHEMA rogue_extra;")
+                owner_sql("hb_source", "CREATE TABLE agent_observations.extra (x INTEGER);")
+                check("recovery-refuses-changed-observation-schema", backup("tampered") == "Unsupported PostgreSQL schema catalog.")
+                owner_sql("hb_source", "DROP TABLE agent_observations.extra;")
+                archive = backup("current")
+                check("recovery-backup-with-observation-schema", isinstance(archive, Path) and archive.is_file())
+                restored_at = int(time.time())
+                receipt = recovery.restore_postgres(archive, database("hb_restored", "verify-full"), identity_file, workdir=work,
+                                                    psql=str(binaries / "psql"), pg_restore=str(binaries / "pg_restore"))
+                check("recovery-restore-verified", receipt.get("status") == "passed" and receipt.get("tables_verified", 0) > 0)
+                check("restored-target-has-no-observations", owner_sql("hb_restored",
+                      "SELECT to_regclass('agent_observations.heartbeats') IS NULL;") == "t")
+                env["LLM_FW_POSTGRES_URL"] = database("hb_restored")
+                console_process = start_console()
+                check("restored-console-reports-observations-unavailable",
+                      status_of("edge-hb")["status"] == "unavailable" and status_of("edge-legacy")["status"] == "unavailable")
+                console_process.terminate()
+                console_process.wait(timeout=15)
+                migrate = subprocess.run([str(console_binary), "migrate"], cwd=console_dir, env=env, capture_output=True, timeout=120)
+                check("migrate-recreates-empty-observations", migrate.returncode == 0 and owner_sql("hb_restored",
+                      "SELECT count(*) FROM agent_observations.heartbeats;") == "0")
+                console_process = start_console()
+                first = status_of("edge-hb")
+                check("restored-observation-not-fresh", first["status"] != "fresh" or first["reported"]["registered_at_unix"] >= restored_at)
+                check("unopted-agent-unsupported-after-restore", status_of("edge-legacy")["status"] == "unsupported")
+                again = wait_status("edge-hb", "fresh", timeout=360, extra=lambda s: s["reported"]["registered_at_unix"] >= restored_at
+                                    and (s["reported"] or {}).get("observed_policy") is not None)
+                check("opted-in-agent-registers-again-after-restore", again["reported"]["registered_at_unix"] >= restored_at)
+                snapshots["recovery"] = {"refused": ["unknown schema", "changed observation schema"],
+                                         "restored_observations": "absent until migrate, then empty", "after": again["status"]}
+
             # Rotation: the new credential must register under the new generation.
             replacement = "sw_agent_" + secrets.token_urlsafe(32)[:43]
             private.append(replacement)
@@ -307,7 +395,7 @@ def main():
                       and "not runtime attestation" in text and "ealthy" not in text)
                 page.locator("#heartbeat-panel").screenshot(path=str(args.output / f"{args.backend}-heartbeat-fresh.png"))
                 page.locator("#fleet-list").get_by_role("button", name="edge-legacy", exact=True).click()
-                expect(page.locator("#heartbeat-status")).to_contain_text("Not opted in", timeout=20000)
+                expect(page.locator("#heartbeat-status")).to_contain_text("No heartbeat registration", timeout=20000)
                 check("browser-unopted-unknown", "unknown" in page.locator("#heartbeat-status").inner_text())
                 # Revocation: refused and shown; enforcement unchanged.
                 req("POST", base + "/agents/edge-hb/revoke", {})

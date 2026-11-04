@@ -83,7 +83,7 @@ selected Agent, re-read every 30 seconds, from
 | `registered_no_report` | registered, nothing reported yet |
 | `credential_changed` | credential rotated after the last report; it no longer counts |
 | `revoked` | credential revoked; reports are refused |
-| `unsupported` | the Agent never opted in (liveness and protection unknown) |
+| `unsupported` | no registration: the Agent never opted in, or the Console has none since a SQLite restart or a restore (liveness and protection unknown) |
 | `unavailable` | the Console's observation store is not migrated (PostgreSQL) |
 
 The self-reported loaded policy is shown separately from the server-recorded
@@ -99,8 +99,19 @@ One row per Agent, outside the recoverable control-plane schema:
 - **PostgreSQL**: table `agent_observations.heartbeats`, created by
   `llm-firewall migrate` (migration role) and deleted with its enrollment.
   The runtime role needs `USAGE` on the schema and `SELECT, INSERT, UPDATE`
-  on the table. It is not part of the versioned Console recovery inventory
-  (public schema, migrations 1 to 28), which is unchanged.
+  on the table. Accepted public-schema migrations stay 1 to 28.
+
+## Backup and restore
+
+Observations are volatile and never archived. On PostgreSQL, Console
+recovery (`scripts/console-recovery.py`) accepts the `agent_observations`
+schema only when its catalog is exactly the reviewed definition (one table,
+its columns, checks, keys and index, nothing else); any other non-public
+schema or object still refuses the backup. `pg_dump` excludes the schema and
+the archive listing is checked to contain no observation entry; a restore
+target must not have the schema either. After a restore the Console reports
+`unavailable` until `llm-firewall migrate` recreates the schema empty; opted-in
+Agents then register again. No restored observation can appear fresh.
 
 ## Verification
 

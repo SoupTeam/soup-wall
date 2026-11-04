@@ -28,7 +28,7 @@ const agentHeartbeat = (() => {
       case "registered_no_report": return ["Registered, but no self-report received yet.", "outcome-other"];
       case "credential_changed": return ["The credential changed after the last self-report; it no longer counts until the Agent registers again with the new credential.", "outcome-other"];
       case "revoked": return ["Credential revoked: self-reports are refused.", "outcome-block"];
-      case "unsupported": return ["Not opted in: this Agent sends no heartbeat. Liveness and protection are unknown.", "note"];
+      case "unsupported": return ["No heartbeat registration: the Agent has not opted in, or this Console has none since its restart or restore. Liveness and protection are unknown.", "note"];
       default: return ["Heartbeat status is unavailable on this Console (its observation store is not migrated).", "outcome-other"];
     }
   }
