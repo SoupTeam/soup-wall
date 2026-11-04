@@ -2440,6 +2440,13 @@ jobs:
           test "$(git -C "$runtime" rev-parse HEAD)" = "$runtime_commit"
           test -z "$(git -C "$runtime" status --porcelain)"
           printf 'SOU216_RUNTIME_SOURCE=%s\n' "$runtime" >> "$GITHUB_ENV"
+      - name: Calibrate owned project import interruption before runtime builds
+        if: github.event.inputs.installed_focus == 'project-recovery'
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v strace >/dev/null
+          python3 -B -m unittest scripts.tests.test_project_recovery_qualification -v
       - name: Build pinned selected runtimes without global installation
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
