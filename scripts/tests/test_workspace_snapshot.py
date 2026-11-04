@@ -161,6 +161,30 @@ class Snapshot(unittest.TestCase):
             M.recovery_apply(other, name, confirmation)
         self.assertTrue((other / name / M.CAPTURE_OWNER).is_file())
 
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux capture required')
+    def test_recovery_refuses_concurrent_apply_and_unknown_stage(self):
+        name = '.snapshot-' + '1' * 32
+        stage = self.base / name
+        stage.mkdir(mode=0o700)
+        marker = stage / 'partial'
+        marker.write_bytes(b'keep partial data')
+        self.assertEqual(
+            [{'stage': name, 'state': 'unknown'}],
+            M.recovery_inventory(self.base)['stages'],
+        )
+        with self.assertRaises(FileNotFoundError):
+            M.recovery_preview(self.base, name)
+        with M.IO.Directory(self.base) as parent, M.IO.Directory(stage) as directory:
+            owner = M.capture_owner(parent.fd, directory.fd, name, self.dest)
+            owner['creator']['start'] += 1
+            M.write_record(directory.fd, M.CAPTURE_OWNER, owner)
+            confirmation = M.recovery_preview(self.base, name)['confirmation']
+            M.fcntl.flock(directory.fd, M.fcntl.LOCK_EX | M.fcntl.LOCK_NB)
+            with self.assertRaisesRegex(ValueError, 'recovery_stage_busy'):
+                M.recovery_apply(self.base, name, confirmation)
+            self.assertEqual(b'keep partial data', marker.read_bytes())
+        self.assertEqual('snapshot-recovered', M.recovery_apply(self.base, name, confirmation)['status'])
+
     def test_preview_is_metadata_only_and_zero_effect(self):
         read=os.read
         def no_content(fd,n):
