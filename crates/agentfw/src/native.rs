@@ -31,6 +31,7 @@ pub mod pilot_cleanup;
 pub mod pilot_stop;
 #[cfg(test)]
 mod purpose_prototype;
+mod quarantine;
 pub mod resource;
 pub mod resource_approval;
 mod timing;
@@ -603,6 +604,7 @@ pub struct NativeState {
     pub(crate) edit: Option<Arc<crate::edit_session::transport::Service>>,
     pub(crate) continuity: Option<continuity::Continuity>,
     pub(crate) sessions: Mutex<Sessions>,
+    quarantine: Mutex<quarantine::Quarantine>,
     pub(crate) approval: Option<approval::ApprovalState>,
     test_time_offset_ms: std::sync::atomic::AtomicU64,
     pub(crate) policy_barrier: Option<crate::policy_transition::Barrier>,
@@ -773,6 +775,7 @@ impl NativeState {
             edit: None,
             continuity: None,
             sessions: Mutex::default(),
+            quarantine: Mutex::default(),
             approval: None,
             test_time_offset_ms: std::sync::atomic::AtomicU64::new(0),
             policy_barrier: None,
@@ -844,6 +847,7 @@ impl NativeState {
             edit: None,
             continuity: None,
             sessions: Mutex::default(),
+            quarantine: Mutex::default(),
             approval: None,
             test_time_offset_ms: std::sync::atomic::AtomicU64::new(0),
             policy_barrier: self.policy_barrier.clone(),
@@ -1311,6 +1315,10 @@ fn parse(body: &str) -> Result<Request, &'static str> {
 
 #[derive(Serialize)]
 struct Response {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    quarantine_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    quarantine_error: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     publication_ttl_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1990,6 +1998,12 @@ pub(crate) fn retire_sessions_terminal(
 
     sessions.spent_authorities.retain(|_, exp| *exp > now_ms);
 
+    if let Ok(mut quarantine) = native.quarantine.lock() {
+        for (_, session, _) in &to_retire {
+            quarantine.retire(&session.epoch);
+        }
+    }
+
     let count = to_retire.len();
 
     if let Some(approval) = &native.approval {
@@ -2152,6 +2166,8 @@ fn inspect_bound_measured(
         session.calls.retain(|_, call| call.expires > now);
     }
     let mut response = Response {
+        quarantine_id: None,
+        quarantine_error: None,
         policy_shadow: Vec::new(),
         publication_ttl_ms: None,
         execution: None,
@@ -3343,6 +3359,27 @@ fn inspect_bound_measured(
         representative.as_ref(),
         timing,
     )?;
+    if !response.release {
+        if let (Some(consumed), Some(outcome)) = (consumed, representative.as_ref()) {
+            match native
+                .quarantine
+                .lock()
+                .map_err(|_| "analysis_quarantine_state")?
+                .hold(
+                    consumed,
+                    session,
+                    &call,
+                    &request,
+                    &firewall,
+                    &events,
+                    outcome,
+                    native.monotonic_now(),
+                ) {
+                Ok(id) => response.quarantine_id = Some(id),
+                Err(reason) => response.quarantine_error = Some(reason),
+            }
+        }
+    }
     if response.release {
         // An outer model result is still held inside the collector until the
         // later context event. Raw judge spans remain post-audit only.

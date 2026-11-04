@@ -23,6 +23,8 @@ use sha2::{Digest, Sha256};
 use crate::native::child_authority;
 use crate::Config;
 
+mod consumer;
+
 pub const DEFAULT_TIMEOUT_SECONDS: u64 = 180;
 pub const FILESYSTEM_SERVER_ID: &str = "filesystem";
 pub const GIT_SERVER_ID: &str = "git";
@@ -1221,6 +1223,20 @@ fn host_group_has_children(group: u32) -> Result<bool> {
 }
 
 async fn reap_owned_host(child: &mut std::process::Child) -> Result<std::process::ExitStatus> {
+    #[cfg(not(unix))]
+    {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            if let Some(status) = child.try_wait()? {
+                return Ok(status);
+            }
+            ensure!(
+                tokio::time::Instant::now() < deadline,
+                "pilot stop incomplete: owned host exit unconfirmed"
+            );
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    }
     #[cfg(target_os = "linux")]
     {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
@@ -1235,6 +1251,7 @@ async fn reap_owned_host(child: &mut std::process::Child) -> Result<std::process
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
     }
+    #[cfg(unix)]
     child.wait().context("reap owned host after group cleanup")
 }
 
@@ -1865,12 +1882,13 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         (None, None, None) => None,
         _ => anyhow::bail!("maintenance_scope_incomplete"),
     };
-    let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
+    let mut child =
+        consumer::Consumer::new(cmd.spawn().context("failed to spawn Claude Code host")?);
     #[cfg(target_os = "linux")]
     drop(maintenance_gate);
     #[cfg(target_os = "linux")]
     drop(selected_ca);
-    let child_pid = child.id();
+    let consumer_identity = child.identity();
     drop(cmd);
     #[cfg(target_os = "linux")]
     let child_environment_ready = child_environment
@@ -1889,8 +1907,8 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         #[cfg(target_os = "linux")]
         if child_environment_ready.is_err() {
             let host_deadline_expired = tokio::time::Instant::now() >= deadline;
-            let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
-            host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
+            let stopped = child.stop(&consumer_identity, Duration::from_millis(200)).await;
+            host_stopped = stopped.is_ok();
             if let Some(waiter) = cleanup_waiter.take() {
                 let _ = tokio::task::spawn_blocking(waiter).await;
             }
@@ -1904,16 +1922,12 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
 
         loop {
             if tokio::time::Instant::now() >= deadline {
-                let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
-                #[cfg(not(unix))]
-                {
-                    let _ = child.kill();
-                }
-                host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
+                let stopped = child.stop(&consumer_identity, Duration::from_millis(200)).await;
+                host_stopped = stopped.is_ok();
                 bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
             }
             // Check if child has exited
-            match owned_host_exited(&mut child) {
+            match child.exited() {
                 Ok(true) => {
                     // Every host exit must let enrolled owners acknowledge
                     // namespace cleanup before group TERM/KILL. Keep the leader
@@ -1928,12 +1942,11 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     };
                     // A missing/failed acknowledgement never skips physical
                     // cleanup, but cannot turn the terminal result into success.
-                    let group = terminate_process_group(child_pid, Duration::from_millis(50)).await;
-                    let result = reap_owned_host(&mut child).await;
-                    host_stopped = result.is_ok() && group.is_ok();
-                    group?;
+                    let result = child.stop(&consumer_identity, Duration::from_millis(50)).await;
+                    host_stopped = result.is_ok();
+                    let status = result?;
                     owner_confirmation?;
-                    return result;
+                    return Ok(status);
                 }
                 Ok(false) => {}
                 Err(error) => {
@@ -1944,12 +1957,8 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
 
             tokio::select! {
                 _ = tokio::time::sleep_until(deadline) => {
-                    let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
-                    #[cfg(not(unix))]
-                    {
-                        let _ = child.kill();
-                    }
-                    host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
+                    let stopped = child.stop(&consumer_identity, Duration::from_millis(200)).await;
+                    host_stopped = stopped.is_ok();
                     bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
                 }
                 _ = async {
@@ -1958,12 +1967,8 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     #[cfg(not(unix))]
                     let _ = tokio::signal::ctrl_c().await;
                 } => {
-                    let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
-                    #[cfg(not(unix))]
-                    {
-                        let _ = child.kill();
-                    }
-                    host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
+                    let stopped = child.stop(&consumer_identity, Duration::from_millis(200)).await;
+                    host_stopped = stopped.is_ok();
                     bail!("pilot host interrupted by SIGINT");
                 }
                 _ = async {
@@ -1980,12 +1985,8 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                         // finish() independently checks the actual observations.
                         let _ = tokio::task::spawn_blocking(waiter).await;
                     }
-                    let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
-                    #[cfg(not(unix))]
-                    {
-                        let _ = child.kill();
-                    }
-                    host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
+                    let stopped = child.stop(&consumer_identity, Duration::from_millis(200)).await;
+                    host_stopped = stopped.is_ok();
                     bail!("pilot host terminated by SIGTERM");
                 }
                 _ = interval.tick() => {
@@ -1993,12 +1994,8 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                         match probe_daemon_liveness(&home_path, &current_token).await {
                             Ok(live_id) if live_id == initial_instance => {}
                             _ => {
-                                let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
-                                #[cfg(not(unix))]
-                                {
-                                    let _ = child.kill();
-                                }
-                                host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
+                                let stopped = child.stop(&consumer_identity, Duration::from_millis(200)).await;
+                                host_stopped = stopped.is_ok();
                                 bail!("daemon instance lost or restarted during pilot session");
                             }
                         }

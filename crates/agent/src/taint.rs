@@ -699,9 +699,19 @@ impl TaintTracker {
     /// Export evidence in insertion order so replay preserves eviction behavior.
     /// No grants, active agents, approvals or executable authority are exported.
     pub fn provenance_snapshot(&self) -> ProvenanceSnapshot {
+        self.snapshot_selected(None)
+    }
+
+    /// Copy only the named contexts for a private lifecycle checkpoint.
+    pub fn provenance_snapshot_for(&self, selected: &[&str]) -> ProvenanceSnapshot {
+        self.snapshot_selected(Some(selected))
+    }
+
+    fn snapshot_selected(&self, selected: Option<&[&str]>) -> ProvenanceSnapshot {
         let mut sessions: Vec<_> = self
             .sessions
             .iter()
+            .filter(|(id, _)| selected.is_none_or(|names| names.contains(&id.as_str())))
             .map(|(id, entry)| SessionProvenanceSnapshot {
                 session: id.clone(),
                 incomplete: entry.incomplete.load(Ordering::Relaxed),

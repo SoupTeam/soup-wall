@@ -202,6 +202,58 @@ bind the process generation and original response. The present source audit
 establishes the missing interfaces. The runtime lifecycle and useful handoff
 remain unimplemented, and the six refusal outcomes remain open.
 
+### November 4 implementation after launcher/control agreement
+
+The 23:04 General reply approves the proposed launcher/control connection and
+requires a held receiving process and its generation, response custody before
+withdrawal, confirmed effect termination, then a separate restricted recipient.
+The issuer/release guard and existing detection signatures stay in place until
+independent acceptance.
+
+This increment implements two components in their existing entry points.
+
+- After successful private `OriginalResult::consume`, complete content inspection
+  and audit, a refused original response can enter daemon-owned quarantine. The
+  record retains exact content, consumed execution metadata, source grant, epoch,
+  invocation binding, policy digest/generation, source events, findings and scoped
+  session/shared-host provenance. Only opaque record IDs and static failure codes
+  appear in the native response. Original verdicts and reason codes are preserved.
+- The store holds at most 32 records and 8 MiB of serialized retained bytes.
+  Encoding stops at the remaining byte budget. The original call deadline governs
+  expiry; expired entries are reclaimed on the next capture. Retirement marks
+  records terminal while preserving their source data through that deadline.
+  A fresh daemon/collector instance starts with an empty store. Incomplete source
+  context, missing grant, exhausted capacity and identity collision refuse capture.
+- The existing pilot launcher now owns its `Child` through a private consumer
+  object with a fresh generation. Its existing cleanup branches use that held
+  object and exact identity for stop/reap. Substitution and repeated stop attempts
+  fail. Selected namespace cleanup retains its existing ordering. Windows exit
+  observation has a two-second bound.
+
+The executable process witness launches two bounded instances of the test binary.
+Each writes effects to its own temporary file. It attempts substitution, stops
+the first process, observes stable file length while the second remains alive,
+then rejects replay and cleans up the second process. The Windows observation
+covers these two owned processes. Linux process-group and selected namespace
+qualification remains required.
+
+The daemon quarantine and launcher consumer are still separate components.
+Authenticated registration/acknowledgement between them, atomic purpose spend
+with authority withdrawal, and the fresh restricted recipient remain outstanding.
+The retained source is currently inaccessible to a consumer. `analysis-purpose`
+continues returning the unsupported guard. The six residual refusal outcomes
+remain open and the PR remains Draft/In Progress.
+
+Focused verification commands follow.
+
+```sh
+cargo test --locked -p agentfw --lib native::execution::tests
+cargo test --locked -p agentfw --lib native::quarantine
+cargo test --locked -p agentfw --lib held_process_stop
+cargo test --locked -p agentfw --lib analysis_purpose
+cargo check --locked -p agentfw --bin agentfw
+```
+
 ### November 4 inert operator contract
 
 Following reviews 5756731817 and 5757316087, `analysis_purpose.rs` introduces
