@@ -30,7 +30,9 @@ def interrupt_before_publication(strace, command, trace, stage, catalog, *, cwd,
     """Observe durable staging, then kill only this owned fresh process group.
 
     Delaying the publication syscall gives the observer a bounded interruption
-    window. Temporary output files avoid inherited-pipe EOF waits. Production
+    window. Kernel syscall filtering avoids tracing every read/stat during the
+    unchanged current-source checks; the early Linux fixture includes that load.
+    Temporary output files avoid inherited-pipe EOF waits. Production
     code has no pause/fault environment option and its timeouts are unchanged.
     """
     def require(ok, code):
@@ -48,9 +50,11 @@ def interrupt_before_publication(strace, command, trace, stage, catalog, *, cwd,
         finally:os.close(fd)
     require(not trace.exists() and not trace.is_symlink() and not stage.exists()
             and not stage.is_symlink() and not catalog.exists() and not catalog.is_symlink(),'fresh_fixture_required')
-    words=[str(strace),'-f','-qq','-yy','-s','256','-e','trace=execve,execveat,fsync,renameat',
+    words=[str(strace),'--seccomp-bpf','-f','-qq','-yy','-s','256','-e','trace=execve,execveat,fsync,renameat',
            '-e','inject=renameat:delay_enter=20000000:when=1','-o',str(trace),*map(str,command)]
-    diagnostics.update(phase='starting',stage_fsynced=False,publication_observed=False)
+    started=time.monotonic()
+    diagnostics.update(phase='starting',stage_fsynced=False,publication_observed=False,
+                       syscall_filter_requested=True)
     with tempfile.TemporaryFile(dir=trace.parent)as out,tempfile.TemporaryFile(dir=trace.parent)as err:
         process=subprocess.Popen(words,cwd=cwd,env=env,stdin=subprocess.DEVNULL,
                                  stdout=out,stderr=err,start_new_session=True)
@@ -87,12 +91,15 @@ def interrupt_before_publication(strace, command, trace, stage, catalog, *, cwd,
                 try:os.killpg(process.pid,signal.SIGKILL)
                 except ProcessLookupError:pass
                 process.wait(timeout=10)
+            diagnostics['elapsed_ms']=round((time.monotonic()-started)*1000)
             diagnostics['stdout_bytes']=os.fstat(out.fileno()).st_size
             diagnostics['stderr_bytes']=os.fstat(err.fileno()).st_size
             if trace.exists():
                 raw=read_trace();diagnostics.update(trace_bytes=len(raw),trace_sha256=hashlib.sha256(raw).hexdigest(),
                     observed_fsync_calls=sum(re.match(rb'^(?:[0-9]+\s+)?fsync\(',line)is not None for line in raw.splitlines()),
-                    stage_present=stage.exists(),catalog_present=catalog.exists())
+                    stage_present=stage.exists(),catalog_present=catalog.exists(),
+                    observed_exec_calls=sum(re.match(rb'^(?:[0-9]+\s+)?execve(?:at)?\(',line)is not None for line in raw.splitlines()),
+                    observed_rename_calls=sum(re.match(rb'^(?:[0-9]+\s+)?renameat\(',line)is not None for line in raw.splitlines()))
             if witness is not None:diagnostics['owned_processes_stopped']=witness.finish()['all_stopped']
         require(diagnostics['stdout_bytes']<=65536 and diagnostics['stderr_bytes']<=16384,'output_bound')
         require(witness is None or diagnostics['owned_processes_stopped'],'cleanup_unconfirmed')
