@@ -4,13 +4,24 @@
 use super::PostgresTenantStore;
 use crate::tenant_store::{
     agent_enrollment::{credential_hash, valid_id, validated_rotation},
+    managed_confirmation::{
+        assemble, classify, ensure_preview_input, id_hash, intent_digest, new_confirmation_id,
+        resolved_signer, signer_identity, valid_confirmation_id, AgentFacts, CohortFacts,
+        ConfirmationFailure, ConfirmationRefused, Disposition, GroupStartPreview, GuardedStart,
+        LatestRollout, StartConfirmation, StartGuard, StoredConfirmation, CONFIRMATION_TTL_SECS,
+        CONFIRMATION_VERSION, MAX_PREVIEW_AGENTS,
+    },
+    managed_idempotency::{
+        ensure_key_shape, intent_digest as deployment_intent_digest, keyed_result,
+    },
     managed_policy::{
         acknowledgement_overdue, exact_id, hex, rollout_agent_status, DeploymentMode, MAX_YAML,
     },
-    now_unix, random_base64url, AppliedReport, EnrolledAgent, IssuedAgentCredential,
-    ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
-    ManagedGroupRollout, ManagedIssuer, ManagedRevision, RolloutPhase, RotationOutcome,
-    RotationRequest, SignedManagedBundle,
+    now_unix, random_base64url, AdminRole, AppliedReport, DeploymentIdempotency, EnrolledAgent,
+    IdempotencyConflict, IssuedAgentCredential, KeyedDeployment, ManagedAgentGroup,
+    ManagedDeployment, ManagedGroupMember, ManagedGroupRevision, ManagedGroupRollout,
+    ManagedIssuer, ManagedRevision, RolloutPhase, RotationOutcome, RotationRequest,
+    SignedManagedBundle,
 };
 use anyhow::{bail, ensure, Context, Result};
 use sha2::{Digest, Sha256};
@@ -127,6 +138,73 @@ impl PostgresTenantStore {
             )).await?;
             self.bounded(tx.execute(
                 "INSERT INTO llm_firewall_schema_migrations(version,applied_at_unix) VALUES(28,$1)",
+                &[&now_unix()],
+            ))
+            .await?;
+        }
+        // SOU-219: optional idempotency keys for individual deployment issuance.
+        if self
+            .bounded(tx.query_opt(
+                "SELECT version FROM llm_firewall_schema_migrations WHERE version=29",
+                &[],
+            ))
+            .await?
+            .is_none()
+        {
+            self.bounded(tx.batch_execute(
+                "CREATE TABLE IF NOT EXISTS managed_agent_deployment_keys (
+                    tenant_id TEXT NOT NULL, agent_id TEXT NOT NULL,
+                    idempotency_key TEXT NOT NULL CHECK(length(idempotency_key) BETWEEN 8 AND 128),
+                    admin_id TEXT NOT NULL,
+                    intent_digest BYTEA NOT NULL CHECK(octet_length(intent_digest)=32),
+                    deployment_sequence BIGINT NOT NULL, created_at_unix BIGINT NOT NULL,
+                    PRIMARY KEY(tenant_id,agent_id,idempotency_key),
+                    UNIQUE(tenant_id,agent_id,deployment_sequence),
+                    FOREIGN KEY(tenant_id,agent_id,deployment_sequence)
+                      REFERENCES managed_agent_deployments(tenant_id,agent_id,deployment_sequence));"
+            )).await?;
+            self.bounded(tx.execute(
+                "INSERT INTO llm_firewall_schema_migrations(version,applied_at_unix) VALUES(29,$1)",
+                &[&now_unix()],
+            ))
+            .await?;
+        }
+        // Version 29 is the accepted deployment-key migration. A different experimental
+        // schema must not be mistaken for that history just because it reused the number.
+        let deployment_keys_exist: bool = self
+            .bounded(tx.query_one(
+                "SELECT to_regclass('public.managed_agent_deployment_keys') IS NOT NULL",
+                &[],
+            ))
+            .await?
+            .get(0);
+        ensure!(
+            deployment_keys_exist,
+            "managed Agent migration 29 deployment-key table is missing"
+        );
+        // SOU-220: bounded, expiring confirmations for an authoritative group start preview.
+        if self
+            .bounded(tx.query_opt(
+                "SELECT version FROM llm_firewall_schema_migrations WHERE version=30",
+                &[],
+            ))
+            .await?
+            .is_none()
+        {
+            self.bounded(tx.batch_execute(
+                "CREATE TABLE IF NOT EXISTS managed_group_start_confirmations (
+                    tenant_id TEXT NOT NULL, group_id TEXT NOT NULL,
+                    confirmation_hash BYTEA NOT NULL CHECK(octet_length(confirmation_hash)=32),
+                    admin_id TEXT NOT NULL,
+                    intent_digest BYTEA NOT NULL CHECK(octet_length(intent_digest)=32),
+                    snapshot_sha256 TEXT NOT NULL,
+                    created_at_unix BIGINT NOT NULL, expires_at_unix BIGINT NOT NULL,
+                    consumed_at_unix BIGINT, rollout_id TEXT,
+                    PRIMARY KEY(tenant_id,group_id,confirmation_hash),
+                    FOREIGN KEY(tenant_id,group_id) REFERENCES managed_agent_groups(tenant_id,group_id) ON DELETE CASCADE);"
+            )).await?;
+            self.bounded(tx.execute(
+                "INSERT INTO llm_firewall_schema_migrations(version,applied_at_unix) VALUES(30,$1)",
                 &[&now_unix()],
             ))
             .await?;
@@ -391,6 +469,89 @@ impl PostgresTenantStore {
                 issuer,
             )
             .await?;
+        self.bounded(tx.commit()).await?;
+        Ok(result)
+    }
+
+    /// Keyed issuance in one transaction: the Agent row lock serializes concurrent callers, so a
+    /// second caller observes the committed key and replays instead of issuing again.
+    pub(in crate::tenant_store) async fn deploy_managed_revision_keyed(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+        rollback: bool,
+        issuer: Option<&ManagedIssuer>,
+        idem: &DeploymentIdempotency<'_>,
+    ) -> Result<KeyedDeployment> {
+        ensure_key_shape(idem)?;
+        let mut client = self.checkout().await?;
+        let tx = self.bounded(client.transaction()).await?;
+        let mode = if rollback {
+            DeploymentMode::Rollback
+        } else {
+            DeploymentMode::Activate
+        };
+        // Current Agent, tenant and administrator authorization precede any stored result.
+        self.lock_managed_agent(&tx, tenant, agent).await?;
+        if idem.admin_id != "bootstrap_owner" {
+            let role: Option<String> = self
+                .bounded(tx.query_opt(
+                    "SELECT role FROM control_plane_admins WHERE id=$1 AND active=TRUE FOR SHARE",
+                    &[&idem.admin_id],
+                ))
+                .await?
+                .map(|row| row.get(0));
+            let role = role.context("administrator is no longer active")?;
+            ensure!(
+                AdminRole::from_storage(&role)?.permits(AdminRole::Owner),
+                "administrator role does not permit deployment"
+            );
+        }
+        let digest: String = self
+            .bounded(tx.query_opt(
+                "SELECT policy_sha256 FROM managed_agent_revisions WHERE tenant_id=$1 AND agent_id=$2 AND revision=$3 AND approved_at_unix IS NOT NULL",
+                &[&tenant, &agent, &revision],
+            ))
+            .await?
+            .context("revision not approved or not found")?
+            .get(0);
+        let intent = deployment_intent_digest(idem, revision, &digest, mode);
+        let existing = self
+            .bounded(tx.query_opt(
+                "SELECT admin_id,intent_digest,deployment_sequence FROM managed_agent_deployment_keys WHERE tenant_id=$1 AND agent_id=$2 AND idempotency_key=$3",
+                &[&tenant, &agent, &idem.key],
+            ))
+            .await?;
+        let (sequence, replayed) = if let Some(row) = existing {
+            let admin: String = row.get(0);
+            let stored: Vec<u8> = row.get(1);
+            ensure!(
+                admin == idem.admin_id && stored == intent,
+                IdempotencyConflict
+            );
+            (row.get::<_, i64>(2), true)
+        } else {
+            let issuer = issuer.context("Agent policy issuer unavailable")?;
+            let created = self
+                .deploy_managed_revision_tx(&tx, tenant, agent, revision, mode, issuer)
+                .await?;
+            let sequence = i64::try_from(created.deployment_sequence)?;
+            self.bounded(tx.execute(
+                "INSERT INTO managed_agent_deployment_keys(tenant_id,agent_id,idempotency_key,admin_id,intent_digest,deployment_sequence,created_at_unix) VALUES($1,$2,$3,$4,$5,$6,$7)",
+                &[&tenant, &agent, &idem.key, &idem.admin_id, &intent, &sequence, &created.issued_at_unix],
+            ))
+            .await?;
+            (sequence, false)
+        };
+        let row = self
+            .bounded(tx.query_one(
+                "SELECT tenant_id,agent_id,deployment_sequence,revision,policy_sha256,action,status,issued_at_unix,applied_at_unix,bundle_json FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 AND deployment_sequence=$3",
+                &[&tenant, &agent, &sequence],
+            ))
+            .await?;
+        let bundle_json: String = row.get(9);
+        let result = keyed_result(deployment(row)?, &bundle_json, replayed)?;
         self.bounded(tx.commit()).await?;
         Ok(result)
     }
@@ -1229,6 +1390,317 @@ impl PostgresTenantStore {
             failure_reason: None,
             created_at_unix: now,
             updated_at_unix: now,
+        })
+    }
+
+    /// Reads every fact `assemble` needs from one PostgreSQL transaction.
+    async fn gather_cohort_facts<C: GenericClient + Sync>(
+        &self,
+        client: &C,
+        tenant: &str,
+        group: &str,
+        revision: &str,
+    ) -> Result<CohortFacts> {
+        let mut facts = CohortFacts {
+            revision: self
+                .bounded(client.query_opt(
+                    "SELECT policy_sha256, approved_at_unix IS NOT NULL FROM managed_group_revisions WHERE tenant_id=$1 AND group_id=$2 AND revision=$3",
+                    &[&tenant, &group, &revision],
+                ))
+                .await?
+                .map(|r| (r.get(0), r.get(1))),
+            latest_rollout: self
+                .bounded(client.query_opt(
+                    "SELECT rollout_id,phase,revision,policy_sha256 FROM managed_group_rollouts WHERE tenant_id=$1 AND group_id=$2 ORDER BY plan_sequence DESC LIMIT 1",
+                    &[&tenant, &group],
+                ))
+                .await?
+                .map(|r| LatestRollout {
+                    rollout_id: r.get(0),
+                    phase: r.get(1),
+                    revision: r.get(2),
+                    policy_sha256: r.get(3),
+                }),
+            ..Default::default()
+        };
+        let limit = MAX_PREVIEW_AGENTS as i64 + 1;
+        facts.members = self
+            .bounded(client.query(
+                "SELECT agent_id, is_pilot FROM managed_agent_group_members WHERE tenant_id=$1 AND group_id=$2 ORDER BY agent_id LIMIT $3",
+                &[&tenant, &group, &limit],
+            ))
+            .await?
+            .into_iter()
+            .map(|r| (r.get::<_, String>(0), r.get::<_, bool>(1)))
+            .collect();
+        for r in self
+            .bounded(client.query(
+                "SELECT group_id,rollout_id,phase,pilot_agents_json,standard_agents_json FROM managed_group_rollouts WHERE tenant_id=$1 AND group_id<>$2 AND phase IN ('pilot','standard','paused','rolling_back')",
+                &[&tenant, &group],
+            ))
+            .await?
+        {
+            let mut agents: Vec<String> =
+                serde_json::from_str(&r.get::<_, String>(3)).unwrap_or_default();
+            agents.extend(
+                serde_json::from_str::<Vec<String>>(&r.get::<_, String>(4)).unwrap_or_default(),
+            );
+            facts
+                .other_active
+                .push((r.get(0), r.get(1), r.get(2), agents));
+        }
+        let wanted = facts.revision.as_ref().map(|(sha, _)| sha.clone());
+        let ids: Vec<String> = facts
+            .members
+            .iter()
+            .take(MAX_PREVIEW_AGENTS)
+            .map(|(a, _)| a.clone())
+            .collect();
+        for agent in ids {
+            let authorized = self
+                .bounded(client.query_opt(
+                    "SELECT 1 FROM managed_agent_enrollments a JOIN tenants t ON t.id=a.tenant_id WHERE a.tenant_id=$1 AND a.agent_id=$2 AND a.revoked_at_unix IS NULL AND t.active=TRUE",
+                    &[&tenant, &agent],
+                ))
+                .await?
+                .is_some();
+            let latest = self
+                .bounded(client.query_opt(
+                    "SELECT deployment_sequence,revision,status FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 ORDER BY deployment_sequence DESC LIMIT 1",
+                    &[&tenant, &agent],
+                ))
+                .await?
+                .map(|r| (r.get::<_, i64>(0) as u64, r.get(1), r.get(2)));
+            let baseline = self
+                .bounded(client.query_opt(
+                    "SELECT revision FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 AND status='applied' ORDER BY deployment_sequence DESC LIMIT 1",
+                    &[&tenant, &agent],
+                ))
+                .await?
+                .map(|r| r.get::<_, String>(0));
+            let existing: Option<(String, bool)> = self
+                .bounded(client.query_opt(
+                    "SELECT policy_sha256, approved_at_unix IS NOT NULL FROM managed_agent_revisions WHERE tenant_id=$1 AND agent_id=$2 AND revision=$3",
+                    &[&tenant, &agent, &revision],
+                ))
+                .await?
+                .map(|r| (r.get(0), r.get(1)));
+            let (revision_conflict, revision_unapproved) = match (&existing, &wanted) {
+                (Some((sha, _)), Some(wanted)) if sha != wanted => (true, false),
+                (Some((_, approved)), _) => (false, !*approved),
+                _ => (false, false),
+            };
+            facts.agents.insert(
+                agent,
+                AgentFacts {
+                    authorized,
+                    latest,
+                    baseline,
+                    revision_conflict,
+                    revision_unapproved,
+                },
+            );
+        }
+        Ok(facts)
+    }
+
+    async fn assert_group_and_owner<C: GenericClient + Sync>(
+        &self,
+        client: &C,
+        tenant: &str,
+        group: &str,
+        admin_id: &str,
+    ) -> Result<()> {
+        ensure!(
+            self.bounded(client.query_opt(
+                "SELECT 1 FROM managed_agent_groups g JOIN tenants t ON t.id=g.tenant_id WHERE g.tenant_id=$1 AND g.group_id=$2 AND t.active=TRUE",
+                &[&tenant, &group],
+            ))
+            .await?
+            .is_some(),
+            "group not found or tenant inactive"
+        );
+        if admin_id != "bootstrap_owner" {
+            let role = self
+                .bounded(client.query_opt(
+                    "SELECT role FROM control_plane_admins WHERE id=$1 AND active=TRUE FOR SHARE",
+                    &[&admin_id],
+                ))
+                .await?
+                .map(|r| r.get::<_, String>(0))
+                .context("administrator is no longer active")?;
+            ensure!(
+                AdminRole::from_storage(&role)?.permits(AdminRole::Owner),
+                "administrator role does not permit rollout changes"
+            );
+        }
+        Ok(())
+    }
+
+    /// See the SQLite twin: writes only the bounded, expiring confirmation record.
+    pub(in crate::tenant_store) async fn preview_managed_group_start(
+        &self,
+        tenant: &str,
+        group: &str,
+        revision: &str,
+        admin_id: &str,
+        requested_issuer: Option<&str>,
+    ) -> Result<GroupStartPreview> {
+        ensure_preview_input(tenant, group, revision, admin_id)?;
+        let mut client = self.checkout().await?;
+        let tx = self
+            .bounded(
+                client
+                    .build_transaction()
+                    .isolation_level(tokio_postgres::IsolationLevel::RepeatableRead)
+                    .start(),
+            )
+            .await?;
+        self.assert_group_and_owner(&*tx, tenant, group, admin_id)
+            .await?;
+        let facts = self
+            .gather_cohort_facts(&*tx, tenant, group, revision)
+            .await?;
+        let preview = assemble(
+            &facts,
+            tenant,
+            group,
+            revision,
+            requested_issuer,
+            resolved_signer(requested_issuer),
+        );
+        let confirmation = if preview.startable {
+            let now = now_unix();
+            self.bounded(tx.execute(
+                "DELETE FROM managed_group_start_confirmations WHERE tenant_id=$1 AND group_id=$2 AND consumed_at_unix IS NULL AND (admin_id=$3 OR expires_at_unix < $4)",
+                &[&tenant, &group, &admin_id, &(now - 86_400)],
+            ))
+            .await?;
+            let id = new_confirmation_id();
+            let expires = now + CONFIRMATION_TTL_SECS;
+            self.bounded(tx.execute(
+                "INSERT INTO managed_group_start_confirmations(tenant_id,group_id,confirmation_hash,admin_id,intent_digest,snapshot_sha256,created_at_unix,expires_at_unix) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+                &[
+                    &tenant,
+                    &group,
+                    &id_hash(&id),
+                    &admin_id,
+                    &intent_digest(tenant, group, admin_id, revision, requested_issuer),
+                    &preview.snapshot_sha256,
+                    &now,
+                    &expires,
+                ],
+            ))
+            .await?;
+            Some(StartConfirmation {
+                version: CONFIRMATION_VERSION,
+                id,
+                expires_at_unix: expires,
+            })
+        } else {
+            None
+        };
+        self.bounded(tx.commit()).await?;
+        Ok(GroupStartPreview {
+            preview,
+            confirmation,
+        })
+    }
+
+    /// Revalidates under the same tenant lease that issues the first wave.
+    pub(in crate::tenant_store) async fn start_managed_group_rollout_guarded(
+        &self,
+        tenant: &str,
+        group: &str,
+        revision: &str,
+        issuer: Option<&ManagedIssuer>,
+        guard: &StartGuard<'_>,
+    ) -> Result<GuardedStart> {
+        ensure_preview_input(tenant, group, revision, guard.admin_id)?;
+        ensure!(
+            valid_confirmation_id(guard.confirmation_id),
+            ConfirmationRefused(ConfirmationFailure::Invalid)
+        );
+        let mut client = self.checkout().await?;
+        let tx = self.bounded(client.transaction()).await?;
+        self.bounded(tx.query_one(
+            "SELECT id FROM tenants WHERE id=$1 AND active=TRUE FOR UPDATE",
+            &[&tenant],
+        ))
+        .await?;
+        self.assert_group_and_owner(&*tx, tenant, group, guard.admin_id)
+            .await?;
+        let hash = id_hash(guard.confirmation_id);
+        let stored = self
+            .bounded(tx.query_opt(
+                "SELECT admin_id,intent_digest,snapshot_sha256,expires_at_unix,consumed_at_unix IS NOT NULL,rollout_id FROM managed_group_start_confirmations WHERE tenant_id=$1 AND group_id=$2 AND confirmation_hash=$3 FOR UPDATE",
+                &[&tenant, &group, &hash],
+            ))
+            .await?
+            .map(|r| StoredConfirmation {
+                admin_id: r.get(0),
+                intent: r.get(1),
+                snapshot_sha256: r.get(2),
+                expires_at_unix: r.get(3),
+                consumed: r.get(4),
+                rollout_id: r.get(5),
+            });
+        let intent = intent_digest(
+            tenant,
+            group,
+            guard.admin_id,
+            revision,
+            guard.requested_issuer_key,
+        );
+        let (disposition, expected) = classify(stored, guard.admin_id, &intent, now_unix())?;
+        if let Disposition::Replay(rollout_id) = disposition {
+            let current = self
+                .get_managed_group_rollout_query(&*tx, tenant, group)
+                .await?
+                .filter(|r| r.rollout_id == rollout_id)
+                .ok_or(ConfirmationRefused(ConfirmationFailure::Invalid))?;
+            self.bounded(tx.commit()).await?;
+            return Ok(GuardedStart {
+                rollout: current,
+                replayed: true,
+            });
+        }
+        let facts = self
+            .gather_cohort_facts(&*tx, tenant, group, revision)
+            .await?;
+        let now_preview = assemble(
+            &facts,
+            tenant,
+            group,
+            revision,
+            guard.requested_issuer_key,
+            issuer.map(signer_identity),
+        );
+        ensure!(
+            now_preview.startable && Some(&now_preview.snapshot_sha256) == expected.as_ref(),
+            ConfirmationRefused(ConfirmationFailure::Stale)
+        );
+        let issuer = issuer.context("Agent policy issuer unavailable")?;
+        self.start_managed_group_rollout_tx(&tx, tenant, group, revision, issuer)
+            .await?;
+        let rollout = self
+            .get_managed_group_rollout_query(&*tx, tenant, group)
+            .await?
+            .context("rollout disappeared during transaction")?;
+        let consumed = self
+            .bounded(tx.execute(
+                "UPDATE managed_group_start_confirmations SET consumed_at_unix=$4, rollout_id=$5 WHERE tenant_id=$1 AND group_id=$2 AND confirmation_hash=$3 AND consumed_at_unix IS NULL",
+                &[&tenant, &group, &hash, &now_unix(), &rollout.rollout_id],
+            ))
+            .await?;
+        ensure!(
+            consumed == 1,
+            ConfirmationRefused(ConfirmationFailure::Invalid)
+        );
+        self.bounded(tx.commit()).await?;
+        Ok(GuardedStart {
+            rollout,
+            replayed: false,
         })
     }
 

@@ -39,6 +39,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Agent self-test](operations/SELF_TEST.md) | One Linux command: witnessed useful reads, a refused synthetic send, daemon loss and a versioned report |
 | [Installed private-edit self-test](operations/private-edit-self-test.md) | Explicit disposable create/replace, Ask, quota, Stop and recovery checks with the selected genuine host |
 | [Offline policy replay](operations/OFFLINE_POLICY_REPLAY.md) | Explicit bounded legacy-event policy simulation, production traces and exact-source synthetic parity |
+| [Linux pilot v1 scope](operations/PILOT_V1_SCOPE.md) | Frozen supported configuration, support matrix, exclusions, bound identities and enforced selection |
 | [Offline Agent audit explorer](operations/AGENT_AUDIT_EXPLORER.md) | Private Linux JSONL report generation, decision timeline, filters and evidence limits |
 | [Bounded Agent audit retention](operations/AGENT_AUDIT_RETENTION.md) | Opt-in Linux segments, crash recovery, private verified export and loss-aware browsing |
 | [Windows bounded Agent audit retention](operations/AGENT_AUDIT_RETENTION_WINDOWS.md) | Native local NTFS scope, private ACLs, recovery, export and standard-user acceptance |

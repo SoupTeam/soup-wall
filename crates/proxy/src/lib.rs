@@ -258,6 +258,10 @@ pub fn app(state: Shared) -> Router {
                     .get(managed_agent_api::get_group_rollout),
             )
             .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/preview",
+                post(managed_agent_api::preview_group_rollout),
+            )
+            .route(
                 "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/advance",
                 post(managed_agent_api::advance_group_rollout),
             )

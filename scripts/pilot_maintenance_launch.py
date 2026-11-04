@@ -37,9 +37,9 @@ def file(path):
 
 
 def revalidate(binding):
-    require(type(binding) is dict and set(binding) == {'format', 'home', 'component_home', 'selection',
-            'state_root', 'files', 'roots', 'launch'} and binding['format'] == FORMAT,
-            'maintenance_binding_invalid')
+    fields = {'format', 'home', 'component_home', 'selection', 'state_root', 'files', 'roots', 'launch'}
+    require(type(binding) is dict and set(binding) in (fields, fields | {'coordinator_root'})
+            and binding['format'] == FORMAT, 'maintenance_binding_invalid')
     require(type(binding['files']) is list and 1 <= len(binding['files']) <= 24
             and type(binding['roots']) is list and 1 <= len(binding['roots']) <= 12,
             'maintenance_binding_invalid')
@@ -49,6 +49,15 @@ def revalidate(binding):
         require(directory(value['path']) == value, 'maintenance_root_changed')
     require(directory(binding['home']) in binding['roots']
             and directory(binding['component_home']) in binding['roots'], 'maintenance_home_changed')
+    if 'coordinator_root' in binding:
+        coordinator = Path(binding['coordinator_root'])
+        require(directory(coordinator) in binding['roots'], 'maintenance_root_changed')
+        selected = M.IO.state(coordinator)['current']
+        require(selected is not None, 'maintenance_source_changed')
+        verified = M.IO.verify_binding(coordinator, selected)
+        require(str(verified['home']) == binding['component_home']
+                and verified['inventory']['selection']['path'] == binding['selection'],
+                'maintenance_source_changed')
 
 
 def binding(home, component_home, selection, paths, profiles, state_root, prep, coordinator=None):
@@ -72,10 +81,14 @@ def binding(home, component_home, selection, paths, profiles, state_root, prep, 
               'git_profile': profiles['git']['profile']['path'], 'policy': str(paths['policy']),
               'classifier': str(paths['git_classifier'])}
     directories = {home, component_home, state_root, selection.parent, *roots.values()}
+    if coordinator is not None:
+        directories.add(Path(coordinator))
     result = {'format': FORMAT, 'home': str(home), 'component_home': str(component_home),
               'selection': str(selection), 'state_root': str(state_root),
               'files': [file(p) for p in sorted(files) if p.is_file()],
               'roots': [directory(p) for p in sorted(directories)], 'launch': launch}
+    if coordinator is not None:
+        result['coordinator_root'] = str(Path(coordinator))
     # All mandatory pointers must exist; never silently drop a missing pin.
     require(all(p.is_file() for p in files), 'maintenance_source_missing')
     require(len(M.encoded(result)) <= M.CAP // 2, 'maintenance_binding_cap')

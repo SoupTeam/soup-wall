@@ -271,9 +271,15 @@ class SourceBuildBoundary(unittest.TestCase):
                     self.assertEqual(first[role], repeated[role])
                     self.assertTrue(Path(first[role]).is_absolute())
                 self.assertEqual(first["receipt"], repeated["receipt"])
+                verified = build.verify_existing(ROOT, output, source["commit"])
+                self.assertEqual(verified["status"], "verified-reuse")
+                self.assertEqual(verified["sandbox_tests"], first["sandbox_tests"])
+                self.assertEqual(verified["receipt_sha256"], build.native.digest(first["receipt"]))
                 identity.return_value = {**source, "files_sha256": "f" * 64}
                 with self.assertRaisesRegex(build.Failure, "receipt_identity_changed"):
                     build.run_build(ROOT, output, source["commit"])
+                with self.assertRaisesRegex(build.Failure, "receipt_identity_changed"):
+                    build.verify_existing(ROOT, output, source["commit"])
                 self.assertEqual((output / "current.json").read_bytes(), marker)
                 self.assertEqual(compile_one.call_count, 1)
 
@@ -319,7 +325,28 @@ class SourceBuildBoundary(unittest.TestCase):
                 binary.chmod(0o500)
                 with self.assertRaisesRegex(build.Failure, "binary_digest_or_mode_changed"):
                     build.run_build(ROOT, output, source["commit"])
+                with self.assertRaisesRegex(build.Failure, "binary_digest_or_mode_changed"):
+                    build.verify_existing(ROOT, output, source["commit"])
                 self.assertEqual((output / "current.json").read_bytes(), marker)
+
+    @unittest.skipUnless(os.name == "posix", "owned generations require POSIX modes")
+    def test_verify_existing_refuses_missing_or_partial_selection_without_build(self):
+        build = builder()
+        source, tools = fake_inputs(build)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "build"
+            with patch.object(build, "inventory", return_value={"missing": [], "tools": tools}), \
+                 patch.object(build, "source_identity", return_value=source), \
+                 patch.object(build, "build_generation", side_effect=fake_generation) as compile_one:
+                with self.assertRaisesRegex(build.Failure, "selected_build_missing"):
+                    build.verify_existing(ROOT, output, source["commit"])
+                self.assertEqual(compile_one.call_count, 0)
+                first = build.run_build(ROOT, output, source["commit"])
+                (output / "current.json").unlink()
+                with self.assertRaisesRegex(build.Failure, "selected_build_missing"):
+                    build.verify_existing(ROOT, output, source["commit"])
+                self.assertEqual(compile_one.call_count, 1)
+                self.assertTrue(Path(first["receipt"]).exists())
 
     @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process groups required")
     def test_bounded_build_reaps_descendant_after_leader_exit(self):

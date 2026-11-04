@@ -340,7 +340,7 @@ class RecoveryTests(unittest.TestCase):
     def test_postgres_alias_and_populated_guards_precede_restore_executor(self):
         # Genuine age archive decoding plus the actual production guard ordering.
         recipient = self.age_identity()
-        state = {'backend': 'postgres', 'schema_version':28,
+        state = {'backend': 'postgres', 'schema_version':30,
                  'schema':recovery.inventory().get('postgres_schema'),
                  'tables': {name: [] for name in recovery.inventory()['postgres_tables']},
                  'sequences': {name: {'last_value':1,'is_called':False}

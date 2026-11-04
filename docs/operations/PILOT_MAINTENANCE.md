@@ -29,11 +29,22 @@ agentfw pilot --home "$AGENT_HOME" maintenance leave   --prefix "$PREFIX" --stat
 
 ## What is bound
 
-The marker governs one installation: the Agent home, the installed component home
-and the directory identities of those two roots. A marker is never inherited from
-another home: a sibling installation is unaffected and keeps launching, and a launch
-or transition for a different installation scope is refused
-(`maintenance_scope_changed`).
+For a direct installation the marker binds the Agent home, installed component
+home and both directory identities. A coordinated installation uses its dedicated
+bootstrap home and the exact coordinator directory identity as the stable gate.
+The full per-launch binding still pins the selected managed component, selection
+and source files, and revalidates them against the coordinator's current verified
+generation before admission and spawn. Update and rollback therefore preserve an
+entered gate across component generations; an unselected component, replaced root
+or different coordinator is refused.
+
+A marker is never inherited from another installation. Use the separate retained
+bootstrap home documented in [coordinated updates](pilot-update.md). A previously
+enrolled direct/component-scoped home is not silently re-enrolled as a coordinator,
+and older component-scoped markers keep their existing conservative scope checks.
+Retain those markers and history; a reader never resets them to make a launch pass.
+A sibling installation is unaffected; a launch or transition for a different scope
+is refused (`maintenance_scope_changed`).
 
 The marker also records the launch binding it last saw (selection, state root, pinned
 selected programs/profiles/policy and their root identities). That record is

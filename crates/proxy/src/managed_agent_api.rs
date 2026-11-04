@@ -8,13 +8,19 @@
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
+use axum::Extension;
 use axum::Json;
 use serde::Deserialize;
 
 use crate::handlers::Shared;
 use crate::tenant_store::{
-    AppliedReport, EnrolledAgent, ManagedIssuer, RotationRequest, TenantStore,
+    valid_idempotency_key, AdminIdentity, AppliedReport, ConfirmationRefused,
+    DeploymentIdempotency, EnrolledAgent, IdempotencyConflict, ManagedIssuer, RotationRequest,
+    StartGuard, TenantStore,
 };
+
+/// Optional header that makes one individual deployment POST safe to retry.
+pub const IDEMPOTENCY_KEY_HEADER: &str = "idempotency-key";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -258,11 +264,20 @@ pub async fn approve_revision(
 
 /// The seed never leaves the operator's environment; each deployment has
 /// fresh sequence and expiry. Rollback re-signs an older approved payload.
+///
+/// With an `Idempotency-Key` header an exact retry returns the original issuance. Without it the
+/// request is the documented keyless operation and always issues a new sequence.
 pub async fn deploy_revision(
     State(state): State<Shared>,
+    Extension(identity): Extension<AdminIdentity>,
+    headers: HeaderMap,
     Path((tenant, agent, revision)): Path<(String, String, String)>,
     Json(input): Json<NewDeploymentRequest>,
 ) -> Response {
+    let key = match idempotency_key(&headers) {
+        Ok(key) => key,
+        Err(()) => return failure(StatusCode::BAD_REQUEST, "invalid Idempotency-Key"),
+    };
     let Some(db) = store(&state) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -270,14 +285,61 @@ pub async fn deploy_revision(
         );
     };
     let target_key = input.issuer_key_id.clone();
+    let Some(key) = key else {
+        return match tokio::task::spawn(async move {
+            let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref())?;
+            db.deploy_managed_revision_async(&tenant, &agent, &revision, input.rollback, &issuer)
+                .await
+        })
+        .await
+        {
+            Ok(Ok(deployment)) => (StatusCode::CREATED, Json(deployment)).into_response(),
+            Ok(Err(e)) => {
+                tracing::warn!(error = %e, "Agent deployment refused");
+                failure(
+                    StatusCode::BAD_REQUEST,
+                    "deployment unavailable or not approved",
+                )
+            }
+            Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
+        };
+    };
     match tokio::task::spawn(async move {
-        let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref())?;
-        db.deploy_managed_revision_async(&tenant, &agent, &revision, input.rollback, &issuer)
-            .await
+        // A retry needs no signer; only a new issuance does.
+        let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref()).ok();
+        let idem = DeploymentIdempotency {
+            key: &key,
+            admin_id: &identity.admin_id,
+            requested_issuer_key: target_key.as_deref(),
+        };
+        db.deploy_managed_revision_keyed_async(
+            &tenant,
+            &agent,
+            &revision,
+            input.rollback,
+            issuer.as_ref(),
+            &idem,
+        )
+        .await
+        .map(|issued| (issued, key.clone()))
     })
     .await
     {
-        Ok(Ok(deployment)) => (StatusCode::CREATED, Json(deployment)).into_response(),
+        Ok(Ok((issued, key))) => {
+            let mut body = serde_json::to_value(&issued.deployment).unwrap_or_default();
+            body["idempotency"] = serde_json::json!({
+                "key": key,
+                "replayed": issued.replayed,
+                "envelope_sha256": issued.envelope_sha256,
+                "issuer_key_id": issued.issuer_key_id,
+                "expires_at_unix": issued.expires_at_unix,
+            });
+            (StatusCode::CREATED, Json(body)).into_response()
+        }
+        Ok(Err(e)) if e.downcast_ref::<IdempotencyConflict>().is_some() => failure(
+            StatusCode::CONFLICT,
+            "idempotency key conflicts with a previous request",
+        ),
         Ok(Err(e)) => {
             tracing::warn!(error = %e, "Agent deployment refused");
             failure(
@@ -286,6 +348,21 @@ pub async fn deploy_revision(
             )
         }
         Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
+    }
+}
+
+/// `Ok(None)` when absent; a repeated, non-ASCII or out-of-bounds header is rejected, never ignored.
+fn idempotency_key(headers: &HeaderMap) -> Result<Option<String>, ()> {
+    let mut values = headers.get_all(IDEMPOTENCY_KEY_HEADER).iter();
+    let Some(first) = values.next() else {
+        return Ok(None);
+    };
+    if values.next().is_some() {
+        return Err(());
+    }
+    match first.to_str() {
+        Ok(key) if valid_idempotency_key(key) => Ok(Some(key.to_owned())),
+        _ => Err(()),
     }
 }
 
@@ -450,6 +527,17 @@ pub struct CreateGroupRevisionRequest {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StartRolloutRequest {
+    pub revision: String,
+    #[serde(default)]
+    pub issuer_key_id: Option<String>,
+    /// From `POST .../rollout/preview`. Absent keeps the documented unguarded start.
+    #[serde(default)]
+    pub confirmation_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreviewRolloutRequest {
     pub revision: String,
     #[serde(default)]
     pub issuer_key_id: Option<String>,
@@ -692,6 +780,7 @@ pub async fn list_group_revisions(
 
 pub async fn start_group_rollout(
     State(state): State<Shared>,
+    Extension(identity): Extension<AdminIdentity>,
     Path((tenant_id, group_id)): Path<(String, String)>,
     Json(input): Json<StartRolloutRequest>,
 ) -> Response {
@@ -702,15 +791,59 @@ pub async fn start_group_rollout(
         );
     };
     let target_key = input.issuer_key_id.clone();
-    match tokio::task::spawn(async move {
-        let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref())?;
-        db.start_managed_group_rollout_async(&tenant_id, &group_id, &input.revision, &issuer)
-            .await
+    let result = tokio::task::spawn(async move {
+        let issuer = ManagedIssuer::from_environment_for_key(target_key.as_deref());
+        match input.confirmation_id.as_deref() {
+            None => {
+                let issuer = issuer?;
+                db.start_managed_group_rollout_async(
+                    &tenant_id,
+                    &group_id,
+                    &input.revision,
+                    &issuer,
+                )
+                .await
+                .map(|rollout| (rollout, None))
+            }
+            Some(id) => {
+                let guard = StartGuard {
+                    confirmation_id: id,
+                    admin_id: &identity.admin_id,
+                    requested_issuer_key: target_key.as_deref(),
+                };
+                db.start_managed_group_rollout_guarded_async(
+                    &tenant_id,
+                    &group_id,
+                    &input.revision,
+                    issuer.ok().as_ref(),
+                    &guard,
+                )
+                .await
+                .map(|started| (started.rollout, Some(started.replayed)))
+            }
+        }
     })
-    .await
-    {
-        Ok(Ok(rollout)) => (StatusCode::CREATED, Json(rollout)).into_response(),
+    .await;
+    match result {
+        Ok(Ok((rollout, replayed))) => {
+            let mut body = serde_json::to_value(&rollout).unwrap_or_default();
+            if let Some(replayed) = replayed {
+                body["confirmation"] = serde_json::json!({ "replayed": replayed });
+            }
+            (StatusCode::CREATED, Json(body)).into_response()
+        }
         Ok(Err(e)) => {
+            if let Some(refused) = e.downcast_ref::<ConfirmationRefused>() {
+                tracing::warn!(code = refused.code(), "guarded group rollout start refused");
+                return (
+                    StatusCode::CONFLICT,
+                    Json(serde_json::json!({
+                        "error": refused.to_string(),
+                        "code": refused.code(),
+                    })),
+                )
+                    .into_response();
+            }
             let msg = e.to_string();
             tracing::warn!(error = %msg, "group rollout start refused");
             if msg.contains("already in progress")
@@ -719,6 +852,45 @@ pub async fn start_group_rollout(
                 failure(StatusCode::CONFLICT, "active rollout already in progress")
             } else {
                 failure(StatusCode::BAD_REQUEST, "rollout cannot be started")
+            }
+        }
+        Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),
+    }
+}
+
+/// Authoritative, non-executing preview of what a start would freeze and issue right now.
+/// It grants no authority; the start re-derives every fact under its own transaction.
+pub async fn preview_group_rollout(
+    State(state): State<Shared>,
+    Extension(identity): Extension<AdminIdentity>,
+    Path((tenant_id, group_id)): Path<(String, String)>,
+    Json(input): Json<PreviewRolloutRequest>,
+) -> Response {
+    let Some(db) = store(&state) else {
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Console storage unavailable",
+        );
+    };
+    match tokio::task::spawn(async move {
+        db.preview_managed_group_start_async(
+            &tenant_id,
+            &group_id,
+            &input.revision,
+            &identity.admin_id,
+            input.issuer_key_id.as_deref(),
+        )
+        .await
+    })
+    .await
+    {
+        Ok(Ok(preview)) => Json(preview).into_response(),
+        Ok(Err(e)) => {
+            tracing::warn!(error = %e, "group rollout preview refused");
+            if e.to_string().contains("not found") {
+                failure(StatusCode::NOT_FOUND, "group not found")
+            } else {
+                failure(StatusCode::BAD_REQUEST, "rollout preview unavailable")
             }
         }
         Err(_) => failure(StatusCode::SERVICE_UNAVAILABLE, "Console unavailable"),

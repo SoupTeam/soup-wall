@@ -808,7 +808,9 @@ def qualify(args, report):
 
         # 2. Preview from outside the checkout: no prefix, selected program or network.
         trace = args.output / "preview.trace.private"
-        code, value, _ = door.call("preview", trace=trace, timeout=600)
+        # The scope mode selects the frozen v1 scope from the first preview; every later step inherits it from the prefix.
+        scope_args = ("--scope", "linux-v1") if args.pilot_scope_only else ()
+        code, value, _ = door.call("preview", *scope_args, trace=trace, timeout=600)
         # The installed Agent itself is the entry point: started once, never again.
         observed = QUAL.executed(trace, {k: v for k, v in selected.items() if k != "agentfw"})
         agent_starts = agent_executions(trace, args.agentfw)
@@ -830,8 +832,12 @@ def qualify(args, report):
                                 "inet_connects": 0, "programs": sorted({path.name for path in programs})})
 
         # 3. Prepare and reuse through the installed command.
-        code, first, _ = door.call("prepare", "--apply", timeout=3600)
+        code, first, _ = door.call("prepare", "--apply", *scope_args, timeout=3600)
         require(code == 0 and first.get("status") == "prepared-not-active", "prepare_failed:" + str(first.get("reason")))
+        if args.pilot_scope_only:
+            require(first["scope"]["selected"] is True and first["scope"]["state"] == "conforming"
+                    and first["scope"]["refused"] == [], "scope_not_selected_by_prepare")
+        # The reuse call omits --scope on purpose: a prefix keeps its recorded scope.
         code, again, _ = door.call("prepare", "--apply", inputs=False, timeout=900)
         require(code == 0 and again.get("status") == "reused" and again["selection"] == first["selection"],
                 "prepare_not_reused:" + str(again.get("reason")))
@@ -893,7 +899,7 @@ def qualify(args, report):
         # 4. An existing selection prepared by the accepted checkout front door
         #    at the same commit is consumed unchanged by the installed command.
         checkout = QUAL.FrontDoor(args, build_env, home)
-        code, other, _ = checkout.call("prepare", "--apply", prefix=args.other_prefix, project_roots=False,
+        code, other, _ = checkout.call("prepare", "--apply", *scope_args, prefix=args.other_prefix, project_roots=False,
                                        timeout=3600)
         require(code == 0 and other.get("status") == "prepared-not-active" and other["selection"] != first["selection"],
                 "checkout_prepare_failed:" + str(other.get("reason")))
@@ -975,6 +981,16 @@ def qualify(args, report):
         row["passed"] = True
         code, value, _ = door.call("status", "--state-root", str(args.state_root), inputs=False, timeout=120)
         require(code == 0 and value.get("protection") == "configured-not-running", "status_after_cancel")
+
+        if args.pilot_scope_only:
+            report["pilot_scope"] = {"selection": str(selection), "demo_selection": other["selection"],
+                                     "demo_prefix": str(args.other_prefix)}
+            load("pilot_scope_qualification", "qualify-pilot-scope.py").qualify(
+                args, door, agent_home, env, report, guided=QUAL, receiver=receiver, baseline=baseline,
+                selection=selection, load=load, agent_executions=agent_executions)
+            report["source_after"] = BASE.source()
+            require(report["source_after"] == before, "source_changed")
+            return
 
         # 6. Tampered helper: changed bytes, an unlisted file, a link.
         tree = agent_home / "pilot-front-door/components" / built["component"] / "tree"
@@ -1104,6 +1120,11 @@ def qualify(args, report):
 
 
 def main():
+    if "--clean-user-only" in sys.argv[1:]:
+        # Exec isolates product imports and removes selected binary paths from
+        # the harness argv before the unchanged update inactivity guard scans it.
+        entry = load("clean_user_entry", "pilot_clean_user_acceptance.py")
+        return entry.replace_process(sys.argv[1:], ROOT / "scripts/pilot_clean_user_acceptance.py")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--run", action="store_true", required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -1125,6 +1146,8 @@ def main():
     parser.add_argument("--budget-presets-only", action="store_true",
                         help="focused SOU-210 installed named Linux budget-preset qualification")
     parser.add_argument("--budget-unit", help="disposable delegated systemd service (sou79-RUN-ATTEMPT.service)")
+    parser.add_argument("--pilot-scope-only", action="store_true",
+                        help="focused SOU-215 frozen v1 scope qualification through the installed commands")
     parser.add_argument("--provider-ca-only", action="store_true",
                         help="focused SOU-195 installed-host HTTPS CA and rotation qualification")
     for name in INPUT_NAMES:
@@ -1160,7 +1183,7 @@ def main():
         report["status"] = "passed"
     except Exception as error:
         detail = str(error)
-        report["error"] = (detail if not (args.provider_ca_only or args.maintenance_only or args.policy_activation_only) or
+        report["error"] = (detail if not (args.provider_ca_only or args.maintenance_only or args.policy_activation_only or args.pilot_scope_only) or
                            re.fullmatch(r"[a-z0-9_:-]{1,160}", detail)
                            else "focused_qualification_failed")[:500]
     finally:

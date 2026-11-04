@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 from ci_components import blocks, generated, TARGET
 import ci_components
-from ci_impact import WORKFLOW_JOBS
+from ci_impact import WORKFLOW_JOBS, BUILD_CONSUMERS
 from ci_admission import component_names
 
 
@@ -111,22 +111,47 @@ class SharedComponents(unittest.TestCase):
         central = blocks(generated())
         producer = "ci-builds--agent-default-ubuntu2404"
         self.assertIn(producer, central)
-        for job in ("linux-create-file", "linux-installed-edit"):
-            body = central["mcp-create-file--" + job]
-            self.assertIn("    needs: " + producer, body)
-            self.assertIn("    if: >-\n      !cancelled() && contains(", body)
-            self.assertIn("      SOU166_MODE: shared", body)
-            self.assertIn("${{ needs." + producer + ".result }}", body)
-            self.assertIn("${{ needs." + producer + ".outputs.artifact_id }}", body)
-            self.assertNotIn("github.event.inputs.build_mode", body)
-            guard = body.index("ci_qualification_build.py guard")
-            self.assertLess(guard, body.index("uses: actions/download-artifact@"))
-            self.assertIn("artifact-ids: ${{ env.SOU166_ARTIFACT_ID }}", body)
-            self.assertNotIn("github-token:", body)
-            self.assertNotIn("run-id:", body)
+        for workflow, jobs in BUILD_CONSUMERS.items():
+            for job in jobs:
+                body = central[workflow.removesuffix('.yml') + "--" + job]
+                self.assertIn("    needs: " + producer, body)
+                self.assertIn("    if: >-\n      !cancelled() && contains(", body)
+                self.assertIn("      SOU166_MODE: shared", body)
+                self.assertIn("${{ needs." + producer + ".result }}", body)
+                self.assertIn("${{ needs." + producer + ".outputs.artifact_id }}", body)
+                self.assertNotIn("github.event.inputs.build_mode", body)
+                guard = body.index("ci_qualification_build.py guard")
+                self.assertLess(guard, body.index("uses: actions/download-artifact@"))
+                self.assertIn("artifact-ids: ${{ env.SOU166_ARTIFACT_ID }}", body)
+                self.assertNotIn("github-token:", body)
+                self.assertNotIn("run-id:", body)
         separate = central["mcp-create-file--linux-replace-file"]
         self.assertNotIn("needs: " + producer, separate)
         self.assertIn("runs-on: ubuntu-22.04", separate)
+
+    def test_manual_shared_probe_includes_new_consumers_only_when_requested(self):
+        manual = (ROOT / ".github/workflows/mcp-create-file.yml").read_text()
+        body = manual.split("  reuse-plan:\n", 1)[1].split("  reuse-qualification:\n", 1)[0]
+        self.assertIn("SOU222_CONSUMERS: ${{ inputs.sou222_consumers }}", body)
+        self.assertIn("if os.environ['SOU222_CONSUMERS'] == 'true':", body)
+        for workflow, job in (("mcp-https-post.yml", "linux-https-post"),
+                              ("mcp-windows-create.yml", "linux-read-create-https-regressions")):
+            self.assertIn("selected['" + workflow + "'] = ['" + job + "']", body)
+        self.assertIn("default: false", manual.split("      sou222_consumers:\n", 1)[1].split("      edit_only:\n", 1)[0])
+
+    def test_linux_compatibility_refuses_loader_override_without_changing_windows_python(self):
+        jobs = blocks((ROOT / ".github/workflows/mcp-windows-create.yml").read_text())
+        linux = jobs["linux-read-create-https-regressions"]
+        self.assertNotIn("actions/setup-python", linux)
+        self.assertIn("sys.version_info[:2] == (3, 12)", linux)
+        self.assertIn("LD_LIBRARY_PATH", linux)
+        self.assertIn("actions/setup-python@v7", jobs["native-windows-standard-user"])
+
+    def test_post_clippy_keeps_locked_source_dependencies_after_verified_download(self):
+        body = blocks((ROOT / ".github/workflows/mcp-https-post.yml").read_text())["linux-https-post"]
+        self.assertLess(body.index("ci_qualification_build.py prepare"), body.index("run: cargo fetch --locked"))
+        self.assertLess(body.index("run: cargo fetch --locked"), body.index("-- clippy --locked --offline"))
+        self.assertIn("cargo fetch --locked", body)
 
     def test_implicit_matrix_names_keep_each_required_platform_and_backend(self):
         text = TARGET.read_text()

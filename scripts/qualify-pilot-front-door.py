@@ -162,7 +162,7 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
             # Observe status while the protected host is active, for this
             # prefix and for a second prepared prefix that is not running.
             code, value, _ = door.call("status", "--state-root", str(args.state_root), inputs=False, timeout=60)
-            live.update(code=code, protection=value.get("protection"),
+            live.update(code=code, protection=value.get("protection"), scope=value.get("scope"),
                         runs=[{k: row.get(k) for k in ("protection", "run_ids")} for row in value.get("runs", [])])
             code, other, _ = door.call("status", "--state-root", str(args.state_root), inputs=False, timeout=60,
                                        prefix=args.other_prefix)

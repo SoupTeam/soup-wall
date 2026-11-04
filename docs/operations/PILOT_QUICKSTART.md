@@ -12,6 +12,10 @@ The real Claude Code host talks to an owned local scripted provider; no model
 account, API key or real credentials are needed. Do not export personal provider
 credentials for this walkthrough.
 
+The supported configuration is frozen as the [v1 scope](PILOT_V1_SCOPE.md). With the guided command,
+add `--scope linux-v1` to `preview` and `prepare`: excluded options refuse before execution and the
+selection is checked against the scope before every run. Without it nothing is claimed.
+
 ## Prerequisites
 
 An administrator supplies Python 3.11+, Git, a C/C++ compiler, make, meson,

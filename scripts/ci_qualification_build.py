@@ -54,6 +54,8 @@ HEX = re.compile(r"[0-9a-f]{64}\Z")
 ROOT = Path(__file__).resolve().parents[1]
 PIN = "1.99.1"
 PRODUCER = "ci-builds--agent-default-ubuntu2404"
+BUILD_CONSUMER_WORKFLOWS = frozenset({"mcp-create-file.yml", "mcp-https-post.yml",
+                                     "mcp-windows-create.yml"})
 
 
 def require(ok, reason):
@@ -431,7 +433,7 @@ def producer_identity(env, attempt=None):
     require(repository == "SoupTeam/soup-wall" and workflow.startswith(repository + "/.github/workflows/")
             and re.fullmatch(r"[0-9a-f]{40}", env.get("GITHUB_WORKFLOW_SHA", "")), "invalid_workflow_context")
     filename, separator, ref = workflow[len(repository + "/.github/workflows/"):].partition("@")
-    require(filename in {"ci.yml", "ci-builds.yml", "mcp-create-file.yml"} and separator
+    require(filename in {"ci.yml", "ci-builds.yml", *BUILD_CONSUMER_WORKFLOWS} and separator
             and ref.startswith("refs/"), "unsupported_producer_workflow")
     return {"run_id": env["GITHUB_RUN_ID"], "run_attempt": int(selected), "repository": repository,
             "workflow_ref": workflow, "workflow_sha": env["GITHUB_WORKFLOW_SHA"], "producer_job": PRODUCER}
@@ -714,10 +716,10 @@ def verified_role(directory, context, role):
             os.close(fd)
 
 
-FILTERS = {"library": {"create_file", "sou54_", "mcp::input::tests::", "edit_session", "policy_candidate",
+FILTERS = {"library": {"", "create_file", "sou54_", "mcp::input::tests::", "edit_session", "policy_candidate",
                        "native::execution::transport", "replace_file", "pilot_approval",
                        "private_export", "support_bundle", "pilot_component"},
-           "native_endpoint": {"create_file_v2", "sou125_stop"}, "replace_file": {""}}
+           "native_endpoint": {"", "create_file_v2", "sou125_stop"}, "replace_file": {""}}
 
 
 def parse_cargo(arguments):

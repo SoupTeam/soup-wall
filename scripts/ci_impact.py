@@ -69,7 +69,11 @@ WORKFLOW_JOBS: dict[str, tuple[str, ...]] = {
 }
 
 # Declarative build edges only; admission scheduling/status algorithms do not change.
-BUILD_CONSUMERS = {"mcp-create-file.yml": ("linux-create-file", "linux-installed-edit")}
+BUILD_CONSUMERS = {
+    "mcp-create-file.yml": ("linux-create-file", "linux-installed-edit"),
+    "mcp-https-post.yml": ("linux-https-post",),
+    "mcp-windows-create.yml": ("linux-read-create-https-regressions",),
+}
 BUILD_PRODUCER = ("ci-builds.yml", "agent-default-ubuntu2404")
 
 AGENT_WORKFLOWS = frozenset({
