@@ -124,7 +124,8 @@ def stop_before_receipt(directory, name, value):
     return original(directory, name, value)
 target, failure = ('publish', stop) if point == 'publication' else ('write_record', stop_before_receipt)
 with patch.object(snapshot, target, side_effect=failure):
-    snapshot.create(source, destination, sys.argv[5])
+    confirmation = snapshot.preview(source, destination)['confirmation']
+    snapshot.create(source, destination, confirmation)
 '''
     for point in ('copy', 'publication'):
         store = args.output / ('recovery-' + point)
@@ -132,11 +133,12 @@ with patch.object(snapshot, target, side_effect=failure):
         sibling = store / 'sibling'
         sibling.write_bytes(b'owned sibling')
         destination = store / 'snapshot'
-        confirmation = cli('preview', '--source', source, '--destination', destination)['confirmation']
         killed = subprocess.run(
             [str(args.component_python), '-I', '-S', '-B', '-c', crash_driver,
-             str(scripts), str(source), str(destination), point, confirmation],
+             str(scripts), str(source), str(destination), point],
             cwd=door.cwd, env={}, stdin=subprocess.DEVNULL, capture_output=True, timeout=120)
+        evidence['last_capture_crash'] = dict(checkpoint=point, exit=killed.returncode,
+                                              stderr_sha256=hashlib.sha256(killed.stderr).hexdigest())
         require(killed.returncode == -9 and not destination.exists(), 'workspace_snapshot_capture_crash_missing')
         inventory = cli('recovery-inventory', '--store', store)['stages']
         require(len(inventory) == 1 and inventory[0]['state'] == 'abandoned', 'workspace_snapshot_abandoned_stage_missing')
