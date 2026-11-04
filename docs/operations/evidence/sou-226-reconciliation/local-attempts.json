@@ -139,5 +139,60 @@
     "source_sha256": "d38c73ca9ee04bdaf43a51060ec3475f24e406e680ff23398aed46efaaed1c2b",
     "log_sha256": "3e61493921782c72bbf16696d076186733036427331f585e3c63dbd9add9daba",
     "elapsed_seconds": 25.03
+  },
+  {
+    "label": "generate-components",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "python3",
+      "-B",
+      "-c",
+      "import sys,pathlib;sys.path.insert(0,\"scripts\");import ci_components;pathlib.Path(\"/private/tmp/sou226-qualification/scratch/ci-components.yml\").write_text(ci_components.generated())"
+    ],
+    "exit_code": 0,
+    "source_sha256": "54f07271ec6b11f808b30fa9e585b30b99be161dca8dd1c2df8a51c06cc4bcf2",
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "elapsed_seconds": 0.07
+  },
+  {
+    "label": "isolated-fixture-contract",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "/bin/sh",
+      "-c",
+      "python3 -B -m unittest discover -s scripts/tests -p \"test_ci_components.py\" && python3 -B scripts/check_docs.py && cargo fmt --all --check"
+    ],
+    "exit_code": 0,
+    "source_sha256": "3480d5da1832003214d91d64c676bbb885d8cb8be467d1012c9d058d36c1fa2c",
+    "log_sha256": "b6f4bd6d28822028d27fba96b1f50954f3aa5b1b617d8d0a9d9072bb0f052e84",
+    "elapsed_seconds": 2.18
+  },
+  {
+    "label": "serial-fixture",
+    "command": [
+      "/bin/sh",
+      "-c",
+      "cargo test --offline --locked -p llm-firewall --test managed_reconciliation && cargo fmt --all --check"
+    ],
+    "exit_code": 0,
+    "source_sha256": "099a167792b855fa22fe28ec324d89eb0c316019bec25219ba97c88fcc8bab4b",
+    "log_sha256": "99ff4624ccdb097e04128ce30d4d3bab2c1cc7d83216cc862168f68aea614168",
+    "elapsed_seconds": 4.46
+  },
+  {
+    "label": "final-fixture-lint",
+    "command": [
+      "/usr/bin/env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "/bin/sh",
+      "-c",
+      "cargo clippy --offline --locked -p llm-firewall --all-targets -- -D warnings && python3 -B -m unittest discover -s scripts/tests -p \"test_ci_components.py\" && python3 -B -c \"import ast,pathlib;ast.parse(pathlib.Path(\\\"scripts/managed-group-rollout-demo.py\\\").read_text())\""
+    ],
+    "exit_code": 0,
+    "source_sha256": "ed1e33edb91db323575274349facdebea4ec3498dbf60d2a3a006d40e36da52b",
+    "log_sha256": "499bfb1075387a45b015c5f271bb59afc727b63dbbd91f9b2389e42671f20599",
+    "elapsed_seconds": 1.08
   }
 ]

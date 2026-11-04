@@ -161,7 +161,9 @@ async fn expire(f: &Fixture, tenant: &str) {
     let condition = format!("UPDATE managed_agent_deployments SET issued_at_unix=issued_at_unix-301 WHERE tenant_id='{tenant}' AND revision='candidate'");
     f.sql(&condition, &condition).await;
 }
+static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 async fn controls(postgres: Option<String>) {
+    let _guard = SERIAL.lock().await;
     std::env::set_var("SOUP_AGENT_POLICY_KEY_ID", "atomic-test");
     std::env::set_var("SOUP_AGENT_POLICY_SEED_HEX", "09".repeat(32));
     let f = Fixture::new(postgres).await;

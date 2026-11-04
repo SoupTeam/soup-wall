@@ -774,6 +774,8 @@ jobs:
           CREATE DATABASE group_controls OWNER rollout_owner;
           CREATE DATABASE group_source OWNER rollout_owner;
           CREATE DATABASE group_restored OWNER rollout_owner;
+          CREATE DATABASE group_reconciliation_source OWNER rollout_owner;
+          CREATE DATABASE group_reconciliation_restored OWNER rollout_owner;
           SQL
       - name: Build and run SQLite regressions
         run: |
@@ -799,8 +801,8 @@ jobs:
         run: python3 scripts/managed-group-rollout-demo.py --no-build --reconciliation --output target/group-reconciliation-sqlite.json
       - name: Offline fleet gate after real downtime, PostgreSQL
         env:
-          SOUP_GROUP_DEMO_DATABASE_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_source?sslmode=disable
-          SOUP_GROUP_DEMO_RESTORED_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_restored?sslmode=disable
+          SOUP_GROUP_DEMO_DATABASE_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_reconciliation_source?sslmode=disable
+          SOUP_GROUP_DEMO_RESTORED_URL: postgresql://rollout_owner:disposable-owner@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/group_reconciliation_restored?sslmode=disable
         run: python3 scripts/managed-group-rollout-demo.py --no-build --reconciliation --backend postgres --output target/group-reconciliation-postgres.json
       - name: Four real Agents with encrypted SQLite recovery
         run: python3 scripts/managed-group-rollout-demo.py --no-build --output target/group-sqlite.json

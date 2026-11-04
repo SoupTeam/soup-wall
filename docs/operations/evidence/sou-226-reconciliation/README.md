@@ -30,3 +30,10 @@ refinement pins a scan ceiling and is separately verified by SQLite controls
 including two actual worker loops, shutdown and atomic restart regressions.
 The updated PostgreSQL controls and real-process witness run on the final
 implementation commit before acceptance is claimed.
+
+Native run 41846137845 passed the new reconciliation controls and both real
+305-second offline-gate witnesses. The run then failed the existing PostgreSQL
+recovery demo because the two demos reused one source database and the same
+unique synthetic tenant name. Reconciliation now has separate explicitly owned
+disposable source/restore databases; neither demo touches the other's state.
+This failed run remains a failed qualification, not an overall pass.
