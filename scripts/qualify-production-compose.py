@@ -134,7 +134,12 @@ def safe_project_containers(docker, project):
 
 def require_local_daemon(docker):
     def local(endpoint):
-        return isinstance(endpoint, str) and endpoint.startswith(("unix:///", "npipe:////"))
+        if not isinstance(endpoint, str):
+            return False
+        # Named pipes can also address a remote Windows host over UNC. Only
+        # the explicit local-machine authority belongs to this owned drill.
+        return (endpoint.startswith("unix:///")
+                or re.fullmatch(r"npipe:////\./pipe/[A-Za-z0-9_.-]+", endpoint) is not None)
     if docker.environment.get("DOCKER_HOST"):
         require(local(docker.environment["DOCKER_HOST"]), "qualification_requires_local_docker")
     contexts = docker.json(["context", "inspect"])

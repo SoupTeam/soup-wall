@@ -48,6 +48,20 @@ class OwnedQualificationTests(unittest.TestCase):
         with self.assertRaises(qualify.QualificationError):
             qualify.require_local_daemon(docker)
 
+    def test_remote_named_pipe_is_refused_in_context_and_docker_host(self):
+        for endpoint in ("npipe:////remote-host/pipe/docker_engine",
+                         "npipe:////192.0.2.10/pipe/dockerDesktopLinuxEngine"):
+            with self.subTest(endpoint=endpoint):
+                context = Docker(endpoint)
+                with self.assertRaises(qualify.QualificationError):
+                    qualify.require_local_daemon(context)
+                self.assertEqual(context.commands, [])
+                override = Docker()
+                override.environment["DOCKER_HOST"] = endpoint
+                with self.assertRaises(qualify.QualificationError):
+                    qualify.require_local_daemon(override)
+                self.assertEqual(override.commands, [])
+
     def test_local_desktop_and_unix_socket_are_supported(self):
         qualify.require_local_daemon(Docker())
         qualify.require_local_daemon(Docker("unix:///var/run/docker.sock"))
