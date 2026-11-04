@@ -11,10 +11,10 @@ screenshots:
 | --- | --- |
 | Platform | hosted Ubuntu 24.04 x86_64 container, non-root user (not a physical host, not WSL2) |
 | Base | main `2a5bf677` (reviewed successor of `f66a2242`) |
-| Source | commit `2543701c`, tree `564b8189ced4ec8637d6185392268922bcea55d5`, clean |
-| Console `llm-firewall` | `57ab14951127137bc8570fbfe0f694dc08ce2bf7259a426b35b89004633f0a59` (debug, local Rust 1.97.0, not the pinned 1.99.1) |
+| Source | commit `6bc29ea6` (recovery fix on top of the PR's `0b6c4cf4`), tree `0ab138feb595d685da78aa023c332b78629b0ed1`, clean |
+| Console `llm-firewall` | `24baf8ae0a4c92e88fdb220d508b2c89f5baf3b42613665681de5dd9cb71c721` (debug, local Rust 1.97.0, not the pinned 1.99.1) |
 | Agent `agentfw` | `b1b9668aa39bfff3c5580ed57316035c47f2ce8309d06b66f5b5953d97c1f14e` (same build) |
-| Stores | disposable SQLite file; disposable PostgreSQL 16.15 cluster on 127.0.0.1 with TLS (owned CA, `sslmode=require`) |
+| Stores | disposable SQLite file; disposable PostgreSQL 16.15 cluster on 127.0.0.1 with TLS (owned CA, `sslmode=require`), source and restore databases owned by a non-superuser role |
 | Agents | two unchanged `agentfw serve` processes on loopback: `edge-hb` with `SOUP_MANAGED_AGENT_HEARTBEAT=1` (interval 5 s), `edge-legacy` without |
 | Runtime witness | each Agent's own `/health` managed policy and a `/hook` PreToolUse decision |
 | Browser | Chromium (Playwright) as Viewer |
@@ -27,8 +27,8 @@ retained report, screenshot or first-run Agent log contains a credential.
 
 ## Result: `scripts/console-agent-heartbeat-acceptance.py` passed
 
-SQLite: **36 checks**. PostgreSQL: **37 checks** (adds `migrate` creating the
-observation schema).
+SQLite: **36 checks**. PostgreSQL: **48 checks** (adds `migrate` creating the
+observation schema and Console recovery with it).
 
 | Step | Observed on both stores |
 | --- | --- |
@@ -41,8 +41,9 @@ observation schema).
 | Offline | `edge-hb` stopped: `stale` at age 91 s (Console receipt time only) |
 | Restart | a new `edge-hb` process registers a new instance and is `fresh` again with a new low sequence |
 | Console outage | Console stopped for 12 s: `/hook` still denies with the same policy digest; after restart `fresh` again (SQLite: the Agent re-registered after `not_registered`; PostgreSQL: registration persisted) |
+| Recovery (PostgreSQL) | the source holds `edge-hb`'s observation; with the Console stopped, `console_recovery` refuses a backup while an unknown schema exists and while the observation schema has an extra table; then backs up and restores (rows and sequences verified); the restored database has no observation schema; a Console on it reports `unavailable` for both Agents; `migrate` recreates the table empty; the next read is not fresh, `edge-legacy` reads `unsupported`, and `edge-hb` registers again after the restore and is `fresh` |
 | Rotation | rotation to generation 2: the old credential gets 401 at once; after the token file is replaced the same process registers under generation 2 and is `fresh` |
-| Browser | the heartbeat section shows the authenticated self-report with its age, the self-reported policy and "not runtime attestation", never "healthy"; `edge-legacy` reads "Not opted in … unknown"; after revocation it reads "Credential revoked"; no write request and no browser storage |
+| Browser | the heartbeat section shows the authenticated self-report with its age, the self-reported policy and "not runtime attestation", never "healthy"; `edge-legacy` reads "No heartbeat registration … unknown"; after revocation it reads "Credential revoked"; no write request and no browser storage |
 | Revocation | status `revoked`; the revoked credential gets 401; `/hook` still denies with the last verified policy |
 
 Screenshots: [fresh](agent-heartbeat-2026-11-04/postgres-heartbeat-fresh.png),
@@ -62,6 +63,10 @@ Screenshots: [fresh](agent-heartbeat-2026-11-04/postgres-heartbeat-fresh.png),
 - `agent_heartbeat` unit tests (3): fixed 90 s expiry on server receipt time
   (including a receipt time after the read time), every status, decision
   table for replay, supersession, epoch and identity, strict shapes.
+- `scripts/tests/test_console_recovery.py` (19, including 3 new): the
+  catalog accepts only the exact reviewed observation schema and still
+  refuses any other schema; a restore target with it is not empty; an archive
+  listing that contains it is refused.
 - `agentfw` `managed_heartbeat` unit test: strict opt-in values, bounded
   interval, random instance IDs.
 - `scripts/tests/test_console_heartbeat_browser.py` (7, synthetic fixtures):

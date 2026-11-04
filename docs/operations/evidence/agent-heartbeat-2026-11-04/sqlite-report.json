@@ -2,7 +2,7 @@
   "backend": "sqlite",
   "binaries": {
     "agentfw": "b1b9668aa39bfff3c5580ed57316035c47f2ce8309d06b66f5b5953d97c1f14e",
-    "llm-firewall": "57ab14951127137bc8570fbfe0f694dc08ce2bf7259a426b35b89004633f0a59"
+    "llm-firewall": "24baf8ae0a4c92e88fdb220d508b2c89f5baf3b42613665681de5dd9cb71c721"
   },
   "checks": {
     "admin-token-refused": true,
@@ -43,7 +43,7 @@
     "wrong-epoch-refused": true
   },
   "config_sha256": {
-    "console": "6e3603794b1093f1a469fef6d09d3f524c884cac7f2e576a1c32d7534da64636"
+    "console": "4b8424d568d0d78f8b29674a9da0f3547347cf10a968f59b91e898bedf5ec5cd"
   },
   "format": "sw-console-agent-heartbeat-acceptance/1",
   "scope": "one disposable private Linux deployment; synthetic tenants and Agent IDs; an authenticated self-report, not runtime attestation, production, multi-host or a health check",
@@ -70,8 +70,8 @@
       "revision": "r-deny"
     }
   },
-  "source_commit": "2543701c9b6c24773059be3a615bc232257c9dc3",
+  "source_commit": "6bc29ea6aa137f9068d743e2c1286f9101ff7240",
   "source_dirty": false,
-  "source_tree": "564b8189ced4ec8637d6185392268922bcea55d5",
+  "source_tree": "0ab138feb595d685da78aa023c332b78629b0ed1",
   "status": "passed"
 }
