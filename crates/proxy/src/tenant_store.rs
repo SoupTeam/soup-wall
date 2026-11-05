@@ -35,13 +35,13 @@ pub use managed_confirmation::{
     StartGuard, CONFIRMATION_TTL_SECS, MAX_PREVIEW_AGENTS,
 };
 pub use managed_idempotency::{
-    valid_idempotency_key, DeploymentIdempotency, IdempotencyConflict, KeyedDeployment,
-    MAX_IDEMPOTENCY_KEY_BYTES, MIN_IDEMPOTENCY_KEY_BYTES,
+    valid_idempotency_key, DeploymentIdempotency, DeploymentPreconditionFailed,
+    IdempotencyConflict, KeyedDeployment, MAX_IDEMPOTENCY_KEY_BYTES, MIN_IDEMPOTENCY_KEY_BYTES,
 };
 pub use managed_policy::{
     AppliedReport, ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
-    ManagedGroupRollout, ManagedIssuer, ManagedRevision, ManagedRolloutAgentStatus, RolloutPhase,
-    SignedManagedBundle,
+    ManagedGroupRollout, ManagedIssuer, ManagedRevision, ManagedRevisionDocument,
+    ManagedRolloutAgentStatus, RolloutPhase, SignedManagedBundle,
 };
 mod postgres;
 pub use agent_enrollment::{
@@ -74,6 +74,7 @@ pub struct TenantStore {
     audit_dispatcher: Option<TenantAuditDispatcher>,
     usage_failed_events: Arc<AtomicU64>,
     webhook_signing_key: Option<WebhookSigningKey>,
+    pub(crate) reconciliation: Arc<Mutex<crate::rollout_reconciliation::ReconciliationStatus>>,
 }
 
 // Readiness counters moved to `crate::control_plane`: the data plane reports its
@@ -2024,6 +2025,7 @@ impl TenantStore {
             audit_dispatcher: None,
             usage_failed_events: Arc::new(AtomicU64::new(0)),
             webhook_signing_key: None,
+            reconciliation: Default::default(),
         })
     }
 
@@ -2101,6 +2103,7 @@ impl TenantStore {
             audit_dispatcher: None,
             usage_failed_events: Arc::new(AtomicU64::new(0)),
             webhook_signing_key: None,
+            reconciliation: Default::default(),
         })
     }
 
@@ -2266,6 +2269,7 @@ impl TenantStore {
             audit_dispatcher: None,
             usage_failed_events: Arc::new(AtomicU64::new(0)),
             webhook_signing_key: None,
+            reconciliation: Default::default(),
         })
     }
 

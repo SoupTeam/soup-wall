@@ -27,6 +27,7 @@ pub mod pipeline;
 pub mod rate_limit;
 pub mod redis_limits;
 pub mod responses;
+pub mod rollout_reconciliation;
 pub mod saml_auth;
 pub mod scim;
 pub mod spend_limit;
@@ -212,7 +213,11 @@ pub fn app(state: Shared) -> Router {
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions",
-                post(managed_agent_api::create_revision),
+                post(managed_agent_api::create_revision).get(managed_agent_api::list_revisions),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision",
+                get(managed_agent_api::read_revision),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision/approve",
@@ -221,6 +226,27 @@ pub fn app(state: Shared) -> Router {
             .route(
                 "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision/deploy",
                 post(managed_agent_api::deploy_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/policy-revision",
+                get(managed_agent_api::read_selected_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/policy-revision/approve",
+                post(managed_agent_api::approve_selected_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/policy-revision/deploy",
+                post(managed_agent_api::deploy_selected_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/policy-revisions",
+                get(managed_agent_api::list_selected_revisions)
+                    .post(managed_agent_api::create_selected_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/policy-deployments",
+                get(managed_agent_api::selected_deployments),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/agents/:agent_id/deployments",
@@ -260,6 +286,10 @@ pub fn app(state: Shared) -> Router {
             .route(
                 "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/preview",
                 post(managed_agent_api::preview_group_rollout),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/reconciliation",
+                get(managed_agent_api::reconciliation_status),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/advance",
@@ -555,6 +585,7 @@ pub fn test_config(base: String) -> Config {
         rate_limit: config::RateLimit::default(),
         spend_limit: config::SpendLimit::default(),
         tenant_store: config::TenantStoreConfig::default(),
+        rollout_reconciliation: Default::default(),
         redis_limits: config::RedisLimitsConfig::default(),
         capability_policy: capability::CapabilityPolicy::default(),
         output_moderation: config::OutputModeration::default(),
