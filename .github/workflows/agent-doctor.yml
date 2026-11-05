@@ -20,30 +20,67 @@ jobs:
     name: doctor-linux
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    env:
+      SOU166_MODE: source
+      SOU166_EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      SOU166_PRODUCER_RESULT: ''
+      SOU166_PRODUCER_ATTEMPT: ''
+      SOU166_PRODUCER_IMAGE_VERSION: ''
+      SOU166_ARTIFACT_ID: ''
+      SOU166_ARCHIVE_NAME: ''
+      SOU166_ARCHIVE_SHA256: ''
+      SOU166_MANIFEST_SHA256: ''
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: dtolnay/rust-toolchain@1.99.1
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+      - name: Initialize private current-job artifact locations
+        run: |
+          printf 'SOU166_BUNDLE=%s/sou166-selected\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          printf 'SOU166_CONTEXT=%s/sou166-context.json\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Require successful explicit producer before download
+        if: env.SOU166_MODE == 'shared'
+        run: python3 -B scripts/ci_qualification_build.py guard
+      - name: Download only the immutable current-run producer artifact
+        if: env.SOU166_MODE == 'shared'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          artifact-ids: ${{ env.SOU166_ARTIFACT_ID }}
+          path: ${{ runner.temp }}/sou166-download
+          skip-decompress: true
+          digest-mismatch: error
+      - name: Independently verify provenance, tuple and every executable byte
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          python3 -B scripts/ci_qualification_build.py prepare \
+            --archive "$RUNNER_TEMP/sou166-download/$SOU166_ARCHIVE_NAME" \
+            --output "$SOU166_BUNDLE" --context "$SOU166_CONTEXT"
+      - name: Fetch locked dependencies for required source Clippy
+        run: cargo fetch --locked
       - name: Record exact source
         run: |
-          git rev-parse HEAD
-          rustc --version
-          cargo --version
+          git rev-parse HEAD | tee "$RUNNER_TEMP/sou229-doctor-source.txt"
+          rustc --version | tee "$RUNNER_TEMP/sou229-doctor-rust.txt"
+          cargo --version | tee "$RUNNER_TEMP/sou229-doctor-cargo.txt"
       - name: Format
         run: cargo fmt --all -- --check
       - name: Focused doctor and privacy unit tests
         run: |
-          cargo test --locked -p agentfw --lib doctor
-          cargo test --locked -p agentfw --lib support_bundle
+          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou229-doctor-unit.json" -- test --locked --offline -p agentfw --lib doctor -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou229-bundle-unit.json" -- test --locked --offline -p agentfw --lib support_bundle -- --nocapture
       - name: Installed command outside checkout
-        run: cargo test --locked -p agentfw --test doctor -- --nocapture
+        run: python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou229-doctor-integration.json" -- test --locked --offline -p agentfw --test doctor -- --nocapture
       - name: Qualify selected offline tooling
-        env:
-          AGENTFW_TEST_BINARY: ${{ github.workspace }}/target/debug/agentfw
         run: |
-          cargo build --locked -p agentfw --bin agentfw
+          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou229-doctor-build.json" -- build --locked --offline -p agentfw --bin agentfw
+          export AGENTFW_TEST_BINARY="$(python3 -B scripts/ci_qualification_build.py binary)"
+          sha256sum "$AGENTFW_TEST_BINARY" > "$RUNNER_TEMP/sou229-doctor-binary.txt"
           if test -f scripts/test_agent_diagnostic_diff.py; then
             python3 -B -m unittest scripts.test_agent_diagnostic_diff -v
           fi
@@ -51,4 +88,16 @@ jobs:
             bash scripts/qualify-command-shells.sh
           fi
       - name: Warnings denied
-        run: cargo clippy --locked -p agentfw --all-targets -- -D warnings
+        run: python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou229-doctor-clippy.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings
+      - name: Retain source-bound build use and native failures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou229-doctor-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou229-*.json
+            ${{ runner.temp }}/sou229-*.log
+            ${{ runner.temp }}/sou229-*.txt
+            ${{ runner.temp }}/sou166-context.json.metrics.json
+          if-no-files-found: warn
+          retention-days: 30

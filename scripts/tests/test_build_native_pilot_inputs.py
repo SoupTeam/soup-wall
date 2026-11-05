@@ -400,6 +400,27 @@ pathlib.Path(sys.argv[1]).write_text(json.dumps({"leader": os.getpid(), "child":
                         build.target_within_limit(root)
 
     @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process groups required")
+    def test_explicit_ci_diagnostic_allowance_remains_finite_and_default_is_unchanged(self):
+        build = builder()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "target"
+            target.mkdir(mode=0o700)
+            with patch.object(build.native, "MAX_LOG", 64):
+                command = [sys.executable, "-c", "import sys;sys.stdout.write('x'*96)"]
+                build.bounded_cargo(command, root=root, env={}, target=target,
+                                    log=root / "extended.log", stage="fixture", log_limit=128)
+                self.assertEqual((root / "extended.log").stat().st_size, 96)
+                with self.assertRaisesRegex(build.Failure, "fixture_log_limit"):
+                    build.bounded_cargo(command, root=root, env={}, target=target,
+                                        log=root / "default.log", stage="fixture")
+                self.assertEqual((root / "default.log").stat().st_size, 64)
+                with self.assertRaisesRegex(build.Failure, "bounded_log_limit_required"):
+                    build.bounded_cargo(command, root=root, env={}, target=target,
+                                        log=root / "unbounded.log", stage="fixture", log_limit=257)
+                self.assertFalse((root / "unbounded.log").exists())
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process groups required")
     def test_bounded_build_refuses_target_quota_overrun(self):
         build = builder()
         with tempfile.TemporaryDirectory() as temporary:

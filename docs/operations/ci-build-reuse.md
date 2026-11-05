@@ -4,7 +4,8 @@ The first shared tuple is Ubuntu 24.04, x86_64 GNU/Linux, Rust **1.99.1**,
 Agent default features and the checked-in dev/test profiles. Its consumers are
 `mcp-create-file / linux-create-file`, `mcp-create-file / linux-installed-edit`,
 `mcp-https-post / linux-https-post`, and
-`mcp-windows-create / linux-read-create-https-regressions`.
+`mcp-windows-create / linux-read-create-https-regressions`,
+`agent-doctor / agent-doctor-linux`, and `mcp-https-get / linux-https-get`.
 Ubuntu 22.04, the native pilot's Rust 1.94.1, other targets, features and profiles,
 Windows and macOS remain separate builds.
 
@@ -31,7 +32,8 @@ workflows and regenerate with `python3 -B scripts/ci_components.py`. The produce
 registration is declarative; admission scheduling and status writing are unchanged.
 
 `ci-builds / agent-default-ubuntu2404` builds the Agent executable, library test
-harness, `native_endpoint` harness and `replace_file` harness. It reuses the
+harness, `native_endpoint`, `replace_file`, `doctor`, `mcp_admission` and
+`resource_approval_witness` harnesses. It reuses the
 accepted clean-checkout, exact package identity and bounded Cargo process-group
 rules. Sources are fetched with `--locked`, compilation is offline in a fresh
 private Cargo home/target, and the compiler is already installed at the exact
@@ -57,7 +59,7 @@ The versioned manifest binds the clean commit, tree, tracked-file digest,
 lockfile and toolchain file; compiler/tool hashes; target, profiles, features and
 flags; exact hosted image version and selected system ABI libraries; source and
 package working-directory paths; producer repository, workflow revision, run and
-attempt; and four finite role/path/mode/size/SHA-256 records. Cargo's JSON artifact
+attempt; and seven finite role/path/mode/size/SHA-256 records. Cargo's JSON artifact
 records select package/target roles; a similarly named binary cannot substitute.
 
 The producer uploads one raw archive using a pinned official action, with a
@@ -77,15 +79,27 @@ every required compiler/tool/library byte and the rest of the tuple match;
 updates to unrelated installed software do not change this build's ABI. The
 consumer's own image and tuple must remain unchanged between preparation and use.
 A finite parser accepts
-only the manifest and four regular files: no extension records, links, traversal,
-extra files, special modes or unbounded declared lengths. The initial limits are
-256 KiB manifest, 320 MiB compressed archive, 320 MiB per file and 1152 MiB
-across the four files. The initial producer refused a 1 GiB aggregate. The
+only the manifest and seven regular files: no extension records, links, traversal,
+extra files, special modes or unbounded declared lengths. The seven-role limits
+are 256 KiB manifest, 576 MiB compressed archive, 320 MiB per file and
+2048 MiB total payload. The initial four-role producer refused a 1 GiB aggregate. The
 explicit nonincremental tuple measured at `af531a2d` then produced 1,004,034,344
 payload bytes (largest file 282,418,024) and 265,384,281 compressed bytes, with
 10.473 seconds packing time. These observations set the current refusal limits;
 they are size evidence, not a successful multi-consumer qualification claim.
 Per-file size observations are retained before copying/packing.
+The three new harnesses compiled locally under Linux/WSL measured 796,413,288
+payload bytes and 215,934,064 bytes as separate gzip level-1 streams. Adding
+those observations to the older four-role native values gives an estimated
+1,800,447,632 payload bytes and 481,318,345 compressed bytes. Separate gzip
+streams are an estimate, not a measured complete producer archive or native
+Ubuntu qualification; the hosted producer must record the actual result.
+The first hosted producer in [run 41963841895](https://github.com/SoupTeam/soup-wall/actions/runs/41963841895)
+at `b51f33f44ad5e48490853531bc3f56cc5af61f36` measured 1,856,396,984
+payload bytes, a 481,785,687-byte archive, 234 compiled Cargo artifacts,
+124.806 s of build stages and 15.537 s of packing. That producer succeeded;
+its separate consumer outcomes must be evaluated independently and this
+earlier source is not automatically qualification of a later head.
 
 Extraction never overwrites an existing generation or repairs a partial one.
 The custody marker is published last. All bytes, modes, finite directory contents
@@ -194,3 +208,71 @@ ID as an option previously produced a CLI parser failure. The real installed
 Agent preflight exercises inspect/approve/reject with synthetic hyphenated IDs
 and a missing run, requiring domain refusal, zero authority and unchanged
 inventory. The original 23 runtime cases and approval semantics remain intact.
+
+## SOU-229 doctor and HTTPS GET comparison
+
+Accepted Ready baseline [run 41609665048](https://github.com/SoupTeam/soup-wall/actions/runs/41609665048)
+at `ad504ed83f8857f76accc148120b5b81c0f9603e`, attempt 1, completed
+both original jobs successfully. Doctor job 125834690997 ran 169 s: the two
+unit suites took 45 s, outside-checkout integration 37 s, offline tooling
+40 s and Clippy 23 s. HTTPS GET job 125834692980 ran 399 s: its build step
+took 98 s, combined native tests/Clippy 206 s and enforcing daemon/receiver
+step 63 s. These are step elapsed times from GitHub, not compiler CPU time,
+and the cache warmth is not proven. This earlier source is a baseline, not
+current-head qualification.
+
+The installed doctor consumer retains its two filtered library suites, full
+outside-checkout `doctor` integration harness, offline Python and shell checks,
+format check and current-source Clippy. The HTTPS GET consumer retains the full
+library and native endpoint harnesses, `sou88` admission filter, complete
+resource approval witness, original marker assertions, owned TLS fixture,
+enforcing daemon/receiver ledger and Clippy.
+The full GET library and native endpoint harnesses use Rust's bounded quiet
+output so current-source diagnostics cannot exhaust the accepted CI log limit.
+They still run both complete suites, require nonzero passing tests, and retain
+full per-case inventories in the shared path. The prior verbose source attempt
+[41963837509](https://github.com/SoupTeam/soup-wall/actions/runs/41963837509)
+failed on `source_library_log_limit` before finishing its native step; it is
+retained as a failed attempt, not counted as GET qualification.
+The second source attempt [41965174083](https://github.com/SoupTeam/soup-wall/actions/runs/41965174083)
+completed the quiet library suite but the still-verbose native endpoint suite
+reached `source_native_endpoint_log_limit`; it too remains failed evidence.
+The full quiet source endpoint suite retains its own finite 2 MiB diagnostic
+journal allowance. Other Cargo and native runs retain the accepted 1 MiB
+default. This changes only retained CI text, not the execution deadline,
+target quota, cleanup/reaper, runtime byte budgets or selected tests.
+The local WSL 26 / Python 3.14 quiet-output check stayed under 1 MiB of log
+but exited 101: 1168 passed, 9 failed, 22 ignored. Three failures explicitly
+reject unsupported Python 3.14; six bounded relay exchanges timed out on
+this WSL environment. This is failed local evidence, not native Ubuntu 24.04
+acceptance or a reason to relax the original test deadlines.
+The same initial shared run's doctor consumer reached the offline command
+fixture but failed when `strip` tried to write its owned copy of the immutable
+0555 producer binary. The fixture now makes only its scratch copy writable;
+the selected producer artifact remains unchanged. The failed attempt remains
+in the run history rather than being counted as passing doctor qualification.
+
+The doctor and admission integration harnesses embed Cargo's binary path.
+For a shared run, the consumer verifies the `agentfw` role from the same
+immutable artifact and passes its private selected path to those harnesses.
+Direct Cargo execution retains the original compiled path. Both paths run from
+the original package working directory. No test filter, receiver control or
+native refusal is replaced by an artifact summary.
+
+Dispatch `agent-doctor.yml` and `mcp-https-get.yml` directly at one exact
+commit for source-build comparison. Then dispatch `mcp-create-file.yml` with
+`build_mode=shared` and `sou229_consumers=true` at that commit. This focused
+manual plan selects one current-run producer and exactly the doctor and GET
+consumers. It does not post admission. Retain job/attempt/source IDs, test case
+inventories, doctor and GET useful/refusal outcomes, calibrated GET receiver
+and prevention witnesses, build-use records, producer manifest and transfer
+metrics. Missing, failed, skipped or cancelled producer and incompatible or
+tampered bytes refuse; no consumer silently builds a fallback. The build-use
+`outcome` distinguishes `full_local_build`, `verified_reuse`, required
+`source_clippy` and `failed`.
+Unavailable custody is reported by the producer guard before download.
+
+Compare actual `fresh=false` Cargo compiler artifacts and compilation step
+time separately from tests, required Clippy, download/verification and total
+job elapsed. A warm source cache is not a cold compilation. Final Ready CI,
+all five CodeQL analyses, trusted admission and merge remain with the lead.

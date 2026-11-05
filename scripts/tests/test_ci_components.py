@@ -139,6 +139,25 @@ class SharedComponents(unittest.TestCase):
             self.assertIn("selected['" + workflow + "'] = ['" + job + "']", body)
         self.assertIn("default: false", manual.split("      sou222_consumers:\n", 1)[1].split("      edit_only:\n", 1)[0])
 
+    def test_doctor_get_comparison_only_selects_reviewed_producer_and_consumers(self):
+        manual = (ROOT / ".github/workflows/mcp-create-file.yml").read_text()
+        body = manual.split("  reuse-plan:\n", 1)[1].split("  reuse-qualification:\n", 1)[0]
+        self.assertIn("SOU229_CONSUMERS: ${{ inputs.sou229_consumers }}", body)
+        self.assertIn("if os.environ['SOU229_CONSUMERS'] == 'true':", body)
+        self.assertIn("selected['agent-doctor.yml'] = ['agent-doctor-linux']", body)
+        self.assertIn("selected['mcp-https-get.yml'] = ['linux-https-get']", body)
+        self.assertIn("if os.environ['SOU229_CONSUMERS'] != 'true':", body)
+        for workflow, job in (("agent-doctor.yml", "agent-doctor-linux"),
+                              ("mcp-https-get.yml", "linux-https-get")):
+            source = blocks((ROOT / ".github/workflows" / workflow).read_text())[job]
+            shared = blocks(generated())[workflow.removesuffix(".yml") + "--" + job]
+            self.assertIn("SOU166_MODE: source", source)
+            self.assertIn("SOU166_MODE: shared", shared)
+            self.assertIn("ci_qualification_build.py guard", shared)
+            self.assertIn("ci_qualification_build.py prepare", shared)
+            self.assertIn("ci_qualification_build.py binary", shared)
+            self.assertIn("-- clippy --locked --offline", shared)
+
     def test_linux_compatibility_refuses_loader_override_without_changing_windows_python(self):
         jobs = blocks((ROOT / ".github/workflows/mcp-windows-create.yml").read_text())
         linux = jobs["linux-read-create-https-regressions"]
