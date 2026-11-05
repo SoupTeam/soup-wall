@@ -500,3 +500,68 @@ these new contention controls is requested; a Windows pass cannot qualify them.
 
 Issuer and payload delivery remain disabled. This fixes the reviewed transaction
 boundary only; the restricted recipient and six benign outcomes remain open.
+
+
+### Restricted recipient interface proposal - November 6
+
+Expiry correction db84de69 was independently accepted in
+[review 5791412713](https://github.com/SoupTeam/soup-wall/pull/346#pullrequestreview-5791412713):
+37 distinct ordinary Linux tests, 18 expiry/contention refusals and three valid
+consume/dispose/confirm controls passed. This accepts expiry handling only.
+
+The next execution/IPC slice needs interface review before implementation, as
+required by SOU-218. Source inspection found no existing zero-authority receiving
+entry point that can be enabled unchanged:
+
+| Existing component | Reusable responsibility | Missing receiving guarantee |
+| --- | --- | --- |
+| `pilot_launcher::consumer::Consumer` | Held child identity and physical stop | No new confined recipient or exact-source delivery channel |
+| `pilot_host::isolate` | Clean environment and project configuration | Does not create OS namespaces; explicitly passes selected provider inputs |
+| `sandbox::run_linux` | Required Linux user/network/PID isolation, capability drop, bounded collection | Mounts a writable workspace, accepts arbitrary program/args and has null stdin |
+| `analysis_purpose::PendingWithdrawal` | Affine selected-process stop confirmation | Carries no response binding to a receiving lifecycle; confirmation returns unit |
+| `native::quarantine` | Private complete bytes and provenance with original expiry | Terminal custody has no authenticated one-use transfer state |
+
+Proposed reviewable increment, within the existing launcher and sandbox modules:
+
+1. Add an internal restricted-reader profile to the existing sandbox machinery,
+   not another launcher or classifier. No caller-chosen command, project mount,
+   writable host mount, provider credential, native token, MCP socket or inherited
+   descriptor. Required user/PID/network namespaces and capability drop stay
+   mandatory. Private scratch is disposable and bounded; missing isolation refuses.
+2. Initially run only a fixed local test reader over public fixture bytes. It
+   returns a bounded digest/length acknowledgement to its owning parent, not raw
+   text or executable instructions to the original agent. No model/API call or
+   production quarantine bytes enter this first witness. A successful witness
+   proves confined transport only, not useful semantic interpretation.
+3. For later daemon wiring, retain exact source binding and original monotonic
+   deadline in an affine withdrawal receipt. Register the fresh held child and
+   executable/profile identity through the existing protected control boundary.
+   Bind its distinct generation to daemon instance, quarantine ID, original
+   response hash/length, call/epoch/policy and consumed purpose ID. Copied JSON
+   identity, client assertions and the stopped source child cannot substitute.
+4. Proposed handoff uses a parent-owned private anonymous channel with explicit
+   descriptor ownership. The reader receives no bytes until current source
+   custody, policy, expiry, spent purpose/authorities, selected-owner cleanup and
+   actual recipient identity are checked together. Reserve transfer once before
+   delivery; partial write, timeout, lost daemon or recipient exit is terminal,
+   without retry into another recipient or restoration of source rights.
+5. Do not return recipient stdout as ordinary agent/tool content. Derived content
+   retains source taint and requires a separately reviewed receiving boundary.
+   No output from this compartment authorizes a later tool action.
+
+Required first runtime witnesses: actual network denial, failed project/home
+read and host write, absent credentials/control descriptors, child escape and
+cleanup, bounded output/time, substituted recipient and replay. Later connected
+witnesses additionally cover partial delivery, restart, source/policy expiry and
+an already running source effect. Preserve exact bytes and original labels in
+all matched benign/malicious pairs; confined receipt is not attack refusal.
+
+Decision requested from TL: approve the fixture-only no-network reader/profile
+and anonymous-channel slice for the next working increment, and identify the
+intended useful receiving surface. A local deterministic reader can validate
+confinement; it cannot replace semantic interpretation. Reusing the current
+Claude host would require explicit provider/egress and output-boundary design,
+which this proposal does not approve or enable. No new model budget is requested.
+
+This proposal is not an implementation or a six-case correction. Production
+issuer, handoff and signature interpretation remain unchanged and unsupported.
