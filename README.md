@@ -42,6 +42,9 @@ are outside this Linux pilot's supported platform.
 
 ## Choose where to start
 
+Downloaded a binary archive? Use the included [offline archive guide](docs/RELEASE_ARCHIVE.md)
+for its root-level executable commands, operator documentation and separately required assets.
+
 Joining the development team? Start with the [development guide](docs/DEVELOPMENT.md), then read [CONTRIBUTING.md](CONTRIBUTING.md). The [documentation index](docs/README.md) links setup, architecture, operator procedures, and verification evidence.
 
 Development starts from the `baseline/team-handoff` source tag. The [product roadmap](docs/ROADMAP.md) orders work by dependencies and acceptance criteria, with one final release after the complete product passes its gates. The canonical repository is [SoupTeam/soup-wall](https://github.com/SoupTeam/soup-wall).
