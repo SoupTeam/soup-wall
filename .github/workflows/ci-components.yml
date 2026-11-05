@@ -3819,6 +3819,9 @@ jobs:
           path: |
             ${{ runner.temp }}/sou215-pilot-scope/report.json
             ${{ runner.temp }}/sou215-pilot-scope.log
+            ${{ runner.temp }}/sou215-pilot-scope/installed-tools/demo/report.json
+            ${{ runner.temp }}/sou215-pilot-scope/installed-tools/support/report.json
+            ${{ runner.temp }}/sou215-pilot-scope/installed-tools/support/index.html
             ${{ runner.temp }}/sou215-installed-pilot/report.json
             ${{ runner.temp }}/sou215-installed-pilot.log
             ${{ runner.temp }}/sou215-pilot-demo/report.json
