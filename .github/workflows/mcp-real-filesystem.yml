@@ -125,7 +125,6 @@ jobs:
     timeout-minutes: 50
     env:
       RUSTUP_TOOLCHAIN: '1.99.1'
-      SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -190,6 +189,8 @@ jobs:
           print('CANDIDATE_BWRAP='+value['bwrap'])
           PY
       - name: Provision only the exact job sandbox executable
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: |
           set -euo pipefail
           python3 -B scripts/ci_bwrap_userns.py install --source "$CANDIDATE_BWRAP" \
@@ -208,6 +209,8 @@ jobs:
             --installed-output "$RUNNER_TEMP/linux-candidate/installed" --output "$RUNNER_TEMP/linux-candidate/exercise"
       - name: Remove only this job's sandbox permission
         if: always()
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: python3 -B scripts/ci_bwrap_userns.py cleanup --report "$RUNNER_TEMP/linux-candidate/apparmor-cleanup.json"
       - name: Retain bounded candidate provenance and failed attempts
         if: always()
