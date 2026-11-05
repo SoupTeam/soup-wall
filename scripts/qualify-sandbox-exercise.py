@@ -20,7 +20,8 @@ def run(args):
     profiles={kind:Path(row['profile']['path']) for kind,row in selection['prepared_profiles'].items()}
     report={'format':'sw-installed-sandbox-exercise-qualification/1','status':'failed','cases':[],
             'active_protection':False,'cargo_or_libtest':'not-required'}
-    env={'HOME':str(args.output),'PATH':'/usr/bin:/bin','LANG':'C','TMPDIR':str(args.output)}
+    env={'HOME':str(args.output),'PATH':'/usr/bin:/bin','LANG':'C','TMPDIR':str(args.output),
+         'SOU62_INHERITED_SECRET':'owned-calibration-canary','SOU68_INHERITED_SECRET':'owned-calibration-canary'}
     def case(label,kind,profile,*,execute=True,digest=None,interrupt=False):
         words=[str(agent),'sandbox-exercise','--kind',kind,'--profile',str(profile),
                '--profile-sha256',digest or c.sha(profile.read_bytes())]
