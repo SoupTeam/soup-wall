@@ -10,9 +10,11 @@ Successful [native run #611](https://github.com/SoupTeam/soup-wall/actions/runs/
 measured clean source `9d8a5fcf524c1cb57f1d05328e4005845b8a139a`, tree
 `af2f98916d54063634217784baa4a65e1a9445cb`, independently based on accepted main
 `5dd30c878d0c786d4ec6c623a33ce4b554469683`. Source before/after matched.
-Later evidence/procedure-only commits do not change the measured implementation,
-qualification drivers or workflow. The PR stays Draft; these results do not
-substitute for final Ready qualification, release acceptance or live-model evaluation.
+The initial evidence/procedure-only commits through
+`2b7119803a4d3daeed64f6c11641b75dba7c556d` did not change that measured implementation,
+qualification driver or workflow. The later output-boundary review follow-up below
+requires its own source-bound qualification. The PR stays Draft; these results do
+not substitute for final Ready qualification, release acceptance or live-model evaluation.
 
 The job used native Ubuntu x86_64, an ordinary owned user, pinned runtimes,
 verified CPython 3.12, the installed front door outside the checkout and owned
@@ -101,3 +103,19 @@ Reproduce through `mcp-real-filesystem.yml` on the measured source with
 inventories and source-before/after equality, including actual refusals,
 interruption/cleanup witnesses and both protected reads, rather than only the
 workflow's green badge.
+
+## Review follow-up — archive output boundary
+
+[Review finding](https://github.com/SoupTeam/soup-wall/pull/362#discussion_r4477230643)
+reproduced an ancestor-symlink escape on the initial delivery head: the lexical
+export check could publish inside a preserved workspace. Native #611 did not
+cover that boundary and is not evidence for the follow-up source.
+
+The fix requires a canonical private parent, holds its no-follow descriptor and
+verifies the publisher's descriptor against that identity and the current path
+immediately before publication. Declared and resolved preserved roots are checked
+again. Regressions cover all preserved root categories, an otherwise allowed
+alias, a redirect before opening, moving the same destination inode into a
+workspace during writing, private-directory replacement and successful create-new
+publication. The installed qualifier adds an explicit zero-archive ancestor-alias
+control. Fresh Linux/native results for this follow-up are pending.
