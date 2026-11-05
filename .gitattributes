@@ -107,3 +107,6 @@ docs/operations/evidence/sou157-mapped-git-41456736055/** text eol=lf
 # store every byte verbatim, without line-ending conversion.
 crates/agentfw/tests/fixtures/schema_upgrade/** -text
 docs/operations/evidence/sou-204-schema-upgrade-2026-11-03/** -text
+
+# SOU-228 sanitized fixtures are bound by raw-byte SHA-256 in provenance.json: keep LF on every platform.
+scripts/tests/fixtures/sou228/** text eol=lf
