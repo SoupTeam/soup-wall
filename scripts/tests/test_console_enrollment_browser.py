@@ -36,6 +36,7 @@ def page_html():
     return html
 
 
+@unittest.skipUnless(os.name == "posix", "Unix private file contract")
 class EnrollmentFixturePrivateFiles(unittest.TestCase):
     def test_native_driver_publishes_private_trust_and_replaces_it_atomically(self):
         file = SRC.parents[2] / "scripts/console-enrollment-acceptance.py"
@@ -330,6 +331,38 @@ class EnrollmentPanelBrowserTests(unittest.TestCase):
             return response;
           };
         })();""".replace("CONFIG", config))
+
+    def test_stalled_committed_rotation_has_a_deadline_and_keeps_the_same_intent(self):
+        path = f"/admin/v1/tenants/{TENANT}/agents/edge-1/credential-rotations"
+        self.overrides[("POST", path)] = self.committed_rotation
+        self.page.add_init_script("""(() => {
+          const original = window.fetch;
+          let held = false;
+          window.fetch = async (...args) => {
+            const response = await original(...args);
+            if (!held && args[1]?.method === 'POST' && String(args[0]).endsWith('/credential-rotations')) {
+              held = true; await response.text();
+              response.text = () => new Promise(() => {});
+              window.fixtureBodyHeld = true;
+            }
+            return response;
+          };
+        })();""")
+        self.page.clock.install()
+        self.open()
+        self.page.get_by_role("button", name="Rotate credential for edge-1").click()
+        self.confirm("edge-1")
+        self.page.wait_for_function("() => window.fixtureBodyHeld === true")
+        self.page.clock.fast_forward(20_001)
+        self.page.wait_for_function("() => document.getElementById('enroll-status').textContent.includes('Confirm with the same request')", timeout=1500)
+        self.assertFalse(self.page.locator("#enroll-secret").is_visible())
+        self.assertEqual(self.enabled_mutations(), 0)
+        self.assertEqual(len(self.rotations()), 1)
+        self.page.get_by_role("button", name="Confirm with the same request").click()
+        self.wait_status("this exact request was already committed")
+        first, second = self.rotations()
+        self.assertEqual(first, second)
+        self.assertEqual(self.page.locator("#enroll-secret-value").inner_text(), first["replacement_token"])
 
     def test_body_abort_after_enrollment_reconciles_without_resending(self):
         self.overrides[("POST", f"/admin/v1/tenants/{TENANT}/agents")] = self.enroll_ok()

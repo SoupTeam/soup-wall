@@ -71,3 +71,12 @@ writer from the wrong helper module. Both failed reports are retained under
 [attempt-1](attempt-1/run.json), with the original runtime and verified input
 hashes. The corrected driver imports the existing credential writer and its
 regression checks private atomic replacement before the next Linux run.
+
+The [second enrollment attempt](https://github.com/SoupTeam/soup-wall/actions/runs/42073386456)
+passed all 61 SQLite controls. The PostgreSQL attempt reached a committed
+rotation whose deliberately lost response left the page in its sending state.
+Both original reports are retained under [attempt-2](attempt-2/run.json).
+A separate browser regression reproduced an indefinitely stalled response
+body and failed before the fix. Enrollment requests now settle after a
+20-second deadline and reconcile the same operation without an automatic
+resend. The regression verifies that the explicit retry is byte-identical.

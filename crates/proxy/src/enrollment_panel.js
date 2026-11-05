@@ -22,6 +22,23 @@ const enrollment = (() => {
   const ambiguous = e => e.status === undefined || e.status >= 500;
   const stale = (id, generation) => generation !== epoch || id !== tenant;
 
+  // Settle a stalled response body as well as aborting its transport. A timed
+  // out mutation follows the same exact-enrollment reconciliation as a lost reply.
+  async function enrollmentRequest(path, options = {}) {
+    const deadline = new AbortController(), parent = options.signal;
+    const signal = parent ? AbortSignal.any([parent, deadline.signal]) : deadline.signal;
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error("Enrollment request timed out"));
+        deadline.abort();
+      }, 20_000);
+    });
+    try {
+      return await Promise.race([request(path, {...options, signal}), timeout]);
+    } finally { clearTimeout(timer); }
+  }
+
   function lock() {
     const disabled = busy || !!blocked || !!secret || !!pending || !owner();
     document.querySelectorAll("#enroll-panel .enroll-mutation").forEach(b => { b.disabled = disabled; });
@@ -31,7 +48,7 @@ const enrollment = (() => {
   async function load() {
     const id = tenant, generation = epoch;
     if (!id) return null;
-    const value = await request(base(id), { signal: controller.signal, cache: "no-store" });
+    const value = await enrollmentRequest(base(id), { signal: controller.signal, cache: "no-store" });
     if (stale(id, generation)) return null;
     if (!Array.isArray(value) || value.some(a => a.tenant_id !== id)) throw new Error("Agent inventory identity mismatch");
     agents = value;
@@ -42,7 +59,7 @@ const enrollment = (() => {
 
   async function readEnrollment(id, agent, generation) {
     try {
-      const row = await request(`${base(id)}/enrollment?${new URLSearchParams({agent_id: agent})}`,
+      const row = await enrollmentRequest(`${base(id)}/enrollment?${new URLSearchParams({agent_id: agent})}`,
         {signal: controller.signal, cache: "no-store"});
       if (stale(id, generation)) return null;
       if (row?.tenant_id !== id || row?.agent_id !== agent || !Number.isSafeInteger(row.credential_generation))
@@ -225,8 +242,8 @@ const enrollment = (() => {
     evidence.textContent = "Reading policy evidence…";
     renderCommands();
     const [issuer, fleet] = await Promise.allSettled([
-      request("/admin/v1/managed-issuer", options),
-      request(`/admin/v1/tenants/${encodeURIComponent(id)}/agent-fleet-detail?${new URLSearchParams({agent_id: agent})}`, options),
+      enrollmentRequest("/admin/v1/managed-issuer", options),
+      enrollmentRequest(`/admin/v1/tenants/${encodeURIComponent(id)}/agent-fleet-detail?${new URLSearchParams({agent_id: agent})}`, options),
     ]);
     if (stale(id, generation) || setup !== selected) return;
     if (issuer.status === "fulfilled" && ID.test(issuer.value?.key_id || "") && /^[0-9a-f]{64}$/.test(issuer.value?.public_key_hex || "")) {
@@ -302,7 +319,7 @@ const enrollment = (() => {
     if (agents.some(a => a.agent_id === agent)) { say(`${agent} is already enrolled in this tenant (duplicate identity). Nothing was sent.`, "error"); return; }
     return guarded(`Enroll ${agent}`, async (id, generation) => {
       try {
-        const issued = await request(base(id), { method: "POST", body: JSON.stringify({ agent_id: agent }) });
+        const issued = await enrollmentRequest(base(id), { method: "POST", body: JSON.stringify({ agent_id: agent }) });
         if (stale(id, generation)) return;
         if (issued?.tenant_id !== id || issued?.agent_id !== agent || !/^sw_agent_[A-Za-z0-9_-]{43}$/.test(issued?.token || ""))
           throw Object.assign(new Error("enrollment response identity mismatch"), { status: 0 });
@@ -344,7 +361,7 @@ const enrollment = (() => {
   // byte-identical, which the server acknowledges without another change.
   async function send(op, generation) {
     try {
-      const receipt = await request(agentAction(op.tenant, op.agent, "credential-rotations"), { method: "POST",
+      const receipt = await enrollmentRequest(agentAction(op.tenant, op.agent, "credential-rotations"), { method: "POST",
         body: JSON.stringify({ expected_generation: op.expected, operation_id: op.operation_id, replacement_token: op.token }) });
       if (stale(op.tenant, generation)) return;
       if (receipt?.tenant_id !== op.tenant || receipt?.agent_id !== op.agent || receipt?.operation_id !== op.operation_id || receipt?.generation !== op.expected + 1)
@@ -367,7 +384,7 @@ const enrollment = (() => {
   function revoke_(agent) {
     return guarded(`Revoke ${agent}`, async (id, generation) => {
       try {
-        await request(agentAction(id, agent, "revoke"), { method: "POST", body: "{}" });
+        await enrollmentRequest(agentAction(id, agent, "revoke"), { method: "POST", body: "{}" });
         if (stale(id, generation)) return;
         const row = await readEnrollment(id, agent, generation);
         if (stale(id, generation)) return;

@@ -273,6 +273,8 @@ def main():
                 browser = playwright.chromium.launch(headless=True)
                 context = browser.new_context(viewport={"width": 1440, "height": 1200})
                 page = context.new_page()
+                browser_errors = []
+                page.on("pageerror", lambda error: browser_errors.append(type(error).__name__))
                 posts = []
                 page.on("request", lambda r: posts.append(r.url.split("/admin/v1/tenants/")[-1])
                         if r.method == "POST" and "/admin/v1/tenants/" in r.url else None)
@@ -652,6 +654,7 @@ def main():
                       page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1"))
                 page.locator("#enroll-panel").screenshot(path=str(args.output / f"{args.backend}-narrow.png"))
                 check("browser-no-storage", page.evaluate("localStorage.length === 0 && sessionStorage.length === 0"))
+                check("enrollment-page-has-no-uncaught-errors", not browser_errors)
                 context.close()
                 browser.close()
 

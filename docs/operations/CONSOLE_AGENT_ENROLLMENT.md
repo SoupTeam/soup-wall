@@ -82,6 +82,9 @@ final for that Agent ID.
 If a change gets no clear answer (network loss, timeout, server error), the
 panel never resends on its own. It reads the server's enrollment records once
 and tells you what it found; all other changes stay disabled meanwhile.
+Each enrollment request has a 20-second deadline, including reading its
+response body. A timeout leaves a mutation's outcome uncertain and enters
+the same reconciliation flow.
 
 - **Enrollment** recorded without the credential reaching you: rotate to issue
   a new one (or revoke). Not recorded: you may enroll again.
