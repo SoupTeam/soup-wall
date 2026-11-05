@@ -123,7 +123,11 @@ class InstalledDoor(QUAL.FrontDoor):
         require(words[2].endswith("scripts/pilot.py"), "unexpected_front_door_words")
         result = [str(self.args.agentfw), "pilot", "--home", str(self.home), *words[3:]]
         if getattr(self.args, "candidate_directory", None) is not None and command in ("preview", "prepare"):
+            if "--sandbox-tests" in result:
+                index = result.index("--sandbox-tests")
+                del result[index:index + 2]
             result += ["--candidate-receipt", str(self.args.candidate_directory / "pilot-binaries.json")]
+            require("--sandbox-tests" not in result, "candidate_forwarded_legacy_test_argument")
         return result
 
 
