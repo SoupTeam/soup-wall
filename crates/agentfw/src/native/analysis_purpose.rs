@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Inert operator grant contract. Verification never authorizes delivery.
+//! Purpose verification and atomic withdrawal. No operator mint or delivery.
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ pub const UNSUPPORTED: &str = "analysis_purpose_consumer_identity_and_drain_unsu
 type HmacSha256 = Hmac<Sha256>;
 
 /// These claims must come from a daemon-owned quarantine record, not CLI input.
-/// No production constructor for an authenticated quarantine record exists yet.
+/// Expected claims are reconstructed from private daemon custody at consumption.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Binding {
@@ -122,6 +122,198 @@ pub fn operator_request(_derived_key: &[u8], _quarantine_id: &str) -> Result<(),
     Err(UNSUPPORTED)
 }
 
+/// Affine withdrawal receipt. It carries no payload and cannot authorize release.
+/// There is intentionally no route or operator mint wired to this component yet.
+pub struct PendingWithdrawal {
+    instance: String,
+    registration: crate::pilot_approval::consumer::Registration,
+}
+
+/// Consume authenticated purpose and withdraw both source authorities under the
+/// existing admission lock. Failures after commitment never restore the grant.
+pub fn consume(
+    st: &crate::handlers::Shared,
+    grant: &Grant,
+) -> Result<PendingWithdrawal, &'static str> {
+    let native = st.native.as_ref().ok_or("native_not_configured")?;
+    if !st.config.enforce || st.config.judge.enabled {
+        return Err("native_enforcement_required");
+    }
+    let now = super::wall_time_ms()?;
+    let registration = {
+        let mut sessions = native
+            .sessions
+            .lock()
+            .map_err(|_| "native_state_unavailable")?;
+        let registration = sessions
+            .consumers
+            .get(&grant.binding.host_generation)
+            .ok_or("analysis_consumer_missing")?
+            .clone();
+        registration
+            .verify(native.instance_id(), &native.registry_sha256, now)
+            .map_err(|_| "analysis_consumer_unverified")?;
+        let firewall = st.firewall.lock().map_err(|_| "native_state_unavailable")?;
+        let policy = serde_json::to_value(firewall.policy_for_diagnostics())
+            .map_err(|_| "analysis_policy_unavailable")?;
+        let mut quarantine = native
+            .quarantine
+            .lock()
+            .map_err(|_| "analysis_quarantine_state")?;
+        let expected = quarantine.purpose_binding(
+            &grant.binding.quarantine_id,
+            &registration,
+            native.instance_id(),
+            &super::canonical_digest(&policy),
+            native.monotonic_now(),
+        )?;
+        verify(&derive_key(&native.token), grant, &expected, now)?;
+        commit_withdrawal(&mut sessions, grant, &registration, now)?;
+        quarantine.spend(&expected.quarantine_id);
+        registration
+    };
+    // The admission lock has already withdrawn both exact authorities. Existing
+    // retirement closes calls/approval state. Failure leaves purpose spent.
+    super::pilot_stop::revoke_selected(
+        st,
+        registration.host(),
+        registration.authorities(),
+        registration.authority_expiry(),
+    )
+    .map_err(|(code, _)| code)?;
+    Ok(PendingWithdrawal {
+        instance: native.instance_id().into(),
+        registration,
+    })
+}
+
+fn commit_withdrawal(
+    sessions: &mut super::Sessions,
+    grant: &Grant,
+    registration: &crate::pilot_approval::consumer::Registration,
+    now: u64,
+) -> Result<(), &'static str> {
+    sessions.purpose_spent.retain(|_, expiry| *expiry > now);
+    if sessions.purpose_spent.contains_key(&grant.single_use_id) {
+        return Err("analysis_purpose_replay");
+    }
+    if sessions.purpose_spent.len() >= super::MAX_SPENT_AUTHORITIES {
+        return Err("analysis_purpose_capacity");
+    }
+    if registration.authority_expiry() <= now || grant.expires_at_ms > registration.expires() {
+        return Err("analysis_purpose_time");
+    }
+    if registration.authorities().values().any(|digest| {
+        sessions
+            .spent_authorities
+            .get(digest)
+            .is_some_and(|exp| *exp > now)
+    }) {
+        return Err("analysis_purpose_authority_retired");
+    }
+    super::pilot_stop::withdraw_locked(
+        sessions,
+        registration.host(),
+        registration.authorities(),
+        registration.authority_expiry(),
+        now,
+    )
+    .map_err(|(code, _)| code)?;
+    sessions
+        .purpose_spent
+        .insert(grant.single_use_id.clone(), grant.expires_at_ms);
+    Ok(())
+}
+
+impl PendingWithdrawal {
+    /// Confirms only selected-process disposal. It is not a receipt for effect
+    /// rollback, sandbox isolation, safe content, or a fresh restricted reader.
+    pub fn confirm(self, st: &crate::handlers::Shared) -> Result<(), &'static str> {
+        let native = st.native.as_ref().ok_or("native_not_configured")?;
+        if native.instance_id() != self.instance {
+            return Err("analysis_purpose_instance");
+        }
+        // Repeat existing retirement/audit checks so a failed close cannot turn
+        // into confirmation merely because the session entry disappeared.
+        super::pilot_stop::revoke_selected(
+            st,
+            self.registration.host(),
+            self.registration.authorities(),
+            self.registration.authority_expiry(),
+        )
+        .map_err(|(code, _)| code)?;
+        let sessions = native
+            .sessions
+            .lock()
+            .map_err(|_| "native_state_unavailable")?;
+        if sessions.entries.values().any(|s| {
+            s.host_session.as_deref() == Some(self.registration.host())
+                || s.authority_digest
+                    .as_ref()
+                    .is_some_and(|d| self.registration.authorities().values().any(|v| v == d))
+        }) || !self
+            .registration
+            .authorities()
+            .iter()
+            .all(|(server, digest)| {
+                sessions.pilot_cleanup.get(digest).is_none_or(|row| {
+                    row.verified
+                        && row.host_session == self.registration.host()
+                        && row.server_id == *server
+                })
+            })
+            || !self.registration.physically_disposed()
+        {
+            return Err("analysis_purpose_cleanup_unconfirmed");
+        }
+        Ok(())
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub(super) fn lifecycle_fixture(
+    st: &crate::handlers::Shared,
+    registration: &crate::pilot_approval::consumer::Registration,
+    id: &str,
+) -> Grant {
+    let native = st.native.as_ref().unwrap();
+    let policy = super::canonical_digest(
+        &serde_json::to_value(st.firewall.lock().unwrap().policy_for_diagnostics()).unwrap(),
+    );
+    let mut quarantine = native.quarantine.lock().unwrap();
+    quarantine.seed_purpose_fixture(
+        id,
+        registration,
+        native.instance_id(),
+        &policy,
+        native.monotonic_now(),
+    );
+    let binding = quarantine
+        .purpose_binding(
+            id,
+            registration,
+            native.instance_id(),
+            &policy,
+            native.monotonic_now(),
+        )
+        .unwrap();
+    let now = super::wall_time_ms().unwrap();
+    let mut grant = Grant {
+        contract_version: CONTRACT.into(),
+        binding,
+        issued_at_ms: now,
+        expires_at_ms: now + 30_000,
+        single_use_id: crate::token::generate(),
+        signature: String::new(),
+    };
+    grant.signature = URL_SAFE_NO_PAD.encode(
+        mac(&derive_key(&native.token), &grant)
+            .finalize()
+            .into_bytes(),
+    );
+    grant
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,7 +405,7 @@ mod tests {
             );
         }
         // Cryptographic verification is intentionally repeatable. Single-use
-        // admission needs the daemon ledger and is not implemented/claimed.
+        // admission is separate and requires the daemon custody/withdrawal transaction.
     }
 
     #[test]
@@ -248,5 +440,73 @@ mod tests {
             grant.signature = URL_SAFE_NO_PAD.encode(mac(&key, &grant).finalize().into_bytes());
             assert!(verify(&key, &grant, &grant.binding, 150).is_err());
         }
+    }
+    #[test]
+    fn atomic_spend_withdrawal_replay_and_capacity() {
+        let registration = crate::pilot_approval::consumer::transaction_fixture();
+        let (_, grant) = fixture();
+        let mut sessions = super::super::Sessions::default();
+        assert_eq!(
+            commit_withdrawal(&mut sessions, &grant, &registration, 150),
+            Ok(())
+        );
+        assert!(registration
+            .authorities()
+            .values()
+            .all(|v| sessions.spent_authorities[v] == 3000));
+        assert_eq!(sessions.purpose_spent["nonce1"], 200);
+        assert_eq!(
+            commit_withdrawal(&mut sessions, &grant, &registration, 150),
+            Err("analysis_purpose_replay")
+        );
+        let mut other = grant.clone();
+        other.single_use_id = "another-nonce".into();
+        assert_eq!(
+            commit_withdrawal(&mut sessions, &other, &registration, 150),
+            Err("analysis_purpose_authority_retired")
+        );
+        for saturated in ["purpose", "authority", "host"] {
+            let mut sessions = super::super::Sessions::default();
+            for i in 0..super::super::MAX_SPENT_AUTHORITIES {
+                match saturated {
+                    "purpose" => {
+                        sessions.purpose_spent.insert(i.to_string(), 5000);
+                    }
+                    "authority" => {
+                        sessions.spent_authorities.insert(i.to_string(), 5000);
+                    }
+                    _ => {
+                        sessions.scoped_hosts.insert(i.to_string());
+                    }
+                }
+            }
+            assert!(commit_withdrawal(&mut sessions, &grant, &registration, 150).is_err());
+            assert!(!sessions.purpose_spent.contains_key("nonce1"));
+            assert!(registration
+                .authorities()
+                .values()
+                .all(|v| !sessions.spent_authorities.contains_key(v)));
+        }
+    }
+
+    #[test]
+    fn concurrent_spend_has_one_winner_and_no_partial_revocation() {
+        let sessions = std::sync::Mutex::new(super::super::Sessions::default());
+        let (_, grant) = fixture();
+        let registration = crate::pilot_approval::consumer::transaction_fixture();
+        std::thread::scope(|scope| {
+            let attempts: Vec<_> = (0..8)
+                .map(|_| {
+                    scope.spawn(|| {
+                        commit_withdrawal(&mut sessions.lock().unwrap(), &grant, &registration, 150)
+                    })
+                })
+                .collect();
+            let outcomes: Vec<_> = attempts.into_iter().map(|h| h.join().unwrap()).collect();
+            assert_eq!(outcomes.iter().filter(|r| r.is_ok()).count(), 1);
+        });
+        let sessions = sessions.lock().unwrap();
+        assert_eq!(sessions.purpose_spent.len(), 1);
+        assert_eq!(sessions.spent_authorities.len(), 2);
     }
 }

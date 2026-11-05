@@ -413,3 +413,65 @@ in that count. Local WSL enumeration failed, so independent Linux execution is
 still requested with `cargo test --locked -p agentfw --lib consumer` using an
 isolated target directory. This is a capacity fix, not purpose admission,
 restricted-recipient delivery, or a correction of any of the six refusals.
+
+
+### Atomic purpose withdrawal component - November 5
+
+Review [5788292266](https://github.com/SoupTeam/soup-wall/pull/346#pullrequestreview-5788292266)
+accepted the capacity correction at 204cd341 after 31 ordinary Linux component
+tests, including the explicitly re-executed real-process helper. This was WSL
+component evidence, not installed Ubuntu qualification. The next increment
+keeps the operator issuer and all payload release unsupported.
+
+`analysis_purpose::consume` reconstructs expected claims from private quarantine
+custody and the live sealed launcher/child registration. It verifies the
+separate purpose HMAC using the daemon key, current policy digest, source grant,
+original response hash/length, invocation binding, epoch, host and child
+generation. Neither an expected-binding JSON nor a copied receipt is authority.
+The admission lock covers one-use ledger checks, existing exact-grant withdrawal
+and quarantine spending. Purpose replay custody is bounded at 512; capacity or
+foreign-binding errors do not partially spend purpose/authority. The shared
+withdrawal helper is also used by the existing pilot-stop handler.
+
+After commitment, the existing retirement path closes sessions and pending
+approvals and audits withdrawal. Errors leave purpose and source authority
+spent. An affine pending receipt can confirm only after rechecking retirement,
+namespace cleanup custody and physical PID/process-group absence. It carries no
+content, has no deserialize/clone constructor, and grants no fresh-reader
+capability. A live child or unconfirmed namespace owner fails confirmation.
+This selected-process observation does not prove rollback or exclude an escaped
+process outside the observed group; a separately confined recipient and full
+in-flight/transfer/restart boundary remain required before any result release.
+
+The Linux helper now combines real sealed registration with the consume/confirm
+component: tampered hash, replay, retired registration, still-live child,
+unconfirmed cleanup and reaped-child confirmation. Its quarantine and signing
+inputs are explicit test fixtures. The separate original-execution regression
+checks binding reconstruction from actual private consumed-result custody,
+foreign instance/policy refusal and retirement invalidation. No test fixture
+is compiled into a production issuer. Windows tests cover transaction races,
+capacity refusal, exact source retention and the existing stop-handler behavior.
+Linux execution of the extended helper is requested independently and is not
+claimed from a Windows pass.
+
+Reproduction, each using an isolated Cargo target on Linux:
+
+```sh
+cargo test --locked -p agentfw --lib analysis_purpose
+cargo test --locked -p agentfw --lib native::execution::tests
+cargo test --locked -p agentfw --lib pilot_stop
+cargo test --locked -p agentfw --lib consumer
+```
+
+The CLI remains unsupported. No HTTP consumption route, production purpose
+mint, restricted recipient or payload handoff is enabled. All six refused cases
+remain unresolved. Review this working withdrawal component before integrating
+an issuer or enabling delivery.
+
+Local validation: 7 purpose-contract/transaction tests, 18 original-execution
+tests, 1 stop wire-contract test and 5 actual stop-endpoint regressions passed
+(31 total). Library check, strict Clippy and documentation validation passed.
+The first Clippy attempt flagged the extracted helper's complex return type;
+named type aliases corrected it without lint suppression. A broad `revoke`
+name filter matched two unrelated tests and is not included in this count.
+The extended real-process Linux helper remains pending independent execution.

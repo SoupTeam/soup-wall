@@ -258,6 +258,65 @@ mod lifecycle_tests {
     #[ignore = "re-executed with the real launcher argv marker by the parent witness"]
     async fn handler_lifecycle_child() {
         assert_eq!(std::env::args().nth(1).as_deref(), Some("pilot-launch"));
+        // Actual sealed registration and consume/confirm component path. Only
+        // the quarantine record/issuer are explicit fixtures, never production mint.
+        for mode in 0..3 {
+            let dir = tempfile::tempdir().unwrap();
+            let st = super::super::tests::fixture(dir.path());
+            let mut child = child();
+            let (registration, _files) = binding(&st, "purpose-host", &child);
+            assert_eq!(register(&st, &registration).await, StatusCode::NO_CONTENT);
+            let grant = analysis_purpose::lifecycle_fixture(&st, &registration, "purpose-q");
+            let mut forged = serde_json::to_value(&grant).unwrap();
+            forged["binding"]["response_sha256"] = json!("f".repeat(64));
+            let forged = serde_json::from_value(forged).unwrap();
+            assert!(analysis_purpose::consume(&st, &forged).is_err());
+            assert!(st
+                .native
+                .as_ref()
+                .unwrap()
+                .sessions
+                .lock()
+                .unwrap()
+                .purpose_spent
+                .is_empty());
+            let pending = analysis_purpose::consume(&st, &grant).unwrap();
+            assert!(analysis_purpose::consume(&st, &grant).is_err());
+            assert_eq!(register(&st, &registration).await, StatusCode::CONFLICT);
+            if mode == 1 {
+                st.native
+                    .as_ref()
+                    .unwrap()
+                    .sessions
+                    .lock()
+                    .unwrap()
+                    .pilot_cleanup
+                    .insert(
+                        registration.authorities()["filesystem"].clone(),
+                        pilot_cleanup::unconfirmed_consumer_fixture(
+                            registration.host(),
+                            "filesystem",
+                        ),
+                    );
+            }
+            if mode != 0 {
+                child.0.kill().unwrap();
+                child.0.wait().unwrap();
+            }
+            let confirmed = pending.confirm(&st);
+            assert_eq!(confirmed.is_ok(), mode == 2);
+            assert!(
+                st.native
+                    .as_ref()
+                    .unwrap()
+                    .quarantine
+                    .lock()
+                    .unwrap()
+                    .retained("purpose-q")
+                    .unwrap()
+                    .1
+            );
+        }
         let dir = tempfile::tempdir().unwrap();
         let st = super::super::tests::fixture(dir.path());
         for index in 0..40 {

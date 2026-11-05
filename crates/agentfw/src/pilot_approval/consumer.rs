@@ -16,6 +16,12 @@ pub(crate) struct Registration {
 }
 
 impl Registration {
+    pub(crate) fn identity(&self) -> String {
+        super::digest(&serde_json::to_vec(self).expect("typed registration"))
+    }
+    pub(crate) fn generation(&self) -> &str {
+        &self.generation
+    }
     pub(crate) fn host(&self) -> &str {
         &self.run.host_session
     }
@@ -227,7 +233,7 @@ pub(crate) fn held_fixture(
 mod tests {
     use super::*;
 
-    fn fixture() -> Registration {
+    pub(super) fn fixture() -> Registration {
         Registration {
             contract: CONTRACT.into(),
             run: Run {
@@ -325,4 +331,9 @@ mod tests {
         child.wait().unwrap();
         assert!(verify_child(pid, start, parent).is_err());
     }
+}
+
+#[cfg(test)]
+pub(crate) fn transaction_fixture() -> Registration {
+    tests::fixture()
 }

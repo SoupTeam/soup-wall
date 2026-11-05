@@ -266,6 +266,53 @@ fn refused_original_quarantine_preserves_source_after_retirement_and_spends_call
         2
     );
     assert!(!before.1);
+    let mut held =
+        serde_json::to_value(crate::pilot_approval::consumer::transaction_fixture()).unwrap();
+    held["run"]["authorities"]["filesystem"] = json!("fixture-grant");
+    let held = serde_json::from_value(held).unwrap();
+    let policy = before.0["policy_sha256"].as_str().unwrap();
+    let expected_binding = native
+        .quarantine
+        .lock()
+        .unwrap()
+        .purpose_binding(
+            id,
+            &held,
+            native.instance_id(),
+            policy,
+            native.monotonic_now(),
+        )
+        .unwrap();
+    assert_eq!(
+        expected_binding.response_sha256,
+        expected["original_result_sha256"]
+    );
+    assert_eq!(
+        expected_binding.response_bytes,
+        expected["original_result_bytes"]
+    );
+    assert_eq!(
+        expected_binding.invocation_binding,
+        before.0["invocation_binding"]
+    );
+    assert!(native
+        .quarantine
+        .lock()
+        .unwrap()
+        .purpose_binding(id, &held, "other-instance", policy, native.monotonic_now())
+        .is_err());
+    assert!(native
+        .quarantine
+        .lock()
+        .unwrap()
+        .purpose_binding(
+            id,
+            &held,
+            native.instance_id(),
+            "other-policy",
+            native.monotonic_now()
+        )
+        .is_err());
     assert!(matches!(
         env.finish(None),
         Err("native_call_unknown_or_spent")
@@ -274,6 +321,18 @@ fn refused_original_quarantine_preserves_source_after_retirement_and_spends_call
     let after = native.quarantine.lock().unwrap().retained(id).unwrap();
     assert_eq!(before.0, after.0);
     assert!(after.1);
+    assert!(native
+        .quarantine
+        .lock()
+        .unwrap()
+        .purpose_binding(
+            id,
+            &held,
+            native.instance_id(),
+            policy,
+            native.monotonic_now()
+        )
+        .is_err());
     assert!(native
         .collector_view()
         .quarantine
