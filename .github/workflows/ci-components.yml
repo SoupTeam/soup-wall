@@ -772,11 +772,10 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Validate owned acceptance driver
-        run: python3 -m py_compile scripts/managed-credential-rotation-demo.py
+        run: python3 -m py_compile scripts/managed-credential-rotation-demo.py scripts/managed-connection-acceptance.py
       - name: Build real Console and Agent
         run: cargo build --locked -p llm-firewall -p agentfw
       - name: Install isolated PostgreSQL fixture dependency
-        if: matrix.backend == 'postgres'
         run: |
           python3 -m venv "$RUNNER_TEMP/sou55-venv"
           "$RUNNER_TEMP/sou55-venv/bin/python" -m pip install cryptography==50.0.2
@@ -789,6 +788,22 @@ jobs:
           else
             python3 scripts/managed-credential-rotation-demo.py --backend sqlite --no-build --output target/sou55-sqlite.json
           fi
+      - name: Installed transactional managed Console connection (SOU-231)
+        run: |
+          if ! command -v strace >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends strace
+          fi
+          "$RUNNER_TEMP/sou55-venv/bin/python" -B scripts/managed-connection-acceptance.py \
+            --backend "${{ matrix.backend }}" --output "$RUNNER_TEMP/sou231-${{ matrix.backend }}.json"
+      - name: Archive installed connection exact-source outcomes
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou231-installed-connection-${{ matrix.backend }}
+          path: ${{ runner.temp }}/sou231-${{ matrix.backend }}.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Archive exact-source non-secret evidence
         if: always()
         uses: actions/upload-artifact@v7

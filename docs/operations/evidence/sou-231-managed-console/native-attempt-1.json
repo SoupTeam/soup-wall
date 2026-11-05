@@ -1,0 +1,19 @@
+{
+  "run_id": 41883743998,
+  "source_commit": "1fc3cc83f7513073bdc7339bcb54d97c7e658ebe",
+  "status": "failed",
+  "cause": "Interrupted-publication witness assertion failed on both backends; earlier controls passed. Subsequent attempt records explicit syscall/target/signal preservation observations instead of relying on a strace display annotation.",
+  "artifacts": {
+    "sqlite": {
+      "id": 13351355232,
+      "sha256": "14449f81d855fcaf8db5a93b9693948e8d1e687928171ef96e7c7537c0cdcfb4"
+    },
+    "postgres": {
+      "id": 13350178171,
+      "sha256": "d657087f9d192d8eba6841ed8e47d5ef7cad00bb2138e30c934c1367e2a53cc8"
+    }
+  },
+  "zip_crc_and_every_source_hash_verified": true,
+  "source_hashes_each": 283,
+  "security_followup": "Fixture publication now reuses the existing O_EXCL 0600/fsync/atomic-replace credential primitive instead of write-then-chmod; CodeQL rerun pending."
+}

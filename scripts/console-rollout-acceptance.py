@@ -108,6 +108,10 @@ def tls_edge(stack, temp, upstream):
                 data = response.read(256_000)
                 self.send_response(response.status)
                 self.send_header("Content-Type", response.getheader("Content-Type", "application/json"))
+                # Preserve authenticated public scope metadata; never forward secrets.
+                for name in ("x-soup-agent-tenant", "x-soup-agent-id"):
+                    if response.getheader(name) is not None:
+                        self.send_header(name, response.getheader(name))
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
