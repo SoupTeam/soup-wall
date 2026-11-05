@@ -72,6 +72,7 @@ pub(crate) async fn git(
         "exercise_profile_kind_mismatch"
     );
     let owned = tempfile::tempdir().context("exercise_observation_invalid")?;
+    let outcome = async {
     let outside = owned.path().join("outside-secret");
     std::fs::write(&outside, b"outside unchanged").context("exercise_observation_invalid")?;
     let host_file = File::open(&outside).context("exercise_observation_invalid")?;
@@ -304,6 +305,9 @@ print(json.dumps(result))
         "exercise_witness_failed"
     );
     Ok(result)
+    }.await;
+    owned.close().context("exercise_cleanup_unconfirmed")?;
+    outcome
 }
 
 pub(crate) async fn filesystem(mut profile: ProfileConfig) -> anyhow::Result<serde_json::Value> {
@@ -315,6 +319,7 @@ pub(crate) async fn filesystem(mut profile: ProfileConfig) -> anyhow::Result<ser
     use std::os::unix::net::{UnixListener, UnixStream};
 
     let owned = tempfile::tempdir().context("exercise_observation_invalid")?;
+    let outcome = async {
     let workspace = owned.path().join("workspace");
     std::fs::create_dir(&workspace).context("exercise_observation_invalid")?;
     std::fs::write(workspace.join("allowed.txt"), b"allowed read")
@@ -527,4 +532,7 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}), probe({{path:'/workspace/e
         "exercise_witness_failed"
     );
     Ok(observed)
+    }.await;
+    owned.close().context("exercise_cleanup_unconfirmed")?;
+    outcome
 }
