@@ -121,7 +121,10 @@ class InstalledDoor(QUAL.FrontDoor):
     def words(self, command, *extra, **options):
         words = super().words(command, *extra, **options)
         require(words[2].endswith("scripts/pilot.py"), "unexpected_front_door_words")
-        return [str(self.args.agentfw), "pilot", "--home", str(self.home), *words[3:]]
+        result = [str(self.args.agentfw), "pilot", "--home", str(self.home), *words[3:]]
+        if getattr(self.args, "candidate_directory", None) is not None and command in ("preview", "prepare"):
+            result += ["--candidate-receipt", str(self.args.candidate_directory / "pilot-binaries.json")]
+        return result
 
 
 def component(args, home, archive, digest, *extra, env, trace=None, diagnostic=None):
@@ -784,8 +787,20 @@ def qualify(args, report):
     agent_home.mkdir(mode=0o700)
     (agent_home / "unrelated-agent-file").write_text("unrelated Agent state must stay\n")
     build_env = QUAL.qualification_environment(home)
-    built = build(ROOT, args.output / "component.tar", build_env)
-    archive, digest = args.output / "component.tar", built["archive_sha256"]
+    if getattr(args, "candidate_directory", None) is not None:
+        import pilot_candidate
+        candidate = pilot_candidate.validate_directory(args.candidate_directory, args.expected_commit)
+        archive = args.candidate_directory / pilot_candidate.COMPONENT
+        receipt = pilot_candidate.parse((args.candidate_directory / pilot_candidate.RECEIPT).read_bytes())
+        built = {"component": receipt["component_manifest_sha256"], "archive_sha256": BASE.sha(archive),
+                 "files": len(pilot_candidate.parse(pilot_candidate.component_manifest(archive))["files"]),
+                 "commit": args.expected_commit}
+        digest = built["archive_sha256"]
+        report["candidate"] = candidate
+        report["candidate"]["sandbox_tests_required"] = False
+    else:
+        built = build(ROOT, args.output / "component.tar", build_env)
+        archive, digest = args.output / "component.tar", built["archive_sha256"]
     report["component"] = {key: built[key] for key in ("component", "archive_sha256", "files", "commit")}
     require(built["commit"] == args.expected_commit, "component_commit_mismatch")
     receiver = QUAL.ISOLATION.Receiver()
@@ -1131,6 +1146,7 @@ def main():
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--component-python", type=Path, required=True,
                         help="absolute CPython recorded for the installed helpers")
+    parser.add_argument("--candidate-directory", type=Path, help="extracted existing Linux candidate archive; never rebuild its component")
     parser.add_argument("--strace", type=Path, default=Path("/usr/bin/strace"))
     parser.add_argument("--allow-download", action="store_true")
     parser.add_argument("--provider-profiles", action="store_true",
@@ -1156,6 +1172,12 @@ def main():
     args = parser.parse_args()
     if args.project_recovery_only:
         args.project_presets_only = True
+    if args.candidate_directory is not None:
+        import pilot_candidate
+        pilot_candidate.validate_directory(args.candidate_directory, args.expected_commit)
+        args.agentfw = args.candidate_directory / "agentfw"
+        args.git_launcher = args.candidate_directory / pilot_candidate.LAUNCHER
+        args.sandbox_tests = args.agentfw  # legacy selection field, never a libtest executable
     args.output = args.output.resolve()
     args.agent_output = None
     report = {"format": FORMAT, "status": "failed", "cases": [], "skipped": 0,

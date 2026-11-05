@@ -519,19 +519,27 @@ class Pilot:
 
     def sandbox(self):
         evidence = {}
-        for kind, test, marker, variable in (
-            ("filesystem", "selected_server_sandbox_isolates_real_node", b"SOU62_SANDBOX_POSITIVE", "SOU62_SANDBOX_TEST_PROFILE"),
-            ("git", "selected_git_sandbox_isolates_real_python_and_git", b"SOU68_SANDBOX_POSITIVE", "SOU68_SANDBOX_TEST_PROFILE")):
-            result = subprocess.run([str(self.paths["sandbox_tests"]), test, "--ignored", "--nocapture"],
-                env=dict(self.env, **{variable: str(self.installs[kind] / "profile.json"), "SOU86_TEST_AGENTFW": str(self.binary)}),
-                cwd=self.private, capture_output=True, timeout=90)
+        for kind in ("filesystem", "git"):
+            profile = self.installs[kind] / "profile.json"
+            result = subprocess.run([str(self.binary), "sandbox-exercise", "--execute",
+                "--kind", kind, "--profile", str(profile), "--profile-sha256", sha(profile)],
+                env=self.env, cwd=self.private, capture_output=True, timeout=90)
             raw = result.stdout + result.stderr
+            require(len(raw) <= 128 * 1024, "sandbox_exercise_output_limit")
             owned_bytes(self.output / (kind + "-sandbox.log"), raw)
-            require(result.returncode == 0 and marker in raw and b"1 passed; 0 failed" in result.stdout,
-                    "required_sandbox_positive_failed")
-            if kind == "filesystem":
-                require(all((name + "=true").encode() in raw for name in BASE.SANDBOX_WITNESSES), "sandbox_witness_missing")
-            evidence[kind] = {"exit_code": 0, "log_sha256": hashlib.sha256(raw).hexdigest(), "executed_tests": 1}
+            try:
+                observation = strict_json(result.stdout)
+            except (ValueError, Failure):
+                raise Failure("sandbox_exercise_report_invalid") from None
+            require(result.returncode == 0 and observation.get("format") == "sw-linux-sandbox-exercise/1"
+                and observation.get("status") == "passed" and observation.get("active_protection") is False
+                and observation.get("cleanup_confirmed") is True
+                and observation.get("calibration_passed") is True
+                and observation.get("inputs", {}).get("profile", {}).get("sha256") == sha(profile),
+                "required_sandbox_positive_failed")
+            evidence[kind] = {"exit_code": 0, "log_sha256": hashlib.sha256(raw).hexdigest(),
+                              "executed_tests": 1, "entrypoint": "agentfw sandbox-exercise",
+                              "observations": observation}
         return evidence
 
     def preserve(self):

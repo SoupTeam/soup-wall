@@ -365,6 +365,7 @@ def publish_marker(output, record):
 def selected_paths(args, generation):
     capacity.recheck("before_asset_inputs")
     supplied = {role: getattr(args, role) for role in PILOT.ROLES if role not in {"node", "npm"}}
+    supplied["sandbox_tests"] = supplied["sandbox_tests"] or supplied["agentfw"]
     for role, path in supplied.items():
         require(path is not None, f"missing_{role}: supply --{role.replace('_', '-')}")
         require(path.is_absolute() and path.is_file(), f"invalid_{role}_path")
@@ -794,7 +795,7 @@ def main():
                    "--output ABSOLUTE_PRIVATE_DIRECTORY" if args.output is None else None,
                    "--expected-commit FULL_REVIEWED_COMMIT" if args.expected_commit is None else None,
                    *["--" + role.replace("_", "-") + " PATH" for role in PILOT.ROLES
-                     if role not in {"node", "npm"} and getattr(args, role) is None],
+                     if role not in {"node", "npm", "sandbox_tests"} and getattr(args, role) is None],
                    "--node-archive PINNED_TAR_XZ or --node PATH --npm PATH"
                    if args.node_archive is None and (args.node is None or args.npm is None) else None,
                    "--python-archive PINNED_TAR_GZ --npm-cache DIR --wheelhouse DIR, or --allow-download"
