@@ -62,8 +62,12 @@ archive operation. Procedure guides explain what additional assets they need;
 their presence does not mean that those assets are packaged or qualified here.
 
 In particular, the [Linux pilot walkthrough](operations/PILOT_QUICKSTART.md)
-requires a source checkout and separately prepared classifier, original MCP
-servers, Python/Node dependencies, Claude Code and sandbox prerequisites. The
+documents source preparation. The Linux archive also supplies a same-source
+Git launcher, verified pilot component and v2 binary/source receipts. Follow the
+[installed front door](operations/PILOT_INSTALLED_FRONT_DOOR.md) to install the
+bundled component and select `--candidate-receipt` without a checkout, Cargo or
+libtest. Original MCP servers, Python/Node dependencies, Claude Code and pinned
+native Git/bubblewrap remain separately declared prerequisites. The
 supported pilot is native Ubuntu 24.04 x86_64. A Linux archive running in WSL
 does not establish supported-pilot acceptance. macOS and native Windows are
 outside that two-server Linux pilot; Windows has its separate
@@ -86,15 +90,26 @@ the existing release workflow stages them. Then run:
 
 ```sh
 commit=$(git rev-parse HEAD)
+# Linux only: after the existing release build with Rust 1.99.1.
+python3 -B scripts/linux_candidate.py stage --directory "$stage" \
+  --binaries target/x86_64-unknown-linux-gnu/release --expected-commit "$commit"
 python3 -B scripts/release_docs.py stage --directory "$stage" \
   --expected-commit "$commit" --target x86_64-unknown-linux-gnu
-tar -czf "$archive" -C "$(dirname "$stage")" "$(basename "$stage")"
+tar --format=ustar -czf "$archive" -C "$(dirname "$stage")" "$(basename "$stage")"
 python3 -B scripts/release_docs.py check-archive --archive "$archive" \
   --archive-root "$(basename "$stage")" --expected-commit "$commit" \
   --target x86_64-unknown-linux-gnu
 ```
 
-Use the matching macOS target for its tar archive. Windows uses
+The focused `linux-candidate` option of the existing Real filesystem MCP workflow
+builds this release lane, checks the existing publication-readiness archive
+binding, extracts into an owned fresh directory and qualifies the installed
+frozen `linux-v1` pilot with public fixtures and a scripted provider. It creates
+no tag, release or image and does not claim final publication readiness. TL owns
+the final reviewed source's Ready matrix, CodeQL and candidate admission.
+
+For macOS, omit the Linux-only pilot staging step and use the matching target
+for its tar archive. Windows uses
 `x86_64-pc-windows-msvc`, `.exe` names and the existing `7z a -tzip` step.
 The same bounded checker extracts and verifies all four target formats without
 executing their binaries. A local all-target structure regression is:
