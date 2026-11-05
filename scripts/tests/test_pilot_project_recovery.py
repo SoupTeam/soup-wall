@@ -8,6 +8,8 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import stat
+import sys
 import tarfile
 import tempfile
 import types
@@ -306,6 +308,113 @@ class Recovery(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'overlaps_preserved_state'):
             R.export(self.source,target,True,self.front,PROFILES,P)
         self.assertFalse(target.exists())
+
+    def export_fixture(self):
+        selections=self.root/'export-selections';selections.mkdir(mode=0o700)
+        with P.Store(self.source,PROFILES)as store:
+            for name,record in list(self.originals.items()):
+                selected=selections/(name+'.json');selected.write_text('{}');selected.chmod(0o600)
+                binding=copy.deepcopy(record['binding']);binding['selection']=P.reference(selected,PROFILES)
+                self.originals[name]=store.write('update',name,binding,P.digest(P.encoded(record)))
+        outside=self.root/'outside';outside.mkdir(mode=0o700)
+        (outside/'private').mkdir(mode=0o700)
+        with patch.object(sys,'path',[str(ROOT/'scripts'),*sys.path]):
+            exchange=load('project_export_destination_exchange_tests','pilot_prerequisite_cache_exchange.py')
+        original=self.front.load
+        self.front.load=lambda name,filename:exchange if filename=='pilot_prerequisite_cache_exchange.py'else original(name,filename)
+        return outside,exchange
+
+    def test_export_rejects_symlink_ancestors_for_every_preserved_root(self):
+        outside,_=self.export_fixture()
+        roots={self.source}
+        for record in self.originals.values():
+            binding=record['binding']
+            roots.update((Path(binding['selection']['path']).parent,Path(binding['state_root']['path'])))
+            roots.update(Path(root['path'])for root in binding['workspaces'].values())
+        before=self.baseline()
+        for number,root in enumerate(sorted(roots)):
+            with self.subTest(root=root.name):
+                private=root/'private-export-control';private.mkdir(mode=0o700)
+                alias=outside/('alias-'+str(number));alias.symlink_to(root,target_is_directory=True)
+                try:
+                    with self.assertRaisesRegex(ValueError,'canonical_directory_required'):
+                        R.export(self.source,alias/private.name/'refused.tar',True,self.front,PROFILES,P)
+                    self.assertFalse((private/'refused.tar').exists())
+                finally:
+                    alias.unlink()
+                    if not any(private.iterdir()):private.rmdir()
+        self.assertEqual(before,self.baseline())
+
+    def test_export_rejects_alias_even_when_its_real_parent_is_outside_preserved_state(self):
+        outside,_=self.export_fixture();alias=self.root/'allowed-alias'
+        alias.symlink_to(outside,target_is_directory=True)
+        with self.assertRaisesRegex(ValueError,'canonical_directory_required'):
+            R.export(self.source,alias/'private'/'refused.tar',True,self.front,PROFILES,P)
+        self.assertFalse((outside/'private'/'refused.tar').exists())
+
+    @unittest.skipUnless(sys.platform.startswith('linux')and hasattr(os,'O_TMPFILE'),'real Linux private publication')
+    def test_export_publishes_only_a_new_canonical_private_archive(self):
+        outside,exchange=self.export_fixture();archive=outside/'private'/'out.tar'
+        result=R.export(self.source,archive,True,self.front,PROFILES,P)
+        self.assertEqual(result['status'],'exported');self.assertEqual(result['records'],2)
+        self.assertEqual(stat.S_IMODE(archive.stat().st_mode),0o600)
+        self.assertEqual(archive.stat().st_nlink,1)
+        document,_=R.load_archive(archive,PROFILES,P)
+        self.assertEqual(document['records'],self.originals);self.assertNotIn(self.canary.encode(),archive.read_bytes())
+        before=archive.read_bytes()
+        with self.assertRaisesRegex(exchange.Refusal,'destination_exists'):
+            R.export(self.source,archive,True,self.front,PROFILES,P)
+        self.assertEqual(archive.read_bytes(),before)
+
+    @unittest.skipUnless(sys.platform.startswith('linux')and hasattr(os,'O_TMPFILE'),'real Linux private publication')
+    def test_export_rejects_ancestor_redirect_before_publisher_opens_the_directory(self):
+        outside,exchange=self.export_fixture();held=self.root/'held-outside'
+        workspace=Path(self.originals['one']['binding']['workspaces']['filesystem']['path'])
+        (workspace/'private').mkdir(mode=0o700)
+        opening=exchange._private_dir_fd
+        def redirected(path):
+            outside.rename(held);outside.symlink_to(workspace,target_is_directory=True)
+            return opening(path)
+        before=(self.source/P.DIRECTORY/'catalog.json').read_bytes()
+        with patch.object(exchange,'_private_dir_fd',side_effect=redirected):
+            with self.assertRaisesRegex(ValueError,'canonical_directory_required'):
+                R.export(self.source,outside/'private'/'refused.tar',True,self.front,PROFILES,P)
+        self.assertFalse((workspace/'private'/'refused.tar').exists())
+        self.assertFalse((held/'private'/'refused.tar').exists())
+        self.assertEqual((self.source/P.DIRECTORY/'catalog.json').read_bytes(),before)
+
+    @unittest.skipUnless(sys.platform.startswith('linux')and hasattr(os,'O_TMPFILE'),'real Linux private publication')
+    def test_export_rechecks_ancestor_binding_at_publication_even_when_the_leaf_inode_is_unchanged(self):
+        outside,exchange=self.export_fixture()
+        workspace=Path(self.originals['one']['binding']['workspaces']['filesystem']['path'])
+        moved=workspace/'moved-export';sync=os.fsync;changed=False
+        before=(self.source/P.DIRECTORY/'catalog.json').read_bytes()
+        def redirected(fd):
+            nonlocal changed
+            sync(fd)
+            if not changed and stat.S_ISREG(os.fstat(fd).st_mode):
+                changed=True;outside.rename(moved);outside.symlink_to(moved,target_is_directory=True)
+        with patch.object(exchange.os,'fsync',side_effect=redirected):
+            with self.assertRaisesRegex(ValueError,'canonical_directory_required'):
+                R.export(self.source,outside/'private'/'refused.tar',True,self.front,PROFILES,P)
+        self.assertTrue(changed)
+        self.assertFalse((moved/'private'/'refused.tar').exists())
+        self.assertEqual((self.source/P.DIRECTORY/'catalog.json').read_bytes(),before)
+
+    @unittest.skipUnless(sys.platform.startswith('linux')and hasattr(os,'O_TMPFILE'),'real Linux private publication')
+    def test_export_rejects_replaced_private_directory_before_publication(self):
+        outside,exchange=self.export_fixture();parent=outside/'private';held=outside/'held-private'
+        sync=os.fsync;changed=False
+        def replaced(fd):
+            nonlocal changed
+            sync(fd)
+            if not changed and stat.S_ISREG(os.fstat(fd).st_mode):
+                changed=True;parent.rename(held);parent.mkdir(mode=0o700)
+        with patch.object(exchange.os,'fsync',side_effect=replaced):
+            with self.assertRaisesRegex(exchange.Refusal,'directory_changed'):
+                R.export(self.source,parent/'refused.tar',True,self.front,PROFILES,P)
+        self.assertTrue(changed)
+        self.assertFalse((parent/'refused.tar').exists());self.assertFalse((held/'refused.tar').exists())
 
     def test_dispatch_apply_requires_both_current_plan_and_explicit_apply(self):
         import contextlib
