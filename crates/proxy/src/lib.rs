@@ -16,6 +16,7 @@ pub mod customer_ui;
 pub mod events;
 pub mod fleet_api;
 pub mod handlers;
+pub mod heartbeat_api;
 pub mod invitation_ui;
 pub mod managed_agent_api;
 pub mod moderation;
@@ -103,6 +104,18 @@ pub fn app(state: Shared) -> Router {
             .route(
                 "/agent/v1/policy/ack",
                 post(managed_agent_api::acknowledge_policy),
+            )
+            .route(
+                "/agent/v1/heartbeat/registrations",
+                post(heartbeat_api::register).layer(axum::extract::DefaultBodyLimit::max(
+                    tenant_store::agent_heartbeat::MAX_BODY_BYTES,
+                )),
+            )
+            .route(
+                "/agent/v1/heartbeats",
+                post(heartbeat_api::record).layer(axum::extract::DefaultBodyLimit::max(
+                    tenant_store::agent_heartbeat::MAX_BODY_BYTES,
+                )),
             );
         let scim_api = Router::new()
             .route("/scim/v2/ResourceTypes", get(scim::resource_types))
@@ -194,6 +207,10 @@ pub fn app(state: Shared) -> Router {
             .route(
                 "/admin/v1/tenants/:tenant_id/agent-fleet/:agent_id",
                 get(fleet_api::detail),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agent-fleet/:agent_id/heartbeat",
+                get(heartbeat_api::status),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/agent-triage",

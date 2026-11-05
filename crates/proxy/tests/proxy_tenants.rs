@@ -1733,6 +1733,9 @@ async fn tenant_admin_can_issue_and_revoke_a_proxy_token() {
     assert!(dashboard_html.contains("Fleet triage"));
     assert!(dashboard_html.contains("sw-agent-fleet-triage/1"));
     assert!(!dashboard_html.contains("/* FLEET_TRIAGE */"));
+    assert!(dashboard_html.contains("Agent heartbeat (self-report)"));
+    assert!(dashboard_html.contains("sw-agent-heartbeat-status/1"));
+    assert!(!dashboard_html.contains("/* AGENT_HEARTBEAT */"));
     assert!(!dashboard_html.contains("localStorage"));
     assert!(!dashboard_html.contains("sessionStorage"));
 

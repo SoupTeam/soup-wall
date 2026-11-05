@@ -15,6 +15,14 @@ version; the inventory binds its native table/column layouts, indexes, triggers 
 expected PRAGMA versions, including lazily created managed Agent tables when present.
 Unknown schemas require an explicit compatibility review, including future fleet tables.
 
+The one reviewed exception is the volatile `agent_observations` schema of the
+opt-in [Agent heartbeat](AGENT_HEARTBEAT.md): a PostgreSQL backup accepts it only
+when its catalog equals the reviewed definition exactly, excludes it from the
+dump, checks the archive listing contains none of it, and a restore target must
+not have it. Its rows are never archived or restored. After a restore and the
+checks below, run `llm-firewall migrate` against the target to recreate it empty;
+until then heartbeat status reads `unavailable`, never fresh.
+
 The archive contains every native table and sequence: tenants, principals, memberships,
 active/revoked credentials, approved policies, immutable Agent revisions, enrollment
 credential hashes, signed deployment sequence/status/acknowledgements, security events,

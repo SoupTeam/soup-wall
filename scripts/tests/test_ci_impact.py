@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
+import ast
+import base64
+import json
+import os
 from pathlib import Path
 import re
+import subprocess
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-from ci_impact import WORKFLOW_JOBS, plan, scheduled_plan  # noqa: E402
+from ci_impact import (WORKFLOW_JOBS, REVIEWED_DEPENDENCY_BLOBS, REVIEWED_PYTHON_BLOBS,
+                       bounded_git_blob,
+                       candidate_changes, git_blob_sha, plan, scheduled_plan)  # noqa: E402
 from ci_activation import ACTIVATION_VALUE, selective_enabled  # noqa: E402
-from ci_admission import assess_codeql, assess_job_names, inspect, required_names  # noqa: E402
+from ci_admission import (assess_codeql, assess_job_names, candidate_script_bytes,
+                          inspect, required_names)  # noqa: E402
 from sou91_ruleset_patch import admission_is_required, prepare as prepare_ruleset  # noqa: E402
 
 
@@ -66,6 +75,156 @@ class ImpactTests(unittest.TestCase):
                 self.assertEqual(result["workflows"],
                                  {name: list(jobs) for name, jobs in WORKFLOW_JOBS.items()})
 
+    def test_reviewed_consumer_union_and_uncertain_changes_fail_broad(self):
+        path = "scripts/check_docs.py"
+        original = subprocess.check_output(["git", "show", "HEAD:" + path], cwd=ROOT)
+        detail = {path: {"status": "modified", "base_content": original,
+                         "head_content": original + b"\n# Nonfunctional parser note.\n"}}
+        selected = plan([path], change_details=detail)
+        self.assertEqual(selected["workflows"]["ci.yml"], ["documentation", "test"])
+        self.assertTrue(all(not jobs for name, jobs in selected["workflows"].items()
+                            if name != "ci.yml"))
+        self.assertEqual(len(selected["codeql"]), 5)
+        docs = "docs/operations/ASK_INBOX.md"
+        mixed = plan([path, docs], change_details={**detail, docs: {"status": "modified"}})
+        self.assertEqual(mixed["workflows"]["ci.yml"], ["documentation", "test"])
+        agent = "crates/agentfw/src/native.rs"
+        with_agent = plan([docs, agent], change_details={docs: {"status": "modified"},
+                                                        agent: {"status": "modified"}})
+        self.assertEqual(with_agent["workflows"]["mcp-create-file.yml"],
+                         list(WORKFLOW_JOBS["mcp-create-file.yml"]))
+        self.assertEqual(with_agent["workflows"]["ci-builds.yml"],
+                         list(WORKFLOW_JOBS["ci-builds.yml"]))
+        for unsafe in (
+            {path: {"status": "added", "base_content": original, "head_content": original}},
+            {path: {"status": "modified", "base_content": original,
+                    "head_content": original + b"\nimport socket\n"}},
+            {path: {"status": "modified", "base_content": original,
+                    "head_content": original + b"\nsubprocess.run(['curl'])\n"}},
+            {path: {"status": "modified", "base_content": original + b"# drift\n",
+                    "head_content": original}},
+            {path: {"status": "modified"}},
+            {},
+        ):
+            with self.subTest(unsafe=unsafe):
+                self.assertEqual(plan([path], change_details=unsafe)["mode"], "full")
+        for status in ("added", "removed", "renamed", "changed", None):
+            self.assertEqual(plan([docs], change_details={docs: {"status": status}})["mode"], "full")
+        self.assertEqual(plan([docs, "unexpected/new.py"], change_details={
+            docs: {"status": "modified"}, "unexpected/new.py": {"status": "added"}})["mode"], "full")
+        self.assertEqual(plan([path])["mode"], "full", "offline paths cannot certify script closure")
+        self.assertEqual(git_blob_sha(original), REVIEWED_PYTHON_BLOBS[path])
+
+        security_test = "scripts/tests/test_macos_relay_headers.py"
+        security_source = subprocess.check_output(["git", "show", "HEAD:" + security_test], cwd=ROOT)
+        dependency = REVIEWED_DEPENDENCY_BLOBS[security_test]
+        reviewed = {security_test: {"status": "modified", "base_content": security_source,
+                                    "head_content": security_source + b"\n# Additional local assertion.\n",
+                                    "dependency_blobs": dependency}}
+        self.assertEqual(plan([security_test], change_details=reviewed)["workflows"]["ci.yml"],
+                         ["documentation", "test"])
+        reviewed[security_test]["dependency_blobs"] = {
+            "scripts/macos-file-acceptance.py": "0" * 40}
+        self.assertEqual(plan([security_test], change_details=reviewed)["mode"], "full")
+
+    def test_alias_and_dynamic_dispatch_cannot_escape_reviewed_dependency_closure(self):
+        path = "scripts/check_docs.py"
+        original = subprocess.check_output(["git", "show", "HEAD:" + path], cwd=ROOT)
+        payloads = (
+            b"\nlaunch = subprocess.run\nlaunch([sys.executable, 'scripts/qualify-installed-front-door.py', '--help'], check=True)\n",
+            b"\nlaunchers = {'later': subprocess.run}\nlaunchers['later']([sys.executable, 'scripts/qualify-installed-front-door.py'])\n",
+            b"\nlaunch = getattr(subprocess, 'run')\nlaunch([sys.executable, 'scripts/qualify-installed-front-door.py'])\n",
+            b"\nfrom subprocess import run as launch\nlaunch([sys.executable, 'scripts/qualify-installed-front-door.py'])\n",
+            b"\nreader = Path.read_text\nreader(Path('scripts/qualify-installed-front-door.py'))\n",
+        )
+        for payload in payloads:
+            with self.subTest(payload=payload):
+                detail = {path: {"status": "modified", "base_content": original,
+                                 "head_content": original + payload}}
+                result = plan([path], change_details=detail)
+                self.assertEqual(result["mode"], "full")
+                self.assertEqual(result["workflows"],
+                                 {name: list(jobs) for name, jobs in WORKFLOW_JOBS.items()})
+
+    def test_nonsemantic_python_edit_retains_reviewed_consumer_plan(self):
+        path = "scripts/check_docs.py"
+        original = subprocess.check_output(["git", "show", "HEAD:" + path], cwd=ROOT)
+        detail = {path: {"status": "modified", "base_content": original,
+                         "head_content": original + b"\n# Clarify the documented-only output.\n"}}
+        self.assertEqual(plan([path], change_details=detail)["workflows"]["ci.yml"],
+                         ["documentation", "test"])
+
+    def test_source_encoding_cookie_cannot_hide_an_executable_consumer(self):
+        path = "scripts/check_docs.py"
+        original = subprocess.check_output(["git", "show", "HEAD:" + path], cwd=ROOT)
+        candidate = (b"# coding: raw_unicode_escape\n" + original
+                     + b'\n# \\u000a__import__("subprocess").run(["python3", "scripts/qualify-installed-front-door.py", "--help"])\n')
+        # Explicit UTF-8 decoding sees a comment, whereas Python byte-source
+        # compilation sees a new call. Neither candidate is executed here.
+        self.assertEqual(ast.dump(ast.parse(original.decode("utf-8")), include_attributes=False),
+                         ast.dump(ast.parse(candidate.decode("utf-8")), include_attributes=False))
+        runtime = compile(candidate, "review-candidate", "exec", ast.PyCF_ONLY_AST)
+        self.assertIsInstance(runtime.body[-1], ast.Expr)
+        self.assertIsInstance(runtime.body[-1].value, ast.Call)
+        self.assertEqual(runtime.body[-1].value.func.attr, "run")
+        detail = {path: {"status": "modified", "base_content": original, "head_content": candidate}}
+        result = plan([path], change_details=detail)
+        self.assertEqual(result["mode"], "full")
+        self.assertEqual(result["workflows"], {name: list(jobs) for name, jobs in WORKFLOW_JOBS.items()})
+
+    def test_scheduler_reads_exact_merge_parents_and_change_statuses(self):
+        base, head, merge = "a" * 40, "b" * 40, "c" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            event = Path(temporary) / "event.json"
+            event.write_text(json.dumps({"pull_request": {"base": {"sha": base},
+                                                          "head": {"sha": head}}}))
+
+            def git(*args, **_kwargs):
+                command = args[0]
+                if command[1:3] == ["rev-parse", "HEAD"]:
+                    return (merge + "\n").encode() if _kwargs.get("text") is None else merge + "\n"
+                if command[1:4] == ["rev-list", "--parents", "-n"]:
+                    return f"{merge} {base} {head}\n"
+                if command[1:4] == ["diff", "--name-status", "--no-renames"]:
+                    return b"M\0docs/operations/PILOT_PROVIDER_PROFILES.md\0"
+                raise AssertionError(command)
+
+            with patch.dict(os.environ, {"GITHUB_EVENT_PATH": str(event)}), \
+                 patch("ci_impact.subprocess.check_output", side_effect=git):
+                changes = candidate_changes()
+                self.assertEqual(changes, {"docs/operations/PILOT_PROVIDER_PROFILES.md":
+                                           {"status": "modified"}})
+                self.assertEqual(plan(list(changes), change_details=changes)["workflows"]["ci.yml"],
+                                 ["documentation"])
+            event.write_text(json.dumps({"pull_request": {"base": {"sha": "d" * 40},
+                                                          "head": {"sha": head}}}))
+            with patch.dict(os.environ, {"GITHUB_EVENT_PATH": str(event)}), \
+                 patch("ci_impact.subprocess.check_output", side_effect=git):
+                self.assertIsNone(candidate_changes(), "stale merge parents cannot select jobs")
+
+    def test_fixed_historical_diffs_keep_conservative_mixed_fallback(self):
+        # f1e13081fc changed exactly this existing operator document.
+        operator = "docs/operations/PILOT_PROVIDER_PROFILES.md"
+        before = {name: list(jobs) for name, jobs in WORKFLOW_JOBS.items()}
+        after = plan([operator], change_details={operator: {"status": "modified"}})
+        self.assertEqual(sum(map(len, before.values())), 58)
+        self.assertEqual(after["workflows"]["ci.yml"], ["documentation"])
+        self.assertEqual(sum(map(len, after["workflows"].values())), 1)
+        # Accepted #349 had two modifications plus a newly added test; it
+        # remains full even if a future map reviews one of its existing paths.
+        changed = {"scripts/macos-file-acceptance.py": {"status": "modified"},
+                   "scripts/tests/test_agent_audit_explorer_browser.js": {"status": "modified"},
+                   "scripts/tests/test_macos_relay_headers.py": {"status": "added"}}
+        self.assertEqual(plan(list(changed), change_details=changed)["workflows"], before)
+
+    def test_oversized_or_incomplete_committed_script_cannot_narrow(self):
+        path = "scripts/check_docs.py"
+        with patch("ci_impact.subprocess.check_output", return_value=b"131073\n") as query:
+            self.assertIsNone(bounded_git_blob("a" * 40, path))
+            self.assertEqual(query.call_count, 1, "oversized blob must not be read")
+        with patch("ci_impact.subprocess.check_output", side_effect=[b"10\n", b"short"]):
+            self.assertIsNone(bounded_git_blob("a" * 40, path))
+
     def test_mixed_change_or_empty_source_cannot_narrow(self):
         self.assertEqual(plan(["README.md", "Cargo.lock"])["mode"], "full")
         self.assertEqual(plan([])["mode"], "full")
@@ -94,7 +253,7 @@ class ImpactTests(unittest.TestCase):
             if filename == "mcp-real-filesystem.yml":
                 auxiliary.update({"manual-long-session", "manual-native-result-profile",
                                   "sou193-provider-preflight", "sou205-proxy-preflight",
-                                  "manual-sou194-cache-exchange", "manual-sou216-process-probe"})
+                                  "manual-sou194-cache-exchange", "manual-sou216-process-probe", "manual-sou225-lifecycle-preflight"})
             if filename == "mcp-real-git.yml":
                 auxiliary.update({"manual-installed-git-profiles", "sou182-raw-boundary"})
             if filename == "mcp-create-file.yml":
@@ -130,6 +289,15 @@ class ImpactTests(unittest.TestCase):
         self.assertNotIn("needs: impact", body)
         self.assertNotIn("manual-sou216-process-probe", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
         self.assertNotIn("manual-sou216-process-probe", (ROOT / ".github/workflows/ci-components.yml").read_text())
+
+    def test_lifecycle_preflight_stays_explicit_manual_only(self):
+        text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
+        body = text.split("  manual-sou225-lifecycle-preflight:\n", 1)[1].split("  sou193-provider-preflight:\n", 1)[0]
+        self.assertIn("github.event_name == 'workflow_dispatch'", body)
+        self.assertIn("github.event.inputs.installed_focus == 'lifecycle-preflight'", body)
+        self.assertNotIn("needs: impact", body)
+        self.assertNotIn("manual-sou225-lifecycle-preflight", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
+        self.assertNotIn("manual-sou225-lifecycle-preflight", (ROOT / ".github/workflows/ci-components.yml").read_text())
         self.assertIn("native-ubuntu-2404", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
 
     def test_native_result_profile_remains_explicit_manual_only(self):
@@ -221,6 +389,30 @@ class AdmissionTests(unittest.TestCase):
         return {"name": name, "conclusion": conclusion, "status": status,
                 "head_sha": head or self.HEAD}
 
+    def test_exact_merge_blob_refuses_missing_or_mismatched_metadata(self):
+        path, merge = "scripts/check_docs.py", "c" * 40
+        body = b"import argparse\n"
+        sha = git_blob_sha(body)
+        class API:
+            def __init__(self):
+                self.item = {"type": "file", "sha": sha, "size": len(body),
+                             "encoding": "base64", "content": base64.b64encode(body).decode()}
+                self.path = None
+            def get(self, suffix):
+                self.path = suffix
+                return self.item
+        api = API()
+        self.assertEqual(candidate_script_bytes(api, path, merge, sha), body)
+        self.assertEqual(api.path, "/contents/" + path + "?ref=" + merge)
+        for key, wrong in (("sha", "d" * 40), ("size", len(body) + 1),
+                           ("encoding", "utf-8"), ("content", "!!!")):
+            with self.subTest(key=key):
+                api.item[key] = wrong
+                self.assertIsNone(candidate_script_bytes(api, path, merge, sha))
+                api.item[key] = {"sha": sha, "size": len(body),
+                                 "encoding": "base64", "content": base64.b64encode(body).decode()}[key]
+        self.assertIsNone(candidate_script_bytes(api, path, merge, None))
+
     def test_required_matrix_and_candidate_source(self):
         names = required_names("ci.yml", ["saml-release-targets"])
         self.assertEqual(len(names), 4)
@@ -282,6 +474,8 @@ class AdmissionTests(unittest.TestCase):
                 self.ruleset = prepare_ruleset(RulesetTests().fixture())
                 self.ruleset.update({"id": 24846282, "source_type": "Repository",
                                      "source": "SoupTeam/soup-wall"})
+                self.files = [{"filename": "README.md", "status": "modified"}]
+                self.contents = {}
 
             def get(self, suffix):
                 if suffix == "/pulls/1":
@@ -290,6 +484,8 @@ class AdmissionTests(unittest.TestCase):
                     return {"parents": [{"sha": sha} for sha in self.parents]}
                 if suffix == "/rulesets/24846282":
                     return self.ruleset
+                if suffix.startswith("/contents/"):
+                    return self.contents[suffix]
                 if suffix.startswith("/actions/runs/"):
                     return next(run for run in self.runs + self.codeql
                                 if run["id"] == int(suffix.rsplit("/", 1)[1]))
@@ -301,7 +497,7 @@ class AdmissionTests(unittest.TestCase):
 
             def pages(self, suffix, key):
                 if suffix.startswith("/pulls/1/files"):
-                    return [{"filename": "README.md"}]
+                    return self.files
                 if suffix.startswith("/actions/runs?"):
                     return self.codeql if "event=dynamic" in suffix else self.runs
                 if suffix.startswith("/actions/runs/"):
@@ -328,6 +524,53 @@ class AdmissionTests(unittest.TestCase):
             api.codeql = []
             self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "pending")
             api.codeql = Fake(self).codeql
+            path = "scripts/check_docs.py"
+            original_script = subprocess.check_output(["git", "show", "HEAD:" + path], cwd=ROOT)
+            candidate = original_script + b"\n# Reviewed dependency-preserving edit.\n"
+            blob = git_blob_sha(candidate)
+            api.files = [{"filename": path, "status": "modified", "sha": blob}]
+            api.contents["/contents/" + path + "?ref=" + "c" * 40] = {
+                "type": "file", "sha": blob, "size": len(candidate),
+                "encoding": "base64", "content": base64.b64encode(candidate).decode()}
+            extra = self.job("test")
+            extra.update(id=105, run_id=1, run_attempt=1)
+            api.jobs[1] = [*original_jobs, extra]
+            with patch("ci_admission.bounded_git_blob", return_value=original_script):
+                self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "success")
+                api.jobs[1] = original_jobs
+                self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "pending",
+                                 "forged narrow scheduling cannot satisfy trusted consumer map")
+                api.jobs[1] = [*original_jobs, extra]
+                alias = (original_script + b"\nlaunch = subprocess.run\n"
+                         b"launch([sys.executable, 'scripts/qualify-installed-front-door.py'])\n")
+                alias_blob = git_blob_sha(alias)
+                api.files[0]["sha"] = alias_blob
+                api.contents["/contents/" + path + "?ref=" + "c" * 40] = {
+                    "type": "file", "sha": alias_blob, "size": len(alias),
+                    "encoding": "base64", "content": base64.b64encode(alias).decode()}
+                self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "pending",
+                                 "trusted admission must require the full suite for an alias consumer")
+                encoded = (b"# coding: raw_unicode_escape\n" + original_script
+                           + b'\n# \\u000a__import__("subprocess").run(["python3", "scripts/qualify-installed-front-door.py", "--help"])\n')
+                encoded_blob = git_blob_sha(encoded)
+                api.files[0]["sha"] = encoded_blob
+                api.contents["/contents/" + path + "?ref=" + "c" * 40] = {
+                    "type": "file", "sha": encoded_blob, "size": len(encoded),
+                    "encoding": "base64", "content": base64.b64encode(encoded).decode()}
+                self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "pending",
+                                 "an encoding cookie cannot give executable changes narrow admission")
+                api.files[0]["sha"] = blob
+                api.contents["/contents/" + path + "?ref=" + "c" * 40] = {
+                    "type": "file", "sha": blob, "size": len(candidate),
+                    "encoding": "base64", "content": base64.b64encode(candidate).decode()}
+                api.contents["/contents/" + path + "?ref=" + "c" * 40]["sha"] = "d" * 40
+                self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "pending",
+                                 "inconsistent exact-merge blob must require full CI")
+                api.contents["/contents/" + path + "?ref=" + "c" * 40]["sha"] = blob
+                api.files[0]["status"] = "renamed"
+                self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "pending")
+            api.files = [{"filename": "README.md", "status": "modified"}]
+            api.jobs[1] = original_jobs
             api.pr["head"]["sha"] = "d" * 40
             self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "failure")
             api.pr["head"]["sha"] = self.HEAD

@@ -1741,10 +1741,14 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
     // Managed enrollment is opt-in and pinned to an operator-approved local
     // Console origin and public key. A corrupt persisted signed policy stops
     // startup rather than silently reverting to a permissive default.
+    let heartbeat = agentfw::managed_heartbeat::requested()?;
     let connection = agentfw::managed_connection::startup(&home)?;
     if let Some(sync) = connection.sync {
         sync.restore(&state)?;
         if connection.enabled {
+            if heartbeat {
+                tokio::spawn(sync.heartbeat_sender()?.run(state.clone()));
+            }
             tokio::spawn(sync.run(state.clone()));
         } else {
             state
@@ -1756,6 +1760,8 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
                     agentfw::protection_status::now_ms() as i64 / 1000,
                 );
         }
+    } else if heartbeat {
+        anyhow::bail!("SOUP_MANAGED_AGENT_HEARTBEAT=1 requires the managed Console configuration (SOUP_MANAGED_AGENT_CONSOLE and its settings)");
     }
 
     let (maint_tx, maint_rx) = tokio::sync::watch::channel(false);

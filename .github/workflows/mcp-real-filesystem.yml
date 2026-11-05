@@ -6,7 +6,7 @@ on:
       installed_focus:
         description: Focus one installed qualification; linked/filesystem/configuration also require native_preparation_only
         type: choice
-        options: ['off', linked-worktrees, filesystem-roots, filesystem-links, workspace-snapshot, clean-user, clean-user-processes, clean-user-session, proxy-preflight, configuration-recovery, project-recovery, maintenance, policy-activation, budget-presets, pilot-scope]
+        options: ['off', lifecycle-preflight, linked-worktrees, filesystem-roots, filesystem-links, workspace-snapshot, clean-user, clean-user-processes, clean-user-session, proxy-preflight, configuration-recovery, project-recovery, maintenance, policy-activation, budget-presets, pilot-scope]
         default: 'off'
       project_presets_only:
         description: Focus installed SOU-197 project presets (use with native_preparation_only)
@@ -115,7 +115,7 @@ concurrency:
 
 jobs:
   impact:
-    if: github.event.inputs.installed_focus != 'clean-user-session' && github.event.inputs.installed_focus != 'clean-user-processes' && github.event.inputs.provider_preflight_only != 'true' && github.event.inputs.installed_focus != 'proxy-preflight' && github.event.inputs.native_result_profile_only != 'true' && github.event.inputs.cache_exchange_only != 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.stability_mode == '' || github.event.inputs.stability_mode == 'off')
+    if: github.event.inputs.installed_focus != 'lifecycle-preflight' && github.event.inputs.installed_focus != 'clean-user-session' && github.event.inputs.installed_focus != 'clean-user-processes' && github.event.inputs.provider_preflight_only != 'true' && github.event.inputs.installed_focus != 'proxy-preflight' && github.event.inputs.native_result_profile_only != 'true' && github.event.inputs.cache_exchange_only != 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.stability_mode == '' || github.event.inputs.stability_mode == 'off')
     uses: ./.github/workflows/ci-impact-plan.yml
     with:
       workflow: mcp-real-filesystem.yml
@@ -156,6 +156,65 @@ jobs:
             ${{ runner.temp }}/sou216-user-session/private-provenance.cms
           if-no-files-found: error
           retention-days: 7
+  manual-sou225-lifecycle-preflight:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'lifecycle-preflight'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: 1.94.1
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [ordinary, installed]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Check bounded lifecycle and existing installed contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked -p agentfw --lib -- -D warnings
+          cargo test --locked -p agentfw --lib pilot_lifecycle_preflight
+          cargo test --locked -p agentfw --lib pilot_component::removal -- --test-threads=1
+          cargo test --locked -p agentfw --lib doctor -- --test-threads=1
+          python3 -B -m unittest scripts.tests.test_pilot_lifecycle_preflight scripts.tests.test_prepare_installed_pilot scripts.tests.test_pilot_front_door scripts.tests.test_pilot_front_door_component
+      - name: Build exact-source Agent and front-door component
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git status --porcelain --untracked-files=all)" = ''
+          cargo build --locked -p agentfw --bin agentfw
+          install -m 0700 target/debug/agentfw "$RUNNER_TEMP/sou225-agentfw"
+          cmp target/debug/agentfw "$RUNNER_TEMP/sou225-agentfw"
+          python3 -B scripts/build-pilot-front-door.py --out "$RUNNER_TEMP/sou225-component.tar"
+      - name: Observe native diagnosis and zero-effect early refusal outside checkout
+        env:
+          SOU225_MODE: ${{ matrix.mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          python3 -B "$GITHUB_WORKSPACE/scripts/verify-sou225-lifecycle-preflight.py" \
+            --agentfw "$RUNNER_TEMP/sou225-agentfw" --component "$RUNNER_TEMP/sou225-component.tar" \
+            --python /usr/bin/python3.12 --mode "$SOU225_MODE" \
+            --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou225-observation"
+      - name: Retain sanitized original outcomes including failures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou225-lifecycle-preflight-${{ matrix.mode }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sou225-observation/report.json
+          if-no-files-found: warn
   sou193-provider-preflight:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.provider_preflight_only == 'true'
     runs-on: ubuntu-24.04

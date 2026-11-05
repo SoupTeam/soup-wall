@@ -1,0 +1,14 @@
+{
+  "active_protection": "not_measured",
+  "agent_sha256": "bc949c66ad672562cfd5e460f4b5331991fda4745b590b4dc9a0e253493e7df1",
+  "cases": [],
+  "component_sha256": "14ec782a5837d1c4800b6dc8e3150ec1ec856d4d0790794ab6d5df5fd2084cfe",
+  "environment": "owned disposable native Ubuntu with verified installed front-door component",
+  "format": "sw-lifecycle-preflight-observation/1",
+  "mode": "installed",
+  "python_sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+  "reason": "diagnosis_effect_attempt",
+  "removal_authorized": false,
+  "source": "af4f4d05437666d7e2e4f6320fc1703327544927",
+  "status": "failed"
+}
