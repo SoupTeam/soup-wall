@@ -104,7 +104,7 @@ class SourceWorkflowIdentity(unittest.TestCase):
     def test_dispatch_builds_its_exact_checkout_and_refuses_another_event_or_commit(self):
         workflow = (SCRIPT.parents[1] / ".github/workflows/mcp-real-filesystem.yml").read_text()
         step = workflow.split("      - name: Pin SOU-216 product candidate independently of the measurement driver\n", 1)[1]
-        step = step.split("      - name: Build pinned selected runtimes", 1)[0]
+        step = step.split("\n      - name: ", 1)[0]
         shell = "set -euo pipefail\numask 077\n" + textwrap.dedent(step.split("          umask 077\n", 1)[1])
         self.assertIn('--runtime-source-commit "$GITHUB_SHA"', workflow)
         with tempfile.TemporaryDirectory() as directory:
