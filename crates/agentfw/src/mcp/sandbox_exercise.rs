@@ -161,6 +161,7 @@ fn execute(args: Cli, report: &mut Value) -> Result<(), &'static str> {
         match args.kind { Kind::Filesystem => exercise::filesystem(profile).await, Kind::Git => exercise::git(profile, false).await }
     });
     drop(pins);
+    owned.close().map_err(|_| "exercise_cleanup_unconfirmed")?;
     match result {
         Ok(observation) => {
             report["observations"] = observation;
@@ -221,7 +222,7 @@ async fn positive(pin: &std::fs::File, args: &[&str], cwd: &std::path::Path) -> 
     match tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await {
         Ok(Ok(status)) => anyhow::ensure!(status.success(), "exercise_calibration_failed"),
         _ => {
-            child.kill().await.context("exercise_cleanup_unconfirmed")?;
+            child.start_kill().context("exercise_cleanup_unconfirmed")?;
             anyhow::ensure!(
                 matches!(
                     tokio::time::timeout(std::time::Duration::from_secs(2), child.wait()).await,
