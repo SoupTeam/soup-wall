@@ -5,7 +5,7 @@ from pathlib import Path
 import tarfile
 import pilot_candidate as c
 
-def populate(directory, commit, agent=b"inert synthetic Agent", tree="b" * 40):
+def populate(directory, commit, agent=b"inert synthetic Agent", tree="b" * 40, launcher=b"inert synthetic launcher"):
     source = {"commit":commit,"tree":tree,"dirty":False,"files_sha256":"c"*64,
               "cargo_lock_sha256":"d"*64,"rust_toolchain_sha256":"e"*64}
     manifest = c.canonical({"schema":"sw-pilot-front-door-component/1",
@@ -14,7 +14,7 @@ def populate(directory, commit, agent=b"inert synthetic Agent", tree="b" * 40):
     with tarfile.open(fileobj=output, mode="w", format=tarfile.USTAR_FORMAT) as package:
         info=tarfile.TarInfo("manifest.json"); info.size=len(manifest)
         package.addfile(info,io.BytesIO(manifest))
-    for name,raw in (("agentfw",agent),(c.LAUNCHER,b"inert synthetic launcher"),
+    for name,raw in (("agentfw",agent),(c.LAUNCHER,launcher),
                      (c.COMPONENT,output.getvalue()),(c.SOURCE,c.canonical(source))):
         (directory/name).write_bytes(raw)
         (directory/name).chmod(0o755 if name in ("agentfw",c.LAUNCHER) else 0o644)
