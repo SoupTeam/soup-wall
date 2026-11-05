@@ -1,6 +1,6 @@
 {
   "version": "sw-roadmap-support/1",
-  "roadmap_sha256": "987c5916384d45723c8956716c2a460d346df266109409ef78a4204b5624aff6",
+  "roadmap_sha256": "447bac15183ffa222c41c1a83a7a0227b0bb6b03281cc74eb695a56e5ca53819",
   "criteria": [
     {
       "id": "foundation.1",
@@ -16,7 +16,10 @@
         "self-test-linux",
         "self-test-macos",
         "self-test-macos-x86",
-        "self-test-windows"
+        "self-test-windows",
+        "installed-front-door-linux",
+        "linux-v1-scope",
+        "clean-user-lifecycle-linux"
       ]
     },
     {
@@ -224,7 +227,8 @@
         "self-test-linux",
         "self-test-macos",
         "self-test-macos-x86",
-        "self-test-windows"
+        "self-test-windows",
+        "clean-user-lifecycle-linux"
       ]
     },
     {
@@ -235,7 +239,9 @@
         "self-test-linux",
         "self-test-macos",
         "self-test-macos-x86",
-        "self-test-windows"
+        "self-test-windows",
+        "installed-front-door-linux",
+        "linux-v1-scope"
       ]
     },
     {
@@ -246,7 +252,8 @@
         "self-test-linux",
         "self-test-macos",
         "self-test-macos-x86",
-        "self-test-windows"
+        "self-test-windows",
+        "clean-user-lifecycle-linux"
       ]
     },
     {
@@ -257,7 +264,9 @@
         "self-test-linux",
         "self-test-macos",
         "self-test-macos-x86",
-        "self-test-windows"
+        "self-test-windows",
+        "installed-front-door-linux",
+        "clean-user-lifecycle-linux"
       ]
     },
     {
@@ -268,7 +277,8 @@
         "self-test-linux",
         "self-test-macos",
         "self-test-macos-x86",
-        "self-test-windows"
+        "self-test-windows",
+        "clean-user-lifecycle-linux"
       ]
     },
     {
@@ -321,7 +331,10 @@
         "self-test-linux",
         "self-test-macos",
         "self-test-macos-x86",
-        "self-test-windows"
+        "self-test-windows",
+        "installed-front-door-linux",
+        "linux-v1-scope",
+        "clean-user-lifecycle-linux"
       ]
     },
     {
@@ -338,7 +351,10 @@
         "self-test-linux",
         "self-test-macos",
         "self-test-macos-x86",
-        "self-test-windows"
+        "self-test-windows",
+        "installed-front-door-linux",
+        "linux-v1-scope",
+        "clean-user-lifecycle-linux"
       ]
     },
     {
@@ -554,6 +570,66 @@
         "runtime": null,
         "server": null
       }
+    },
+    {
+      "id": "installed-front-door-linux",
+      "title": "Installed front door, installed acceptance and first-use demo",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "host": "Claude Code 2.1.251 (pinned)",
+      "transport": "stdio",
+      "server": "original reviewed filesystem and Git MCP servers",
+      "support": "conditional",
+      "profile": "installed-front-door-native-ubuntu-24.04",
+      "fail_mode": "Missing, changed or tampered installed inputs refuse before execution",
+      "limits": "Native Ubuntu 24.04 x86_64 CI runner, job-scoped sandbox permission and owned scripted loopback provider; no live model",
+      "identity": {
+        "implementation": "3e0c7e3ad86d05810dde98c6bb7557a3d81a98016742f1031e18293f5a2b3172",
+        "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+        "registry": null,
+        "runtime": null,
+        "server": null
+      }
+    },
+    {
+      "id": "linux-v1-scope",
+      "title": "Frozen Linux-v1 pilot scope selected through installed commands",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "host": "Claude Code 2.1.251 (pinned)",
+      "transport": "stdio",
+      "server": "original reviewed filesystem and Git MCP servers",
+      "support": "conditional",
+      "profile": "linux-v1@a67a5822e57603affc678bde0b3e319d8fa43d3f90faf915c0650b28e6bc853e",
+      "fail_mode": "Excluded options and a changed scope document refuse before execution",
+      "limits": "Scope selection and conformance only; the scope document claims no acceptance and shadow mode is outside v1",
+      "identity": {
+        "implementation": "3e0c7e3ad86d05810dde98c6bb7557a3d81a98016742f1031e18293f5a2b3172",
+        "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+        "registry": null,
+        "runtime": null,
+        "server": null
+      }
+    },
+    {
+      "id": "clean-user-lifecycle-linux",
+      "title": "Clean ordinary-user install, use, update, rollback and removal",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "host": "Claude Code 2.1.251 (pinned)",
+      "transport": "stdio",
+      "server": "original reviewed filesystem and Git MCP servers",
+      "support": "conditional",
+      "profile": "two-new-projects-one-clean-user-environment",
+      "fail_mode": "Unexpected processes, maintenance or changed selections refuse launch and removal",
+      "limits": "Exclusively owned, empty hosted-CI user session; not stock-host, novice-user, live-model or full-product acceptance",
+      "identity": {
+        "implementation": "3e0c7e3ad86d05810dde98c6bb7557a3d81a98016742f1031e18293f5a2b3172",
+        "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+        "registry": null,
+        "runtime": null,
+        "server": null
+      }
     }
   ],
   "evidence": [
@@ -666,6 +742,162 @@
         "runtime": "c070a10397203cf03f869f5ba7f89f8d274fa78ce3865dd4f768bcf281780461",
         "server": null
       }
+    },
+    {
+      "id": "sou228-front-door-41818201020",
+      "capability": "installed-front-door-linux",
+      "path": "sou-228/41818201020/sou215-pilot-scope/report.json",
+      "sha256": "c360bb3f2e03141969f0ed700134cf1477bc05b887b16bc35be2968ed349c084",
+      "format": "sw-installed-front-door/standard/1",
+      "kind": "integrated-candidate",
+      "source": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "host": "Claude Code 2.1.251 (pinned)",
+      "transport": "stdio",
+      "server": "original reviewed filesystem and Git MCP servers",
+      "profile": "installed-front-door-native-ubuntu-24.04",
+      "identity": {
+        "implementation": "3e0c7e3ad86d05810dde98c6bb7557a3d81a98016742f1031e18293f5a2b3172",
+        "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+        "registry": null,
+        "runtime": "c528b62f1d1d9973c8679aaddf9d534eb058e74350d586e68948f3f09ea3fb85",
+        "server": null
+      },
+      "companions": [
+        {
+          "role": "installed-pilot",
+          "path": "sou-228/41818201020/sou215-installed-pilot/report.json",
+          "sha256": "f32c32feeb56952c87231e9a70a23fba49fe086616cf55f843a7b728d091523c"
+        },
+        {
+          "role": "demo",
+          "path": "sou-228/41818201020/sou215-pilot-demo/report.json",
+          "sha256": "9ffa0473e8d6ff5143c722bbfc4ddf33803c326720919d1da615569541bf339d"
+        }
+      ]
+    },
+    {
+      "id": "sou228-linux-v1-scope-41818201020",
+      "capability": "linux-v1-scope",
+      "path": "sou-228/41818201020/sou215-pilot-scope/report.json",
+      "sha256": "c360bb3f2e03141969f0ed700134cf1477bc05b887b16bc35be2968ed349c084",
+      "format": "sw-installed-front-door/linux-v1-scope/1",
+      "kind": "integrated-candidate",
+      "source": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "host": "Claude Code 2.1.251 (pinned)",
+      "transport": "stdio",
+      "server": "original reviewed filesystem and Git MCP servers",
+      "profile": "linux-v1@a67a5822e57603affc678bde0b3e319d8fa43d3f90faf915c0650b28e6bc853e",
+      "identity": {
+        "implementation": "3e0c7e3ad86d05810dde98c6bb7557a3d81a98016742f1031e18293f5a2b3172",
+        "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+        "registry": null,
+        "runtime": "c528b62f1d1d9973c8679aaddf9d534eb058e74350d586e68948f3f09ea3fb85",
+        "server": null
+      },
+      "companions": [
+        {
+          "role": "installed-pilot",
+          "path": "sou-228/41818201020/sou215-installed-pilot/report.json",
+          "sha256": "f32c32feeb56952c87231e9a70a23fba49fe086616cf55f843a7b728d091523c"
+        },
+        {
+          "role": "demo",
+          "path": "sou-228/41818201020/sou215-pilot-demo/report.json",
+          "sha256": "9ffa0473e8d6ff5143c722bbfc4ddf33803c326720919d1da615569541bf339d"
+        }
+      ]
+    },
+    {
+      "id": "sou228-clean-user-41818211366",
+      "capability": "clean-user-lifecycle-linux",
+      "path": "sou-228/41818211366/sou216-clean-user/report.json",
+      "sha256": "5ae594e027b9b03354504898e89d1bf85b523d8e3da095a1de6b26b9299c9515",
+      "format": "sw-installed-front-door/clean-user/1",
+      "kind": "integrated-candidate",
+      "source": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "host": "Claude Code 2.1.251 (pinned)",
+      "transport": "stdio",
+      "server": "original reviewed filesystem and Git MCP servers",
+      "profile": "two-new-projects-one-clean-user-environment",
+      "identity": {
+        "implementation": "3e0c7e3ad86d05810dde98c6bb7557a3d81a98016742f1031e18293f5a2b3172",
+        "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+        "registry": null,
+        "runtime": "98af293b9c80bc60822019bfa47de22d433f03d3d8145cd1280b406e5f227407",
+        "server": null
+      },
+      "companions": [
+        {
+          "role": "walkthrough",
+          "path": "sou-228/41818211366/sou216-clean-user/walkthrough/report.json",
+          "sha256": "8ccb8c74ef3c99aa8367004c58dc1691e1d1c7fd32a5a271a521280f50fbdb7b"
+        },
+        {
+          "role": "ask",
+          "path": "sou-228/41818211366/sou216-clean-user/ask/qualification.json",
+          "sha256": "d4ab3636dfb4deefbfb38d54b19ebc527316d6210620c0032f732ac9a3e02254"
+        },
+        {
+          "role": "user-session",
+          "path": "sou-228/41818211366/sou216-user-session/report.json",
+          "sha256": "b0279fd5181950331f34a447940a8f43469a249dc0fd6870bf1f3273e0966212"
+        },
+        {
+          "role": "user-session-after-cleanup",
+          "path": "sou-228/41818211366/sou216-user-session-after-cleanup/report.json",
+          "sha256": "e206f21c871e46d1d945eeb40ebc17f16a53f0d07497a0363b5b70d0414ccbfa"
+        }
+      ]
+    },
+    {
+      "id": "sou228-clean-user-41818225908",
+      "capability": "clean-user-lifecycle-linux",
+      "path": "sou-228/41818225908/sou216-clean-user/report.json",
+      "sha256": "55a53e973c8190408f8631ef75e02d5e20ad0580b3b7859b055dfad14986a51e",
+      "format": "sw-installed-front-door/clean-user/1",
+      "kind": "integrated-candidate",
+      "source": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "host": "Claude Code 2.1.251 (pinned)",
+      "transport": "stdio",
+      "server": "original reviewed filesystem and Git MCP servers",
+      "profile": "two-new-projects-one-clean-user-environment",
+      "identity": {
+        "implementation": "3e0c7e3ad86d05810dde98c6bb7557a3d81a98016742f1031e18293f5a2b3172",
+        "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+        "registry": null,
+        "runtime": "05df6445147e4d38320fce980943a2c9dc4d9ef2e1f09298fea74743f776ca02",
+        "server": null
+      },
+      "companions": [
+        {
+          "role": "walkthrough",
+          "path": "sou-228/41818225908/sou216-clean-user/walkthrough/report.json",
+          "sha256": "956ed8c4d28be8ddb80cc0fce79d54c99c6540c211b2392132eb73bded1f3423"
+        },
+        {
+          "role": "ask",
+          "path": "sou-228/41818225908/sou216-clean-user/ask/qualification.json",
+          "sha256": "0cd123d426ee0bb692bb8d554aa226ee3474917c12e659cc52e9d12381510bc6"
+        },
+        {
+          "role": "user-session",
+          "path": "sou-228/41818225908/sou216-user-session/report.json",
+          "sha256": "37fc011a06ce6a3561f2cbd2504a74c11c4ab648601517d26e0949a00eec1ec0"
+        },
+        {
+          "role": "user-session-after-cleanup",
+          "path": "sou-228/41818225908/sou216-user-session-after-cleanup/report.json",
+          "sha256": "adf66b664a65690f67a9314f019b26c0c771166ce0c39110eca990200e42b6cb"
+        }
+      ]
     }
   ],
   "profile_inputs": [

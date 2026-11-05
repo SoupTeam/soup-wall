@@ -332,6 +332,13 @@ def linux_binary(artifacts, manifest_path, manifest_sha, expected_binary):
         raise Blocked("invalid_candidate_archive") from None
 
 
+def evidence_references(index):
+    """Every indexed report and its pinned companions, so evaluation never reads outside the snapshot."""
+    return [{"path": row["path"], "sha256": row["sha256"], "member": None, "member_sha256": None}
+            for descriptor in index["evidence"]
+            for row in (descriptor, *descriptor.get("companions", []))]
+
+
 def roadmap(snapshot, selection, repo, approval):
     index = snapshot.json(selection["support_index"])
     try:
@@ -344,9 +351,8 @@ def roadmap(snapshot, selection, repo, approval):
         for profile in index["profile_inputs"]:
             need(sha(DOSSIER.git_bytes(repo, commit, profile["path"])) == profile["sha256"],
                  "roadmap_profile_mismatch")
-        for descriptor in index["evidence"]:
-            snapshot.add({"path": descriptor["path"], "sha256": descriptor["sha256"],
-                          "member": None, "member_sha256": None})
+        for ref in evidence_references(index):
+            snapshot.add(ref)
         decisions = SUPPORT.validate_decisions(approval["roadmap_decisions"], commit, index)
         report = SUPPORT.build(index, snapshot.target, commit, decisions)
         required = [row for row in report["criteria"] if row["phase"] != "Phase 7"]
