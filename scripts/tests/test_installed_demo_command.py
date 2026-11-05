@@ -1,4 +1,5 @@
 import json
+import hashlib
 import importlib.util
 from pathlib import Path
 import subprocess
@@ -46,6 +47,16 @@ class InstalledDemoCommand(unittest.TestCase):
                     (base / "source-report" / name).read_bytes(),
                     (base / "installed-report" / name).read_bytes(),
                 )
+            (component / "scripts/roadmap_support_assets/report.css").unlink()
+            refused = base / "missing-asset-report"
+            result = subprocess.run(
+                [sys.executable, str(component / "scripts/pilot.py"), "roadmap-support",
+                 "--source", "a" * 40, "--evidence-dir", str(evidence),
+                 "--output", str(refused)],
+                cwd=base, capture_output=True, text=True,
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertFalse(refused.exists())
 
     def test_help_registers_both_commands_and_their_options(self):
         result = subprocess.run(
@@ -62,6 +73,26 @@ class InstalledDemoCommand(unittest.TestCase):
             )
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertIn(flag, result.stdout)
+
+    def test_catalog_and_shell_completions_include_installed_tools(self):
+        helper = PILOT.with_name("agent-command-help.py")
+        arguments = [
+            sys.executable, "-B", str(helper), "--pilot", str(PILOT),
+            "--sha256", hashlib.sha256(PILOT.read_bytes()).hexdigest(),
+        ]
+        result = subprocess.run([*arguments, "list"], capture_output=True, text=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        rows = {tuple(row["command"]): row for row in json.loads(result.stdout)["commands"]}
+        self.assertIn(("demo",), rows)
+        self.assertIn(("roadmap-support",), rows)
+        self.assertIn("--evidence-dir", [flag["name"] for flag in rows[("roadmap-support",)]["flags"]])
+        for shell in ("bash", "zsh", "fish"):
+            result = subprocess.run(
+                [*arguments, "completion", "--shell", shell], capture_output=True, text=True,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertIn("roadmap-support", result.stdout)
+            self.assertIn("demo", result.stdout)
 
     def test_demo_plan_works_outside_checkout_without_creating_files(self):
         with tempfile.TemporaryDirectory() as directory:

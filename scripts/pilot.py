@@ -114,6 +114,8 @@ def provider_preflight():
 
 
 PREP = load("front_door_preparation", "prepare-installed-pilot.py")
+DEMO = load("front_door_demo", "pilot-demo.py")
+SUPPORT = load("front_door_support", "roadmap_support.py")
 SOURCE_IDENTITY = load("front_door_source_identity", "pilot_source_identity.py")
 SCOPE = load("front_door_scope", "pilot_scope.py")
 # Inside a component verified by `agentfw pilot` there is no Git
@@ -1135,9 +1137,9 @@ def parser():
     commands.add_parser("policy-activation", help="activate a reviewed deny-only policy candidate for an idle installation")
     commands.add_parser("budget-preset", help="inspect, check and explicitly manage named Linux resource-budget presets")
     commands.add_parser("help")
-    commands.add_parser("demo", parents=[load("demo_parser", "pilot-demo.py").parser()],
+    commands.add_parser("demo", parents=[DEMO.parser()],
                         add_help=False, help="run the synthetic protected pilot demonstration")
-    commands.add_parser("roadmap-support", parents=[load("roadmap_parser", "roadmap_support.py").parser(installed=True)],
+    commands.add_parser("roadmap-support", parents=[SUPPORT.parser(installed=True)],
                         add_help=False, help="build a private offline ROADMAP evidence report")
     commands.add_parser("update", help="preview, apply, recover or roll back a complete local pilot generation")
     commands.add_parser("configuration", help="privately back up and restore supported declarative configuration")
