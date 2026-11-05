@@ -140,6 +140,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: linux-candidate-1.99.1
+          cache-on-failure: true
       - name: Check bounded candidate and production-entrypoint changes
         env:
           DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
@@ -201,12 +202,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B scripts/qualify-installed-front-door.py --run --pilot-scope-only --allow-download \
-            --candidate-directory "$RUNNER_TEMP/linux-candidate/extracted/soup-wall-v0.0.0-sou236-x86_64-unknown-linux-gnu" \
-            --git "$CANDIDATE_GIT" --bwrap "$CANDIDATE_BWRAP" --component-python /usr/bin/python3.12 \
+            --candidate-directory "$RUNNER_TEMP/linux-candidate/candidate-home/extracted/soup-wall-v0.0.0-sou236-x86_64-unknown-linux-gnu" \
+            --git "$CANDIDATE_GIT" --bwrap "$SOU111_BWRAP" --component-python /usr/bin/python3.12 \
             --python /usr/bin/python3.12 --strace /usr/bin/strace --expected-commit "$GITHUB_SHA" \
             --output "$RUNNER_TEMP/linux-candidate/installed"
           python3 -B scripts/qualify-sandbox-exercise.py --candidate-directory \
-            "$RUNNER_TEMP/linux-candidate/extracted/soup-wall-v0.0.0-sou236-x86_64-unknown-linux-gnu" \
+            "$RUNNER_TEMP/linux-candidate/candidate-home/extracted/soup-wall-v0.0.0-sou236-x86_64-unknown-linux-gnu" \
             --installed-output "$RUNNER_TEMP/linux-candidate/installed" --output "$RUNNER_TEMP/linux-candidate/exercise"
       - name: Remove only this job's sandbox permission
         if: always()
