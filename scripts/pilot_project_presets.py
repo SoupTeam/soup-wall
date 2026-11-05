@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import stat
 import sys
+import types
 import uuid
 
 if os.name == 'posix':
@@ -108,6 +109,31 @@ def provider_reference(home, name, version, expected, profiles):
         return profile, {'name': name, 'version': version, 'sha256': bound}
 
 
+def strict_record(raw, profiles):
+    # Project catalogs have their own 128 KiB bound, not the provider-secret cap.
+    require(len(raw) <= CAP, 'store_limit')
+    try:
+        value = json.loads(raw, object_pairs_hook=profiles.pairs,
+                           parse_constant=lambda _: require(False, 'store_invalid'))
+    except (ValueError, UnicodeError, RecursionError):
+        raise ValueError('project_store_invalid') from None
+    require(type(value) is dict, 'store_invalid')
+    return value
+
+
+def validate_catalog(raw, profiles):
+    value = strict_record(raw, profiles)
+    require(isinstance(value, dict) and set(value) == {'format', 'records'}
+            and value['format'] == FORMAT and isinstance(value['records'], dict)
+            and len(value['records']) <= 16 and encoded(value) == raw, 'store_invalid')
+    for name, record in value['records'].items():
+        require(NAME.fullmatch(name) and isinstance(record, dict)
+                and set(record) == {'version', 'binding'}
+                and re.fullmatch(r'[0-9a-f]{32}', record['version']), 'record_invalid')
+        validate_binding(record['binding'])
+    return value
+
+
 class Store:
     def __init__(self, home, profiles, create=False):
         self.home, self.profiles = Path(home), profiles
@@ -155,27 +181,21 @@ class Store:
     def __exit__(self, *_):
         self.close()
 
-    def read(self):
+    def read(self, pending=None, allow_empty=False):
         self.check()
         if self.fd is None:
             return {'format': FORMAT, 'records': {}}
-        # Bound enumeration as well as bytes; unknown/interrupted state refuses.
+        # Only explicit import recovery may inspect its exact staged catalog.
+        require(pending is None or re.fullmatch(r'\.import-next-[0-9a-f]{64}', pending), 'recovery_stage_invalid')
+        allowed = {'catalog.json'} if pending is None else {'catalog.json', pending}
         with os.scandir(self.fd) as entries:
             for count, entry in enumerate(entries):
-                require(count == 0 and entry.name == 'catalog.json', 'store_inventory_invalid')
+                require(count < len(allowed) and entry.name in allowed, 'store_inventory_invalid')
         raw = read_at(self.fd, 'catalog.json')
         if raw is None:
-            require(self.new, 'catalog_missing')
+            require(self.new or allow_empty, 'catalog_missing')
             return {'format': FORMAT, 'records': {}}
-        value = self.profiles.strict(raw)
-        require(isinstance(value, dict) and set(value) == {'format', 'records'}
-                and value['format'] == FORMAT and isinstance(value['records'], dict)
-                and len(value['records']) <= 16 and encoded(value) == raw, 'store_invalid')
-        for name, record in value['records'].items():
-            require(NAME.fullmatch(name) and isinstance(record, dict)
-                    and set(record) == {'version', 'binding'}
-                    and re.fullmatch(r'[0-9a-f]{32}', record['version']), 'record_invalid')
-            validate_binding(record['binding'])
+        value = validate_catalog(raw, self.profiles)
         self.check()
         return value
 
@@ -310,8 +330,12 @@ def verify(binding, home, front, profiles):
 
 
 def main(argv, front):
+    if argv[:1] and argv[0] in ('export', 'import-preview', 'import', 'import-recover'):
+        return front.load('front_door_project_recovery', 'pilot_project_recovery.py').main(argv, front, types.SimpleNamespace(**globals()))
     parser = argparse.ArgumentParser(prog=front.PROG + ' project', description=__doc__)
     commands = parser.add_subparsers(dest='action', required=True)
+    for action in ('export', 'import-preview', 'import', 'import-recover'):
+        commands.add_parser(action, add_help=False, help='private declarative recovery; use '+action+' --help')
     for action in ('inspect', 'check', 'create', 'update', 'remove', 'run'):
         sub = commands.add_parser(action)
         sub.add_argument('--name', required=action != 'inspect')

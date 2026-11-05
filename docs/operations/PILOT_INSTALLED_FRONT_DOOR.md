@@ -144,6 +144,110 @@ one-project cancellation and sibling continuation, provider execution traces,
 source preservation and complete owned cleanup. Failed/incomplete evidence is
 retained. It does not replace TL-owned final Ready qualification and admission.
 
+## Private export and guarded recovery of project presets
+
+`agentfw pilot project export` backs up the declarative project catalog, separately
+from [configuration recovery](PILOT_CONFIGURATION_RECOVERY.md), which excludes it.
+The private archive contains selection/provider/budget references, workspace and
+state-root identities, source digests and the original record versions as identity
+metadata. Paths and project names can be sensitive: use an existing owner-private
+0700 export directory outside the Agent home, selections, workspaces and run roots.
+Export requires explicit consent, publishes one new 0600 file and never overwrites
+an existing archive. Every export parent component must be canonical; symlink
+ancestors refuse even when the final directory is private. The destination is
+pinned by descriptor and checked again immediately before publication.
+It does not copy credentials, provider bodies, grants,
+approvals, run/session state, workspace contents or executable/configuration bodies.
+
+```bash
+agentfw pilot --home /absolute/source-home project export \
+  --archive /absolute/private-export/projects.tar --consent
+```
+
+The uncompressed canonical USTAR archive has exactly `manifest.json` and
+`projects.json`, at most 512 KiB total and 128 KiB per JSON member, with at most
+16 records. Malformed, oversized, linked, duplicate, noncanonical or traversal
+members refuse without extraction. Project catalogs use their own 128 KiB limit;
+the smaller provider-secret limit is unchanged.
+
+Install and verify the current component in an existing fresh private Agent home
+(section 2), supply provider credentials through the existing explicit provider
+workflow, and prepare current selections if necessary. The archive supplies no
+provider credentials and imports no provider profile or budget preset. Privately
+create a 0600 binding file for **each** archived name:
+
+```json
+{"format":"sw-pilot-project-import-bindings/1","projects":{"one":{
+  "selection":"/absolute/current-prefix/selection.json",
+  "provider_name":"owned-provider","provider_version":"<current 32-hex version>",
+  "state_root":"/absolute/existing-private-run-root",
+  "linux_budget":null,"budget_preset":null
+}}}
+```
+
+Repeat the entry for `two` when both records were exported. Select either an
+explicit `linux_budget` file or a current named `budget_preset`, or leave both
+null for an explicitly unbudgeted binding. Use the existing provider/budget
+inspect flows to obtain exact versions; credentials never go into this file.
+
+```bash
+agentfw pilot --home /absolute/fresh-home project import-preview \
+  --archive /absolute/private-export/projects.tar \
+  --bindings /absolute/private-export/bindings.json
+agentfw pilot --home /absolute/fresh-home project import \
+  --archive /absolute/private-export/projects.tar \
+  --bindings /absolute/private-export/bindings.json \
+  --confirm-plan <reviewed-plan-sha256> --apply
+```
+
+Preview is read-only, including when the destination has no project catalog.
+Without a binding file it diagnoses archived references but leaves every entry
+unresolved. It reports changed/unavailable selection, provider, budget, workspace,
+state-root and current-source evidence, name conflicts and capacity. Import is
+all-or-nothing: every entry needs an explicit binding that passes the existing
+current-source selection/provider/budget/workspace checks. Resolve duplicates
+through the existing explicit project workflow and obtain a new plan; import
+never overwrites an existing name.
+
+Apply binds the exact archive/binding bytes and identities, destination path/home
+identity, catalog/store version and resolved current inputs. Under the existing
+catalog lock it repeats validation and atomically publishes the complete merged
+catalog. Existing entries, provider/component files, sibling state and projects
+stay intact. New record versions derive from the reviewed plan and replace the
+source versions; they are CAS identifiers, never bearer authority. Imported
+records still require `project check` and explicit `project run` confirmation;
+the accepted launcher independently revalidates inputs and creates fresh authority.
+Import itself starts no host or selected runtime and claims no observed protection.
+
+An interruption can leave the original catalog or the complete new catalog, plus
+an exact `.import-next-<plan>` staged catalog before publication. Ordinary catalog
+commands refuse unknown/interrupted inventory. With the same trusted archive,
+binding file and plan, explicitly run:
+
+```bash
+agentfw pilot --home /absolute/fresh-home project import-recover \
+  --archive /absolute/private-export/projects.tar \
+  --bindings /absolute/private-export/bindings.json \
+  --confirm-plan <same-reviewed-plan-sha256> --apply
+```
+
+Recovery validates the complete staged bytes or an already published result and
+rechecks current bindings/CAS before completing. A missing, altered or substituted
+input, changed catalog, unsafe stage or unrelated extra file refuses; preserve
+that state for private inspection. It never silently drops or adopts altered
+files. This operation does not inspect/stop a running host or authorize removal.
+SOU-225 retains its separate early-diagnostics qualification.
+
+Native reproduction: dispatch `mcp-real-filesystem.yml` on the exact Draft source
+with `installed_focus=project-recovery`, `project_presets_only=true` and
+`native_preparation_only=true`; leave other modes off. The existing installed
+two-project qualifier exports/rebinds/imports into a fresh home, observes staged
+catalog fsync and SIGKILLs its owned invocation before publication, recovers, then
+exercises both real protected reads, independent authority, sibling continuation
+and owned cleanup. The [5 November native evidence](evidence/PROJECT_PRESET_RECOVERY_2026-11-05.md)
+retains the measured sources and original reports, including the 33-control
+installed review follow-up with zero archives created through ancestor aliases. A local archive/control fixture is not a protected-run qualification.
+
 ## 4. Update, roll back, recover, remove
 
 | Command | Effect |
