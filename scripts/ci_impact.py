@@ -70,7 +70,9 @@ WORKFLOW_JOBS: dict[str, tuple[str, ...]] = {
 
 # Declarative build edges only; admission scheduling/status algorithms do not change.
 BUILD_CONSUMERS = {
+    "agent-doctor.yml": ("agent-doctor-linux",),
     "mcp-create-file.yml": ("linux-create-file", "linux-installed-edit"),
+    "mcp-https-get.yml": ("linux-https-get",),
     "mcp-https-post.yml": ("linux-https-post",),
     "mcp-windows-create.yml": ("linux-read-create-https-regressions",),
 }
