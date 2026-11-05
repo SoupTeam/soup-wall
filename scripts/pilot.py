@@ -8,6 +8,7 @@
     pilot.py status --prefix DIR
     pilot.py provider preview|check|create|update|restore|prune|select|remove [options]
     pilot.py configuration inventory|backup|inspect|restore-preview|restore|recover [options]
+    pilot.py project export|import-preview|import|import-recover [options]
     pilot.py snapshot preview|create|inspect|remove [options]
     pilot.py help
 

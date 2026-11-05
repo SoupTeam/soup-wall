@@ -1,0 +1,266 @@
+{
+ "cases": [
+  {
+   "case": "component-install",
+   "component": "070bd7adb4be611cdf7f3e4ce6130f4761d921a9b3d449117fea4a8d98fc8d72",
+   "files": 90,
+   "passed": true
+  },
+  {
+   "case": "preview-zero-effect",
+   "inet_connects": 0,
+   "passed": true,
+   "selected_started": 0
+  },
+  {
+   "case": "prepare-and-reuse",
+   "first": "prepared-not-active",
+   "passed": true,
+   "second": "reused"
+  },
+  {
+   "case": "existing-selection-status",
+   "passed": true,
+   "prepared_by": "scripts/pilot.py (checkout)",
+   "protection": "configured-not-running"
+  },
+  {
+   "case": "status-configured",
+   "passed": true,
+   "protection": "configured-not-running"
+  },
+  {
+   "case": "useful",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 0,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "configured-not-running",
+    "other_prefix_unrelated_runs": 1,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "document_sha256": "a67a5822e57603affc678bde0b3e319d8fa43d3f90faf915c0650b28e6bc853e",
+     "id": "linux-v1",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "reasons": [],
+     "selected": true,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "conforming"
+    }
+   },
+   "passed": true,
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": null,
+   "status": "completed"
+  },
+  {
+   "case": "status-after-run",
+   "passed": true,
+   "protection": "configured-not-running"
+  },
+  {
+   "case": "cancel",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 1,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "configured-not-running",
+    "other_prefix_unrelated_runs": 1,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "document_sha256": "a67a5822e57603affc678bde0b3e319d8fa43d3f90faf915c0650b28e6bc853e",
+     "id": "linux-v1",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "reasons": [],
+     "selected": true,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "conforming"
+    }
+   },
+   "passed": true,
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": "pilot_cancelled",
+   "status": "failed"
+  },
+  {
+   "case": "scope-selected-through-preview-and-prepare",
+   "passed": true
+  },
+  {
+   "case": "excluded-option-preview",
+   "passed": true
+  },
+  {
+   "case": "standard-cases-ran-under-scope",
+   "passed": true
+  },
+  {
+   "case": "excluded-capability-refused",
+   "passed": true
+  },
+  {
+   "case": "tampered-scope-refused",
+   "passed": true
+  },
+  {
+   "case": "unselected-claims-nothing",
+   "passed": true
+  },
+  {
+   "case": "status-never-claims-more",
+   "passed": true
+  },
+  {
+   "case": "owned-cleanup",
+   "passed": true
+  }
+ ],
+ "component": {
+  "archive_sha256": "3e0c7e3ad86d05810dde98c6bb7557a3d81a98016742f1031e18293f5a2b3172",
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "component": "070bd7adb4be611cdf7f3e4ce6130f4761d921a9b3d449117fea4a8d98fc8d72",
+  "files": 90
+ },
+ "component_python_sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+ "format": "sw-installed-front-door-qualification/1",
+ "inputs_sha256": {
+  "agentfw": "c528b62f1d1d9973c8679aaddf9d534eb058e74350d586e68948f3f09ea3fb85",
+  "bwrap": "ade37f573e2a075aa44b07e46de972035fec0d35ed323fd2ea837869ff420f5d",
+  "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+  "git": "4389f3ff06bc8f0f45d38ce78d484d12f472e489457a6d53f250105efd335ea3",
+  "git_launcher": "81c26234eaee95df71e33da22bda8516a900ecada5e2ce948e1855356b9f6c4c",
+  "node_archive": "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37",
+  "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+  "sandbox_tests": "86e1cf4586ac96a7b49c0c036c2c2617c0e307c3926d3baa7b1c6dfade5c3f6d"
+ },
+ "live_model_effectiveness": "not_tested",
+ "pilot_scope": {
+  "demo_prefix": "<redacted>",
+  "demo_selection": "<redacted>",
+  "selection": "<redacted>"
+ },
+ "pilot_scope_qualification": {
+  "active_case": "owned-cleanup",
+  "cases": [
+   {
+    "agent_starts": 1,
+    "attempted": true,
+    "document_sha256": "a67a5822e576",
+    "id": "scope-selected-through-preview-and-prepare",
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "id": "excluded-option-preview",
+    "refused": [
+     "capability-git-profiles"
+    ],
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "id": "standard-cases-ran-under-scope",
+    "live_scope_mode": "enforce",
+    "refused_results": 3,
+    "status": "passed",
+    "useful_results": 2
+   },
+   {
+    "attempted": true,
+    "id": "excluded-capability-refused",
+    "network_connections": 0,
+    "prefix_unchanged": true,
+    "reason": "scope_excludes_capability",
+    "selected_started": 0,
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "id": "tampered-scope-refused",
+    "reason": "scope_document_changed",
+    "selected_started": 0,
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "id": "unselected-claims-nothing",
+    "protection": "not-configured",
+    "status": "passed"
+   },
+   {
+    "acceptance": "not-claimed",
+    "attempted": true,
+    "enforce_only_when_observed_live": true,
+    "id": "status-never-claims-more",
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "id": "owned-cleanup",
+    "receiver_effects": 0,
+    "sources_preserved": true,
+    "status": "passed"
+   }
+  ],
+  "expected": [
+   "scope-selected-through-preview-and-prepare",
+   "excluded-option-preview",
+   "standard-cases-ran-under-scope",
+   "excluded-capability-refused",
+   "tampered-scope-refused",
+   "unselected-claims-nothing",
+   "status-never-claims-more",
+   "owned-cleanup"
+  ],
+  "format": "sw-installed-pilot-scope-qualification/1",
+  "source": {
+   "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+   "dirty": false,
+   "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+  },
+  "source_after": {
+   "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+   "dirty": false,
+   "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+  },
+  "status": "passed"
+ },
+ "platform": {
+  "kind": "linux"
+ },
+ "project_before_sha256": {
+  "home": "80f4d94d2f7814f9acc780d32bc2959998a1c55bf5ffac6a851795e08cc0fc0b",
+  "project": "154cec8810260be39f4d807efde0dd8a285efed2c3359dee806ce817f0412c83",
+  "repository": "2bcc1e1d8310bf4dccba954acd95a635a451dd482248f9da5c6613cc5c46fe25"
+ },
+ "provider": "owned-scripted-loopback",
+ "selection_sha256": "5ddf80fa921ae9f89476c498d6a8b36257970dbfcc1d06a2bedf86e86f19e8da",
+ "skipped": 0,
+ "source_after": {
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "dirty": false,
+  "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+ },
+ "source_before": {
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "dirty": false,
+  "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+ },
+ "status": "passed"
+}

@@ -94,10 +94,12 @@ def _link_inode(source_fd, directory_fd, name):
         os.close(proc_fd)
 
 
-def _publish_private(directory, name, writer, claim):
-    """Write a new regular inode, then publish that exact inode under one leaf."""
+def _publish_private(directory, name, writer, claim, *, verify_directory=None):
+    """Publish one new inode; optional checks bind the actual destination descriptor."""
     dir_fd, original = _private_dir_fd(directory)
     try:
+        if verify_directory is not None:
+            verify_directory(dir_fd)
         try:
             file_fd = os.open(".", os.O_TMPFILE | os.O_RDWR | os.O_CLOEXEC,
                               0o600, dir_fd=dir_fd)
@@ -114,9 +116,13 @@ def _publish_private(directory, name, writer, claim):
                     and inode.st_dev == original.st_dev, "exchange_publication_unsafe")
             claim.verify()
             _same_dir(directory, dir_fd, original)
+            if verify_directory is not None:
+                verify_directory(dir_fd)
             _link_inode(file_fd, dir_fd, name)
             os.fsync(dir_fd)
             _same_dir(directory, dir_fd, original)
+            if verify_directory is not None:
+                verify_directory(dir_fd)
             published = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
             require((published.st_dev, published.st_ino, published.st_size, published.st_mode)
                     == (inode.st_dev, inode.st_ino, inode.st_size, inode.st_mode)

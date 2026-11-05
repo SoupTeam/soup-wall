@@ -1,0 +1,345 @@
+{
+  "format": "sw-production-compose-verification/1",
+  "observed_on_client_date": "2026-11-04",
+  "status": "passed",
+  "source_commit": "8f8f807cee325e15b03bee5d4d07ea4598b04052",
+  "accepted_base": "2a5bf6771c63c6ccf2c55d07dede512a72f26481",
+  "scope": "owned-local-Docker-Compose-runtime-and-configuration",
+  "runtime_host": {
+    "client": "Windows with Docker Desktop Linux engine",
+    "docker_server_version": "29.9.2",
+    "platform": "linux/amd64",
+    "post_run_owned_containers": 0,
+    "post_run_owned_project_volumes": 0
+  },
+  "canonical_git_blob_sha256": {
+    ".github/workflows/ci.yml": "6670e68071e8d872f1c76d8d9d00e925afa647600a97c9b6034ac511af75b3c3",
+    "deploy/docker-compose.production.yaml": "e503c9b775cad135f2a709216969509ee1955e10b0c8bed2b8cbde351e1cf5b9",
+    "deploy/production-images.lock.json": "4acc5cb9dee032c0eb493945e54c0bbc2570ad49234bac721c79e8ebe823e197",
+    "deploy/production.firewall.yaml": "18a0b56dac9b4dcadb72b9157ffa867908d20fb1b92b531d8977986fabe36e4f",
+    "deploy/Dockerfile": "1e953334aab52b44119d3f7731504304103a5185d8d38d9efb9f11c2b4e5857b",
+    "policies/default.yaml": "f56e40101b6899a8ddc98a4dc5c8672bf1006da5a419d89d481a97c51ffc1998",
+    "scripts/production-compose.py": "b5aee7ece20360ded4d077128da0cc4ae11133e65cab026e0dfb64578b25588b",
+    "scripts/qualify-production-compose.py": "51a42d04c0a2f5c87125a204f1bc0ff59100fcb8ac8a26f1501ab1893c289069",
+    "scripts/tests/test_production_compose.py": "551a11620087a6c6f04a638310844c5727e60a57c3098f5719f76f4f960fe186",
+    "scripts/tests/test_qualify_production_compose.py": "aaabb7deea5e5da9a030916afeab858f67d04092c6553457e500ee860a25170a",
+    "scripts/local-compose-drill.ps1": "b8637c5325e498ae42783598ee2bd04576cccf6a443fbd2cfffa2e795b14a494",
+    "scripts/staging-acceptance.ps1": "65a71aff9932ea9c2e6433323862d5f73d8f2c47f7e4c026e3a88da492a250b6",
+    "scripts/dependency-failure-drill.ps1": "ea6ae7c16ae5dbbfb1be64319691585ee2968060034b9b879365c8ff82d77aaa",
+    "docs/operations/PRODUCTION_COMPOSE.md": "cb7a92ce2bb53be5d5c1d858367dc6634cfa7f319f0f6a077c043900c10aa611",
+    "docs/operations/PRODUCTION_RUNBOOK.md": "b18a9af70f2ad97de051a26151d62d0fa38047ab08e7408f75c26adafa9761c0"
+  },
+  "no_docker_controls": [
+    {
+      "source_commit": "8f8f807cee325e15b03bee5d4d07ea4598b04052",
+      "host": "native-Windows",
+      "suite": "test_production_compose.py",
+      "command": "python -B -m unittest discover -s scripts/tests -p test_production_compose.py -v",
+      "tests": 44,
+      "passed": 38,
+      "skipped": 6,
+      "skip_scope": "POSIX file-mode/link semantics",
+      "elapsed_seconds": 4.188,
+      "status": "passed",
+      "retained_output_sha256": "2d1ede4c6008e823d0b04eab3ca58dc3ed616f159d91b3e8831519976e2d5e22"
+    },
+    {
+      "source_commit": "8f8f807cee325e15b03bee5d4d07ea4598b04052",
+      "host": "native-Windows",
+      "suite": "test_qualify_production_compose.py",
+      "command": "python -B -m unittest discover -s scripts/tests -p test_qualify_production_compose.py -v",
+      "tests": 11,
+      "passed": 11,
+      "skipped": 0,
+      "skip_scope": null,
+      "elapsed_seconds": 0.015,
+      "status": "passed",
+      "retained_output_sha256": "5b5fa99b51040d0c69fd1672bcce26ece2aa09035a3b55d90564204ef2ef148f"
+    },
+    {
+      "source_commit": "8f8f807cee325e15b03bee5d4d07ea4598b04052",
+      "host": "WSL-Linux",
+      "suite": "test_production_compose.py",
+      "command": "python -B -m unittest discover -s scripts/tests -p test_production_compose.py -v",
+      "tests": 44,
+      "passed": 44,
+      "skipped": 0,
+      "skip_scope": null,
+      "elapsed_seconds": 4.693,
+      "status": "passed",
+      "retained_output_sha256": "d77ac8eee03468ee287d9e935f983037d65e5b38340e9d798a6601a495b3fcb7"
+    },
+    {
+      "source_commit": "8f8f807cee325e15b03bee5d4d07ea4598b04052",
+      "host": "WSL-Linux",
+      "suite": "test_qualify_production_compose.py",
+      "command": "python -B -m unittest discover -s scripts/tests -p test_qualify_production_compose.py -v",
+      "tests": 11,
+      "passed": 11,
+      "skipped": 0,
+      "skip_scope": null,
+      "elapsed_seconds": 0.05,
+      "status": "passed",
+      "retained_output_sha256": "30c63858677aabb267acbe249285fa32f9690be5ff13ecc8b239de4085b132a9"
+    }
+  ],
+  "owned_stack_observation": {
+    "format": "sw-production-compose-qualification/1",
+    "status": "passed",
+    "checks": [
+      "missing-image-refused-before-container-creation",
+      "wrong-owned-container-image-refused-without-replacement",
+      "verified-images-preflight-migrate-and-healthy-start",
+      "admin-refusal-and-authenticated-postgres-mutation",
+      "postgres-and-redis-authenticated-data-witnesses",
+      "three-container-restart-retains-postgres-redis-and-tenant-data",
+      "existing-staging-and-postgres-redis-outage-recovery-drill"
+    ],
+    "checked_at": "2026-11-04T10:38:41.096651+00:00",
+    "provider_requests": 0,
+    "scope": "owned-local-docker-stack-not-release-or-native-platform-approval",
+    "gateway": {
+      "image_id": "sha256:cd6f86a842c756fe7a2895b5156a353f8f2440437af36c53678ffc9297feb183",
+      "observed_source_label": "2a5bf6771c63c6ccf2c55d07dede512a72f26481",
+      "build_attestation": "not_asserted"
+    },
+    "source_commit": "8f8f807cee325e15b03bee5d4d07ea4598b04052",
+    "project": "soup-compose-qual-68a2aae2d73be754",
+    "closure": {
+      "format": "sw-production-compose-observation/1",
+      "status": "passed",
+      "action": "check",
+      "checked_at": "2026-11-04T10:38:53.796008+00:00",
+      "project": "soup-compose-qual-68a2aae2d73be754",
+      "platform": "linux/amd64",
+      "images": {
+        "postgres": {
+          "reference": "docker.io/library/postgres:16.15-alpine3.24@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab",
+          "config_digest": "sha256:6a2e324ebe59af6031c4c1cd96c1d5072c2ebc36563d2196365e43b8297c062d",
+          "manifest_digest": "sha256:cbf42f0edc946c0bc1b8eeed62403734e1f25dc67a3491455d07a92fdb558b28",
+          "local_image_id": "sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab",
+          "selected_local_id": "sha256:cbf42f0edc946c0bc1b8eeed62403734e1f25dc67a3491455d07a92fdb558b28",
+          "store_identity": "oci-manifest"
+        },
+        "redis": {
+          "reference": "docker.io/library/redis:7.4.12-alpine3.21@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f",
+          "config_digest": "sha256:98c6ca8f397f86e469be752c3e7ed5eb8b17f2479840cb69a2e413037038e9f4",
+          "manifest_digest": "sha256:1cf73a2f04808e55a8bd2f5706c2aa0ebb0f71938f93deb7af79f48311cd5cb9",
+          "local_image_id": "sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f",
+          "selected_local_id": "sha256:1cf73a2f04808e55a8bd2f5706c2aa0ebb0f71938f93deb7af79f48311cd5cb9",
+          "store_identity": "oci-manifest"
+        },
+        "firewall": {
+          "reference": "sha256:cd6f86a842c756fe7a2895b5156a353f8f2440437af36c53678ffc9297feb183",
+          "manifest_digest": "sha256:cffddd56a0502d75ca352c5d2c8b0d8374e5afbceb5af5665da9fd797f484ff0",
+          "local_image_id": "sha256:cd6f86a842c756fe7a2895b5156a353f8f2440437af36c53678ffc9297feb183",
+          "selected_local_id": "sha256:cffddd56a0502d75ca352c5d2c8b0d8374e5afbceb5af5665da9fd797f484ff0",
+          "store_identity": "oci-manifest"
+        }
+      },
+      "input_sha256": {
+        "deploy/docker-compose.production.yaml": "e503c9b775cad135f2a709216969509ee1955e10b0c8bed2b8cbde351e1cf5b9",
+        "deploy/production.firewall.yaml": "18a0b56dac9b4dcadb72b9157ffa867908d20fb1b92b531d8977986fabe36e4f",
+        "deploy/Dockerfile": "1e953334aab52b44119d3f7731504304103a5185d8d38d9efb9f11c2b4e5857b",
+        "policies/default.yaml": "f56e40101b6899a8ddc98a4dc5c8672bf1006da5a419d89d481a97c51ffc1998",
+        "deploy/production-images.lock.json": "4acc5cb9dee032c0eb493945e54c0bbc2570ad49234bac721c79e8ebe823e197",
+        "scripts/production-compose.py": "b5aee7ece20360ded4d077128da0cc4ae11133e65cab026e0dfb64578b25588b"
+      },
+      "network_downloads": 0,
+      "image_builds": 0,
+      "scope": "local-image-and-compose-closure-not-advisory-or-license-clearance"
+    },
+    "stage": "start",
+    "existing_drill_phases": [
+      "BaselineAcceptance",
+      "PostgresDown",
+      "Baseline",
+      "RedisDown",
+      "Recovered"
+    ],
+    "owned_stack_cleanup": "passed"
+  },
+  "retained_final_report_sha256": "c962b749f4668406b3d0ad0a6d4f7618587a7890f2dc79293dee4fb2439387f6",
+  "supplied_gateway_build": {
+    "source_commit": "2a5bf6771c63c6ccf2c55d07dede512a72f26481",
+    "source_archive_sha256": "f1dacfe562fecf309baf386fde7c7d9b2c58df2a75ccd73e069b647cb7c66e45",
+    "recipe": "existing deploy/Dockerfile with the builder toolchain explicitly selected as Rust 1.98.1",
+    "owned_check_dockerfile_sha256": "1e67b0815a70f50fffa97666be2102c4d487dca39d3a66376ab5f6679d866639",
+    "build_attestation": "not-asserted; owned local check, not compiler or release qualification"
+  },
+  "other_checks": {
+    "documentation": {
+      "markdown_files": 425,
+      "local_links": 1357,
+      "errors": 0,
+      "source_commit": "8f8f807cee325e15b03bee5d4d07ea4598b04052"
+    },
+    "ci_impact_controls": {
+      "tests": 22,
+      "status": "passed",
+      "source_commit": "60536805fe82984551757de695aaadbfda82eafc",
+      "reused_inputs": ".github/workflows/ci.yml and scripts/ci_impact.py unchanged at final implementation"
+    },
+    "git_diff_check": "passed"
+  },
+  "corrected_causes": [
+    "Docker 29 OCI index IDs require exact platform-manifest/container-descriptor binding; export config IDs are not local references in that store.",
+    "The wrong-image probe needed Compose ownership/config-hash labels and explicit orphan cleanup; its verified owned stopped container was removed.",
+    "Generated OIDC/webhook fixture keys must be independent unpadded-base64url encodings of 32 bytes.",
+    "Compose config already serializes escaped dollars. Normalize runtime values and escape once, retaining shell healthchecks and literal password dollars.",
+    "Explicit null command/entrypoint fields inherit verified image defaults; actual explicit overrides still require exact equality.",
+    "Filtered Windows child environments must retain PATHEXT and system-directory variables. A real Compose-version probe reproduced selection of the extensionless Unix launcher with no exit code, then docker.exe/exit 0 after correction.",
+    "The local-only qualifier must refuse remote UNC named-pipe authorities in both context and DOCKER_HOST.",
+    "A new Windows environment control initially compared mixed-case fixture keys against the OS-uppercase environment; the fixture now uses canonical uppercase keys."
+  ],
+  "earlier_attempts": [
+    {
+      "source_commit": "60536805fe82984551757de695aaadbfda82eafc",
+      "status": "failed",
+      "stage": "start",
+      "reason": "existing_dependency_drill_failed",
+      "checks_completed": [
+        "missing-image-refused-before-container-creation",
+        "wrong-owned-container-image-refused-without-replacement",
+        "verified-images-preflight-migrate-and-healthy-start",
+        "admin-refusal-and-authenticated-postgres-mutation",
+        "postgres-and-redis-authenticated-data-witnesses",
+        "three-container-restart-retains-postgres-redis-and-tenant-data"
+      ],
+      "owned_stack_cleanup": "passed",
+      "retained_report_sha256": "02d2ee8af5ed19699de1d925478af5f71e5be2780734488ed65ecb45281db9cb"
+    },
+    {
+      "source_commit": "60536805fe82984551757de695aaadbfda82eafc",
+      "status": "failed",
+      "stage": "start",
+      "reason": "existing_dependency_drill_failed",
+      "checks_completed": [
+        "missing-image-refused-before-container-creation",
+        "wrong-owned-container-image-refused-without-replacement",
+        "verified-images-preflight-migrate-and-healthy-start",
+        "admin-refusal-and-authenticated-postgres-mutation",
+        "postgres-and-redis-authenticated-data-witnesses",
+        "three-container-restart-retains-postgres-redis-and-tenant-data"
+      ],
+      "owned_stack_cleanup": "passed",
+      "retained_report_sha256": "07acf8225e3ae643941fa927d00e701b78c9d57315344ca436f6cf7a1c0a02e8"
+    },
+    {
+      "source_commit": "60b406970cfc5838b966941badb48317a9535278",
+      "status": "failed",
+      "stage": "migrate",
+      "reason": "closure_container_process_or_environment_mismatch",
+      "checks_completed": [
+        "missing-image-refused-before-container-creation",
+        "wrong-owned-container-image-refused-without-replacement"
+      ],
+      "owned_stack_cleanup": "passed",
+      "retained_report_sha256": "2b60014b01ee9d7f4e2f0f471e75a677923348d21c98e0c5a05a0b2febfba14e"
+    },
+    {
+      "source_commit": "6a3808e967302ad83ca4aef2cdbdd917f442349d",
+      "status": "failed",
+      "stage": "preflight",
+      "reason": "closure_docker_command_failed",
+      "checks_completed": [
+        "missing-image-refused-before-container-creation",
+        "wrong-owned-container-image-refused-without-replacement"
+      ],
+      "owned_stack_cleanup": "passed",
+      "retained_report_sha256": "a8dc9f951b6f69567ba7b4330251f673e8ae3b22c8105d1eb0a24e5158068603"
+    },
+    {
+      "source_commit": "3cd98e29afa40f7b4d0c4c3bb2e74ae45e4c6a8c",
+      "status": "failed",
+      "stage": null,
+      "reason": "qualification_failed",
+      "checks_completed": [
+        "missing-image-refused-before-container-creation",
+        "wrong-owned-container-image-refused-without-replacement"
+      ],
+      "owned_stack_cleanup": "passed",
+      "retained_report_sha256": "e6bd89c31624ab858fffa8f74ac75ac173e75c0c0071b9fe33b7b77119596089"
+    },
+    {
+      "source_commit": "60536805fe82984551757de695aaadbfda82eafc",
+      "status": "failed",
+      "stage": "start",
+      "reason": "existing_dependency_drill_failed",
+      "checks_completed": [
+        "missing-image-refused-before-container-creation",
+        "wrong-owned-container-image-refused-without-replacement",
+        "verified-images-preflight-migrate-and-healthy-start",
+        "admin-refusal-and-authenticated-postgres-mutation",
+        "postgres-and-redis-authenticated-data-witnesses",
+        "three-container-restart-retains-postgres-redis-and-tenant-data"
+      ],
+      "owned_stack_cleanup": "passed",
+      "retained_report_sha256": "87c985215853c0e7681df60ce44d8bc84612b49e4dd46b58c6d30b8ce7e55b9a"
+    },
+    {
+      "source_commit": "60b406970cfc5838b966941badb48317a9535278",
+      "status": "failed",
+      "stage": "migrate",
+      "reason": "closure_container_process_or_environment_mismatch",
+      "checks_completed": [
+        "missing-image-refused-before-container-creation",
+        "wrong-owned-container-image-refused-without-replacement"
+      ],
+      "owned_stack_cleanup": "passed",
+      "retained_report_sha256": "aea4cdb3be189b9b5015abc5aa6fbdac63626f58dbdc324fd859bcf0c8f99730"
+    },
+    {
+      "source_commit": "6a3808e967302ad83ca4aef2cdbdd917f442349d",
+      "status": "failed",
+      "stage": "preflight",
+      "reason": "closure_docker_command_failed",
+      "checks_completed": [
+        "missing-image-refused-before-container-creation",
+        "wrong-owned-container-image-refused-without-replacement"
+      ],
+      "owned_stack_cleanup": "passed",
+      "retained_report_sha256": "f3e4fe294f4fe17fbf6727c012a5aaba0f9f7d8b70ed434d6146beaf60a5545e"
+    },
+    {
+      "source_commit": null,
+      "status": "failed",
+      "stage": null,
+      "reason": "qualification_failed",
+      "checks_completed": [],
+      "owned_stack_cleanup": "not-needed-or-not-recorded",
+      "retained_report_sha256": "b590bab7f09e698779bb58d6811bd9bf71df7234c718879709684bfd86d5467b"
+    },
+    {
+      "source_commit": "82da385f199692fc755620ecd156a7dc2ee0dcc1",
+      "status": "failed",
+      "stage": "migrate",
+      "reason": "closure_docker_command_failed",
+      "checks_completed": [
+        "missing-image-refused-before-container-creation",
+        "wrong-owned-container-image-refused-without-replacement"
+      ],
+      "owned_stack_cleanup": "passed",
+      "retained_report_sha256": "e16758af6d9a0f473965f7b0c14a5773c9ba08508574fe29a1c2bcb10649805d"
+    },
+    {
+      "source_commit": "b85cd2c99dff14ef47f2bccffed717a2e5b0b018",
+      "status": "failed",
+      "stage": null,
+      "reason": "owned_stack_cleanup_failed",
+      "checks_completed": [
+        "missing-image-refused-before-container-creation"
+      ],
+      "owned_stack_cleanup": "not-needed-or-not-recorded",
+      "retained_report_sha256": "49f34cdd13a6f9807a0138e7de05e444accea296bc9f7e84ff233f5ceae194a8"
+    }
+  ],
+  "not_performed": [
+    "Linux arm64 runtime execution (identity refusal/selection covered by unit controls only)",
+    "native production Linux host or remote/shared deployment qualification",
+    "live model-provider requests, paid inference or private/held-out data",
+    "image-wide advisory clearance, license-policy/legal approval or source-to-binary reproducibility",
+    "registry/image publication, tag/release publication, Ready CI, CodeQL, candidate admission or merge"
+  ],
+  "reproduce": "docs/operations/PRODUCTION_COMPOSE.md#bounded-local-validation"
+}

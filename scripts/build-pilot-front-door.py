@@ -75,6 +75,7 @@ SCRIPTS = (
     "scripts/pilot_policy_activation.py",
     "scripts/pilot_budget_presets.py",
     "scripts/pilot_project_presets.py",
+    "scripts/pilot_project_recovery.py",
     "scripts/pilot_provider_ca.py",
     "scripts/pilot_provider_profiles.py",
     "scripts/pilot_provider_preflight.py",
