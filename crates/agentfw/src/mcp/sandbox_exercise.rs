@@ -130,6 +130,33 @@ fn execute(args: Cli, report: &mut Value) -> Result<(), &'static str> {
                 .map_err(|_| "input_identity_mismatch")?,
         );
     }
+    if matches!(args.kind, Kind::Git) && profile.git.is_none() {
+        return Err("invalid_input");
+    }
+    // Refuse every selected asset mismatch before unsandboxed positive
+    // calibration; preparation re-pins the same inputs for protected execution.
+    pins.push(
+        open_verified_file(&profile.bwrap_path, &profile.bwrap_sha256, true)
+            .map_err(|_| "input_identity_mismatch")?,
+    );
+    if let Some(launcher) = &profile.git_launcher {
+        pins.push(
+            open_verified_file(&launcher.path, &launcher.sha256, true)
+                .map_err(|_| "input_identity_mismatch")?,
+        );
+    }
+    for library in &profile.libraries {
+        pins.push(
+            open_verified_file(&library.path, &library.sha256, false)
+                .map_err(|_| "input_identity_mismatch")?,
+        );
+    }
+    if server_profile::package_tree_sha256(&profile.package_root)
+        .map_err(|_| "input_identity_mismatch")?
+        != profile.package_tree_sha256
+    {
+        return Err("input_identity_mismatch");
+    }
     let owned = tempfile::tempdir().map_err(|_| "fixture_unavailable")?;
     let workspace = owned.path().join("workspace");
     std::fs::create_dir(&workspace).map_err(|_| "fixture_unavailable")?;
