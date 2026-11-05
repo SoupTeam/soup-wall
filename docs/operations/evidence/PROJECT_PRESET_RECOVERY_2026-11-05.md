@@ -4,7 +4,7 @@ SOU-230, roadmap Phases 5/6. Follow the existing
 [private export and guarded recovery procedure](../PILOT_INSTALLED_FRONT_DOOR.md#private-export-and-guarded-recovery-of-project-presets).
 Measurements ran on 4 November UTC (delivery date: 5 November in Almaty).
 
-## Measured source and scope
+## Initial delivery: measured source and scope
 
 Successful [native run #611](https://github.com/SoupTeam/soup-wall/actions/runs/41894243461)
 measured clean source `9d8a5fcf524c1cb57f1d05328e4005845b8a139a`, tree
@@ -118,4 +118,45 @@ again. Regressions cover all preserved root categories, an otherwise allowed
 alias, a redirect before opening, moving the same destination inode into a
 workspace during writing, private-directory replacement and successful create-new
 publication. The installed qualifier adds an explicit zero-archive ancestor-alias
-control. Fresh Linux/native results for this follow-up are pending.
+control.
+
+[Native #613](https://github.com/SoupTeam/soup-wall/actions/runs/41992726784) passed
+on clean follow-up source `7f2a1a46cef1bdc9e1ea832b5af48ce0c9f8e7cc`, tree
+`42d021a83592ebbb00268595bbe2e90b87569c15`, unchanged before/after. All 33 installed
+controls passed, zero skips: the original 32 plus the new ancestor-alias control.
+The installed command checked aliases into 9 preserved roots and created zero
+archives. Real create-new export, fresh-home import, actual protected reads for
+both projects, independent/cross-project authority, SIGKILL/recovery, sibling
+continuation and owned cleanup all passed. These observations qualify the fix;
+initial #611 remains a historical result on its own earlier source.
+
+All 86 Linux regressions passed with zero skips: 4 phase calibrations, 15 original
+project tests and 67 recovery/configuration/cache-exchange tests. This includes
+all six new output-boundary tests with real unmocked Linux publication and all
+18 existing cache-exchange tests. The separate macOS attempt of those 18 tests
+could not set up because O_TMPFILE is unavailable; that environment result was
+not relabelled as a pass. The portable focused macOS suite passed 110 of 132
+tests with 22 platform-dependent skips. Source actionlint, generator consistency
+and documentation checks passed; all five CodeQL analyses/rollup and Draft checks
+passed on the measured follow-up source.
+
+The installed interruption witness recorded 39,957 ms, exit -9 after successful
+staged fsync, stage present and catalog absent; owned processes stopped and
+same-plan installed recovery completed. Its trace digest is
+`85f791ea88889e8bf9cfb30b69c55292541b7a4c23c9edda7e3d8ff3a6419fdf`.
+The raw scripted-provider fixture log includes a BrokenPipeError in its reply
+writer, consistent with the deliberately stopped first client being disconnected
+when the delayed reply is released. It is retained in the original artifact; all correlated readbacks,
+sibling continuation and cleanup checks completed successfully. No error output
+was removed or converted into a passed case.
+
+[Unmodified original #613 report](PROJECT_PRESET_RECOVERY_2026-11-05.run613.json):
+
+- Report SHA-256: `6b98ee358520291dc3911d71034e29e64f644f1043cf0b44b798885730d574d8`.
+- Official artifact `13400330188`, ZIP SHA-256: `c9ffa57b64f0bdf31b8a3f0129f5d0bc2c66b49cbd6d07c7bf88a31ad6918a64`; digest and ZIP CRC verified before using the report.
+- Installed component: `1419f8987e94844732968a200ef6eeb7d90ada15718e3712aa591a60f8c57811`, 91 files.
+- Component archive SHA-256: `01afef48fecc5c25c24d2ee5b534c0b53f801692ebe9f594fa92e469f52d297f`.
+
+Evidence/procedure-only commits after this measured source do not change the
+implementation, qualification drivers or workflows. The PR remains Draft for
+independent re-review; final Ready qualification, merge and Done are deferred.
