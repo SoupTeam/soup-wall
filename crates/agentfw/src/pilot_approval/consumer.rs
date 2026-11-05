@@ -188,6 +188,17 @@ pub(crate) fn held_fixture(
     host: &str,
     child: &std::process::Child,
 ) -> (Registration, Vec<fs::File>) {
+    held_fixture_with_ttl(instance, registry, host, child, 120_000)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn held_fixture_with_ttl(
+    instance: &str,
+    registry: &str,
+    host: &str,
+    child: &std::process::Child,
+    ttl_ms: u64,
+) -> (Registration, Vec<fs::File>) {
     let mut run_file = manifest().unwrap();
     let now = approval::now_ms();
     let run = Run {
@@ -200,7 +211,7 @@ pub(crate) fn held_fixture(
         launcher_pid: std::process::id(),
         launcher_start: process_start(std::process::id()).unwrap(),
         manifest_fd: descriptor(&run_file),
-        expires_at_ms: now + 120_000,
+        expires_at_ms: now + ttl_ms,
         authority_expires_at_ms: now + 180_000,
         authorities: BTreeMap::from([
             (

@@ -258,6 +258,21 @@ mod lifecycle_tests {
     #[ignore = "re-executed with the real launcher argv marker by the parent witness"]
     async fn handler_lifecycle_child() {
         assert_eq!(std::env::args().nth(1).as_deref(), Some("pilot-launch"));
+        for expire_registration in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let st = super::super::tests::fixture(dir.path());
+            let child = child();
+            let native = st.native.as_ref().unwrap();
+            let (registration, _files) = crate::pilot_approval::consumer::held_fixture_with_ttl(
+                native.instance_id(),
+                &native.registry_sha256,
+                "expiry-wait-host",
+                &child.0,
+                if expire_registration { 2_000 } else { 120_000 },
+            );
+            assert_eq!(register(&st, &registration).await, StatusCode::NO_CONTENT);
+            analysis_purpose::expiry_lock_wait_regression(&st, &registration, expire_registration);
+        }
         // Actual sealed registration and consume/confirm component path. Only
         // the quarantine record/issuer are explicit fixtures, never production mint.
         for mode in 0..3 {

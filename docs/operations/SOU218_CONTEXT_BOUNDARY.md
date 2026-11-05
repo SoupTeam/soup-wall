@@ -475,3 +475,28 @@ The first Clippy attempt flagged the extracted helper's complex return type;
 named type aliases corrected it without lint suppression. A broad `revoke`
 name filter matched two unrelated tests and is not included in this count.
 The extended real-process Linux helper remains pending independent execution.
+
+
+### Expiry across transaction lock wait - November 6
+
+Independent review [5791131209](https://github.com/SoupTeam/soup-wall/pull/346#pullrequestreview-5791131209)
+passed the 37 requested Linux component tests at b601bad0 but reproduced
+expired-purpose consumption in three private contention runs. Those passing
+component tests did not establish correct expiry handling.
+
+Registration verification now occurs after the sessions, firewall and quarantine
+locks are acquired. Purpose verification uses fresh wall time after custody
+reconstruction, and the commit helper receives a fresh timestamp and rejects
+expired purpose or registration before modifying any ledger.
+
+The existing re-executed Linux lifecycle witness now holds the real firewall
+lock while consume holds admission, releases it only after expiry plus 100 ms,
+and requires refusal with purpose, both source authorities and quarantine
+unspent. It covers a one-second signed purpose and a separately sealed short-lived
+registration. The child and owner manifests remain real; quarantine/signing are
+explicit test fixtures. A portable boundary test checks refusal at exact expiry
+and preservation of existing ledger entries. Independent Linux execution of
+these new contention controls is requested; a Windows pass cannot qualify them.
+
+Issuer and payload delivery remain disabled. This fixes the reviewed transaction
+boundary only; the restricted recipient and six benign outcomes remain open.

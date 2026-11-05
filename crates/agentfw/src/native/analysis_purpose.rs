@@ -139,7 +139,6 @@ pub fn consume(
     if !st.config.enforce || st.config.judge.enabled {
         return Err("native_enforcement_required");
     }
-    let now = super::wall_time_ms()?;
     let registration = {
         let mut sessions = native
             .sessions
@@ -150,9 +149,6 @@ pub fn consume(
             .get(&grant.binding.host_generation)
             .ok_or("analysis_consumer_missing")?
             .clone();
-        registration
-            .verify(native.instance_id(), &native.registry_sha256, now)
-            .map_err(|_| "analysis_consumer_unverified")?;
         let firewall = st.firewall.lock().map_err(|_| "native_state_unavailable")?;
         let policy = serde_json::to_value(firewall.policy_for_diagnostics())
             .map_err(|_| "analysis_policy_unavailable")?;
@@ -160,6 +156,13 @@ pub fn consume(
             .quarantine
             .lock()
             .map_err(|_| "analysis_quarantine_state")?;
+        registration
+            .verify(
+                native.instance_id(),
+                &native.registry_sha256,
+                super::wall_time_ms()?,
+            )
+            .map_err(|_| "analysis_consumer_unverified")?;
         let expected = quarantine.purpose_binding(
             &grant.binding.quarantine_id,
             &registration,
@@ -167,8 +170,10 @@ pub fn consume(
             &super::canonical_digest(&policy),
             native.monotonic_now(),
         )?;
+        // Refresh authorization time after all transaction locks and custody checks.
+        let now = super::wall_time_ms()?;
         verify(&derive_key(&native.token), grant, &expected, now)?;
-        commit_withdrawal(&mut sessions, grant, &registration, now)?;
+        commit_withdrawal(&mut sessions, grant, &registration, super::wall_time_ms()?)?;
         quarantine.spend(&expected.quarantine_id);
         registration
     };
@@ -193,6 +198,9 @@ fn commit_withdrawal(
     registration: &crate::pilot_approval::consumer::Registration,
     now: u64,
 ) -> Result<(), &'static str> {
+    if now < grant.issued_at_ms || now >= grant.expires_at_ms || now >= registration.expires() {
+        return Err("analysis_purpose_time");
+    }
     sessions.purpose_spent.retain(|_, expiry| *expiry > now);
     if sessions.purpose_spent.contains_key(&grant.single_use_id) {
         return Err("analysis_purpose_replay");
@@ -442,6 +450,29 @@ mod tests {
         }
     }
     #[test]
+    fn expired_at_commit_leaves_ledgers_unchanged() {
+        let registration = crate::pilot_approval::consumer::transaction_fixture();
+        let (_, grant) = fixture();
+        for now in [99, 200, 201, 3_001] {
+            let mut sessions = super::super::Sessions::default();
+            // Even pre-existing expired tombstones must be untouched on refusal.
+            sessions.purpose_spent.insert("old".into(), 50);
+            sessions
+                .spent_authorities
+                .insert("old-authority".into(), 50);
+            assert_eq!(
+                commit_withdrawal(&mut sessions, &grant, &registration, now),
+                Err("analysis_purpose_time")
+            );
+            assert_eq!(sessions.purpose_spent.len(), 1);
+            assert_eq!(sessions.purpose_spent.get("old"), Some(&50));
+            assert_eq!(sessions.spent_authorities.len(), 1);
+            assert_eq!(sessions.spent_authorities.get("old-authority"), Some(&50));
+            assert!(sessions.scoped_hosts.is_empty());
+        }
+    }
+
+    #[test]
     fn atomic_spend_withdrawal_replay_and_capacity() {
         let registration = crate::pilot_approval::consumer::transaction_fixture();
         let (_, grant) = fixture();
@@ -509,4 +540,66 @@ mod tests {
         assert_eq!(sessions.purpose_spent.len(), 1);
         assert_eq!(sessions.spent_authorities.len(), 2);
     }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub(super) fn expiry_lock_wait_regression(
+    st: &crate::handlers::Shared,
+    registration: &crate::pilot_approval::consumer::Registration,
+    expire_registration: bool,
+) {
+    let native = st.native.as_ref().unwrap();
+    let mut grant = lifecycle_fixture(st, registration, "expired-wait-q");
+    grant.expires_at_ms = if expire_registration {
+        registration.expires()
+    } else {
+        super::wall_time_ms().unwrap() + 1_000
+    };
+    grant.signature = URL_SAFE_NO_PAD.encode(
+        mac(&derive_key(&native.token), &grant)
+            .finalize()
+            .into_bytes(),
+    );
+    let firewall = st.firewall.lock().unwrap();
+    std::thread::scope(|scope| {
+        let worker = scope.spawn(|| consume(st, &grant));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            if matches!(
+                native.sessions.try_lock(),
+                Err(std::sync::TryLockError::WouldBlock)
+            ) {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                // Release before panicking so scoped thread join cannot deadlock.
+                drop(firewall);
+                panic!("consume did not acquire admission lock");
+            }
+            std::thread::yield_now();
+        }
+        while super::wall_time_ms().unwrap() <= grant.expires_at_ms + 100 {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        drop(firewall);
+        let error = if expire_registration {
+            "analysis_consumer_unverified"
+        } else {
+            "analysis_purpose_time"
+        };
+        assert!(matches!(worker.join().unwrap(), Err(actual) if actual == error));
+    });
+    let sessions = native.sessions.lock().unwrap();
+    assert!(sessions.purpose_spent.is_empty());
+    assert!(sessions.spent_authorities.is_empty());
+    assert!(sessions.scoped_hosts.is_empty());
+    assert!(
+        !native
+            .quarantine
+            .lock()
+            .unwrap()
+            .retained("expired-wait-q")
+            .unwrap()
+            .1
+    );
 }
