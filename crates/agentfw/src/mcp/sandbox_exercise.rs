@@ -177,12 +177,13 @@ fn execute(args: Cli, report: &mut Value) -> Result<(), &'static str> {
         .map_err(|_| "prerequisite_unavailable")?;
     let result = runtime.block_on(async {
         match args.kind {
-            Kind::Filesystem => positive(&pins[0], &["-e", "if (require('node:fs').readFileSync('/dev/null').length !== 0) process.exit(1)"], owned.path()).await?,
+            Kind::Filesystem => positive(&pins[0], &profile.runtime_path, &["-e", "if (require('node:fs').readFileSync('/dev/null').length !== 0) process.exit(1)"], owned.path()).await.context("calibration_node")?,
             Kind::Git => {
-                positive(&pins[0], &["-I", "-B", "-c", "import pathlib; assert pathlib.Path('/dev/null').read_bytes() == b''"], owned.path()).await?;
+                positive(&pins[0], &profile.runtime_path, &["-I", "-B", "-c", "import pathlib; assert pathlib.Path('/dev/null').read_bytes() == b''"], owned.path()).await.context("calibration_python")?;
                 let git = pins.get(1).context("exercise_input_invalid")?;
-                positive(git, &["init", "--quiet", "."], &profile.workspace).await?;
-                positive(git, &["-c", "user.name=Owned exercise", "-c", "user.email=exercise@example.invalid", "commit", "--quiet", "--allow-empty", "-m", "Owned sandbox exercise"], &profile.workspace).await?;
+                let git_name = &profile.git.as_ref().context("exercise_input_invalid")?.path;
+                positive(git, git_name, &["init", "--quiet", "."], &profile.workspace).await.context("calibration_git_init")?;
+                positive(git, git_name, &["-c", "user.name=Owned exercise", "-c", "user.email=exercise@example.invalid", "commit", "--quiet", "--allow-empty", "-m", "Owned sandbox exercise"], &profile.workspace).await.context("calibration_git_commit")?;
             }
         }
         match args.kind { Kind::Filesystem => exercise::filesystem(profile).await, Kind::Git => exercise::git(profile, false).await }
@@ -197,6 +198,16 @@ fn execute(args: Cli, report: &mut Value) -> Result<(), &'static str> {
             Ok(())
         }
         Err(error) => {
+            for stage in [
+                "calibration_node",
+                "calibration_python",
+                "calibration_git_init",
+                "calibration_git_commit",
+            ] {
+                if error.chain().any(|cause| cause.to_string() == stage) {
+                    report["calibration_stage"] = json!(stage);
+                }
+            }
             if error
                 .chain()
                 .any(|cause| cause.to_string() == "exercise_cleanup_confirmed")
@@ -227,12 +238,22 @@ fn execute(args: Cli, report: &mut Value) -> Result<(), &'static str> {
 }
 
 #[cfg(target_os = "linux")]
-async fn positive(pin: &std::fs::File, args: &[&str], cwd: &std::path::Path) -> anyhow::Result<()> {
+async fn positive(
+    pin: &std::fs::File,
+    program_name: &std::path::Path,
+    args: &[&str],
+    cwd: &std::path::Path,
+) -> anyhow::Result<()> {
     use anyhow::Context;
     use std::os::fd::AsRawFd;
+    use std::os::unix::process::CommandExt;
     use std::process::Stdio;
     // Execute the verified inode, not a second lookup of its mutable pathname.
     let mut command = tokio::process::Command::new(format!("/proc/self/fd/{}", pin.as_raw_fd()));
+    // CPython locates its stdlib using argv[0]. The fd is intentionally
+    // CLOEXEC, so /proc/self/fd/N disappears after exec; retain the reviewed
+    // installation name without resolving the executable a second time.
+    command.as_std_mut().arg0(program_name);
     command
         .args(args)
         .current_dir(cwd)
