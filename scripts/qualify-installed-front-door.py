@@ -988,6 +988,8 @@ def qualify(args, report):
             load("pilot_scope_qualification", "qualify-pilot-scope.py").qualify(
                 args, door, agent_home, env, report, guided=QUAL, receiver=receiver, baseline=baseline,
                 selection=selection, load=load, agent_executions=agent_executions)
+            load("installed_tools_qualification", "qualify-installed-tools.py").qualify(
+                args, door, agent_home, env, report, load=load, require=require)
             report["source_after"] = BASE.source()
             require(report["source_after"] == before, "source_changed")
             return
