@@ -324,7 +324,7 @@ def tar_binary(stream, binary_name, *, pilot=False):
             need(read(padding) == b"\0" * padding, "candidate_archive_padding")
 
 
-def linux_binary(artifacts, manifest_path, manifest_sha, expected_binary, expected_commit=None):
+def linux_binary(artifacts, manifest_path, manifest_sha, expected_binary, expected_commit=None, expected_launcher=None, expected_tree=None):
     """Bind the actual retained Linux archive binary to the readiness runtime."""
     need(artifacts is not None and manifest_path is not None, "candidate_artifact_bytes_required")
     manifest, actual = read_json(manifest_path, MAX_INDEX)
@@ -346,7 +346,11 @@ def linux_binary(artifacts, manifest_path, manifest_sha, expected_binary, expect
                 binary, rows, small = tar_binary(stream, archive_name[:-7] + "/agentfw", pilot=True)
         need(binary == expected_binary, "candidate_runtime_binary_mismatch")
         import pilot_candidate
-        pilot_candidate.validate(rows, small, expected_commit, expected_binary)
+        custody = pilot_candidate.validate(rows, small, expected_commit, expected_binary)
+        if expected_launcher is not None:
+            need(custody["binaries"]["git_launcher"]["sha256"] == expected_launcher, "candidate_git_launcher_mismatch")
+        if expected_tree is not None:
+            need(custody["source"]["tree"] == expected_tree, "candidate_source_tree_mismatch")
     except Blocked:
         raise
     except (OSError, ValueError, KeyError, TypeError, EOFError, tarfile.TarError, zlib.error):
@@ -454,7 +458,7 @@ def verify(index_path, root, repo, candidate_commit, manifest_sha256, approval_p
                 need(row["report"] == entry["file"], "stage_report_binding_mismatch")
                 snapshot.add(row["report"])
             result["stages"] = [{"id": stage, "status": "verified"} for stage in RUNTIME.STAGES]
-            linux_binary(artifacts, manifest_path, manifest_sha256, selection["identities"]["agentfw"], selection["candidate"]["commit"])
+            linux_binary(artifacts, manifest_path, manifest_sha256, selection["identities"]["agentfw"], selection["candidate"]["commit"], selection["identities"]["git_launcher"], selection["candidate"]["tree"])
             result["roadmap"] = roadmap(snapshot, selection, Path(repo), approval)
             result["status"] = "admitted"
     except Blocked as exc:
