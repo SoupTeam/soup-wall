@@ -161,7 +161,8 @@ jobs:
     name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - test' || 'test' }}
     needs: impact
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'test')
-    runs-on: ubuntu-latest
+    # Pilot lifecycle tests use the supported system interpreter at /usr/bin/python3.
+    runs-on: ubuntu-24.04
     # Full workspace debug/test executables can exhaust the hosted runner disk.
     # Omit DWARF and incremental state; keep debug assertions and every test.
     env:
@@ -178,7 +179,7 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ci-workspace-no-dwarf-v1-${{ runner.os }}-${{ runner.arch }}
+          shared-key: ci-workspace-no-dwarf-ubuntu2404-v1-${{ runner.os }}-${{ runner.arch }}
           key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-default
           # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
           save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
@@ -521,7 +522,8 @@ jobs:
       (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'test') || needs.test.result == 'success') &&
       (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-macos-resilience') || needs.native-macos-resilience.result == 'success') &&
       (!contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'agent-windows-security') || needs.agent-windows-security.result == 'success')
-    runs-on: ubuntu-latest
+    # Pilot lifecycle tests use the supported system interpreter at /usr/bin/python3.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -530,7 +532,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ci-${{ runner.os }}-${{ runner.arch }}
+          shared-key: ci-ubuntu2404-${{ runner.os }}-${{ runner.arch }}
           key: ${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-all-features
           # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
           save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}

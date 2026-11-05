@@ -39,6 +39,18 @@ class SharedComponents(unittest.TestCase):
         self.assertIn("mcp-https-post--linux-https-post", actual)
         self.assertIn("mcp-real-filesystem--native-ubuntu-2404", actual)
 
+    def test_full_workspace_jobs_keep_the_supported_system_python_and_image_cache(self):
+        jobs = blocks((ROOT / ".github/workflows/ci.yml").read_text())
+        for name in ("test", "all-features"):
+            with self.subTest(job=name):
+                job = jobs[name]
+                self.assertIn("    runs-on: ubuntu-24.04\n", job)
+                cache = re.search(r"(?m)^          shared-key: (.+)$", job)
+                self.assertIsNotNone(cache)
+                self.assertIn("ubuntu2404", cache[1])
+                command = "cargo test --workspace --all-features" if name == "all-features" else "python3 scripts/verify_policy_composition.py"
+                self.assertIn(command, job)
+
     def test_existing_filesystem_lane_keeps_its_qualified_runner(self):
         source = blocks((ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text())
         self.assertIn("runs-on: ubuntu-22.04", source["required-linux-sandbox-and-real-host"])
