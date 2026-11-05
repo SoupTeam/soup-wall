@@ -34,6 +34,8 @@ pub struct DeploymentIdempotency<'a> {
     pub admin_id: &'a str,
     /// The `issuer_key_id` exactly as requested (`None` when the default signer was meant).
     pub requested_issuer_key: Option<&'a str>,
+    /// Optional Console compare-and-issue guard; included in the durable intent.
+    pub expected_sequence: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -44,6 +46,15 @@ pub struct KeyedDeployment {
     pub expires_at_unix: i64,
     pub issuer_key_id: String,
 }
+
+#[derive(Debug)]
+pub struct DeploymentPreconditionFailed;
+impl std::fmt::Display for DeploymentPreconditionFailed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("deployment inventory changed or group rollout active")
+    }
+}
+impl std::error::Error for DeploymentPreconditionFailed {}
 
 /// The key was already used by another principal or for a different deployment intent.
 #[derive(Debug)]
@@ -78,6 +89,12 @@ pub(super) fn intent_digest(
     ] {
         digest.update((part.len() as u32).to_be_bytes());
         digest.update(part.as_bytes());
+    }
+    // Preserve accepted SOU-219 digests byte-for-byte when the optional guard
+    // is absent. Guarded intents additionally bind the observed inventory.
+    if let Some(sequence) = idem.expected_sequence {
+        digest.update(b"expected-sequence/v1\0");
+        digest.update(sequence.to_be_bytes());
     }
     digest.finalize().to_vec()
 }
@@ -157,6 +174,18 @@ impl TenantStore {
             tx.commit()?;
             return Ok(result);
         }
+        if let Some(expected) = idem.expected_sequence {
+            let latest: i64 = tx.query_row("SELECT COALESCE(MAX(deployment_sequence),0) FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2",params![tenant,agent],|r|r.get(0))?;
+            ensure!(
+                u64::try_from(latest).ok() == Some(expected),
+                DeploymentPreconditionFailed
+            );
+            let has_groups:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_group_rollouts')",[],|r|r.get(0))?;
+            if has_groups {
+                let overlap:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM managed_group_rollouts r WHERE tenant_id=?1 AND phase IN ('pilot','standard','paused','rolling_back') AND (EXISTS(SELECT 1 FROM json_each(r.pilot_agents_json) WHERE value=?2) OR EXISTS(SELECT 1 FROM json_each(r.standard_agents_json) WHERE value=?2)))",params![tenant,agent],|r|r.get(0))?;
+                ensure!(!overlap, DeploymentPreconditionFailed);
+            }
+        }
         let issuer = issuer.context("Agent policy issuer unavailable")?;
         let deployment =
             self.deploy_managed_revision_conn(&tx, tenant, agent, revision, mode, issuer)?;
@@ -218,7 +247,7 @@ fn load_issuance(
 /// A stored administrator must still be active and permitted to mutate; the bootstrap owner has
 /// no row. This repeats the request-time check (agent mutations require an owner) inside the
 /// issuing transaction.
-fn current_admin_may_deploy(db: &rusqlite::Connection, admin_id: &str) -> Result<()> {
+pub(super) fn current_admin_may_deploy(db: &rusqlite::Connection, admin_id: &str) -> Result<()> {
     if admin_id == BOOTSTRAP_ADMIN {
         return Ok(());
     }

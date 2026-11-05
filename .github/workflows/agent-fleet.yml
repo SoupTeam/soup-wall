@@ -45,6 +45,20 @@ jobs:
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" scripts/fleet-console-acceptance.py --backend postgres --output target/fleet-evidence/postgres'
       - name: Managed Agent rollout panel browser regressions
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_rollout_browser.py -v'
+      - name: Individual signed policy browser regressions
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_single_policy_browser.py -v'
+      - name: Individual policy complete real browser and Agent cycle on both backends
+        shell: bash
+        run: |
+          set +e
+          status=0
+          for backend in sqlite postgres; do
+            "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-single-policy-acceptance.py --no-build \
+              --backend "$backend" --output "$RUNNER_TEMP/single-policy" || status=1
+          done
+          mkdir -p target/fleet-evidence/single-policy
+          cp -r "$RUNNER_TEMP/single-policy/." target/fleet-evidence/single-policy/
+          exit $status
       - name: Agent enrollment panel browser regressions
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_enrollment_browser.py -v'
       - name: Browser enrollment and credential lifecycle with a real Agent over HTTPS

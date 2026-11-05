@@ -1315,6 +1315,35 @@ impl Manager {
         self.verify(state.active.as_ref().context("Agent is not installed")?)
     }
 
+    /// Serialize installed connection changes with start/stop and direct serve.
+    /// Never infer a stopped process from an unreachable health endpoint alone.
+    #[cfg(unix)]
+    pub(crate) fn managed_connection_guard(&self, config: &crate::Config) -> Result<OperationLock> {
+        let lock = self.lock()?;
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        crate::service::require_unregistered(&self.home)?;
+        let path = self.root.join(MANIFEST);
+        let state: State = match fs::symlink_metadata(&path) {
+            Ok(_) => serde_json::from_slice(&crate::doctor::read_private(&path, 1024 * 1024)?)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => State::default(),
+            Err(_) => anyhow::bail!("managed_connection_lifecycle_unavailable"),
+        };
+        self.validate_state(&state)?;
+        ensure!(
+            state.operation.is_none() && state.pending_stage.is_none(),
+            "managed_connection_recover_lifecycle_first"
+        );
+        ensure!(
+            state.process.is_none(),
+            "managed_connection_stop_or_recover_recorded_instance_first"
+        );
+        ensure!(
+            !port_occupied(config),
+            "managed_connection_unowned_or_active_listener"
+        );
+        Ok(lock)
+    }
+
     pub(crate) fn lock(&self) -> Result<OperationLock> {
         if self.home.exists() {
             ensure_dir(&self.home)?;

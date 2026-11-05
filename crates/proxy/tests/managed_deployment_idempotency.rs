@@ -182,27 +182,31 @@ struct Audience {
 }
 
 async fn audience(store: &TenantStore, name: &str) -> Audience {
+    audience_for_agent(store, name, "agent-a").await
+}
+
+async fn audience_for_agent(store: &TenantStore, name: &str, agent: &str) -> Audience {
     let tenant = store
         .create_tenant_async(&format!("{name} {}", rand::random::<u64>()))
         .await
         .unwrap();
     let credential = store
-        .enroll_managed_agent_async(&tenant.id, "agent-a")
+        .enroll_managed_agent_async(&tenant.id, agent)
         .await
         .unwrap();
     for (revision, yaml) in [("r1", "default: allow\n"), ("r2", "default: deny\n")] {
         store
-            .create_managed_revision_async(&tenant.id, "agent-a", revision, yaml)
+            .create_managed_revision_async(&tenant.id, agent, revision, yaml)
             .await
             .unwrap();
         store
-            .approve_managed_revision_async(&tenant.id, "agent-a", revision)
+            .approve_managed_revision_async(&tenant.id, agent, revision)
             .await
             .unwrap();
     }
     Audience {
         tenant: tenant.id,
-        agent: "agent-a".into(),
+        agent: agent.into(),
         token: credential.token,
     }
 }
@@ -278,6 +282,10 @@ fn key(label: &str) -> String {
 async fn controls(f: &Fixture) {
     let _guard = SERIAL.lock().await;
     set_signers();
+    cold_revision_gets_are_read_only_and_backend_equivalent(f).await;
+    revision_readback_and_authoring_authorization(f).await;
+    query_addressed_dot_revisions_preserve_authority(f).await;
+    guarded_console_issuance_conflicts_without_side_effects(f).await;
     lost_response_returns_original_and_delivers_once(f).await;
     parallel_callers_share_one_issuance(f).await;
     conflicting_reuse_is_refused_without_issuance(f).await;
@@ -658,6 +666,7 @@ async fn authorization_is_rechecked_before_a_stored_result(f: &Fixture) {
                     key: stored_key,
                     admin_id: &owner.admin.id,
                     requested_issuer_key: None,
+                    expected_sequence: None,
                 },
             )
             .await;
@@ -783,5 +792,686 @@ async fn sqlite_older_database_gains_the_key_table_on_first_use() {
     let (status, body) = post(&server, &a, "r1", Some(&key("older")), json!({}), OWNER).await;
     assert_eq!(status, StatusCode::CREATED, "{body}");
     assert_eq!(f.keys(&a.tenant).await, 1);
+    server.kill().await;
+}
+
+async fn revision_readback_and_authoring_authorization(f: &Fixture) {
+    let store = f.store().await;
+    let a = audience(&store, "Revision readback").await;
+    let b = audience(&store, "Other audience").await;
+    let viewer = store
+        .create_admin_async(&unique("Revision viewer"), AdminRole::Viewer)
+        .await
+        .unwrap();
+    let owner = store
+        .create_admin_async(&unique("Revision owner"), AdminRole::Owner)
+        .await
+        .unwrap();
+    let server = Server::start(store.clone()).await;
+    let client = reqwest::Client::new();
+    let path = format!(
+        "{}/admin/v1/tenants/{}/agents/{}/revisions",
+        server.base, a.tenant, a.agent
+    );
+    let view = format!("Bearer {}", viewer.token);
+    let response = client
+        .get(format!("{path}?limit=1"))
+        .header("x-llm-firewall-admin-token", &view)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 200);
+    let rows: Value = response.json().await.unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 1);
+    assert_eq!(rows[0]["revision"], "r1");
+    assert!(rows[0].get("policy_yaml").is_none());
+    let rows: Value = client
+        .get(format!("{path}?limit=1&after=r1"))
+        .header("x-llm-firewall-admin-token", &view)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(rows[0]["revision"], "r2");
+    let row: Value = client
+        .get(format!("{path}/r2"))
+        .header("x-llm-firewall-admin-token", &view)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(row["tenant_id"], a.tenant);
+    assert_eq!(row["agent_id"], a.agent);
+    assert_eq!(row["policy_yaml"], "default: deny\n");
+    assert_eq!(
+        row["policy_sha256"],
+        format!("{:x}", Sha256::digest(b"default: deny\n"))
+    );
+    assert_eq!(
+        client
+            .get(format!("{path}?limit=101"))
+            .header("x-llm-firewall-admin-token", &view)
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        400
+    );
+    assert_eq!(
+        client
+            .get(format!("{path}/missing"))
+            .header("x-llm-firewall-admin-token", &view)
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        404
+    );
+    assert_eq!(
+        client
+            .get(format!("{path}/r2"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        401
+    );
+    assert_eq!(
+        client
+            .post(&path)
+            .header("x-llm-firewall-admin-token", &view)
+            .json(&json!({"revision":"no","policy_yaml":"default: allow\n"}))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        403
+    );
+    // Readback is GET-only: no deployment or key allocation, no cross-audience YAML.
+    assert_eq!(f.deployments(&a.tenant).await, 0);
+    assert!(store
+        .read_managed_revision_async(&b.tenant, "absent", "r1")
+        .await
+        .unwrap()
+        .is_none());
+    let doc = store
+        .create_managed_revision_authorized_async(
+            &a.tenant,
+            &a.agent,
+            "new",
+            "default: deny\n",
+            &owner.admin.id,
+        )
+        .await
+        .unwrap();
+    assert!(!doc.approved);
+    assert!(store
+        .create_managed_revision_authorized_async(
+            &a.tenant,
+            &a.agent,
+            "new",
+            "default: allow\n",
+            &owner.admin.id
+        )
+        .await
+        .is_err());
+    let id = owner.admin.id;
+    let q = format!("UPDATE control_plane_admins SET role='viewer' WHERE id='{id}'");
+    f.sql(&q, &q).await;
+    assert!(store
+        .approve_managed_revision_authorized_async(&a.tenant, &a.agent, "new", &id)
+        .await
+        .is_err());
+    assert!(store
+        .create_managed_revision_authorized_async(
+            &a.tenant,
+            &a.agent,
+            "after-demotion",
+            "default: deny\n",
+            &id
+        )
+        .await
+        .is_err());
+    assert!(
+        !store
+            .read_managed_revision_async(&a.tenant, &a.agent, "new")
+            .await
+            .unwrap()
+            .unwrap()
+            .identity
+            .approved
+    );
+    store
+        .revoke_managed_agent_async(&a.tenant, &a.agent)
+        .await
+        .unwrap();
+    assert!(store
+        .create_managed_revision_authorized_async(
+            &a.tenant,
+            &a.agent,
+            "after-revocation",
+            "default: deny\n",
+            "bootstrap_owner"
+        )
+        .await
+        .is_err());
+    assert!(store
+        .approve_managed_revision_authorized_async(&a.tenant, &a.agent, "new", "bootstrap_owner")
+        .await
+        .is_err());
+}
+
+async fn guarded_console_issuance_conflicts_without_side_effects(f: &Fixture) {
+    let store = f.store().await;
+    let a = audience(&store, "Guarded Console").await;
+    let server = Server::start(store.clone()).await;
+    let first = key("guard-first");
+    let next = key("guard-next");
+    let (status, original) = post(
+        &server,
+        &a,
+        "r1",
+        Some(&first),
+        json!({"expected_sequence":0}),
+        OWNER,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, _) = post(
+        &server,
+        &a,
+        "r2",
+        Some(&next),
+        json!({"expected_sequence":0}),
+        OWNER,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(f.deployments(&a.tenant).await, 1);
+    assert_eq!(f.keys(&a.tenant).await, 1);
+    let (status, replay) = post(
+        &server,
+        &a,
+        "r1",
+        Some(&first),
+        json!({"expected_sequence":0}),
+        OWNER,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(
+        replay["deployment_sequence"],
+        original["deployment_sequence"]
+    );
+    assert_eq!(
+        idem(&replay)["envelope_sha256"],
+        idem(&original)["envelope_sha256"]
+    );
+    assert_eq!(
+        post(
+            &server,
+            &a,
+            "r1",
+            Some(&first),
+            json!({"expected_sequence":1}),
+            OWNER
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let (bundle, _) = fetch(&server, &a).await.unwrap();
+    acknowledge(&server, &a, &bundle).await;
+    store
+        .create_managed_group_async(&a.tenant, "guard-group", "Guard")
+        .await
+        .unwrap();
+    store
+        .enroll_managed_agent_async(&a.tenant, "pilot")
+        .await
+        .unwrap();
+    store
+        .add_managed_group_member_async(&a.tenant, "guard-group", "pilot", true)
+        .await
+        .unwrap();
+    store
+        .add_managed_group_member_async(&a.tenant, "guard-group", &a.agent, false)
+        .await
+        .unwrap();
+    store
+        .create_managed_group_revision_async(
+            &a.tenant,
+            "guard-group",
+            "group-candidate",
+            "default: deny\n",
+        )
+        .await
+        .unwrap();
+    store
+        .approve_managed_group_revision_async(&a.tenant, "guard-group", "group-candidate")
+        .await
+        .unwrap();
+    let issuer = llm_firewall::tenant_store::ManagedIssuer::from_environment_for_key(None).unwrap();
+    store
+        .start_managed_group_rollout_async(&a.tenant, "guard-group", "group-candidate", &issuer)
+        .await
+        .unwrap();
+    // This Agent is a frozen worker, not yet issued by the group. Sequence CAS
+    // alone would miss the conflict; live membership is not the ownership source.
+    store
+        .remove_managed_group_member_async(&a.tenant, "guard-group", &a.agent)
+        .await
+        .unwrap();
+    let (status, _) = post(
+        &server,
+        &a,
+        "r2",
+        Some(&next),
+        json!({"expected_sequence":1}),
+        OWNER,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(
+        store
+            .list_managed_deployments_async(&a.tenant, &a.agent)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(f.keys(&a.tenant).await, 1);
+    // A prior confirmed issuance can still be reconciled during a group rollout.
+    assert_eq!(
+        post(
+            &server,
+            &a,
+            "r1",
+            Some(&first),
+            json!({"expected_sequence":0}),
+            OWNER
+        )
+        .await
+        .0,
+        StatusCode::CREATED
+    );
+}
+
+async fn cold_revision_gets_are_read_only_and_backend_equivalent(f: &Fixture) {
+    let store = f.store().await;
+    let tenant = store
+        .create_tenant_async(&unique("Cold revision GET"))
+        .await
+        .unwrap();
+    let sqlite =
+        "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='managed_agent_revisions'";
+    let postgres="SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename='managed_agent_revisions'";
+    let before = f.count(sqlite, postgres).await;
+    let server = Server::start(store).await;
+    let url = format!(
+        "{}/admin/v1/tenants/{}/agents/never-enrolled/revisions",
+        server.base, tenant.id
+    );
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
+        .header("x-llm-firewall-admin-token", OWNER)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 200);
+    assert_eq!(response.json::<Value>().await.unwrap(), json!([]));
+    let response = client
+        .get(format!("{url}/absent"))
+        .header("x-llm-firewall-admin-token", OWNER)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 404);
+    assert_eq!(
+        f.count(sqlite, postgres).await,
+        before,
+        "GET allocated managed schema"
+    );
+    if f.postgres.is_none() {
+        f.sql(
+            "CREATE TABLE managed_agent_enrollments (placeholder TEXT)",
+            "",
+        )
+        .await;
+        let response = client
+            .get(&url)
+            .header("x-llm-firewall-admin-token", OWNER)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status().as_u16(),
+            503,
+            "partial schema reported empty history"
+        );
+        let response = client
+            .get(format!("{url}/absent"))
+            .header("x-llm-firewall-admin-token", OWNER)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status().as_u16(), 503);
+        assert_eq!(
+            f.count(sqlite, postgres).await,
+            before,
+            "GET repaired partial schema"
+        );
+        f.sql("DROP TABLE managed_agent_enrollments", "").await;
+    }
+}
+
+async fn query_addressed_dot_revisions_preserve_authority(f: &Fixture) {
+    for agent in ["agent-a", ".", ".."] {
+        query_addressed_identifiers_preserve_authority(f, agent).await;
+    }
+}
+
+async fn query_addressed_identifiers_preserve_authority(f: &Fixture, agent: &str) {
+    let store = f.store().await;
+    let a = audience_for_agent(&store, "Dot revision compatibility", agent).await;
+    let other = audience_for_agent(&store, "Other dot audience", agent).await;
+    let viewer = store
+        .create_admin_async(&unique("Dot revision viewer"), AdminRole::Viewer)
+        .await
+        .unwrap();
+    let view = format!("Bearer {}", viewer.token);
+    let server = Server::start(store).await;
+    let client = reqwest::Client::new();
+    let base = format!("{}/admin/v1/tenants/{}/agents", server.base, a.tenant);
+    let other_base = format!("{}/admin/v1/tenants/{}/agents", server.base, other.tenant);
+    for (offset, revision) in [".", ".."].into_iter().enumerate() {
+        let expected = offset as u64;
+        assert_eq!(
+            client
+                .post(format!("{base}/policy-revisions"))
+                .query(&[("agent_id", a.agent.as_str())])
+                .header("x-llm-firewall-admin-token", &view)
+                .json(&json!({"revision":revision,"policy_yaml":"default: deny\n"}))
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            403
+        );
+        let create = client
+            .post(format!("{base}/policy-revisions"))
+            .query(&[("agent_id", a.agent.as_str())])
+            .header("x-llm-firewall-admin-token", OWNER)
+            .json(&json!({"revision":revision,"policy_yaml":"default: deny\n"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(create.status().as_u16(), 201);
+        let query = [("agent_id", a.agent.as_str()), ("revision", revision)];
+        let read_url = format!("{base}/policy-revision");
+        assert_eq!(
+            client
+                .get(&read_url)
+                .query(&query)
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            401
+        );
+        let read = client
+            .get(&read_url)
+            .query(&query)
+            .header("x-llm-firewall-admin-token", &view)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(read.status().as_u16(), 200);
+        let document: Value = read.json().await.unwrap();
+        assert_eq!(document["revision"], revision);
+        assert_eq!(document["tenant_id"], a.tenant);
+        assert_eq!(document["agent_id"], a.agent);
+        assert_eq!(document["policy_yaml"], "default: deny\n");
+        assert_eq!(document["approved"], false);
+        assert_eq!(
+            document["policy_sha256"],
+            format!("{:x}", Sha256::digest(b"default: deny\n"))
+        );
+        let changed = client
+            .post(format!("{base}/policy-revisions"))
+            .query(&[("agent_id", a.agent.as_str())])
+            .header("x-llm-firewall-admin-token", OWNER)
+            .json(&json!({"revision":revision,"policy_yaml":"default: allow\n"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            changed.status().as_u16(),
+            400,
+            "immutable dot revision changed"
+        );
+        let page = client
+            .get(format!("{base}/policy-revisions"))
+            .query(&[
+                ("agent_id", a.agent.as_str()),
+                ("limit", "1"),
+                ("after", revision),
+            ])
+            .header("x-llm-firewall-admin-token", &view)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(page.status().as_u16(), 200);
+        let page: Value = page.json().await.unwrap();
+        assert_eq!(page.as_array().unwrap().len(), 1);
+        assert_eq!(page[0]["agent_id"], a.agent);
+        assert_eq!(page[0]["tenant_id"], a.tenant);
+        assert!(page[0].get("policy_yaml").is_none());
+        let approve_url = format!("{base}/policy-revision/approve");
+        assert_eq!(
+            client
+                .post(&approve_url)
+                .query(&query)
+                .header("x-llm-firewall-admin-token", &view)
+                .json(&json!({}))
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            403
+        );
+        let approve = client
+            .post(&approve_url)
+            .query(&query)
+            .header("x-llm-firewall-admin-token", OWNER)
+            .json(&json!({}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(approve.status().as_u16(), 204);
+        assert_eq!(
+            client
+                .get(format!("{other_base}/policy-revision"))
+                .query(&query)
+                .header("x-llm-firewall-admin-token", &view)
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            404
+        );
+        assert_eq!(
+            client
+                .post(format!("{other_base}/policy-revision/approve"))
+                .query(&query)
+                .header("x-llm-firewall-admin-token", OWNER)
+                .json(&json!({}))
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            404
+        );
+        let deploy_url = format!("{base}/policy-revision/deploy");
+        let idempotency_key = key("dot-intent");
+        let body = json!({"rollback":offset == 1,"expected_sequence":expected});
+        assert_eq!(
+            client
+                .post(&deploy_url)
+                .query(&query)
+                .header("x-llm-firewall-admin-token", &view)
+                .header("Idempotency-Key", &idempotency_key)
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            403
+        );
+        assert_eq!(
+            client
+                .post(format!("{other_base}/policy-revision/deploy"))
+                .query(&query)
+                .header("x-llm-firewall-admin-token", OWNER)
+                .header("Idempotency-Key", &idempotency_key)
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            400
+        );
+        assert_eq!(f.deployments(&a.tenant).await, expected as i64);
+        assert_eq!(f.keys(&a.tenant).await, expected as i64);
+        let issued = client
+            .post(&deploy_url)
+            .query(&query)
+            .header("x-llm-firewall-admin-token", OWNER)
+            .header("Idempotency-Key", &idempotency_key)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(issued.status().as_u16(), 201);
+        let issued: Value = issued.json().await.unwrap();
+        assert_eq!(issued["revision"], revision);
+        assert_eq!(issued["deployment_sequence"], expected + 1);
+        assert_eq!(
+            issued["action"],
+            if offset == 1 { "rollback" } else { "activate" }
+        );
+        let replay = client
+            .post(&deploy_url)
+            .query(&query)
+            .header("x-llm-firewall-admin-token", OWNER)
+            .header("Idempotency-Key", &idempotency_key)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(replay.status().as_u16(), 201);
+        let replay: Value = replay.json().await.unwrap();
+        assert_eq!(replay["deployment_sequence"], issued["deployment_sequence"]);
+        assert_eq!(
+            idem(&replay)["envelope_sha256"],
+            idem(&issued)["envelope_sha256"]
+        );
+        assert_eq!(idem(&replay)["replayed"], true);
+        assert_eq!(f.deployments(&a.tenant).await, (expected + 1) as i64);
+        assert_eq!(f.keys(&a.tenant).await, (expected + 1) as i64);
+    }
+    let deployments = client
+        .get(format!("{base}/policy-deployments"))
+        .query(&[("agent_id", a.agent.as_str())])
+        .header("x-llm-firewall-admin-token", &view)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(deployments.status().as_u16(), 200);
+    let deployments: Value = deployments.json().await.unwrap();
+    assert_eq!(deployments.as_array().unwrap().len(), 2);
+    assert!(deployments
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|row| row["agent_id"] == a.agent && row["tenant_id"] == a.tenant));
+    assert_eq!(f.deployments(&other.tenant).await, 0);
+    assert_eq!(f.keys(&other.tenant).await, 0);
+    let oversized = "a".repeat(129);
+    let invalid_queries = [
+        vec![],
+        vec![("revision", "")],
+        vec![("revision", oversized.as_str())],
+        vec![("revision", "a/b")],
+        vec![("revision", "é")],
+        vec![("revision", "."), ("unexpected", "1")],
+        vec![("revision", "."), ("revision", "..")],
+    ];
+    for suffix in ["", "/approve", "/deploy"] {
+        for query in &invalid_queries {
+            let mut selected_query = vec![("agent_id", a.agent.as_str())];
+            selected_query.extend(query.iter().copied());
+            let path = format!("{base}/policy-revision{suffix}");
+            let request = if suffix.is_empty() {
+                client.get(path)
+            } else {
+                client.post(path).json(&json!({}))
+            };
+            assert_eq!(
+                request
+                    .header("x-llm-firewall-admin-token", OWNER)
+                    .query(&selected_query)
+                    .send()
+                    .await
+                    .unwrap()
+                    .status()
+                    .as_u16(),
+                400
+            );
+        }
+    }
+    for invalid_agent in ["", "a/b", "é", oversized.as_str()] {
+        for (suffix, create) in [
+            ("policy-revisions", false),
+            ("policy-revisions", true),
+            ("policy-deployments", false),
+        ] {
+            let path = format!("{base}/{suffix}");
+            let request = if create {
+                client
+                    .post(path)
+                    .json(&json!({"revision":"rejected","policy_yaml":"default: deny\n"}))
+            } else {
+                client.get(path)
+            };
+            assert_eq!(
+                request
+                    .query(&[("agent_id", invalid_agent)])
+                    .header("x-llm-firewall-admin-token", OWNER)
+                    .send()
+                    .await
+                    .unwrap()
+                    .status()
+                    .as_u16(),
+                400
+            );
+        }
+    }
     server.kill().await;
 }

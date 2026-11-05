@@ -243,8 +243,11 @@ def target_within_limit(target):
     return True
 
 
-def bounded_cargo(command, *, root, env, target, log, stage):
+def bounded_cargo(command, *, root, env, target, log, stage, log_limit=None):
     """Use SOU-115's owned-group reaper, with an aggregate target quota."""
+    log_limit = native.MAX_LOG if log_limit is None else log_limit
+    require(type(log_limit) is int and native.MAX_LOG <= log_limit <= 2 * native.MAX_LOG,
+            "bounded_log_limit_required", stage)
     capacity.recheck("before_cargo")
     cancelled = False
 
@@ -282,8 +285,8 @@ def bounded_cargo(command, *, root, env, target, log, stage):
                             selector.unregister(key.fileobj)
                             continue
                         count += len(block)
-                        output.write(block[:max(0, native.MAX_LOG - output.tell())])
-                        require(count <= native.MAX_LOG, f"{stage}_log_limit", stage)
+                        output.write(block[:max(0, log_limit - output.tell())])
+                        require(count <= log_limit, f"{stage}_log_limit", stage)
                 native.stop_group(process)
                 require(not cancelled, f"{stage}_cancelled", stage)
                 require(process.returncode == 0, f"{stage}_exit_{process.returncode}", stage)
