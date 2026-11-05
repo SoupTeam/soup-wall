@@ -39,6 +39,18 @@ class SharedComponents(unittest.TestCase):
         self.assertIn("mcp-https-post--linux-https-post", actual)
         self.assertIn("mcp-real-filesystem--native-ubuntu-2404", actual)
 
+    def test_full_workspace_jobs_keep_the_supported_system_python_and_image_cache(self):
+        jobs = blocks((ROOT / ".github/workflows/ci.yml").read_text())
+        for name in ("test", "all-features"):
+            with self.subTest(job=name):
+                job = jobs[name]
+                self.assertIn("    runs-on: ubuntu-24.04\n", job)
+                cache = re.search(r"(?m)^          shared-key: (.+)$", job)
+                self.assertIsNotNone(cache)
+                self.assertIn("ubuntu2404", cache[1])
+                command = "cargo test --workspace --all-features" if name == "all-features" else "python3 scripts/verify_policy_composition.py"
+                self.assertIn(command, job)
+
     def test_existing_filesystem_lane_keeps_its_qualified_runner(self):
         source = blocks((ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text())
         self.assertIn("runs-on: ubuntu-22.04", source["required-linux-sandbox-and-real-host"])
@@ -138,6 +150,25 @@ class SharedComponents(unittest.TestCase):
                               ("mcp-windows-create.yml", "linux-read-create-https-regressions")):
             self.assertIn("selected['" + workflow + "'] = ['" + job + "']", body)
         self.assertIn("default: false", manual.split("      sou222_consumers:\n", 1)[1].split("      edit_only:\n", 1)[0])
+
+    def test_doctor_get_comparison_only_selects_reviewed_producer_and_consumers(self):
+        manual = (ROOT / ".github/workflows/mcp-create-file.yml").read_text()
+        body = manual.split("  reuse-plan:\n", 1)[1].split("  reuse-qualification:\n", 1)[0]
+        self.assertIn("SOU229_CONSUMERS: ${{ inputs.sou229_consumers }}", body)
+        self.assertIn("if os.environ['SOU229_CONSUMERS'] == 'true':", body)
+        self.assertIn("selected['agent-doctor.yml'] = ['agent-doctor-linux']", body)
+        self.assertIn("selected['mcp-https-get.yml'] = ['linux-https-get']", body)
+        self.assertIn("if os.environ['SOU229_CONSUMERS'] != 'true':", body)
+        for workflow, job in (("agent-doctor.yml", "agent-doctor-linux"),
+                              ("mcp-https-get.yml", "linux-https-get")):
+            source = blocks((ROOT / ".github/workflows" / workflow).read_text())[job]
+            shared = blocks(generated())[workflow.removesuffix(".yml") + "--" + job]
+            self.assertIn("SOU166_MODE: source", source)
+            self.assertIn("SOU166_MODE: shared", shared)
+            self.assertIn("ci_qualification_build.py guard", shared)
+            self.assertIn("ci_qualification_build.py prepare", shared)
+            self.assertIn("ci_qualification_build.py binary", shared)
+            self.assertIn("-- clippy --locked --offline", shared)
 
     def test_linux_compatibility_refuses_loader_override_without_changing_windows_python(self):
         jobs = blocks((ROOT / ".github/workflows/mcp-windows-create.yml").read_text())

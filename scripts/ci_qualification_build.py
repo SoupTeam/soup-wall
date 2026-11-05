@@ -27,27 +27,35 @@ FORMAT = "sw-ci-qualification-build/1"
 CUSTODY = "sw-ci-qualification-build-custody/1"
 TUPLE = "ubuntu2404-x86_64-rust1.99.1-agent-default-debug-v1"
 ROLES = {"agentfw": "bin/agentfw", "library": "tests/agentfw-lib",
-         "native_endpoint": "tests/native-endpoint", "replace_file": "tests/replace-file"}
+         "native_endpoint": "tests/native-endpoint", "replace_file": "tests/replace-file",
+         "doctor": "tests/doctor", "mcp_admission": "tests/mcp-admission",
+         "resource_approval_witness": "tests/resource-approval-witness"}
 TARGETS = {"agentfw": {"name": "agentfw", "kind": "bin", "test": False},
            "library": {"name": "agentfw", "kind": "lib", "test": True},
            "native_endpoint": {"name": "native_endpoint", "kind": "test", "test": True},
-           "replace_file": {"name": "replace_file", "kind": "test", "test": True}}
+           "replace_file": {"name": "replace_file", "kind": "test", "test": True},
+           "doctor": {"name": "doctor", "kind": "test", "test": True},
+           "mcp_admission": {"name": "mcp_admission", "kind": "test", "test": True},
+           "resource_approval_witness": {"name": "resource_approval_witness", "kind": "test", "test": True}}
 PROFILES = {role: {"opt_level": "0", "debuginfo": 2, "debug_assertions": True,
                    "overflow_checks": True, "test": role != "agentfw"} for role in ROLES}
-# Actual direct AND transitive ELF closure observed for all four roles. Other
+# Actual direct AND transitive ELF closure is checked for every role. Other
 # dependencies require a reviewed tuple; unrelated installed packages are not ABI.
 ABI_LIBRARIES = {"libc.so.6", "ld-linux-x86-64.so.2", "libgcc_s.so.1", "libm.so.6"}
 COMMANDS = [
     ["build", "--locked", "--offline", "-p", "agentfw", "--bin", "agentfw", "--message-format=json"],
     ["test", "--locked", "--offline", "-p", "agentfw", "--lib", "--test", "native_endpoint",
-     "--test", "replace_file", "--no-run", "--message-format=json"],
+     "--test", "replace_file", "--test", "doctor", "--test", "mcp_admission",
+     "--test", "resource_approval_witness", "--no-run", "--message-format=json"],
 ]
 MAX_MANIFEST = 256 * 1024
-# Native observation at af531a2d: 1,004,034,344 payload bytes, largest file
-# 282,418,024 bytes, 265,384,281 compressed bytes. Keep finite headroom.
-MAX_ARCHIVE = 320 * 1024 * 1024
+# Original four-role native observation at af531a2d: 1,004,034,344 payload
+# bytes, 265,384,281 compressed. Three new WSL-built test harnesses at this
+# change: 796,413,288 payload bytes, 215,934,064 gzip -1 bytes. The hosted
+# producer must still measure and remain under these finite refusal limits.
+MAX_ARCHIVE = 576 * 1024 * 1024
 MAX_FILE = 320 * 1024 * 1024
-MAX_PAYLOAD = 1152 * 1024 * 1024
+MAX_PAYLOAD = 2048 * 1024 * 1024
 CHUNK = 1024 * 1024
 MAX_TAIL = tarfile.RECORDSIZE + 1024
 HEX = re.compile(r"[0-9a-f]{64}\Z")
@@ -55,7 +63,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PIN = "1.99.1"
 PRODUCER = "ci-builds--agent-default-ubuntu2404"
 BUILD_CONSUMER_WORKFLOWS = frozenset({"mcp-create-file.yml", "mcp-https-post.yml",
-                                     "mcp-windows-create.yml"})
+                                     "mcp-windows-create.yml", "agent-doctor.yml",
+                                     "mcp-https-get.yml"})
 
 
 def require(ok, reason):
@@ -718,8 +727,9 @@ def verified_role(directory, context, role):
 
 FILTERS = {"library": {"", "create_file", "sou54_", "mcp::input::tests::", "edit_session", "policy_candidate",
                        "native::execution::transport", "replace_file", "pilot_approval",
-                       "private_export", "support_bundle", "pilot_component"},
-           "native_endpoint": {"", "create_file_v2", "sou125_stop"}, "replace_file": {""}}
+                       "private_export", "support_bundle", "pilot_component", "doctor"},
+           "native_endpoint": {"", "create_file_v2", "sou125_stop"}, "replace_file": {""},
+           "doctor": {""}, "mcp_admission": {"sou88"}, "resource_approval_witness": {""}}
 
 
 def parse_cargo(arguments):
@@ -729,7 +739,8 @@ def parse_cargo(arguments):
     if arguments == ["clippy", "--locked", "--offline", "-p", "agentfw", "--all-targets", "--", "-D", "warnings"]:
         return "clippy", None
     prefix = ["test", "--locked", "--offline", "-p", "agentfw"]
-    require(arguments[:5] == prefix and arguments[-2:] == ["--", "--nocapture"], "unregistered_cargo_command")
+    require(arguments[:5] == prefix and arguments[-2:] in (["--", "--nocapture"], ["--", "--quiet"]),
+            "unregistered_cargo_command")
     middle = arguments[5:-2]
     if middle[:1] == ["--lib"]:
         role, rest = "library", middle[1:]
@@ -737,6 +748,8 @@ def parse_cargo(arguments):
         require(middle[:1] == ["--test"] and len(middle) >= 2, "unregistered_cargo_target")
         role, rest = middle[1], middle[2:]
     require(role in FILTERS and len(rest) <= 1 and (rest[0] if rest else "") in FILTERS[role], "unregistered_test_filter")
+    require(arguments[-1] != "--quiet" or (role in {"library", "native_endpoint"} and not rest),
+            "unregistered_test_output_mode")
     return role, rest[0] if rest else ""
 
 
@@ -760,7 +773,7 @@ def dependency_context(env):
                    env.get("SOU166_MANIFEST_SHA256", ""))
 
 
-def run_native(fd, arguments, log):
+def run_native(fd, arguments, log, *, selected_agentfw=None):
     # Owned process group with the same accepted reaper and finite log/deadline.
     import selectors
     import signal
@@ -776,8 +789,12 @@ def run_native(fd, arguments, log):
             signal.signal(number, cancel)
         with log.open("xb") as output:
             os.fchmod(output.fileno(), 0o600)
+            native_env = {**os.environ, "CARGO_MANIFEST_DIR": str(ROOT / "crates/agentfw")}
+            native_env.pop("SOU166_TEST_AGENTFW", None)
+            if selected_agentfw is not None:
+                native_env["SOU166_TEST_AGENTFW"] = str(selected_agentfw)
             process = subprocess.Popen(["/proc/self/fd/" + str(fd), *arguments], cwd=ROOT / "crates/agentfw",
-                                       env={**os.environ, "CARGO_MANIFEST_DIR": str(ROOT / "crates/agentfw")},
+                                       env=native_env,
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, pass_fds=(fd,), start_new_session=True)
             selector = selectors.DefaultSelector()
             selector.register(process.stdout, selectors.EVENT_READ)
@@ -816,7 +833,7 @@ def cargo(arguments, output):
     start = time.monotonic()
     log = output.with_suffix(".log")
     record = {"format": "sw-ci-build-use/1", "mode": mode, "arguments": arguments, "role": role,
-              "status": "failed", "compiled_artifacts": 0, "execution_seconds": None}
+              "status": "failed", "outcome": "failed", "compiled_artifacts": 0, "execution_seconds": None}
     try:
         if mode == "source":
             command = ["cargo", *arguments]
@@ -824,8 +841,16 @@ def cargo(arguments, output):
             target = Path(os.environ.get("CARGO_TARGET_DIR", str(ROOT / "target")))
             target.mkdir(mode=0o700, parents=True, exist_ok=True)
             require(stat.S_ISDIR(target.lstat().st_mode), "source_target_directory_required")
-            source_builder().bounded_cargo(command, root=ROOT, env=dict(os.environ), target=target,
-                                          log=log, stage="source_" + role)
+            source_env = dict(os.environ)
+            source_env.pop("SOU166_TEST_AGENTFW", None)
+            builder = source_builder()
+            # The complete router writes independent per-call timing evidence.
+            # Keep it, with a finite CI-only journal allowance; the accepted
+            # builder's process/target/deadline limits remain identical.
+            log_limit = (2 * builder.native.MAX_LOG
+                         if role == "native_endpoint" and arguments[-1] == "--quiet" else None)
+            builder.bounded_cargo(command, root=ROOT, env=source_env, target=target,
+                                  log=log, stage="source_" + role, log_limit=log_limit)
             record["compiled_artifacts"] = stage_metrics(log, "source", start)["compiled_artifacts"]
         else:
             directory, context = command_context()
@@ -833,12 +858,28 @@ def cargo(arguments, output):
             try:
                 record["artifact_id"] = context["artifact_id"]
                 if role != "agentfw":
+                    # These integration harnesses embed Cargo's producer-side
+                    # binary path. Bind their runtime override to the separately
+                    # verified same-artifact agentfw role, never ambient PATH.
+                    selected_agentfw = None
+                    if role in {"doctor", "mcp_admission"}:
+                        agent_fd = verified_role(directory, context, "agentfw")
+                        os.close(agent_fd)
+                        selected_agentfw = directory / ROLES["agentfw"]
                     listing = output.with_suffix(".inventory.log")
-                    run_native(fd, ([test_filter] if test_filter else []) + ["--list"], listing)
+                    run_native(fd, ([test_filter] if test_filter else []) + ["--list"], listing,
+                               selected_agentfw=selected_agentfw)
                     inventory = [line for line in listing.read_text().splitlines() if line.endswith(": test")]
                     require(inventory, "empty_native_test_inventory")
                     record["test_inventory_count"] = len(inventory)
-                    run_native(fd, ([test_filter] if test_filter else []) + ["--nocapture"], log)
+                    if selected_agentfw is not None:
+                        agent_fd = verified_role(directory, context, "agentfw")
+                        os.close(agent_fd)
+                    run_native(fd, ([test_filter] if test_filter else []) + [arguments[-1]], log,
+                               selected_agentfw=selected_agentfw)
+                    if selected_agentfw is not None:
+                        agent_fd = verified_role(directory, context, "agentfw")
+                        os.close(agent_fd)
                 else:
                     log.write_text("Verified immutable producer build reused; no consumer Cargo build was run.\n")
             finally:
@@ -847,6 +888,8 @@ def cargo(arguments, output):
             text = log.read_text(errors="replace")
             require(re.search(r"test result: ok\. [1-9][0-9]* passed; 0 failed;", text), "nonempty_passed_native_tests_required")
         record["status"] = "passed"
+        record["outcome"] = ("verified_reuse" if mode == "shared" else
+                             "source_clippy" if role == "clippy" else "full_local_build")
     finally:
         record["execution_seconds"] = round(time.monotonic() - start, 3)
         output.write_bytes(canonical(record))
@@ -934,7 +977,8 @@ def main(argv=None):
                 print(Path(os.environ.get("CARGO_TARGET_DIR", str(ROOT / "target"))) / "debug/agentfw")
         return 0
     except Exception as error:
-        print(json.dumps({"status": "failed", "reason": str(error), "command": args.command}), file=sys.stderr)
+        status = "unavailable" if args.command == "guard" else "failed"
+        print(json.dumps({"status": status, "reason": str(error), "command": args.command}), file=sys.stderr)
         return 2
 
 

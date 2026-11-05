@@ -33,6 +33,10 @@ impl Binding {
         ensure!(
             self.format == FORMAT
                 && super::normal_absolute(&self.generation)
+                && self
+                    .generation
+                    .file_name()
+                    .is_some_and(|name| !name.as_encoded_bytes().starts_with(b".snapshot-"))
                 && workspace == self.generation.join("workspace")
                 && self.entries.len() <= 256
                 && crate::native::is_digest(&self.receipt_sha256)
@@ -409,6 +413,16 @@ mod tests {
         };
         (temp, binding)
     }
+    #[test]
+    fn workspace_snapshot_binding_rejects_unpublished_stage() {
+        let (_temp, mut binding) = fixture();
+        binding
+            .generation
+            .set_file_name(".snapshot-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        let workspace = binding.generation.join("workspace");
+        assert!(binding.validate(&workspace).is_err());
+    }
+
     #[test]
     fn workspace_snapshot_execution_uses_hash_verified_kernel_sealed_images() {
         let (_temp, binding) = fixture();

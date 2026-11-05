@@ -22,6 +22,9 @@ use crate::managed_policy::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TrustSource {
     KeyringFile(PathBuf),
+    PrivateKeyringFile(PathBuf),
+    /// Read-only setup probe; only exact operator-approved descriptor bytes.
+    Snapshot(Vec<PinnedIssuerKey>),
     Environment(PinnedIssuerKey),
 }
 
@@ -35,6 +38,7 @@ pub struct ManagedSync {
     trust_source: TrustSource,
     active_path: PathBuf,
     native_barrier: crate::policy_transition::Barrier,
+    connection: Option<(PathBuf, crate::managed_connection::ConnectionIdentity)>,
 }
 
 #[derive(Debug)]
@@ -96,7 +100,7 @@ const MAX_PRIVATE_CA_BYTES: usize = 64 * 1024;
 /// The credential-bearing Agent is restricted to a single origin. HTTP is
 /// permitted only for the existing loopback demonstration; HTTPS uses rustls
 /// hostname/certificate validation, including for private non-loopback hosts.
-fn parse_console_origin(raw: &str) -> Result<reqwest::Url> {
+pub(crate) fn parse_console_origin(raw: &str) -> Result<reqwest::Url> {
     ensure!(
         !raw.is_empty()
             && raw.len() <= 2048
@@ -176,17 +180,22 @@ fn private_ca_from_path(path: &Path) -> Result<Vec<u8>> {
         !data.is_empty() && data.len() <= MAX_PRIVATE_CA_BYTES,
         "operator private CA PEM is missing or exceeds 64 KiB"
     );
+    validate_private_ca(&data)?;
+    Ok(data)
+}
+
+pub(crate) fn validate_private_ca(data: &[u8]) -> Result<()> {
     // reqwest's PEM wrapper may accept empty/non-certificate input before
     // connecting. Parse the certificate bytes eagerly to fail closed on
     // malformed operator configuration, never after credentialed requests.
-    let pem_text = std::str::from_utf8(&data).context("private CA must be UTF-8 PEM")?;
+    let pem_text = std::str::from_utf8(data).context("private CA must be UTF-8 PEM")?;
     let trimmed = pem_text.trim();
     ensure!(
         trimmed.starts_with("-----BEGIN CERTIFICATE-----")
             && trimmed.ends_with("-----END CERTIFICATE-----"),
         "private CA must contain a PEM certificate"
     );
-    let mut parsed = CertificateDer::pem_slice_iter(data.as_slice());
+    let mut parsed = CertificateDer::pem_slice_iter(data);
     let cert = parsed
         .next()
         .transpose()
@@ -200,8 +209,8 @@ fn private_ca_from_path(path: &Path) -> Result<Vec<u8>> {
         parsed.next().is_none(),
         "supply exactly one operator private CA PEM certificate"
     );
-    reqwest::Certificate::from_pem(&data).context("invalid operator private CA PEM")?;
-    Ok(data)
+    reqwest::Certificate::from_pem(data).context("invalid operator private CA PEM")?;
+    Ok(())
 }
 
 impl ManagedSync {
@@ -266,7 +275,121 @@ impl ManagedSync {
             trust_source,
             active_path: home.join("managed-policy-active.json"),
             native_barrier: crate::policy_transition::Barrier::new(home)?,
+            connection: None,
         }))
+    }
+
+    /// Explicit installed profiles never consult environment credentials or trust defaults.
+    #[cfg(unix)]
+    pub(crate) fn from_connection(
+        home: &Path,
+        settings: &crate::managed_connection::Settings,
+        transport: bool,
+    ) -> Result<Self> {
+        let console = parse_console_origin(&settings.console)?;
+        let private_ca_pem = settings
+            .ca_file
+            .as_ref()
+            .filter(|_| transport)
+            .map(|path| {
+                let bytes =
+                    crate::managed_connection::read_private_reference(path, MAX_PRIVATE_CA_BYTES)?;
+                validate_private_ca(&bytes)?;
+                Ok::<_, anyhow::Error>(bytes)
+            })
+            .transpose()?;
+        Ok(Self {
+            console,
+            private_ca_pem,
+            credential_source: CredentialSource::PrivateFile(settings.credential_file.clone()),
+            tenant: settings.tenant.clone(),
+            agent: settings.agent.clone(),
+            trust_source: TrustSource::PrivateKeyringFile(settings.issuer_keyring.clone()),
+            active_path: home.join("managed-policy-active.json"),
+            native_barrier: crate::policy_transition::Barrier::for_home(home),
+            connection: None,
+        })
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn bind_connection(
+        &mut self,
+        home: &Path,
+        identity: crate::managed_connection::ConnectionIdentity,
+    ) {
+        self.connection = Some((home.into(), identity));
+    }
+    fn selected(&self) -> bool {
+        self.connection.as_ref().is_none_or(|(home, identity)| {
+            crate::managed_connection::still_selected(home, identity)
+        })
+    }
+
+    #[cfg(unix)]
+    pub(crate) async fn probe_connection(
+        home: &Path,
+        settings: &crate::managed_connection::Settings,
+        token: String,
+        keys: Vec<PinnedIssuerKey>,
+        ca: Option<Vec<u8>>,
+    ) -> serde_json::Value {
+        let Ok(mut probe) = Self::from_connection(home, settings, false) else {
+            return serde_json::json!({"state":"invalid_local_inputs","applied":false});
+        };
+        probe.private_ca_pem = ca;
+        probe.credential_source = CredentialSource::Environment(token);
+        probe.trust_source = TrustSource::Snapshot(keys);
+        probe.verify_connection().await
+    }
+
+    #[cfg(unix)]
+    fn bound_probe_audience(
+        &self,
+        headers: &reqwest::header::HeaderMap,
+    ) -> Result<bool, &'static str> {
+        let tenant: Vec<_> = headers.get_all("x-soup-agent-tenant").iter().collect();
+        let agent: Vec<_> = headers.get_all("x-soup-agent-id").iter().collect();
+        if tenant.is_empty() && agent.is_empty() {
+            return Ok(false);
+        }
+        if tenant.len() != 1
+            || agent.len() != 1
+            || tenant[0].to_str().ok() != Some(self.tenant.as_str())
+            || agent[0].to_str().ok() != Some(self.agent.as_str())
+        {
+            return Err("authenticated_audience_mismatch");
+        }
+        Ok(true)
+    }
+
+    /// Non-mutating verification: a signed candidate is not evidence of application.
+    #[cfg(unix)]
+    pub(crate) async fn verify_connection(&self) -> serde_json::Value {
+        let result = async {
+            let token = self.credential_source.load().map_err(|_| "auth_unavailable")?;
+            let client = self.build_client().map_err(|_| "invalid_transport_configuration")?;
+            let mut response = client.get(self.endpoint("agent/v1/policy").map_err(|_| "invalid_origin")?)
+                .bearer_auth(token).send().await.map_err(|_| "transport_unavailable")?;
+            if matches!(response.status(), reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN) {return Err("auth_unavailable");}
+            let audience_bound=self.bound_probe_audience(response.headers())?;
+            if response.status() == reqwest::StatusCode::NO_CONTENT {
+                return Ok(if audience_bound {serde_json::json!({"state":"authenticated_bound_no_policy","enrollment":"authenticated","audience_verified":true,"applied":false})}
+                else {serde_json::json!({"state":"authenticated_no_policy","enrollment":"credential_accepted","audience_verified":false,"applied":false})});
+            }
+            if !response.status().is_success() {return Err("console_unavailable_or_rejected");}
+            let mut body = Vec::new();
+            while let Some(chunk) = response.chunk().await.map_err(|_| "transport_unavailable")? {
+                if body.len().saturating_add(chunk.len()) > MAX_BUNDLE_BYTES {return Err("invalid_policy");}
+                body.extend_from_slice(&chunk);
+            }
+            let candidate = parse_bounded(&body).map_err(|_| "invalid_policy")?;
+            let keys = self.load_keys().map_err(|_| "invalid_trust")?;
+            let verified = verify_candidate(&candidate, &keys, &self.tenant, &self.agent, 0, now()).map_err(|_| "policy_or_audience_rejected")?;
+            Ok(serde_json::json!({"state":"verified_candidate","enrollment":"authenticated","audience_verified":true,"revision":verified.revision,"deployment_sequence":verified.deployment_sequence,"policy_sha256":verified.policy_sha256,"applied":false}))
+        }.await;
+        result.unwrap_or_else(
+            |reason| serde_json::json!({"state":reason,"enrollment":"unknown","applied":false}),
+        )
     }
 
     /// Load trusted issuer keys dynamically.
@@ -275,9 +398,16 @@ impl ManagedSync {
     /// If environment mode is configured, the pinned single key is used.
     pub fn load_keys(&self) -> Result<Vec<PinnedIssuerKey>> {
         match &self.trust_source {
+            TrustSource::Snapshot(keys) => Ok(keys.clone()),
             TrustSource::Environment(pinned) => {
                 ensure!(!pinned.revoked, "managed issuer is locally revoked");
                 Ok(vec![pinned.clone()])
+            }
+            TrustSource::PrivateKeyringFile(path) => {
+                parse_keyring(&crate::managed_connection::read_private_reference(
+                    path,
+                    crate::managed_policy::MAX_KEYRING_BYTES,
+                )?)
             }
             TrustSource::KeyringFile(path) => {
                 let data = read_keyring_file(path)?;
@@ -429,6 +559,7 @@ impl ManagedSync {
         state: &Shared,
         token: &str,
     ) -> Result<()> {
+        ensure!(self.selected(), "managed connection configuration changed");
         let current = state
             .firewall
             .lock()
@@ -557,6 +688,7 @@ impl ManagedSync {
                     return Err(error);
                 }
             };
+        ensure!(self.selected(), "managed connection configuration changed");
         if let Err(error) = self.activate(state, verified, &bundle) {
             if error.is::<NativeBoundaryBusy>() {
                 return Err(error);
@@ -596,6 +728,12 @@ impl ManagedSync {
         let mut ticker = tokio::time::interval(Duration::from_secs(2));
         loop {
             ticker.tick().await;
+            if !self.selected() {
+                if let Ok(mut fw) = state.firewall.lock() {
+                    fw.set_managed_transport_status("configuration_changed", now());
+                }
+                return;
+            }
             let result = self.poll_once(&client, &state).await;
             let transport_state = match &result {
                 Ok(()) => "online",
@@ -634,6 +772,34 @@ impl ManagedSync {
 #[cfg(test)]
 mod https_transport_tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn probe_audience_requires_one_exact_authenticated_pair() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = crate::managed_connection::Settings {
+            console: "http://127.0.0.1:12345/".into(),
+            tenant: "tenant".into(),
+            agent: "agent".into(),
+            credential_file: dir.path().join("credential"),
+            issuer_keyring: dir.path().join("issuer"),
+            ca_file: None,
+        };
+        let sync = ManagedSync::from_connection(dir.path(), &settings, false).unwrap();
+        let mut headers = reqwest::header::HeaderMap::new();
+        assert!(!sync.bound_probe_audience(&headers).unwrap());
+        headers.insert("x-soup-agent-tenant", "tenant".parse().unwrap());
+        assert!(sync.bound_probe_audience(&headers).is_err());
+        headers.insert("x-soup-agent-id", "agent".parse().unwrap());
+        assert!(sync.bound_probe_audience(&headers).unwrap());
+        headers.append("x-soup-agent-id", "agent".parse().unwrap());
+        assert!(sync.bound_probe_audience(&headers).is_err());
+        headers.insert("x-soup-agent-id", "other-agent".parse().unwrap());
+        assert!(sync.bound_probe_audience(&headers).is_err());
+        headers.insert("x-soup-agent-id", "agent".parse().unwrap());
+        headers.insert("x-soup-agent-tenant", "other-tenant".parse().unwrap());
+        assert!(sync.bound_probe_audience(&headers).is_err());
+    }
 
     #[test]
     fn accepts_https_remote_and_existing_loopback_http() {

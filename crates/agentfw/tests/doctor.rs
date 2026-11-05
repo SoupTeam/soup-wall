@@ -6,8 +6,22 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::{Command, Output};
 
+fn agentfw_test_binary() -> &'static str {
+    static BINARY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    BINARY.get_or_init(|| {
+        if std::env::var("SOU166_MODE").as_deref() == Ok("shared") {
+            let selected = std::env::var("SOU166_TEST_AGENTFW")
+                .expect("shared test requires the verified Agent binary");
+            assert!(Path::new(&selected).is_absolute());
+            selected
+        } else {
+            env!("CARGO_BIN_EXE_agentfw").into()
+        }
+    })
+}
+
 fn doctor(home: &Path, cwd: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_agentfw"))
+    Command::new(agentfw_test_binary())
         .arg("doctor")
         .arg("--json")
         .arg("--home")
@@ -157,7 +171,7 @@ fn real_owned_linux_install_reaches_authenticated_ready_without_host_execution()
     private(&home.join("config.yaml"), config.as_bytes());
 
     let manager = Manager::new(&home);
-    let original_binary = Path::new(env!("CARGO_BIN_EXE_agentfw"));
+    let original_binary = Path::new(agentfw_test_binary());
     let binary_digest = sha256_file(original_binary).unwrap();
     let installed = manager
         .install("doctor-one", original_binary, &binary_digest)
@@ -255,7 +269,7 @@ fn cancellation_before_completion_never_publishes_support_bundle() {
     std::fs::create_dir(&out_parent).unwrap();
     std::fs::set_permissions(&out_parent, std::fs::Permissions::from_mode(0o700)).unwrap();
     let bundle = out_parent.join("bundle");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_agentfw"))
+    let mut child = Command::new(agentfw_test_binary())
         .arg("doctor")
         .arg("--json")
         .arg("--home")
@@ -335,7 +349,7 @@ fn recorded_process_fixture(root: &Path) -> (std::path::PathBuf, std::path::Path
 fn doctor_with_deadline(home: &Path, cwd: &Path, args: &[&str]) -> Output {
     use std::process::Stdio;
     use std::time::{Duration, Instant};
-    let mut child = Command::new(env!("CARGO_BIN_EXE_agentfw"))
+    let mut child = Command::new(agentfw_test_binary())
         .arg("doctor")
         .arg("--json")
         .arg("--home")
