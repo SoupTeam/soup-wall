@@ -30,9 +30,9 @@ pub fn run_cli(args: Cli) -> i32 {
     let mut report = json!({"format":FORMAT,"status":"failed","reason":null,
         "active_protection":false,"cleanup_confirmed":false,
         "limits":{"profile_bytes":65536,"output_bytes":65536,"runtime_seconds":15,
-                  "calibration_seconds":5},"inputs":null,"observations":null});
+                  "calibration_seconds":5,"report_bytes":131072,"owner_cleanup_ms":3000,"reap_seconds":2},"inputs":null,"observations":null});
     let result = execute(args, &mut report);
-    let code = match result {
+    let mut code = match result {
         Ok(()) => {
             report["status"] = json!("passed");
             0
@@ -46,6 +46,13 @@ pub fn run_cli(args: Cli) -> i32 {
             }
         }
     };
+    if report.to_string().len() > 128 * 1024 {
+        report["inputs"] = Value::Null;
+        report["observations"] = Value::Null;
+        report["status"] = json!("failed");
+        report["reason"] = json!("report_output_limit");
+        code = 3;
+    }
     println!("{}", report);
     code
 }
@@ -76,15 +83,18 @@ fn execute(args: Cli, report: &mut Value) -> Result<(), &'static str> {
     }
     let load = || -> anyhow::Result<ProfileConfig> {
         use std::io::Read;
-        let metadata = std::fs::symlink_metadata(&args.profile)?;
+        use std::os::unix::fs::OpenOptionsExt;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
+            .open(&args.profile)?;
+        let metadata = file.metadata()?;
         anyhow::ensure!(
             metadata.is_file() && metadata.len() <= 65536,
             "invalid_input"
         );
         let mut bytes = Vec::new();
-        std::fs::File::open(&args.profile)?
-            .take(65537)
-            .read_to_end(&mut bytes)?;
+        file.take(65537).read_to_end(&mut bytes)?;
         anyhow::ensure!(
             bytes.len() <= 65536 && format!("{:x}", Sha256::digest(&bytes)) == args.profile_sha256,
             "input_identity_mismatch"
@@ -139,29 +149,13 @@ fn execute(args: Cli, report: &mut Value) -> Result<(), &'static str> {
         .build()
         .map_err(|_| "prerequisite_unavailable")?;
     let result = runtime.block_on(async {
-        use tokio::process::Command;
-        use std::process::Stdio;
-        async fn positive(path: &std::path::Path, args: &[&str], cwd: &std::path::Path) -> anyhow::Result<()> {
-            let mut command = Command::new(path);
-            command.args(args).current_dir(cwd).env_clear().env("HOME", cwd).env("LANG", "C")
-                .env("PATH", "/usr/bin:/bin").env("GIT_CONFIG_NOSYSTEM", "1")
-                .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).kill_on_drop(true);
-            let mut child = command.spawn().context("exercise_calibration_failed")?;
-            let result = tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await;
-            if !matches!(&result, Ok(Ok(status)) if status.success()) {
-                child.kill().await.context("exercise_cleanup_unconfirmed")?;
-                anyhow::ensure!(child.wait().await.is_ok(), "exercise_cleanup_unconfirmed");
-                anyhow::bail!("exercise_calibration_failed");
-            }
-            Ok(())
-        }
         match args.kind {
-            Kind::Filesystem => positive(&profile.runtime_path, &["-e", "if (require('node:fs').readFileSync('/dev/null').length !== 0) process.exit(1)"], owned.path()).await?,
+            Kind::Filesystem => positive(&pins[0], &["-e", "if (require('node:fs').readFileSync('/dev/null').length !== 0) process.exit(1)"], owned.path()).await?,
             Kind::Git => {
-                positive(&profile.runtime_path, &["-I", "-B", "-c", "import pathlib; assert pathlib.Path('/dev/null').read_bytes() == b''"], owned.path()).await?;
-                let git = profile.git.as_ref().context("exercise_input_invalid")?;
-                positive(&git.path, &["init", "--quiet", "."], &profile.workspace).await?;
-                positive(&git.path, &["-c", "user.name=Owned exercise", "-c", "user.email=exercise@example.invalid", "commit", "--quiet", "--allow-empty", "-m", "Owned sandbox exercise"], &profile.workspace).await?;
+                positive(&pins[0], &["-I", "-B", "-c", "import pathlib; assert pathlib.Path('/dev/null').read_bytes() == b''"], owned.path()).await?;
+                let git = pins.get(1).context("exercise_input_invalid")?;
+                positive(git, &["init", "--quiet", "."], &profile.workspace).await?;
+                positive(git, &["-c", "user.name=Owned exercise", "-c", "user.email=exercise@example.invalid", "commit", "--quiet", "--allow-empty", "-m", "Owned sandbox exercise"], &profile.workspace).await?;
             }
         }
         match args.kind { Kind::Filesystem => exercise::filesystem(profile).await, Kind::Git => exercise::git(profile, false).await }
@@ -202,4 +196,41 @@ fn execute(args: Cli, report: &mut Value) -> Result<(), &'static str> {
             Err("prerequisite_or_identity_failed")
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+async fn positive(pin: &std::fs::File, args: &[&str], cwd: &std::path::Path) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use std::os::fd::AsRawFd;
+    use std::process::Stdio;
+    // Execute the verified inode, not a second lookup of its mutable pathname.
+    let mut command = tokio::process::Command::new(format!("/proc/self/fd/{}", pin.as_raw_fd()));
+    command
+        .args(args)
+        .current_dir(cwd)
+        .env_clear()
+        .env("HOME", cwd)
+        .env("LANG", "C")
+        .env("PATH", "/usr/bin:/bin")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    let mut child = command.spawn().context("exercise_calibration_failed")?;
+    match tokio::time::timeout(std::time::Duration::from_secs(5), child.wait()).await {
+        Ok(Ok(status)) => anyhow::ensure!(status.success(), "exercise_calibration_failed"),
+        _ => {
+            child.kill().await.context("exercise_cleanup_unconfirmed")?;
+            anyhow::ensure!(
+                matches!(
+                    tokio::time::timeout(std::time::Duration::from_secs(2), child.wait()).await,
+                    Ok(Ok(_))
+                ),
+                "exercise_cleanup_unconfirmed"
+            );
+            anyhow::bail!("exercise_calibration_failed");
+        }
+    }
+    Ok(())
 }
