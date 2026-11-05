@@ -6,7 +6,7 @@ on:
       installed_focus:
         description: Focus one installed qualification; linked/filesystem/configuration also require native_preparation_only
         type: choice
-        options: ['off', linked-worktrees, filesystem-roots, filesystem-links, workspace-snapshot, clean-user, clean-user-processes, clean-user-session, proxy-preflight, configuration-recovery, project-recovery, maintenance, policy-activation, budget-presets, pilot-scope]
+        options: ['off', linux-candidate, linked-worktrees, filesystem-roots, filesystem-links, workspace-snapshot, clean-user, clean-user-processes, clean-user-session, proxy-preflight, configuration-recovery, project-recovery, maintenance, policy-activation, budget-presets, pilot-scope]
         default: 'off'
       project_presets_only:
         description: Focus installed SOU-197 project presets (use with native_preparation_only)
@@ -115,10 +115,115 @@ concurrency:
 
 jobs:
   impact:
-    if: github.event.inputs.installed_focus != 'clean-user-session' && github.event.inputs.installed_focus != 'clean-user-processes' && github.event.inputs.provider_preflight_only != 'true' && github.event.inputs.installed_focus != 'proxy-preflight' && github.event.inputs.native_result_profile_only != 'true' && github.event.inputs.cache_exchange_only != 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.stability_mode == '' || github.event.inputs.stability_mode == 'off')
+    if: github.event.inputs.installed_focus != 'linux-candidate' && github.event.inputs.installed_focus != 'clean-user-session' && github.event.inputs.installed_focus != 'clean-user-processes' && github.event.inputs.provider_preflight_only != 'true' && github.event.inputs.installed_focus != 'proxy-preflight' && github.event.inputs.native_result_profile_only != 'true' && github.event.inputs.cache_exchange_only != 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.stability_mode == '' || github.event.inputs.stability_mode == 'off')
     uses: ./.github/workflows/ci-impact-plan.yml
     with:
       workflow: mcp-real-filesystem.yml
+  manual-linux-candidate:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'linux-candidate'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      RUSTUP_TOOLCHAIN: '1.99.1'
+      SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-candidate-1.99.1
+      - name: Check bounded candidate and production-entrypoint changes
+        env:
+          DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import json, os
+          inputs=json.loads(os.environ['DISPATCH_INPUTS'])
+          assert inputs['installed_focus']=='linux-candidate'
+          assert inputs.get('stability_mode','off')=='off'
+          assert all(v in ('false','',False) for k,v in inputs.items() if k not in ('installed_focus','stability_mode'))
+          PY
+          cargo fmt --all -- --check
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_candidate.py
+          python3 -B -m unittest discover -s scripts/tests -p test_release_docs.py
+          python3 -B -m unittest discover -s scripts/tests -p test_publication_readiness.py
+          python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door_component.py
+      - name: Build the exact existing release lane without publishing
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain --untracked-files=all)"
+          cargo build --release --locked --target x86_64-unknown-linux-gnu -p agentfw -p soup-wall-bench -p llm-firewall
+          python3 -B scripts/stage-linux-candidate.py --expected-commit "$GITHUB_SHA" \
+            --binaries target/x86_64-unknown-linux-gnu/release --output "$RUNNER_TEMP/linux-candidate"
+      - name: Prepare declared native dependencies for the installed archive
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ninja-build libcap-dev pkg-config zlib1g-dev strace
+          mkdir -m 700 "$RUNNER_TEMP/candidate-build-tools"
+          python3 -m pip download --disable-pip-version-check --only-binary=:all: --no-deps \
+            --dest "$RUNNER_TEMP/candidate-build-tools" meson==1.9.1
+          printf '%s  %s\n' f824ab770c041a202f532f69e114c971918ed2daff7ea56583d80642564598d0 \
+            "$RUNNER_TEMP/candidate-build-tools/meson-1.9.1-py3-none-any.whl" | sha256sum --check
+          python3 -m pip install --disable-pip-version-check --no-deps --no-index \
+            --target "$RUNNER_TEMP/candidate-build-tools/installed" "$RUNNER_TEMP/candidate-build-tools/meson-1.9.1-py3-none-any.whl"
+          export PATH="$RUNNER_TEMP/candidate-build-tools/installed/bin:$PATH"
+          python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --allow-download \
+            --expected-commit "$GITHUB_SHA" --output "$RUNNER_TEMP/candidate-native" \
+            --meson-pythonpath "$RUNNER_TEMP/candidate-build-tools/installed" > "$RUNNER_TEMP/linux-candidate/native.json"
+          python3 -B - <<'PY' >> "$GITHUB_ENV"
+          import json, os
+          from pathlib import Path
+          value=json.loads((Path(os.environ['RUNNER_TEMP'])/'linux-candidate/native.json').read_bytes())
+          assert value['status']=='prepared-not-qualified'
+          print('CANDIDATE_GIT='+value['git'])
+          print('CANDIDATE_BWRAP='+value['bwrap'])
+          PY
+      - name: Provision only the exact job sandbox executable
+        run: |
+          set -euo pipefail
+          python3 -B scripts/ci_bwrap_userns.py install --source "$CANDIDATE_BWRAP" \
+            --sha256 "$(sha256sum "$CANDIDATE_BWRAP" | cut -d ' ' -f1)" \
+            --report "$RUNNER_TEMP/linux-candidate/apparmor.json"
+      - name: Exercise extracted installed bytes outside checkout without Cargo or libtest
+        run: |
+          set -euo pipefail
+          python3 -B scripts/qualify-installed-front-door.py --run --pilot-scope-only --allow-download \
+            --candidate-directory "$RUNNER_TEMP/linux-candidate/extracted/soup-wall-v0.0.0-sou236-x86_64-unknown-linux-gnu" \
+            --git "$CANDIDATE_GIT" --bwrap "$CANDIDATE_BWRAP" --component-python /usr/bin/python3.12 \
+            --python /usr/bin/python3.12 --strace /usr/bin/strace --expected-commit "$GITHUB_SHA" \
+            --output "$RUNNER_TEMP/linux-candidate/installed"
+          python3 -B scripts/qualify-sandbox-exercise.py --candidate-directory \
+            "$RUNNER_TEMP/linux-candidate/extracted/soup-wall-v0.0.0-sou236-x86_64-unknown-linux-gnu" \
+            --installed-output "$RUNNER_TEMP/linux-candidate/installed" --output "$RUNNER_TEMP/linux-candidate/exercise"
+      - name: Remove only this job's sandbox permission
+        if: always()
+        run: python3 -B scripts/ci_bwrap_userns.py cleanup --report "$RUNNER_TEMP/linux-candidate/apparmor-cleanup.json"
+      - name: Retain bounded candidate provenance and failed attempts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-candidate-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/linux-candidate/report.json
+            ${{ runner.temp }}/linux-candidate/native.json
+            ${{ runner.temp }}/linux-candidate/installed/report.json
+            ${{ runner.temp }}/linux-candidate/exercise/report.json
+            ${{ runner.temp }}/linux-candidate/exercise/*.json
+            ${{ runner.temp }}/linux-candidate/apparmor*.json
+            ${{ runner.temp }}/linux-candidate/staged/pilot-*.json
+          if-no-files-found: warn
+          retention-days: 14
   manual-sou216-process-probe:
     if: github.event_name == 'workflow_dispatch' && (github.event.inputs.installed_focus == 'clean-user-processes' || github.event.inputs.installed_focus == 'clean-user-session')
     runs-on: ubuntu-24.04
