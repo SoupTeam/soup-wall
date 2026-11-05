@@ -153,7 +153,10 @@ state-root identities, source digests and the original record versions as identi
 metadata. Paths and project names can be sensitive: use an existing owner-private
 0700 export directory outside the Agent home, selections, workspaces and run roots.
 Export requires explicit consent, publishes one new 0600 file and never overwrites
-an existing archive. It does not copy credentials, provider bodies, grants,
+an existing archive. Every export parent component must be canonical; symlink
+ancestors refuse even when the final directory is private. The destination is
+pinned by descriptor and checked again immediately before publication.
+It does not copy credentials, provider bodies, grants,
 approvals, run/session state, workspace contents or executable/configuration bodies.
 
 ```bash
