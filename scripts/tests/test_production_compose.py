@@ -66,6 +66,7 @@ class FakeDocker:
     @staticmethod
     def owned_network():
         return {"Id": "f" * 64, "Name": "owned-test_default", "Driver": "bridge", "Scope": "local",
+                "EnableIPv4": True, "EnableIPv6": False,
                 "Options": {},
                 "Labels": {"com.docker.compose.project": "owned-test", "com.docker.compose.network": "default"}}
 
@@ -228,6 +229,9 @@ class ProductionComposeControls(unittest.TestCase):
             ("Options", {"com.docker.network.bridge.gateway_mode_ipv4": "nat-unprotected"}),
             ("Options", {"com.docker.network.bridge.gateway_mode_ipv6": "nat-unprotected"}),
             ("Options", {"com.docker.network.bridge.trusted_host_interfaces": "eth0"}),
+            ("Options", {"com.docker.network.enable_ipv4": "false"}),
+            ("Options", {"com.docker.network.enable_ipv6": "true"}),
+            ("EnableIPv4", False), ("EnableIPv6", True),
             ("Options", []),
         )
         for action in ("check", "preflight", "migrate", "start"):
@@ -239,8 +243,10 @@ class ProductionComposeControls(unittest.TestCase):
                         self.closure().execute(action)
                     self.assertEqual(self.docker.mutations(), [])
 
-    def test_empty_or_null_bridge_options_preserve_the_shipped_default(self):
-        for options in ({}, None):
+    def test_engine_normalized_ip_options_preserve_the_shipped_default(self):
+        for options in ({}, None, {"com.docker.network.enable_ipv4": "true"},
+                        {"com.docker.network.enable_ipv6": "false"},
+                        {"com.docker.network.enable_ipv4": "true", "com.docker.network.enable_ipv6": "false"}):
             with self.subTest(options=options):
                 self.docker.network["Options"] = options
                 self.closure().execute("check")
@@ -336,6 +342,8 @@ class ProductionComposeControls(unittest.TestCase):
             lambda m: m["networks"]["default"].update(name="unrelated"),
             lambda m: m["networks"]["default"].update(external=True),
             lambda m: m["networks"]["default"].update(driver="host"),
+            lambda m: m["networks"]["default"].update(enable_ipv4=False),
+            lambda m: m["networks"]["default"].update(enable_ipv6=True),
             lambda m: m["networks"]["default"].update(driver_opts={
                 "com.docker.network.bridge.gateway_mode_ipv4": "nat-unprotected"}),
             lambda m: m["networks"].update(unrelated={"name": "unrelated"}),

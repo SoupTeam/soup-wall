@@ -32,6 +32,8 @@ MANIFEST_TYPES = {"application/vnd.oci.image.manifest.v1+json",
                   "application/vnd.docker.distribution.manifest.v2+json"}
 INDEX_TYPES = {"application/vnd.oci.image.index.v1+json",
                "application/vnd.docker.distribution.manifest.list.v2+json"}
+DEFAULT_NETWORK_OPTIONS = {"com.docker.network.enable_ipv4": "true",
+                           "com.docker.network.enable_ipv6": "false"}
 
 
 class ClosureError(Exception):
@@ -323,6 +325,8 @@ class ProductionCompose:
         if (not isinstance(default, dict) or set(networks) != {"default"}
                 or default.get("name") != self.project + "_default"
                 or default.get("external") or default.get("driver", "bridge") != "bridge"
+                or default.get("enable_ipv4", True) is not True
+                or default.get("enable_ipv6", False) is not False
                 or default.get("driver_opts")):
             fail("compose_project_network_changed")
         for name, row in self.images.items():
@@ -476,9 +480,15 @@ class ProductionCompose:
         row = actual[0]
         labels = row.get("Labels")
         options = row.get("Options")
+        if options is None:
+            options = {}
         if (row.get("Id") != matches[0] or row.get("Name") != expected
                 or row.get("Driver") != "bridge" or row.get("Scope") != "local"
-                or (options is not None and (not isinstance(options, dict) or options))
+                or row.get("EnableIPv4", True) is not True
+                or row.get("EnableIPv6", False) is not False
+                or not isinstance(options, dict)
+                or any(key not in DEFAULT_NETWORK_OPTIONS or value != DEFAULT_NETWORK_OPTIONS[key]
+                       for key, value in options.items())
                 or row.get("ConfigOnly") or not isinstance(labels, dict)
                 or labels.get("com.docker.compose.project") != self.project
                 or labels.get("com.docker.compose.network") != "default"):

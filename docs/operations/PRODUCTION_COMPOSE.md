@@ -80,8 +80,9 @@ startup, an existing network must match its exact name, full inspected ID and
 Compose project/default-network ownership. Each container must use that network
 by full name or ID, with exactly one matching attachment. Host networking,
 another container's network namespace, foreign networks and extra attachments
-are refused. The shipped template has no bridge driver options; existing options
-are refused too, including [gateway modes that expose unpublished ports](https://docs.docker.com/engine/network/port-publishing/#gateway-modes).
+are refused. The shipped IPv4 bridge accepts Docker's equivalent normalized
+IPv4-enabled/IPv6-disabled metadata. Driver overrides are refused, including
+[gateway modes that expose unpublished ports](https://docs.docker.com/engine/network/port-publishing/#gateway-modes).
 Fresh projects may have no network yet. A container created but never started
 may have an empty attachment ID while its configured network identity is checked;
 running and stopped containers must retain the exact network ID. Transient
