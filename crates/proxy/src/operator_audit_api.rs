@@ -2,10 +2,10 @@
 
 use axum::{
     body::Body,
-    extract::{MatchedPath, Path, Query, State},
+    extract::{MatchedPath, Path, Query, RawPathParams, State},
     http::{header, Method, Request, StatusCode},
     response::{IntoResponse, Response},
-    Json,
+    Json, RequestExt,
 };
 
 use crate::{
@@ -23,7 +23,7 @@ pub(crate) struct Attempt {
 impl Attempt {
     /// Match only routed mutations. Never store a submitted path, selector,
     /// query string or body for a request that has no committed target.
-    pub(crate) fn identify(request: &Request<Body>) -> Option<Self> {
+    pub(crate) async fn identify(request: &mut Request<Body>) -> Option<Self> {
         use AuditOperation::*;
         let route = request
             .extensions()
@@ -66,12 +66,10 @@ impl Attempt {
             (&Method::PUT, "/model-policy") => ModelPolicySet,
             _ => return None,
         };
-        let tenant = request
-            .uri()
-            .path()
-            .strip_prefix("/admin/v1/tenants/")?
-            .split('/')
-            .next()?;
+        let params = request.extract_parts::<RawPathParams>().await.ok()?;
+        let tenant = params
+            .iter()
+            .find_map(|(name, value)| (name == "tenant_id").then_some(value))?;
         if !crate::tenant_store::operator_audit::canonical_scope(tenant) {
             return None;
         }

@@ -181,7 +181,7 @@ pub async fn require_admin_token(
     next: Next,
 ) -> Response {
     let received_at = crate::tenant_store::now_unix();
-    let attempt = crate::operator_audit_api::Attempt::identify(&request);
+    let attempt = crate::operator_audit_api::Attempt::identify(&mut request).await;
     let presented = request
         .headers()
         .get(ADMIN_AUTH_HEADER)
