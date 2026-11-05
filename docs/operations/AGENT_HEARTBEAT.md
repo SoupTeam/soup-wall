@@ -28,6 +28,14 @@ queue: each tick sends the current observation once. Failed or refused sends
 back off up to five minutes. A Console outage, a refusal or a lost credential
 never changes local enforcement; the last verified policy stays in force.
 
+The current heartbeat lane uses environment-based managed enrollment. The
+installed [managed-Console connection](INSTALLED_MANAGED_CONSOLE.md) uses its
+own explicit selector and rejects overlapping `SOUP_MANAGED_AGENT_*`
+environment settings, including heartbeat options. That installed lane
+reports heartbeat `unsupported` until an explicit profile option is reviewed.
+Its configured connection and authenticated policy application remain visible
+through the existing connection inspection and Console history.
+
 ## Contract
 
 `sw-agent-heartbeat/1`, Bearer Agent credential only (admin tokens get 401),
