@@ -23,15 +23,24 @@ refused with 401 or 403, the panel becomes read-only until you reconnect.
 ## Workflow
 
 1. **Select the tenant**, then an **Agent group** (or create one). Add enrolled
-   Agents and mark pilots. Current membership is only a **preview**.
+   Agents and mark pilots. The membership list is this page's own view and is
+   not authoritative.
 2. **Create a revision**: paste the AgentPolicySet YAML. The panel shows the
    SHA-256 of these exact bytes and, after creation, checks that the server
    digest is the same. A mismatch says "Do not approve it".
 3. **Review and approve**: type the revision ID to approve that exact digest.
    Approval issues nothing.
-4. **Start pilot deployment**: choose an approved revision, check the preview
-   cohort and type the revision ID. The server then freezes the actual cohort;
-   the panel says whether it matches your preview. Only pilots are issued.
+4. **Start pilot deployment**: choose an approved revision. The panel asks the
+   server for its **authoritative preview** (nothing is issued): the exact
+   pilots and workers, the revision digest, each Agent's baseline and latest
+   sequence, and any blocker. Review it and type the revision ID. The server
+   re-derives every fact inside the transaction that issues the first wave and,
+   if anything changed since the preview (membership, an Agent's authorization,
+   the revision, a baseline or a sequence), refuses with **zero** deployments.
+   The panel then says so and shows the server's new preview; nothing is retried
+   for you. A blocked preview offers no confirmation. If the answer to the start
+   is lost, the panel reads the persisted plan instead of resubmitting. Only
+   pilots are issued, and the frozen cohort is the one you confirmed.
 5. **Promotion**: the server issues the worker wave only after every pilot's
    exact applied acknowledgement (Agent, sequence, revision, digest) is recorded.
    **Evaluate pilot gate** asks the server to re-check it and process expired

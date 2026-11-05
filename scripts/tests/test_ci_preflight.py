@@ -7,7 +7,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 from ci_components import blocks
-from ci_impact import plan
+from ci_impact import plan, BUILD_CONSUMERS
 
 
 BARRIERS = ("test", "native-macos-resilience", "agent-windows-security")
@@ -106,12 +106,12 @@ class ReadyPreflight(unittest.TestCase):
         self.assertFalse(scheduled("agent-lifecycle-macos", gateway, skipped))
 
     def test_cancelled_shared_consumer_cannot_restart_after_producer(self):
-        for job in ("mcp-create-file--linux-create-file",
-                    "mcp-create-file--linux-installed-edit"):
-            body = MIRROR[job]
-            self.assertIn("    if: >-\n      !cancelled() && contains(", body)
-            self.assertIn("ci_qualification_build.py guard", body)
-            self.assertIn("        if: always()", body)
+        for workflow, jobs in BUILD_CONSUMERS.items():
+            for job in jobs:
+                body = MIRROR[workflow.removesuffix('.yml') + "--" + job]
+                self.assertIn("    if: >-\n      !cancelled() && contains(", body)
+                self.assertIn("ci_qualification_build.py guard", body)
+                self.assertIn("        if: always()", body)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,35 @@
+{
+  "format": "sw-managed-connection-final-qualification/1",
+  "run_id": 41889836435,
+  "source_commit": "e13c1f777af4a59f05f023aabf057e866fbd5dd1",
+  "runtime_source_commit": "8e644d668e3346662f19235701a28e4ecdfef4db",
+  "status": "passed",
+  "backends": {
+    "sqlite": {
+      "artifact_id": 13352952782,
+      "archive_sha256": "b0eb1644e80bc2f56cee320293935b841fe3cd0a99ecdf77971c75c3d9a88ea2",
+      "zip_crc": "passed",
+      "source_hashes_verified": 284,
+      "checks_passed": 33,
+      "all_required_controls_passed": true,
+      "source_clean": true,
+      "database_transport": "SQLite, owned private local file",
+      "agent_binary_sha256": "a017c3b0a55d4d28d53d2fd4c0a958a18782b7e35b2e2f7927c64154f7d28fd3",
+      "console_binary_sha256": "24911132e4a261314d012cbd9dbe1295ba1e492eb20d60d70a75e7247e6fdb9e"
+    },
+    "postgres": {
+      "artifact_id": 13351899784,
+      "archive_sha256": "85b4fedd8dd354be96acb8998a83be5b08f0833a6efd0635c66ac4bb4948c03f",
+      "zip_crc": "passed",
+      "source_hashes_verified": 284,
+      "checks_passed": 34,
+      "all_required_controls_passed": true,
+      "source_clean": true,
+      "database_transport": "PostgreSQL 16, owned CA, verified TLS",
+      "agent_binary_sha256": "a017c3b0a55d4d28d53d2fd4c0a958a18782b7e35b2e2f7927c64154f7d28fd3",
+      "console_binary_sha256": "24911132e4a261314d012cbd9dbe1295ba1e492eb20d60d70a75e7247e6fdb9e"
+    }
+  },
+  "no_skips": true,
+  "raw_logs_credentials_configs_and_traces_excluded": true
+}

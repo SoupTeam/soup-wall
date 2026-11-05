@@ -16,6 +16,10 @@ pub async fn dashboard() -> Response {
             .replace("/* FLEET_PANEL */", include_str!("fleet_panel.js"))
             .replace("/* ROLLOUT_PANEL */", include_str!("rollout_panel.js"))
             .replace(
+                "/* SINGLE_AGENT_POLICY */",
+                include_str!("single_agent_policy.js"),
+            )
+            .replace(
                 "/* ENROLLMENT_PANEL */",
                 include_str!("enrollment_panel.js"),
             )

@@ -270,6 +270,30 @@ class PreparedQualificationCoverage(unittest.TestCase):
                 self.assertIn("Delegate=cpu memory pids", body)
                 self.assertIn('--budget-unit "$unit.service"', body)
 
+    def test_pilot_scope_dispatch_is_separate_from_full_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.installed_focus": "pilot-scope",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                body = step(text, "Qualify the frozen v1 pilot scope through installed commands")
+                self.assertTrue(enabled(body, **context))
+                self.assertFalse(enabled(body))
+                for missing in ("installed_focus", "native_preparation_only"):
+                    self.assertFalse(enabled(body, **{
+                        **context, "github.event.inputs." + missing: "",
+                    }))
+                self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
+                self.assertIn("--pilot-scope-only", body)
+                self.assertIn("scripts/qualify-installed-pilot.py --run --selection", body)
+                self.assertIn("scripts/pilot-demo.py", body)
+
     def test_update_dispatch_is_targeted_and_does_not_replace_existing_qualification(self):
         context = {"github.event_name": "workflow_dispatch",
                    "github.event.inputs.coordinated_update_only": "true"}
@@ -378,6 +402,13 @@ class PreparedQualificationCoverage(unittest.TestCase):
                 self.assertTrue(enabled(private, **context))
                 self.assertTrue(enabled(private))
                 self.assertIn("scripts/qualify-private-edit-self-test.py", private)
+                self.assertIn("--verify-existing", private)
+                self.assertIn('"$SOU119_SANDBOX_TESTS" self_test::tests', private)
+                self.assertIn('if [[ "${{ github.event.inputs.private_edit_self_test_only }}" == true ]]; then', private)
+                self.assertIn('cargo test --locked -p agentfw --lib self_test::tests', private)
+                self.assertIn('else\n            "$SOU119_SANDBOX_TESTS" self_test::tests\n          fi', private)
+                self.assertIn("cargo clippy --locked -p agentfw --all-targets", private)
+                self.assertIn("cargo fmt --all --check", private)
 
     def test_storage_faults_are_explicit_manual_evidence_with_separate_output(self):
         for name, text in self.workflows():

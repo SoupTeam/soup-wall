@@ -1,0 +1,60 @@
+{
+  "run": 41846137845,
+  "conclusion": "failure",
+  "failed_step": "Four real Agents with encrypted PostgreSQL recovery",
+  "cause": "Two independent demos reused a disposable source database and collided on a unique synthetic tenant name. Dedicated reconciliation databases now isolate both runs.",
+  "reports": [
+    {
+      "report": "group-postgres.json",
+      "sha256": "cd372fd7be1deabe5cb68dc7596693eee7d693b935b8a4cb862294687899ee44",
+      "source_commit": "be6cd3a391d14a2c0cf4a342d28ffcbab4260a07",
+      "passed": false,
+      "cleanup_passed": true,
+      "checks_passed": 0,
+      "checks_total": 0,
+      "binary_sha256": {
+        "llm-firewall": "55f752eb5ce4046c8b4163e3f57d076e4c652b6632b7c9d5fb79b99df2b397a7",
+        "agentfw": "a7a39a87bef4f241cca094300162f1f4d57ddc43bef427ff819ad5358561cf3e"
+      }
+    },
+    {
+      "report": "group-reconciliation-postgres.json",
+      "sha256": "64f7c0a9136a1c3661d5b4c9b30efa1c1db4e425c2b9911d3e94f691172efec8",
+      "source_commit": "be6cd3a391d14a2c0cf4a342d28ffcbab4260a07",
+      "passed": true,
+      "cleanup_passed": true,
+      "checks_passed": 15,
+      "checks_total": 15,
+      "binary_sha256": {
+        "llm-firewall": "55f752eb5ce4046c8b4163e3f57d076e4c652b6632b7c9d5fb79b99df2b397a7",
+        "agentfw": "a7a39a87bef4f241cca094300162f1f4d57ddc43bef427ff819ad5358561cf3e"
+      }
+    },
+    {
+      "report": "group-reconciliation-sqlite.json",
+      "sha256": "b44575b08eed627297444a66b03cc6235837c40e7c87337420f3237fdd3384ef",
+      "source_commit": "be6cd3a391d14a2c0cf4a342d28ffcbab4260a07",
+      "passed": true,
+      "cleanup_passed": true,
+      "checks_passed": 15,
+      "checks_total": 15,
+      "binary_sha256": {
+        "llm-firewall": "55f752eb5ce4046c8b4163e3f57d076e4c652b6632b7c9d5fb79b99df2b397a7",
+        "agentfw": "a7a39a87bef4f241cca094300162f1f4d57ddc43bef427ff819ad5358561cf3e"
+      }
+    },
+    {
+      "report": "group-sqlite.json",
+      "sha256": "8c9ebe40025d1df28b079ff76220c3e66f077243c556916624da26ef33be180e",
+      "source_commit": "be6cd3a391d14a2c0cf4a342d28ffcbab4260a07",
+      "passed": true,
+      "cleanup_passed": true,
+      "checks_passed": 31,
+      "checks_total": 31,
+      "binary_sha256": {
+        "llm-firewall": "55f752eb5ce4046c8b4163e3f57d076e4c652b6632b7c9d5fb79b99df2b397a7",
+        "agentfw": "a7a39a87bef4f241cca094300162f1f4d57ddc43bef427ff819ad5358561cf3e"
+      }
+    }
+  ]
+}
