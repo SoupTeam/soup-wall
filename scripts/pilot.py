@@ -47,7 +47,7 @@ PLAN_SECONDS = 180
 CLAUDE_VERSION = "2.1.251 (Claude Code)"
 CLAUDE_RELATIVE = "node_modules/@anthropic-ai/claude-code-linux-x64/claude"
 EXECUTABLE_INPUTS = ("agentfw", "git_launcher", "sandbox_tests", "git", "bwrap", "node", "npm", "claude", "python")
-FILE_INPUTS = ("node_archive", "python_archive", "git_archive", "bwrap_archive", "git_worktree_binding", "filesystem_roots_binding")
+FILE_INPUTS = ("candidate_receipt", "node_archive", "python_archive", "git_archive", "bwrap_archive", "git_worktree_binding", "filesystem_roots_binding")
 DIR_INPUTS = ("workspace_snapshot", "npm_cache", "wheelhouse", "filesystem_workspace", "git_workspace", "native_output", "agent_output",
               "pkg_config_libdir", "pkg_config_sysroot", "meson_pythonpath")
 NEVER = ["start a daemon, Claude host or MCP server", "edit a project, Git repository or Claude configuration",
@@ -127,8 +127,8 @@ PROG = "agentfw pilot" if INSTALLED else "pilot.py"
 # variables, user site or working-directory imports.
 PYTHON_FLAGS = ["-I", "-B"] if INSTALLED else ["-B"]
 HINTS = {key: re.sub(r"(?<![-\w])pilot\.py", PROG, value) for key, value in HINTS.items()}
-AGENT_NOT_BUILT = ("--agentfw, --git-launcher and --sandbox-tests built from commit {commit} (the installed front door "
-                   "never builds from source; build them in a checkout with scripts/build-native-pilot-inputs.py)")
+AGENT_NOT_BUILT = ("--agentfw and --git-launcher from the same-source Linux candidate archive at commit {commit} "
+                   "(the installed front door never builds from source)")
 
 
 class Failure(Exception):
@@ -216,6 +216,35 @@ def write_state(prefix, value):
     os.replace(temporary, path)
 
 
+def candidate_inputs(inputs, expected=None):
+    """Verify all candidate bytes before any preparation/runtime subprocess."""
+    if "candidate_receipt" not in inputs:
+        require(expected is None, "candidate_receipt_missing")
+        return None
+    import pilot_candidate
+    try:
+        path = inputs["candidate_receipt"]
+        require(path.name == pilot_candidate.RECEIPT, "candidate_receipt_path_invalid")
+        result = pilot_candidate.validate_directory(path.parent, source()["commit"])
+        current = source()
+        require(all(result["source"][key] == current[key] for key in current), "candidate_source_mismatch")
+        for role, name in pilot_candidate.BINARY_NAMES.items():
+            selected = path.parent / name
+            require(role not in inputs or inputs[role].resolve(strict=True) == selected.resolve(strict=True),
+                    "candidate_selected_binary_mismatch")
+            inputs[role] = selected
+        if INSTALLED:
+            require(sha(ROOT.parent / "manifest.json") ==
+                    pilot_candidate.parse(path.read_bytes())["component_manifest_sha256"], "candidate_installed_component_mismatch")
+        if expected is not None:
+            require(result == expected, "candidate_inputs_changed")
+        return result
+    except Failure:
+        raise
+    except (OSError, ValueError, KeyError, TypeError):
+        raise Failure("candidate_inputs_refused") from None
+
+
 def recorded_inputs(args, state):
     """Explicit operator inputs. A later prepare may omit them to reuse the
     recorded explicit values; nothing is looked up on PATH."""
@@ -231,6 +260,7 @@ def recorded_inputs(args, state):
     if "python" not in inputs:
         # The interpreter the operator invoked, resolved once and recorded; not a PATH search.
         inputs["python"] = Path(sys.executable).resolve(strict=True)
+    candidate_inputs(inputs, (state or {}).get("candidate"))
     return inputs
 
 
@@ -445,9 +475,9 @@ def plan(args):
                        "plan_status": value.get("status"), "missing": value.get("missing", []),
                        "pins": value.get("pins")})
         produced.update(git=paths["native"] / "PENDING/git-src/git", bwrap=paths["native"] / "PENDING/bwrap-build/bwrap")
-    if all(name in inputs for name in ("agentfw", "git_launcher", "sandbox_tests")):
+    if all(name in inputs for name in ("agentfw", "git_launcher")):
         stages.append({"stage": "agent", "action": "use supplied Agent executables",
-                       "inputs": {name: describe(inputs[name]) for name in ("agentfw", "git_launcher", "sandbox_tests")}})
+                       "inputs": {name: describe(inputs[name]) for name in ("agentfw", "git_launcher", "sandbox_tests") if name in inputs}})
     elif INSTALLED:
         stages.append({"stage": "agent", "action": "supply Agent executables built from the component commit",
                        "missing": [AGENT_NOT_BUILT.format(commit=current["commit"])]})
@@ -546,7 +576,7 @@ def prepare(args):
     if not ("git" in inputs and "bwrap" in inputs):
         value = step("native", native + (["--rebuild"] if args.rebuild else []))
         produced.update(git=Path(value["git"]), bwrap=Path(value["bwrap"]))
-    if not all(name in inputs for name in ("agentfw", "git_launcher", "sandbox_tests")):
+    if not all(name in inputs for name in ("agentfw", "git_launcher")):
         value = step("agent", agent + (["--rebuild"] if args.rebuild else []))
         produced.update(agentfw=Path(value["agentfw"]), git_launcher=Path(value["git_launcher"]),
                         sandbox_tests=Path(value["sandbox_tests"]))
@@ -585,6 +615,9 @@ def prepare(args):
               "allow_download": bool(args.allow_download),
               "git_profile": args.git_profile,
               "inputs": {name: str(path) for name, path in inputs.items()}}
+    candidate = candidate_inputs(inputs)
+    if candidate is not None:
+        record["candidate"] = candidate
     if scope["selected"]:
         # Defense in depth: the prepared (or reused) selection must itself be inside the scope before it is recorded.
         document, digest_value = scope_document()
@@ -657,6 +690,7 @@ def verified_state(prefix):
     if state is None:
         raise Failure("not_prepared")
     current = source()
+    candidate_inputs({key: Path(value) for key, value in state.get("inputs", {}).items()}, state.get("candidate"))
     require(not current["dirty"], "dirty_source")
     require(state["commit"] == current["commit"], "stale_source")
     marker = layout(prefix)["preparation"] / "current.json"

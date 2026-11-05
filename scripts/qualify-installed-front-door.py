@@ -121,7 +121,14 @@ class InstalledDoor(QUAL.FrontDoor):
     def words(self, command, *extra, **options):
         words = super().words(command, *extra, **options)
         require(words[2].endswith("scripts/pilot.py"), "unexpected_front_door_words")
-        return [str(self.args.agentfw), "pilot", "--home", str(self.home), *words[3:]]
+        result = [str(self.args.agentfw), "pilot", "--home", str(self.home), *words[3:]]
+        if getattr(self.args, "candidate_directory", None) is not None and command in ("preview", "prepare"):
+            if "--sandbox-tests" in result:
+                index = result.index("--sandbox-tests")
+                del result[index:index + 2]
+            result += ["--candidate-receipt", str(self.args.candidate_directory / "pilot-binaries.json")]
+            require("--sandbox-tests" not in result, "candidate_forwarded_legacy_test_argument")
+        return result
 
 
 def component(args, home, archive, digest, *extra, env, trace=None, diagnostic=None):
@@ -771,6 +778,61 @@ def qualify_provider_rotation(args, door, home, env, report, proposals):
         new_model.close()
 
 
+def candidate_refusals(args, home, env, report):
+    """The caller executable stays intact while every selected asset is damaged.
+
+    Only the driver Agent and installed verified interpreter may execute before
+    these refusals. strace independently checks no runtime/host/daemon launch.
+    """
+    import pilot_candidate
+    controls = args.output / "candidate-controls"
+    controls.mkdir(mode=0o700)
+    selected = controls / "selected"
+    shutil.copytree(args.candidate_directory, selected)
+    driver = controls / "agentfw-driver"
+    shutil.copyfile(args.agentfw, driver)
+    driver.chmod(0o700)
+    rows = []
+    report["candidate_refusals"] = rows
+    for name in (*pilot_candidate.FILES, "agentfw"):
+        path = selected / name
+        raw, mode = path.read_bytes(), path.stat().st_mode & 0o777
+        for mutation in ("missing", "changed", "mode"):
+            label = name + "-" + mutation
+            trace = controls / (label + ".trace.private")
+            try:
+                if mutation == "missing":
+                    path.rename(path.with_name(path.name + ".retained"))
+                elif mutation == "changed":
+                    path.chmod(0o600);path.write_bytes(raw + b"changed");path.chmod(mode)
+                else:
+                    path.chmod(0o600)
+                command = [str(args.strace), "-f", "-qq", "-s", "4096", "-e", "trace=execve,execveat,connect",
+                    "-o", str(trace), str(driver), "pilot", "--home", str(home), "preview",
+                    "--prefix", str(controls / "never-created"), "--scope", "linux-v1",
+                    "--candidate-receipt", str(selected / pilot_candidate.RECEIPT)]
+                result = subprocess.run(command, cwd=args.work, env=env, capture_output=True, timeout=30)
+                value, state = component_output(result.stdout)
+                require(result.returncode != 0 and value.get("status") == "failed"
+                        and value.get("reason", "").startswith("candidate_") and not (controls / "never-created").exists(),
+                        "candidate_damage_not_refused")
+                executed = QUAL.executed(trace, {key:getattr(args,key) for key in ("claude","node","bwrap","npm","git")
+                                                if getattr(args,key,None) is not None})
+                require(not executed["selected_started"] and executed["inet_connects"] == 0,
+                        "candidate_refusal_started_runtime")
+                # A daemon launch is another Agent invocation; only the one
+                # intact CLI driver is permitted by this independent trace.
+                require(agent_executions(trace, driver) == 1, "candidate_refusal_started_daemon")
+                rows.append({"asset":name,"mutation":mutation,"passed":True,"selected_started":0,
+                             "inet_connects":0,"reason":value.get("reason")})
+            finally:
+                if mutation == "missing":
+                    path.with_name(path.name + ".retained").rename(path)
+                else:
+                    path.chmod(0o600);path.write_bytes(raw);path.chmod(mode)
+    pilot_candidate.validate_directory(selected, args.expected_commit)
+
+
 def qualify(args, report):
     require(os.geteuid() != 0, "non_root_operator_required")
     before = BASE.source()
@@ -784,8 +846,20 @@ def qualify(args, report):
     agent_home.mkdir(mode=0o700)
     (agent_home / "unrelated-agent-file").write_text("unrelated Agent state must stay\n")
     build_env = QUAL.qualification_environment(home)
-    built = build(ROOT, args.output / "component.tar", build_env)
-    archive, digest = args.output / "component.tar", built["archive_sha256"]
+    if getattr(args, "candidate_directory", None) is not None:
+        import pilot_candidate
+        candidate = pilot_candidate.validate_directory(args.candidate_directory, args.expected_commit)
+        archive = args.candidate_directory / pilot_candidate.COMPONENT
+        receipt = pilot_candidate.parse((args.candidate_directory / pilot_candidate.RECEIPT).read_bytes())
+        built = {"component": receipt["component_manifest_sha256"], "archive_sha256": BASE.sha(archive),
+                 "files": len(pilot_candidate.parse(pilot_candidate.component_manifest(archive))["files"]),
+                 "commit": args.expected_commit}
+        digest = built["archive_sha256"]
+        report["candidate"] = candidate
+        report["candidate"]["sandbox_tests_required"] = False
+    else:
+        built = build(ROOT, args.output / "component.tar", build_env)
+        archive, digest = args.output / "component.tar", built["archive_sha256"]
     report["component"] = {key: built[key] for key in ("component", "archive_sha256", "files", "commit")}
     require(built["commit"] == args.expected_commit, "component_commit_mismatch")
     receiver = QUAL.ISOLATION.Receiver()
@@ -805,6 +879,9 @@ def qualify(args, report):
             "never reports protection", ""), "component_verify_failed")
         report["cases"].append({"case": "component-install", "passed": True, "component": value["component"],
                                 "python": value["python"], "files": value["files"]})
+
+        if getattr(args, "candidate_directory", None) is not None:
+            candidate_refusals(args, agent_home, env, report)
 
         # 2. Preview from outside the checkout: no prefix, selected program or network.
         trace = args.output / "preview.trace.private"
@@ -1133,6 +1210,7 @@ def main():
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--component-python", type=Path, required=True,
                         help="absolute CPython recorded for the installed helpers")
+    parser.add_argument("--candidate-directory", type=Path, help="extracted existing Linux candidate archive; never rebuild its component")
     parser.add_argument("--strace", type=Path, default=Path("/usr/bin/strace"))
     parser.add_argument("--allow-download", action="store_true")
     parser.add_argument("--provider-profiles", action="store_true",
@@ -1158,6 +1236,12 @@ def main():
     args = parser.parse_args()
     if args.project_recovery_only:
         args.project_presets_only = True
+    if args.candidate_directory is not None:
+        import pilot_candidate
+        pilot_candidate.validate_directory(args.candidate_directory, args.expected_commit)
+        args.agentfw = args.candidate_directory / "agentfw"
+        args.git_launcher = args.candidate_directory / pilot_candidate.LAUNCHER
+        args.sandbox_tests = args.agentfw  # legacy selection field, never a libtest executable
     args.output = args.output.resolve()
     args.agent_output = None
     report = {"format": FORMAT, "status": "failed", "cases": [], "skipped": 0,

@@ -318,6 +318,8 @@ enum McpCommands {
     ///
     /// Writes a versioned JSON report. Exit 0 passed, 3 failed, 4 incomplete, 5 unsupported.
     SelfTest(agentfw::self_test::Cli),
+    /// Explicit real-runtime Linux sandbox exercise; bounded JSON, no protection claim.
+    SandboxExercise(agentfw::mcp::sandbox_exercise::Cli),
     #[cfg(windows)]
     /// Preview a native Windows Agent setup against explicitly selected local assets.
     OnboardWindows {
@@ -658,6 +660,9 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
         }
         Cmd::Mcp(McpCommands::SelfTest(args)) => {
             std::process::exit(agentfw::self_test::run_cli(args))
+        }
+        Cmd::Mcp(McpCommands::SandboxExercise(args)) => {
+            std::process::exit(agentfw::mcp::sandbox_exercise::run_cli(args))
         }
         #[cfg(windows)]
         Cmd::Mcp(McpCommands::OnboardWindows { command }) => {

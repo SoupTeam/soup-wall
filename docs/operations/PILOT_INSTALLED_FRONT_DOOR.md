@@ -49,7 +49,7 @@ rename. Files are mode 0400 and directories 0700 under
 ## 3. Use
 
 ```bash
-agentfw pilot preview --prefix "$HOME/soup-wall-pilot" --agentfw ... --git-launcher ... --sandbox-tests ... [inputs]
+agentfw pilot preview --prefix "$HOME/soup-wall-pilot" --agentfw ... --git-launcher ... [inputs]
 agentfw pilot prepare --apply --prefix "$HOME/soup-wall-pilot" [same inputs]
 agentfw pilot run --prefix "$HOME/soup-wall-pilot" --prompt '...'
 agentfw pilot status --prefix "$HOME/soup-wall-pilot"
@@ -64,12 +64,72 @@ download. The helpers report the component's recorded commit as their source,
 so a selection prepared from that commit (by `agentfw pilot` or by
 `scripts/pilot.py` in the reviewed checkout) is used unchanged.
 
-The installed command never builds from source: supply `--agentfw`,
-`--git-launcher` and `--sandbox-tests` built from the same commit (for example
-with `scripts/build-native-pilot-inputs.py` in the checkout). Native Git and
+The installed command never builds from source. The Linux candidate archive
+supplies `agentfw`, `agentfw-git-sandbox`, `pilot-front-door.tar`,
+`pilot-binaries.json` and `pilot-source.json` from one clean source. After verifying
+the outer archive against its independently retained checksum, install that
+component with the recorded archive SHA-256 and an explicit CPython 3.11–3.13.
+From the extracted directory, select its receipt for preparation:
+
+```sh
+./agentfw pilot preview --prefix "$HOME/soup-wall-pilot" --scope linux-v1 \
+  --candidate-receipt "$PWD/pilot-binaries.json" [declared runtime inputs]
+./agentfw pilot prepare --apply --prefix "$HOME/soup-wall-pilot" --scope linux-v1 \
+  --candidate-receipt "$PWD/pilot-binaries.json" [same inputs]
+```
+
+The receipt selects the two production binaries. It verifies their actual bytes
+and modes, the component manifest and source identity before a preparation
+subprocess starts. Preparation retains that custody result; later runs recheck
+it before starting a daemon or host. Keep the extracted inputs at their selected
+paths. No source checkout, Cargo, compiler or libtest executable is needed by
+these installed commands. Existing explicit `--agentfw`/`--git-launcher` inputs
+remain supported. The old `--sandbox-tests` argument and selection field remain
+for migration; when omitted the field aliases Agent and is never executed as
+libtest. The source builder's original v1 receipts and native test selectors
+remain supported separately.
+
+The candidate receipt v2 records the **release Rust 1.99.1** lane, target,
+compiler identities, source tree/tracked-byte digest and binary hashes. The
+older native source builder still explicitly selects Rust 1.94.1. Neither lane
+substitutes for qualification of the actual staged bytes. The candidate excludes
+the SOU-87 private offline kit; SOU-130 license/advisory clearance remains a
+separate handoff. Native Git and
 bubblewrap preparation, Node, Claude Code and the selection step work as in the
 checkout. A component install, `verify` or a file hash never reports
 protection; only `agentfw pilot status` reports it, with the same meanings.
+
+## Explicit installed sandbox exercise
+
+`doctor` remains read-only. To execute the bounded common sandbox exercise with
+selected installed runtime/package/library pins, explicitly supply a profile and
+its SHA-256:
+
+```sh
+./agentfw sandbox-exercise --execute --kind filesystem \
+  --profile /absolute/filesystem-profile/profile.json --profile-sha256 PROFILE_SHA256
+./agentfw sandbox-exercise --execute --kind git \
+  --profile /absolute/git-profile/profile.json --profile-sha256 PROFILE_SHA256
+```
+
+Both commands create owned fixtures; the Git exercise creates its own repository.
+The selected Node or Python/Git actually runs. Calibrated TCP/Unix/FIFO receivers,
+outside-file and inherited-descriptor witnesses check denied effects alongside
+useful reads, environment isolation, private network/PID namespaces and the
+existing authenticated owner cleanup. The exercised common read-only profile is
+named separately from the supplied profile; this does not qualify advanced
+profile-specific operations. Existing ignored native tests call the same shared
+implementation and retain their selectors and positive markers.
+
+Stdout is a versioned `sw-linux-sandbox-exercise/1` JSON object. Exit 0 means the
+exercise passed; 3 means refusal/failure; 5 means unsupported platform. Profile
+input is capped at 64 KiB, each runtime output stream at 64 KiB, calibration at
+5 seconds and sandbox collection at 15 seconds, with the existing owner's finite
+cleanup deadline. Missing prerequisites, malformed/mismatched inputs, failed
+calibration, timeout, interruption and unconfirmed cleanup fail visibly. SIGTERM
+or Ctrl-C after sandbox startup requests owned cleanup; a failed interrupted run
+can report confirmed cleanup without becoming a pass. The report always sets
+`active_protection: false`: only a live protected host can supply that status.
 
 ## Frozen v1 scope
 

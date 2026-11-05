@@ -17,6 +17,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 import release_docs as docs
+import candidate_fixture
 
 
 class ReleaseDocumentation(unittest.TestCase):
@@ -31,7 +32,7 @@ class ReleaseDocumentation(unittest.TestCase):
         target = target or self.target
         stage = self.root / ("soup-wall-test-" + target)
         stage.mkdir()
-        for name in docs.required_files(target) | {"README.md"}:
+        for name in (docs.required_files(target) | {"README.md"}) - set(docs.linux_candidate.FILES):
             path = stage / name
             path.parent.mkdir(parents=True, exist_ok=True)
             if name in {"agentfw", "soup-wall-bench", "llm-firewall", "soup-wall-gateway"} or name.endswith(".exe"):
@@ -41,6 +42,8 @@ class ReleaseDocumentation(unittest.TestCase):
             else:
                 source = "vendor/kryptering/LICENSE" if name == "third-party/kryptering/LICENSE" else name
                 path.write_bytes((ROOT / source).read_bytes())
+        if target == docs.linux_candidate.TARGET:
+            candidate_fixture.populate(stage, self.commit, (stage / "agentfw").read_bytes())
         docs.stage(ROOT, stage, self.commit, target)
         return stage
 
@@ -281,7 +284,7 @@ class ReleaseDocumentation(unittest.TestCase):
         target = docs.TARGETS[-1]
         stage = self.root / "cross-checkout-archive"
         stage.mkdir()
-        for name in docs.required_files(target) | {"README.md"}:
+        for name in (docs.required_files(target) | {"README.md"}) - set(docs.linux_candidate.FILES):
             path = stage / name
             path.parent.mkdir(parents=True, exist_ok=True)
             if name.endswith(".exe"):
