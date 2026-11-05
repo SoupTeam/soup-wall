@@ -26,6 +26,35 @@ impl Registration {
         &self.run.authorities
     }
 
+    pub(crate) fn authority_expiry(&self) -> u64 {
+        self.run.authority_expires_at_ms
+    }
+
+    /// Expiry or a failed liveness lookup is not physical disposal. Require
+    /// both the PID and its entire process group to be absent. Ambiguous
+    /// errors and PID/group reuse retain the live slot conservatively.
+    pub(crate) fn physically_disposed(&self) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            let Ok(pid) = i32::try_from(self.consumer_pid) else {
+                return false;
+            };
+            if pid <= 1 || fs::metadata("/proc/self/stat").is_err() {
+                return false;
+            }
+            if !matches!(fs::metadata(format!("/proc/{pid}")), Err(e) if e.kind() == std::io::ErrorKind::NotFound)
+            {
+                return false;
+            }
+            let result = unsafe { libc::kill(-pid, 0) };
+            result == -1 && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            false
+        }
+    }
+
     /// A live observation, not a durable drain/ownership attestation.
     pub(crate) fn verify(&self, instance: &str, registry: &str, now: u64) -> Result<()> {
         ensure!(
@@ -143,6 +172,55 @@ impl RunGuard {
             })?;
         Ok(held)
     }
+}
+
+// Real-process fixture used only by the re-executed Linux handler regression.
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn held_fixture(
+    instance: &str,
+    registry: &str,
+    host: &str,
+    child: &std::process::Child,
+) -> (Registration, Vec<fs::File>) {
+    let mut run_file = manifest().unwrap();
+    let now = approval::now_ms();
+    let run = Run {
+        contract: "sw-pilot-run/1".into(),
+        run_id: crate::token::generate(),
+        home: PathBuf::from("/unused-component-fixture"),
+        instance_id: instance.into(),
+        registry_sha256: registry.into(),
+        host_session: host.into(),
+        launcher_pid: std::process::id(),
+        launcher_start: process_start(std::process::id()).unwrap(),
+        manifest_fd: descriptor(&run_file),
+        expires_at_ms: now + 120_000,
+        authority_expires_at_ms: now + 180_000,
+        authorities: BTreeMap::from([
+            (
+                "filesystem".into(),
+                digest(format!("{host}:filesystem").as_bytes()),
+            ),
+            ("git".into(), digest(format!("{host}:git").as_bytes())),
+        ]),
+        files: vec![],
+    };
+    seal(&mut run_file, &run).unwrap();
+    let mut consumer_file = manifest().unwrap();
+    let registration = Registration {
+        contract: CONTRACT.into(),
+        run,
+        consumer_pid: child.id(),
+        consumer_start: process_start(child.id()).unwrap(),
+        generation: crate::token::generate(),
+        manifest_fd: descriptor(&consumer_file),
+    };
+    seal_bytes(
+        &mut consumer_file,
+        &serde_json::to_vec(&registration).unwrap(),
+    )
+    .unwrap();
+    (registration, vec![run_file, consumer_file])
 }
 
 #[cfg(test)]

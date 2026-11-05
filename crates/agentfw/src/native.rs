@@ -484,6 +484,7 @@ impl Session {
 
 #[derive(Default)]
 pub(crate) struct Sessions {
+    pub(crate) consumer_terminal: BTreeMap<String, u64>,
     pub(crate) consumers: BTreeMap<String, crate::pilot_approval::consumer::Registration>,
     #[cfg(test)]
     analysis_hosts: BTreeSet<String>,

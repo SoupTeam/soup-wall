@@ -386,3 +386,30 @@ argument count. Its inputs are now grouped in a borrowed `Capture` structure;
 all 18 execution regressions passed afterward. Windows library Clippy with
 `-D warnings`, binary check, and documentation validation (426 files / 1356
 local links) passed. This refactor changes no capture condition or wire field.
+
+
+### November 5 capacity correction (pending Linux review)
+
+Independent review of eb944413 passed 29 Linux component tests, then found
+that 32 terminated registrations exhausted capacity despite exact authority
+withdrawal and child reaping. Live slots now have separate bounded terminal
+replay custody (512 entries). Reclamation requires withdrawn/expired exact
+authorities, no matching native sessions, confirmed cleanup for every admitted
+namespace owner, and observed absence of both receiving PID and process group.
+Unknown process/cleanup state retains capacity. Registration expiry alone does
+not prove disposal. Tombstones remain until the sealed registration expires;
+a full replay store fails closed rather than forgetting a generation.
+
+The new Linux handler witness completes 40 actual child registrations through
+the protected registration and stop handlers, checks replay refusal and verifies
+that withdrawal alone cannot reclaim a live process. A second sequence fills
+32 slots with reaped children but unconfirmed cleanup: the fresh registration
+must fail until the protected cleanup finish handler confirms all owners.
+Sealed manifests and real PID/parent/group observations remain mandatory.
+
+Local Windows consumer tests: 5 passed, 1 subprocess helper ignored; library
+Clippy with warnings denied passed. The new Linux-only sequence is NOT included
+in that count. Local WSL enumeration failed, so independent Linux execution is
+still requested with `cargo test --locked -p agentfw --lib consumer` using an
+isolated target directory. This is a capacity fix, not purpose admission,
+restricted-recipient delivery, or a correction of any of the six refusals.
