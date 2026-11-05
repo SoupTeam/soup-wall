@@ -120,7 +120,7 @@ const singlePolicy = (() => {
     catch (e) { fail(e, stamp); }
     finally { if (same(stamp)) { loading = false; controls(); } }
   }
-  async function select(id) {
+  async function select(id, openAgent = null) {
     epoch++; controller?.abort(); controller = new AbortController(); tenant = id; agent = null;
     agents = []; revisions = []; deployments = []; document = null; locked = true; loading = false; after = ""; next = "";
     ["single-new-revision", "single-yaml", "single-issuer"].forEach(id => { $(id).value = ""; });
@@ -133,7 +133,11 @@ const singlePolicy = (() => {
       if (!Array.isArray(values) || values.some(a => a.tenant_id !== id)) throw new Error("Agent identity mismatch");
       agents = values;
       values.forEach(a => { const o = make("option", `${a.agent_id}${a.revoked_at_unix != null ? " (revoked)" : ""}`); o.value = a.agent_id; $("single-agent").append(o); });
-      say("Select one Agent to inspect its signed policy history.");
+      if (openAgent && agents.some(a => a.agent_id === openAgent)) {
+        $("single-agent").value = openAgent;
+        $("single-agent").dispatchEvent(new Event("change"));
+        $("single-agent").scrollIntoView({block: "center"});
+      } else say("Select one Agent to inspect its signed policy history.");
     } catch (e) { fail(e, stamp); }
   }
   $("single-agent").addEventListener("change", () => { agent = $("single-agent").value || null; ["single-new-revision", "single-yaml", "single-issuer"].forEach(id => { $(id).value = ""; }); after = ""; next = ""; revisions = []; deployments = []; document = null; epoch++; locked = true; render(); if (agent) load(); });
@@ -146,5 +150,5 @@ const singlePolicy = (() => {
   $("single-deploy").addEventListener("click", () => confirmIssue(false));
   $("single-rollback").addEventListener("click", () => confirmIssue(true));
   $("single-retry").addEventListener("click", () => { const intent = intents.get(scope()); if (intent && owner()) issue(intent); });
-  return {select};
+  return {select, open(id, agentId) { if (id === tenant) return select(id, agentId); }};
 })();

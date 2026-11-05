@@ -34,7 +34,9 @@ def native_sqlite_schema():
         source = (ROOT / 'crates/proxy/src/tenant_store' / filename).read_text()
         start = source.index('CREATE TABLE IF NOT EXISTS ' + first + ' (')
         result += '\n' + source[start:source.index(';",', start) + 1]
-    return result
+    audit = (ROOT / 'crates/proxy/src/tenant_store/operator_audit.rs').read_text()
+    start = audit.index('CREATE TABLE IF NOT EXISTS operator_audit_events (')
+    return result + '\n' + audit[start:audit.index(';";', start) + 1]
 
 
 def native_group_schema():
@@ -73,6 +75,13 @@ class RecoveryTests(unittest.TestCase):
                            (label, 'tenant_a', bytes([active]) * 32, label, active, 1, None if active else 2))
             db.execute("INSERT INTO tenant_audit VALUES (999,'tenant_a',1,'/controlled','allowed',200,1)")
             db.execute('DELETE FROM tenant_audit WHERE id=999')
+            db.execute("INSERT INTO operator_audit_events "
+                "(id,tenant_id,received_at_unix,actor_kind,actor_id,operation,target_kind,target_id,outcome) "
+                "VALUES (321,'tenant_a',2,'admin','admin_test','agent.rotate','agent','edge-1','committed')")
+            db.execute("INSERT INTO operator_audit_events "
+                "(id,tenant_id,received_at_unix,actor_kind,operation,target_kind,target_id,outcome) "
+                "VALUES (456,'tenant_a',3,'unavailable','agent.rotate','tenant','tenant_a','denied')")
+            db.execute('DELETE FROM operator_audit_events WHERE id=456')
         os.chmod(self.source, 0o600)
         self.identity = self.directory / 'identity.age'
         self.archive = self.directory / 'backup.age'
@@ -121,13 +130,19 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(recovery.canonical(before), recovery.canonical(recovery.inspect_sqlite(self.target)))
         self.assertEqual(source_bytes, self.source.read_bytes())
         self.assertEqual(backed['private_state_sha256'], restored['private_state_sha256'])
-        self.assertEqual(restored['tables_verified'], 43)
+        self.assertEqual(restored['tables_verified'], 44)
         self.assertFalse(restored['operator_signing_and_trust_restored'])
         self.assertEqual(list(self.work.iterdir()), [])
         with local_database(self.target) as connection:
             self.assertEqual(connection.execute('SELECT id,active,revoked_at_unix FROM tenant_tokens ORDER BY id').fetchall(),
                              [('retained', 1, None), ('revoked', 0, 2)])
             self.assertEqual(connection.execute("SELECT seq FROM sqlite_sequence WHERE name='tenant_audit'").fetchone(), (999,))
+            self.assertEqual(connection.execute(
+                "SELECT id,actor_id,operation,target_id,outcome FROM operator_audit_events"
+            ).fetchall(), [(321, 'admin_test', 'agent.rotate', 'edge-1', 'committed')])
+            self.assertEqual(connection.execute(
+                "SELECT seq FROM sqlite_sequence WHERE name='operator_audit_events'"
+            ).fetchone(), (456,))
             connection.execute("INSERT INTO tenant_audit(tenant_id,created_at_unix,path,outcome,status_code,latency_ms) "
                                "VALUES ('tenant_a',1,'/after','allowed',200,1)")
             self.assertEqual(connection.execute('SELECT id FROM tenant_audit').fetchone(), (1000,))
@@ -164,7 +179,7 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(value['status'], 'passed')
             self.assertEqual(value['phase'], arguments[0])
             self.assertEqual(value['backend'], 'sqlite')
-            self.assertEqual(value['tables_verified'], 43)
+            self.assertEqual(value['tables_verified'], 44)
             self.assertTrue(value['plaintext_temporary_cleaned'])
             self.assertFalse(value['operator_signing_and_trust_restored'])
             self.assertGreaterEqual(value['duration_seconds'], 0)
@@ -305,7 +320,7 @@ class RecoveryTests(unittest.TestCase):
             connection.execute('DROP TABLE managed_agent_revisions')
             connection.execute('DROP TABLE managed_agent_enrollments')
         state = recovery.inspect_sqlite(self.source)
-        self.assertEqual(len(state['tables']), 40)
+        self.assertEqual(len(state['tables']), 41)
         with local_database(self.source) as connection:
             connection.executescript(native_sqlite_schema())
             connection.execute('DROP TABLE managed_agent_deployments')
@@ -319,7 +334,7 @@ class RecoveryTests(unittest.TestCase):
             connection.execute("INSERT INTO managed_agent_groups VALUES ('tenant_a','legacy','Legacy',100)")
             connection.execute("ALTER TABLE managed_group_rollouts ADD COLUMN initial_sequences_json TEXT NOT NULL DEFAULT '{}'")
         state = recovery.inspect_sqlite(self.source)
-        self.assertEqual(len(state['tables']), 47)
+        self.assertEqual(len(state['tables']), 48)
         self.assertEqual(state['tables']['managed_agent_groups']['rows'][0][1], ['text', 'legacy'])
 
     def test_populated_group_recovery_control(self):
@@ -331,7 +346,7 @@ class RecoveryTests(unittest.TestCase):
             connection.execute("INSERT INTO managed_group_revisions VALUES ('tenant_a','grp_1','v1','default: allow\\n','sha_v1',100)")
             connection.execute("INSERT INTO managed_group_rollouts (tenant_id,group_id,rollout_id,revision,policy_sha256,issuer_key_id,phase,pilot_agents_json,standard_agents_json,active_deployments_json,previous_revisions_json,failure_reason,created_at_unix,updated_at_unix) VALUES ('tenant_a','grp_1','r_1','v1','sha_v1',NULL,'completed','[]','[]','{}','{}',NULL,100,100)")
         state = recovery.inspect_sqlite(self.source)
-        self.assertEqual(len(state['tables']), 47)
+        self.assertEqual(len(state['tables']), 48)
         self.assertEqual(state['tables']['managed_agent_groups']['rows'],
                          [[['text', 'tenant_a'], ['text', 'grp_1'], ['text', 'Group 1'], ['integer', 100]]])
         with local_database(self.source) as connection:
@@ -342,7 +357,7 @@ class RecoveryTests(unittest.TestCase):
     def test_postgres_alias_and_populated_guards_precede_restore_executor(self):
         # Genuine age archive decoding plus the actual production guard ordering.
         recipient = self.age_identity()
-        state = {'backend': 'postgres', 'schema_version':30,
+        state = {'backend': 'postgres', 'schema_version': recovery.POSTGRES_SCHEMA_VERSION,
                  'schema':recovery.inventory().get('postgres_schema'),
                  'tables': {name: [] for name in recovery.inventory()['postgres_tables']},
                  'sequences': {name: {'last_value':1,'is_called':False}

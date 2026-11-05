@@ -8,6 +8,7 @@
 //! storage transaction (SQLite) or tenant lease (PostgreSQL) that issues the first wave, and refuses
 //! with zero deployments if anything differs. The pure rules live here once; each backend only gathers
 //! the facts, so SQLite and PostgreSQL cannot drift apart.
+use super::operator_audit::{AuditFact, AuditOperation};
 use std::collections::BTreeMap;
 
 use anyhow::{ensure, Context, Result};
@@ -632,6 +633,11 @@ impl TenantStore {
             consumed == 1,
             ConfirmationRefused(ConfirmationFailure::Invalid)
         );
+        self.audit_committed(
+            &tx,
+            tenant,
+            AuditFact::rollout(AuditOperation::RolloutStart, &rollout),
+        )?;
         tx.commit()?;
         Ok(GuardedStart {
             rollout,

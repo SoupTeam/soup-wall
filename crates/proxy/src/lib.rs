@@ -24,6 +24,7 @@ pub mod oidc;
 pub mod oidc_auth;
 pub mod oidc_token;
 pub mod openai;
+mod operator_audit_api;
 pub mod pipeline;
 pub mod rate_limit;
 pub mod redis_limits;
@@ -213,6 +214,10 @@ pub fn app(state: Shared) -> Router {
                 get(heartbeat_api::status),
             )
             .route(
+                "/admin/v1/tenants/:tenant_id/agent-fleet-detail",
+                get(fleet_api::selected_detail),
+            )
+            .route(
                 "/admin/v1/tenants/:tenant_id/agent-triage",
                 get(fleet_api::triage),
             )
@@ -227,6 +232,18 @@ pub fn app(state: Shared) -> Router {
             .route(
                 "/admin/v1/tenants/:tenant_id/agents/:agent_id/credential-rotations",
                 post(managed_agent_api::rotate_credential),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/credential-rotations",
+                post(managed_agent_api::rotate_selected_credential),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/enrollment",
+                get(managed_agent_api::selected_enrollment),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/revoke",
+                post(managed_agent_api::revoke_selected_agent),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions",
@@ -383,6 +400,10 @@ pub fn app(state: Shared) -> Router {
             .route(
                 "/admin/v1/tenants/:tenant_id/webhook-deliveries",
                 get(admin::list_webhook_deliveries),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/operator-audit",
+                get(operator_audit_api::history),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/audit",

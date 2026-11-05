@@ -41,12 +41,17 @@ read, makes the panel read-only until you reconnect.
    - writes into a fresh exclusive `mktemp` file in that directory (never a
      fixed staging name), checks the 52-byte `sw_agent_` format and renames it
      into place (`mv -T`), so the file is `0600` without a newline.
-4. Start the existing daemon (`agentfw serve`) with `SOUP_MANAGED_AGENT_TOKEN_FILE`,
-   the tenant and Agent ID, the pinned issuer key and, for a private CA,
-   `SOUP_MANAGED_AGENT_TLS_CA_FILE`. The panel shows the exact command with
-   these non-secret values filled in. Use the token **file**: only file mode can
-   reload a rotated credential without restart.
-5. Deploy an approved policy. The Agent fleet shows its applied acknowledgement.
+4. Open **Connection setup** for the Agent. Enter the Console origin reachable
+   from the installed Linux Agent and choose explicit private-CA handling when
+   needed. Independently provision and verify the issuer keyring. Follow the
+   displayed `managed-console preview` and `apply` commands with identical
+   options and the exact preview digest. The [installed connection
+   guide](INSTALLED_MANAGED_CONSOLE.md) covers private files and service lifecycle.
+5. Start the Agent through its installed lifecycle, inspect the authenticated
+   running connection, and open its policy panel to approve and deploy a signed
+   policy. Refresh connection evidence and match the application sequence,
+   revision and digest. Verify protection on the Agent host. A fetched bundle
+   is shown separately from its authenticated application acknowledgement.
 
 If the credential is lost before it is stored, the Console cannot show it
 again. Rotate the credential to issue a new one.
@@ -56,8 +61,10 @@ again. Rotate the credential to issue a new one.
 **Rotate credential** asks you to type the Agent ID. The browser generates a
 fresh random credential and operation ID in memory and sends one request with
 the current generation. On success the new credential is shown once; run the
-displayed install command with `SOUP_MANAGED_AGENT_TOKEN_FILE` set to the
-Agent's token file. It applies the same refusals and replaces the file only by
+displayed install command. For an existing connection, read
+`settings.credential_file` with `agentfw managed-console inspect` and set the
+shell variable `AGENT_CREDENTIAL_FILE` to that absolute path when it differs
+from the default. The installer applies the same refusals and replaces the file only by
 an atomic rename. The running daemon re-reads the file before its next fetch. The old credential is
 refused from the moment the server commits.
 
@@ -75,6 +82,9 @@ final for that Agent ID.
 If a change gets no clear answer (network loss, timeout, server error), the
 panel never resends on its own. It reads the server's enrollment records once
 and tells you what it found; all other changes stay disabled meanwhile.
+Each enrollment request has a 20-second deadline, including reading its
+response body. A timeout leaves a mutation's outcome uncertain and enters
+the same reconciliation flow.
 
 - **Enrollment** recorded without the credential reaching you: rotate to issue
   a new one (or revoke). Not recorded: you may enroll again.
@@ -100,4 +110,5 @@ python3 -B scripts/console-enrollment-acceptance.py --no-build --backend postgre
 The PostgreSQL run needs local PostgreSQL server binaries (`initdb`, `pg_ctl`,
 `createdb`; `--pg-bin DIR`) and an ordinary user; it creates a disposable TLS
 cluster. CI runs both in the Agent fleet workflow. Evidence:
-[2026-10-31](evidence/CONSOLE_AGENT_ENROLLMENT_2026-10-31.md).
+[original environment-based journey](evidence/CONSOLE_AGENT_ENROLLMENT_2026-10-31.md)
+and [installed connection and operator audit](evidence/sou-233-234-console-enrollment-operator-audit/README.md).

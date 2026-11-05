@@ -9,10 +9,12 @@ Optional: pip install playwright; python -m playwright install chromium.
 """
 import importlib.util
 import json
+from urllib.parse import parse_qs, urlsplit
 import os
 from pathlib import Path
 import re
 import shutil
+import sys
 import stat
 import subprocess
 import tempfile
@@ -29,9 +31,28 @@ assert len(SYNTHETIC) == 52
 def page_html():
     html = (SRC / "admin_dashboard.html").read_text(encoding="utf-8")
     for marker, name in (("FLEET_PANEL", "fleet_panel.js"), ("ROLLOUT_PANEL", "rollout_panel.js"), ("SINGLE_AGENT_POLICY", "single_agent_policy.js"),
-                         ("ENROLLMENT_PANEL", "enrollment_panel.js"), ("AGENT_HISTORY", "agent_history.js"), ("FLEET_TRIAGE", "fleet_triage.js"), ("AGENT_HEARTBEAT", "heartbeat_panel.js")):
+                         ("ENROLLMENT_PANEL", "enrollment_panel.js"), ("AGENT_HISTORY", "agent_history.js"), ("FLEET_TRIAGE", "fleet_triage.js"), ("AGENT_HEARTBEAT", "heartbeat_panel.js"), ("OPERATOR_AUDIT", "operator_audit_panel.js")):
         html = html.replace(f"/* {marker} */", (SRC / name).read_text(encoding="utf-8"))
     return html
+
+
+@unittest.skipUnless(os.name == "posix", "Unix private file contract")
+class EnrollmentFixturePrivateFiles(unittest.TestCase):
+    def test_native_driver_publishes_private_trust_and_replaces_it_atomically(self):
+        file = SRC.parents[2] / "scripts/console-enrollment-acceptance.py"
+        spec = importlib.util.spec_from_file_location("enrollment_native_fixture", file)
+        driver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(driver)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "trust.json"
+            driver.write_private(path, '{"issuers":[]}')
+            first = path.stat().st_ino
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            driver.write_private(path, '{"issuers":["owned replacement"]}')
+            self.assertEqual(json.loads(path.read_text()), {"issuers": ["owned replacement"]})
+            self.assertNotEqual(path.stat().st_ino, first)
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            self.assertFalse(path.with_suffix(".pending").exists())
 
 
 @unittest.skipUnless(AVAILABLE, "optional Playwright browser fixture dependency unavailable")
@@ -105,6 +126,10 @@ class EnrollmentPanelBrowserTests(unittest.TestCase):
             self.json(route, None)
         elif path.endswith(("/tokens", "/audit", "/groups")):
             self.json(route, [])
+        elif request.method == "GET" and path.endswith("/agents/enrollment"):
+            selected = parse_qs(urlsplit(request.url).query)["agent_id"][0]
+            row = next((a for a in self.agents[path.split("/")[4]] if a["agent_id"] == selected), None)
+            self.json(route, row if row else {"error": "not found"}, 200 if row else 404)
         elif request.method == "GET" and path.endswith("/agents"):
             self.json(route, self.agents[path.split("/")[4]])
         else:
@@ -147,7 +172,7 @@ class EnrollmentPanelBrowserTests(unittest.TestCase):
                 self.open()
                 self.assertIn("edge-1", self.page.locator("#enroll-list").inner_text())
                 self.assertEqual(self.page.locator("#enroll-panel .owner-action:visible").count(), 0)
-                self.assertEqual(self.page.locator("#enroll-list button").count(), 0)
+                self.assertEqual(self.page.locator("#enroll-list .enroll-mutation").count(), 0)
                 self.assertEqual(self.posts, [])
 
     def test_enrollment_shows_a_one_time_secret_and_clears_it(self):
@@ -158,13 +183,18 @@ class EnrollmentPanelBrowserTests(unittest.TestCase):
         self.page.keyboard.press("Enter")
         self.wait_status("edge-2 enrolled")
         self.assertEqual(self.page.locator("#enroll-secret-value").inner_text(), SYNTHETIC)
-        self.page.wait_for_function("() => document.getElementById('enroll-secret-steps').textContent.includes('synthetic-issuer')")
-        steps = self.page.locator("#enroll-secret-steps").inner_text()
-        for fragment in ("SOUP_MANAGED_AGENT_TENANT=tenant-a", "SOUP_MANAGED_AGENT_ID=edge-2", "SOUP_MANAGED_AGENT_TOKEN_FILE",
-                         "agentfw serve", "cannot be shown again"):
-            self.assertIn(fragment, steps)
-        self.assertNotIn(SYNTHETIC, steps)
+        self.page.wait_for_function("() => document.getElementById('enroll-connection-issuer').textContent.includes('synthetic-issuer')")
         self.assertEqual(self.page.evaluate("document.activeElement.id"), "enroll-secret-copy")
+        self.page.locator("#enroll-console-origin").fill("https://console.example.test/")
+        self.page.locator("#enroll-private-ca").check()
+        steps = self.page.locator("#enroll-connection-steps").inner_text()
+        for fragment in ("--tenant 'tenant-a'", "--agent 'edge-2'", "--credential-file",
+                         "--ca-file", "agentfw managed-console preview", "agentfw managed-console apply",
+                         "agentfw managed-console verify", "agentfw lifecycle start", "independently verify"):
+            self.assertIn(fragment, steps)
+        self.assertNotIn("agentfw serve", steps)
+        self.assertIn("cannot be shown again", self.page.locator("#enroll-secret-steps").inner_text())
+        self.assertNotIn(SYNTHETIC, steps)
         self.assertEqual(self.enabled_mutations(), 0)
         # Optional public evidence: only this synthetic credential is ever captured.
         if os.environ.get("ENROLLMENT_SCREENSHOTS"):
@@ -219,13 +249,16 @@ class EnrollmentPanelBrowserTests(unittest.TestCase):
             route.abort("failed")
 
         self.overrides[("POST", f"/admin/v1/tenants/{TENANT}/agents")] = lost
+        # The new ID need not fit in the bounded inventory. Reconciliation
+        # uses the exact enrollment read, leaving it available for rotation.
+        self.overrides[("GET", f"/admin/v1/tenants/{TENANT}/agents")] = (200, [self.row("edge-1", 1)])
         self.open()
         self.page.locator("#enroll-agent-id").fill("edge-2")
         self.page.locator("#enroll-form button").click()
         self.wait_status("its one-time credential did not reach this browser")
         self.assertEqual(len(self.posts), 1)
         self.assertFalse(self.page.locator("#enroll-secret").is_visible())
-        self.assertIn("edge-2", self.page.locator("#enroll-list").inner_text())
+        self.assertTrue(self.page.get_by_role("button", name="Rotate credential for edge-2").is_enabled())
 
     def test_rotation_sends_a_fresh_pinned_request_and_shows_the_new_credential_once(self):
         def rotate(route):
@@ -291,13 +324,45 @@ class EnrollmentPanelBrowserTests(unittest.TestCase):
               if (config.error === 'AbortError') throw new DOMException('Owned response loss', 'AbortError');
               throw new TypeError('Owned response loss');
             }
-            if (config.reconcile && committed && !readAborted && !args[1]?.method && url.endsWith('/agents')) {
+            if (config.reconcile && committed && !readAborted && !args[1]?.method && url.includes('/agents/enrollment?')) {
               readAborted = true; await response.text();
               throw new DOMException('Owned inventory response loss', 'AbortError');
             }
             return response;
           };
         })();""".replace("CONFIG", config))
+
+    def test_stalled_committed_rotation_has_a_deadline_and_keeps_the_same_intent(self):
+        path = f"/admin/v1/tenants/{TENANT}/agents/edge-1/credential-rotations"
+        self.overrides[("POST", path)] = self.committed_rotation
+        self.page.add_init_script("""(() => {
+          const original = window.fetch;
+          let held = false;
+          window.fetch = async (...args) => {
+            const response = await original(...args);
+            if (!held && args[1]?.method === 'POST' && String(args[0]).endsWith('/credential-rotations')) {
+              held = true; await response.text();
+              response.text = () => new Promise(() => {});
+              window.fixtureBodyHeld = true;
+            }
+            return response;
+          };
+        })();""")
+        self.page.clock.install()
+        self.open()
+        self.page.get_by_role("button", name="Rotate credential for edge-1").click()
+        self.confirm("edge-1")
+        self.page.wait_for_function("() => window.fixtureBodyHeld === true")
+        self.page.clock.fast_forward(20_001)
+        self.page.wait_for_function("() => document.getElementById('enroll-status').textContent.includes('Confirm with the same request')", timeout=1500)
+        self.assertFalse(self.page.locator("#enroll-secret").is_visible())
+        self.assertEqual(self.enabled_mutations(), 0)
+        self.assertEqual(len(self.rotations()), 1)
+        self.page.get_by_role("button", name="Confirm with the same request").click()
+        self.wait_status("this exact request was already committed")
+        first, second = self.rotations()
+        self.assertEqual(first, second)
+        self.assertEqual(self.page.locator("#enroll-secret-value").inner_text(), first["replacement_token"])
 
     def test_body_abort_after_enrollment_reconciles_without_resending(self):
         self.overrides[("POST", f"/admin/v1/tenants/{TENANT}/agents")] = self.enroll_ok()
@@ -407,6 +472,7 @@ class EnrollmentPanelBrowserTests(unittest.TestCase):
                 self.assertEqual(self.enabled_mutations(), 0)
                 self.assertFalse(self.page.locator("#enroll-secret").is_visible())
         self.overrides[("GET", f"/admin/v1/tenants/{TENANT}/agents")] = (503, {"error": "Agent inventory unavailable"})
+        self.overrides[("GET", f"/admin/v1/tenants/{TENANT}/agents/enrollment")] = (503, {"error": "Agent enrollment unavailable"})
         self.open_unavailable()
 
     def open_unavailable(self):
@@ -462,7 +528,7 @@ class EnrollmentPanelBrowserTests(unittest.TestCase):
         self.assertNotIn("umask", enroll + rotate_command)
         return enroll, rotate_command
 
-    @unittest.skipUnless(shutil.which("bash") and shutil.which("mktemp") and shutil.which("find"), "POSIX tools needed")
+    @unittest.skipUnless(sys.platform.startswith("linux") and shutil.which("bash"), "Linux GNU installer tools needed")
     def test_displayed_installer_is_private_exclusive_and_refuses_unsafe_targets(self):
         enroll, rotate_command = self.displayed_installers()
         token = SYNTHETIC
@@ -520,13 +586,14 @@ class EnrollmentPanelBrowserTests(unittest.TestCase):
                 self.assertEqual(list((cases["invalid"] / ".agentfw").iterdir()), [])
                 # Rotation replaces the configured private file atomically and
                 # refuses when the token file is not configured.
-                configured = {"SOUP_MANAGED_AGENT_TOKEN_FILE": str(target)}
+                configured = {"AGENT_CREDENTIAL_FILE": str(target)}
                 newer = "sw_agent_" + "N" * 43
                 self.assertEqual(run(rotate_command, home, shell, data=newer, extra=configured).returncode, 0)
                 self.assertEqual(target.read_bytes(), newer.encode())
                 self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
-                self.assertNotEqual(run(rotate_command, home, shell, data=newer).returncode, 0)
-                linked = {"SOUP_MANAGED_AGENT_TOKEN_FILE": str(cases["link"] / ".agentfw/enrollment-token")}
+                self.assertNotEqual(run(rotate_command, home, shell, data=newer + "extra").returncode, 0)
+                self.assertEqual(target.read_bytes(), newer.encode())
+                linked = {"AGENT_CREDENTIAL_FILE": str(cases["link"] / ".agentfw/enrollment-token")}
                 self.assertNotEqual(run(rotate_command, cases["link"], shell, extra=linked).returncode, 0)
                 self.assertEqual(victim.read_text(), "owned other file\n")
 
@@ -540,6 +607,30 @@ class EnrollmentPanelBrowserTests(unittest.TestCase):
         self.page.locator("#unlock").wait_for(state="visible")
         self.assertFalse(self.page.evaluate(f"document.documentElement.outerHTML.includes('{SYNTHETIC}')"))
         self.assertEqual(self.page.locator("#admin-token").input_value(), "")
+
+    def test_operator_audit_refuses_cross_tenant_page_and_clears_on_switch(self):
+        path = f"/admin/v1/tenants/{TENANT}/operator-audit"
+        events = [{
+            "event_id": "7", "tenant_id": TENANT, "received_at_unix": 1800000000,
+            "actor_kind": "admin", "actor_id": "admin-fixture", "operation": "agent.rotate",
+            "target_kind": "agent", "target_id": "edge-1", "outcome": "committed",
+            "source_ref": None, "source_sequence": "2", "source_sha256": None,
+        }]
+        valid = {"contract_version": "sw-operator-audit/1", "tenant_id": TENANT,
+                 "events": events, "observed_at_unix": 1800000000, "next_before": TENANT + "~7"}
+        self.overrides[("GET", path)] = (200, valid)
+        self.open()
+        self.page.locator("#operator-audit-load").click()
+        self.page.locator("#operator-audit-rows").get_by_text("agent.rotate").wait_for()
+        self.assertTrue(self.page.locator("#operator-audit-download").is_enabled())
+        self.overrides[("GET", path)] = (200, {**valid, "events": [{**events[0], "tenant_id": OTHER}]})
+        self.page.locator("#operator-audit-next").click()
+        self.page.get_by_text("Operator audit unavailable.").wait_for()
+        self.assertTrue(self.page.locator("#operator-audit-download").is_disabled())
+        self.assertEqual(self.page.locator("#operator-audit-rows tr").count(), 0)
+        self.page.locator("#tenant-list button").filter(has_text="Beta").click()
+        self.assertTrue(self.page.locator("#operator-audit-download").is_disabled())
+        self.assertNotIn("admin-fixture", self.page.locator("#operator-audit").inner_text())
 
     def test_narrow_layout_keeps_controls_reachable(self):
         self.page.set_viewport_size({"width": 390, "height": 900})
