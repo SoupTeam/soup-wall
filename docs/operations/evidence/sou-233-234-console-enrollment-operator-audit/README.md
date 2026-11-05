@@ -56,3 +56,18 @@ checks the accepted schema and preserves audit rows and sequence state.
 
 Operator instructions: [installed connection](../../INSTALLED_MANAGED_CONSOLE.md)
 and [operator audit](../../CONSOLE_OPERATOR_AUDIT.md).
+
+## Linux results
+
+The [encrypted recovery run](https://github.com/SoupTeam/soup-wall/actions/runs/42070311455)
+passed 74 SQLite and 88 PostgreSQL controls on clean runtime
+`29bf830a7fbb2c4da067bf484b338bb12a7eaefc`. All 343 input hashes in each
+report were verified against Git. The artifact SHA-256 and ZIP CRC also
+matched. Retained reports and verification are in [recovery](recovery/run.json).
+
+The [first enrollment attempt](https://github.com/SoupTeam/soup-wall/actions/runs/42070305185)
+stopped before connection setup because the fixture selected its private file
+writer from the wrong helper module. Both failed reports are retained under
+[attempt-1](attempt-1/run.json), with the original runtime and verified input
+hashes. The corrected driver imports the existing credential writer and its
+regression checks private atomic replacement before the next Linux run.

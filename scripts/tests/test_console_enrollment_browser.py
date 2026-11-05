@@ -36,6 +36,24 @@ def page_html():
     return html
 
 
+class EnrollmentFixturePrivateFiles(unittest.TestCase):
+    def test_native_driver_publishes_private_trust_and_replaces_it_atomically(self):
+        file = SRC.parents[2] / "scripts/console-enrollment-acceptance.py"
+        spec = importlib.util.spec_from_file_location("enrollment_native_fixture", file)
+        driver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(driver)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "trust.json"
+            driver.write_private(path, '{"issuers":[]}')
+            first = path.stat().st_ino
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            driver.write_private(path, '{"issuers":["owned replacement"]}')
+            self.assertEqual(json.loads(path.read_text()), {"issuers": ["owned replacement"]})
+            self.assertNotEqual(path.stat().st_ino, first)
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            self.assertFalse(path.with_suffix(".pending").exists())
+
+
 @unittest.skipUnless(AVAILABLE, "optional Playwright browser fixture dependency unavailable")
 class EnrollmentPanelBrowserTests(unittest.TestCase):
     @classmethod

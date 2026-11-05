@@ -41,6 +41,7 @@ def module(name, file):
 D = module("enrollment_managed_helpers", "managed-policy-demo.py")
 EDGE = module("enrollment_rollout_edge", "console-rollout-acceptance.py")
 AUDIT = module("operator_audit_controls", "console_operator_audit_controls.py")
+write_private = module("enrollment_private_files", "managed-credential-rotation-demo.py").replace_secret
 
 
 def sha(data):
@@ -110,6 +111,7 @@ def main():
     source_inputs = {}
     fixtures = {"scripts/console-enrollment-acceptance.py", "scripts/console_operator_audit_controls.py",
                 "scripts/console-rollout-acceptance.py", "scripts/managed-policy-demo.py",
+                "scripts/managed-credential-rotation-demo.py",
                 "scripts/tests/test_console_enrollment_browser.py", ".github/workflows/agent-fleet.yml",
                 "Cargo.toml", "Cargo.lock", "rust-toolchain.toml"}
     for name in subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True).splitlines():
@@ -354,7 +356,7 @@ def main():
                 # 2. Run the exact preview/apply commands shown by Console.
                 # A queued signed policy forces issuer validation during setup.
                 first_deployment = deploy("r1", "deny")
-                D.replace_secret(trust_file, json.dumps({**keyring, "issuers": [
+                write_private(trust_file, json.dumps({**keyring, "issuers": [
                     {**keyring["issuers"][0], "public_key_hex": "01" * 32}]}))
                 other_ca_key = temp / "wrong-ca.key"
                 subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
@@ -363,10 +365,10 @@ def main():
                 ca_file.chmod(0o600)
                 shell(apply.replace("PREVIEW_DIGEST", shell(preview)["confirmation"]), expected=False)
                 check("incorrect-ca-preserves-absent-selector", not selector.exists())
-                D.replace_secret(ca_file, ca.read_text())
+                write_private(ca_file, ca.read_text())
                 shell(apply.replace("PREVIEW_DIGEST", shell(preview)["confirmation"]), expected=False)
                 check("incorrect-issuer-preserves-absent-selector", not selector.exists())
-                D.replace_secret(trust_file, json.dumps(keyring))
+                write_private(trust_file, json.dumps(keyring))
                 pending = shell(apply.replace("PREVIEW_DIGEST", shell(preview)["confirmation"]))
                 check("corrected-setup-configures-without-applying",
                       pending["status"] == "committed" and managed("inspect")["runtime_authenticated"] is False)
@@ -579,7 +581,7 @@ def main():
 
                 # 7. Guarded disconnect retains the last signed policy and stops sync.
                 shell("agentfw lifecycle stop")
-                D.replace_secret(profile / "user-note.txt", "owned data survives disconnect")
+                write_private(profile / "user-note.txt", "owned data survives disconnect")
                 retained = {p.name: sha(p.read_bytes()) for p in profile.iterdir()
                             if p.is_file() and p.name != "managed-console.json"}
                 disconnect = managed("disconnect-preview")["confirmation"]
