@@ -1035,15 +1035,22 @@ def write_private(directory: Path, name: str, data: bytes) -> None:
         raise
 
 
-def main(argv: list[str] | None = None) -> int:
+def parser(installed=False) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", required=True, help="full clean candidate commit SHA")
     parser.add_argument("--evidence-dir", required=True, type=Path)
-    parser.add_argument("--index", required=True, type=Path)
-    parser.add_argument("--roadmap", required=True, type=Path)
+    root = Path(__file__).resolve().parents[1]
+    parser.add_argument("--index", required=not installed, type=Path,
+                        default=root / "docs/operations/roadmap-support-index.json" if installed else None)
+    parser.add_argument("--roadmap", required=not installed, type=Path,
+                        default=root / "docs/ROADMAP.md" if installed else None)
     parser.add_argument("--output", required=True, type=Path, help="new private output directory")
     parser.add_argument("--decisions", type=Path, help="optional, explicit operator decision JSON")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None, *, installed=False) -> int:
+    args = parser(installed).parse_args(argv)
     try:
         source(args.source, "target source")
         index = validate_index(load_json(args.index, MAX_INDEX)[0])

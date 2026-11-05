@@ -17,6 +17,10 @@ ALLOWED_READER = None
 
 
 def effects(parts):
+    if parts == ['demo']:
+        return 'launch_and_provider_only_with_run'
+    if parts == ['roadmap-support']:
+        return 'private_report_export_requires_explicit_output'
     if parts[:1] == ['edit-session']:
         if parts[1:] in (['preview'], ['status'], ['inventory'], ['review'], ['ask', 'list']):
             return 'read_only'
