@@ -94,7 +94,7 @@ class ImpactTests(unittest.TestCase):
             if filename == "mcp-real-filesystem.yml":
                 auxiliary.update({"manual-long-session", "manual-native-result-profile",
                                   "sou193-provider-preflight", "sou205-proxy-preflight",
-                                  "manual-sou194-cache-exchange", "manual-sou216-process-probe"})
+                                  "manual-sou194-cache-exchange", "manual-sou216-process-probe", "manual-linux-candidate"})
             if filename == "mcp-real-git.yml":
                 auxiliary.update({"manual-installed-git-profiles", "sou182-raw-boundary"})
             if filename == "mcp-create-file.yml":
