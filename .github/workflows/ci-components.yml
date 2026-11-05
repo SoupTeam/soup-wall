@@ -3681,7 +3681,7 @@ jobs:
           set -euo pipefail
           asset="$RUNNER_TEMP/sou111-assets"
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_project_presets.py -v
-          python3 -B -m unittest scripts.tests.test_pilot_project_recovery scripts.tests.test_pilot_configuration_backup
+          python3 -B -m unittest scripts.tests.test_pilot_project_recovery scripts.tests.test_pilot_configuration_backup scripts.tests.test_pilot_prerequisite_cache_exchange
           focus=--project-presets-only
           if [ "${{ github.event.inputs.installed_focus }}" = project-recovery ]; then focus=--project-recovery-only; fi
           python3 -B scripts/qualify-installed-front-door.py --run "$focus" \
