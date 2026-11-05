@@ -75,6 +75,17 @@ the pinned dependencies before invoking the existing one-shot migration.
 `--no-deps`, then checks every actual container's image ID, project/service
 ownership, process/environment configuration, data-volume identity, isolation
 and health. Secret values are compared in memory and never included in reports.
+The frozen topology uses only the project's default bridge network. Before any
+startup, an existing network must match its exact name, full inspected ID and
+Compose project/default-network ownership. Each container must use that network
+by full name or ID, with exactly one matching attachment. Host networking,
+another container's network namespace, foreign networks and extra attachments
+are refused. The shipped template has no bridge driver options; existing options
+are refused too, including [gateway modes that expose unpublished ports](https://docs.docker.com/engine/network/port-publishing/#gateway-modes).
+Fresh projects may have no network yet. A container created but never started
+may have an empty attachment ID while its configured network identity is checked;
+running and stopped containers must retain the exact network ID. Transient
+endpoint addresses are not used as network identity.
 The actual Gateway bind source must equal the verified policy snapshot's full
 path. Windows Desktop drive/separator notation is normalized; an equal basename
 under another directory is insufficient. Added capabilities or privileged mode

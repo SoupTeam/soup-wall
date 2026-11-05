@@ -38,6 +38,7 @@ class FakeDocker:
         self.current_model = None
         self.modern = False
         self.descriptor_override = None
+        self.network = self.owned_network()
 
     def model(self):
         services = {name: {"image": row["image"], "platform": "linux/" + self.arch,
@@ -52,13 +53,21 @@ class FakeDocker:
             "volumes": [{"type": "bind", "read_only": True, "target": "/app/firewall.yaml",
                          "source": str(self.root / "deploy/production.firewall.yaml")}]}
         model = {"name": "owned-test", "services": services,
+                 "networks": {"default": {"name": "owned-test_default", "ipam": {}}},
                  "volumes": {n + "-data": {"name": "owned-test_" + n + "-data"} for n in ("postgres", "redis")}}
-        if self.model_override:
-            self.model_override(model)
         for service in services.values():
             service.setdefault("command", None)
             service.setdefault("entrypoint", None)
+            service["networks"] = {"default": None}
+        if self.model_override:
+            self.model_override(model)
         return model
+
+    @staticmethod
+    def owned_network():
+        return {"Id": "f" * 64, "Name": "owned-test_default", "Driver": "bridge", "Scope": "local",
+                "Options": {},
+                "Labels": {"com.docker.compose.project": "owned-test", "com.docker.compose.network": "default"}}
 
     @staticmethod
     def defaults(name):
@@ -97,8 +106,10 @@ class FakeDocker:
                        "Labels": {"com.docker.compose.project": "owned-test",
                                   "com.docker.compose.service": name,
                                   "com.docker.compose.oneoff": "False"}},
-            "State": {"Running": True, "Health": {"Status": "unhealthy" if self.unhealthy else "healthy"}},
+            "State": {"Running": True, "Status": "running", "Health": {"Status": "unhealthy" if self.unhealthy else "healthy"}},
+            "NetworkSettings": {"Networks": {"owned-test_default": {"NetworkID": (self.network or self.owned_network())["Id"]}}},
             "HostConfig": {"ReadonlyRootfs": name == "firewall", "CapDrop": ["ALL"] if name == "firewall" else [],
+                           "NetworkMode": "owned-test_default",
                            "SecurityOpt": ["no-new-privileges:true"] if name == "firewall" else [],
                            "PortBindings": {"8080/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8080"}]} if name == "firewall" else {}},
             "Mounts": ([{"Type": "bind", "Destination": "/app/firewall.yaml", "RW": False,
@@ -127,6 +138,10 @@ class FakeDocker:
             return json.dumps([actual])
         if args[:2] == ["container", "inspect"]:
             return json.dumps([next(row for row in self.containers.values() if row["Id"] == args[2])])
+        if args[:2] == ["network", "ls"]:
+            return json.dumps({"ID": self.network["Id"], "Name": self.network["Name"]}) if self.network else ""
+        if args[:2] == ["network", "inspect"]:
+            return json.dumps([self.network])
         if args[0] == "version":
             return json.dumps({"Os": "linux", "Arch": self.arch, "ApiVersion": "1.56" if self.modern else "1.43"})
         if args[-3:] == ["config", "--format", "json"]:
@@ -139,6 +154,8 @@ class FakeDocker:
             row = self.containers.get(args[-1])
             return row["Id"] + "\n" if row else ""
         if "up" in args:
+            if self.network is None:
+                self.network = self.owned_network()
             for name in ("postgres", "redis", "firewall"):
                 if name in args:
                     self.add_container(name)
@@ -164,7 +181,8 @@ class ProductionComposeControls(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(SOURCE / relative, target)
         self.env_file = self.root / "fixture.env"
-        self.env_file.write_text("TEST_PASSWORD=" + SECRET + "\n")
+        # FakeDocker supplies credential-shaped values only in memory.
+        self.env_file.touch()
         self.docker = FakeDocker(self.root)
 
     def closure(self, **kwargs):
@@ -177,6 +195,160 @@ class ProductionComposeControls(unittest.TestCase):
         self.assertEqual(self.docker.mutations(), [])
         self.assertNotIn(SECRET, json.dumps(report))
         self.assertNotIn("fixture.env", json.dumps(report))
+
+    def test_fixture_file_has_no_credentials_and_interpolation_value_stays_in_memory(self):
+        self.assertEqual(self.env_file.read_bytes(), b"")
+        self.assertEqual(self.docker.model()["services"]["firewall"]["environment"]["TEST_PASSWORD"], SECRET)
+
+    def test_fresh_project_can_check_and_start_without_an_existing_network(self):
+        self.docker.network = None
+        self.closure().execute("check")
+        self.assertEqual(self.docker.mutations(), [])
+        self.assertFalse(any(args[:2] == ["network", "inspect"] for args in self.docker.calls))
+        self.closure().execute("start")
+        self.assertIsNotNone(self.docker.network)
+
+    def test_network_name_substring_is_not_treated_as_the_expected_network(self):
+        self.docker.network["Name"] += "-unrelated"
+        self.closure().execute("check")
+        self.assertFalse(any(args[:2] == ["network", "inspect"] for args in self.docker.calls))
+
+    def test_actual_network_is_inspected_by_its_full_listed_id(self):
+        self.closure().execute("check")
+        inspections = [args for args in self.docker.calls if args[:2] == ["network", "inspect"]]
+        self.assertTrue(inspections)
+        self.assertTrue(all(args == ["network", "inspect", "f" * 64] for args in inspections))
+
+    def test_foreign_or_non_bridge_project_network_refuses_even_without_containers(self):
+        changes = (
+            ("Labels", {}),
+            ("Labels", {"com.docker.compose.project": "other", "com.docker.compose.network": "default"}),
+            ("Labels", {"com.docker.compose.project": "owned-test", "com.docker.compose.network": "other"}),
+            ("Driver", "host"), ("Scope", "swarm"), ("ConfigOnly", True),
+            ("Options", {"com.docker.network.bridge.gateway_mode_ipv4": "nat-unprotected"}),
+            ("Options", {"com.docker.network.bridge.gateway_mode_ipv6": "nat-unprotected"}),
+            ("Options", {"com.docker.network.bridge.trusted_host_interfaces": "eth0"}),
+            ("Options", []),
+        )
+        for action in ("check", "preflight", "migrate", "start"):
+            for field, value in changes:
+                with self.subTest(action=action, field=field, value=value):
+                    self.docker.network = self.docker.owned_network()
+                    self.docker.network[field] = value
+                    with self.assertRaisesRegex(MODULE.ClosureError, "project_network_identity_or_owner_mismatch"):
+                        self.closure().execute(action)
+                    self.assertEqual(self.docker.mutations(), [])
+
+    def test_empty_or_null_bridge_options_preserve_the_shipped_default(self):
+        for options in ({}, None):
+            with self.subTest(options=options):
+                self.docker.network["Options"] = options
+                self.closure().execute("check")
+
+    def test_network_lookup_failures_are_not_reinterpreted_as_absence(self):
+        original = self.docker.run
+        for operation in ("ls", "inspect"):
+            def unavailable(args, **kwargs):
+                if args[:2] == ["network", operation]:
+                    raise MODULE.ClosureError("docker_command_failed")
+                return original(args, **kwargs)
+            with self.subTest(operation=operation), patch.object(self.docker, "run", side_effect=unavailable):
+                with self.assertRaisesRegex(MODULE.ClosureError, "^docker_command_failed$"):
+                    self.closure().execute("start")
+                self.assertEqual(self.docker.mutations(), [])
+
+    def test_inspected_network_cannot_swap_its_listed_name_or_id(self):
+        original = self.docker.json
+        for field, value in (("Id", "e" * 64), ("Name", "unrelated")):
+            def swapped(args, **kwargs):
+                result = original(args, **kwargs)
+                if args[:2] == ["network", "inspect"]:
+                    result[0][field] = value
+                return result
+            with self.subTest(field=field), patch.object(self.docker, "json", side_effect=swapped):
+                with self.assertRaisesRegex(MODULE.ClosureError, "project_network_identity_or_owner_mismatch"):
+                    self.closure().execute("start")
+                self.assertEqual(self.docker.mutations(), [])
+
+    def test_container_network_mode_mismatches_refuse_before_any_startup(self):
+        modes = ("host", "container:" + "b" * 64, "bridge", "none", "unrelated_default", "f" * 12)
+        for name in ("postgres", "redis", "firewall"):
+            for action in ("check", "preflight", "migrate", "start"):
+                for mode in modes:
+                    with self.subTest(service=name, action=action, mode=mode):
+                        self.docker.containers.clear()
+                        self.docker.add_container(name)
+                        self.docker.containers[name]["HostConfig"]["NetworkMode"] = mode
+                        with self.assertRaisesRegex(MODULE.ClosureError, "container_project_network_mismatch"):
+                            self.closure().execute(action)
+                        self.assertEqual(self.docker.mutations(), [])
+
+    def test_container_attachment_set_and_full_network_id_must_match(self):
+        mismatches = ({}, {"unrelated": {"NetworkID": "f" * 64}},
+            {"owned-test_default": {"NetworkID": "e" * 64}},
+            {"owned-test_default": {"NetworkID": "f" * 12}},
+            {"owned-test_default": {"NetworkID": ""}},
+            {"owned-test_default": {"NetworkID": "f" * 64}, "unrelated": {"NetworkID": "e" * 64}})
+        for name in ("postgres", "redis", "firewall"):
+            for attached in mismatches:
+                with self.subTest(service=name, attached=attached):
+                    self.docker.containers.clear()
+                    self.docker.add_container(name)
+                    self.docker.containers[name]["NetworkSettings"]["Networks"] = attached
+                    with self.assertRaisesRegex(MODULE.ClosureError, "container_project_network_mismatch"):
+                        self.closure().execute("start")
+                    self.assertEqual(self.docker.mutations(), [])
+
+    def test_existing_container_requires_the_actual_project_network_to_exist(self):
+        self.docker.add_container("postgres")
+        self.docker.network = None
+        with self.assertRaisesRegex(MODULE.ClosureError, "container_project_network_mismatch"):
+            self.closure().execute("start")
+        self.assertEqual(self.docker.mutations(), [])
+
+    def test_project_network_name_and_full_id_preserve_container_lifecycle(self):
+        for status, identifier in (("created", ""), ("exited", "f" * 64), ("running", "f" * 64)):
+            for mode in ("owned-test_default", "f" * 64):
+                with self.subTest(status=status, mode=mode):
+                    self.docker.containers.clear()
+                    self.docker.add_container("postgres")
+                    row = self.docker.containers["postgres"]
+                    row["State"].update(Status=status, Running=status == "running")
+                    row["HostConfig"]["NetworkMode"] = mode
+                    row["NetworkSettings"]["Networks"]["owned-test_default"]["NetworkID"] = identifier
+                    self.closure().execute("check")
+                    self.closure().execute("start")
+
+    def test_empty_attachment_id_is_only_allowed_before_the_first_start(self):
+        for status, running in (("running", True), ("exited", False), ("created", True)):
+            with self.subTest(status=status, running=running):
+                self.docker.containers.clear()
+                self.docker.add_container("postgres")
+                row = self.docker.containers["postgres"]
+                row["State"].update(Status=status, Running=running)
+                row["NetworkSettings"]["Networks"]["owned-test_default"]["NetworkID"] = ""
+                with self.assertRaisesRegex(MODULE.ClosureError, "container_project_network_mismatch"):
+                    self.closure().execute("start")
+        self.assertEqual(self.docker.mutations(), [])
+
+    def test_rendered_project_or_service_network_override_refuses(self):
+        changes = (
+            lambda m: m["networks"]["default"].update(name="unrelated"),
+            lambda m: m["networks"]["default"].update(external=True),
+            lambda m: m["networks"]["default"].update(driver="host"),
+            lambda m: m["networks"]["default"].update(driver_opts={
+                "com.docker.network.bridge.gateway_mode_ipv4": "nat-unprotected"}),
+            lambda m: m["networks"].update(unrelated={"name": "unrelated"}),
+            lambda m: m["services"]["postgres"].update(network_mode="host"),
+            lambda m: m["services"]["redis"].update(network_mode="container:other"),
+            lambda m: m["services"]["firewall"].update(networks={"default": None, "unrelated": None}),
+        )
+        for change in changes:
+            with self.subTest(change=change):
+                self.docker.model_override = change
+                with self.assertRaisesRegex(MODULE.ClosureError, "compose_(project|service)_network_changed"):
+                    self.closure().execute("start")
+                self.assertEqual(self.docker.mutations(), [])
 
     def test_gateway_starts_only_after_verified_healthy_dependencies(self):
         self.closure().execute("start")

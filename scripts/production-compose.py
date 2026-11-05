@@ -318,6 +318,13 @@ class ProductionCompose:
     def _validate_model(self, model):
         if not isinstance(model, dict) or set(model.get("services", {})) != set(self.images):
             fail("unexpected_compose_services")
+        networks = model.get("networks")
+        default = networks.get("default") if isinstance(networks, dict) else None
+        if (not isinstance(default, dict) or set(networks) != {"default"}
+                or default.get("name") != self.project + "_default"
+                or default.get("external") or default.get("driver", "bridge") != "bridge"
+                or default.get("driver_opts")):
+            fail("compose_project_network_changed")
         for name, row in self.images.items():
             service = model["services"][name]
             if (service.get("image") != row["reference"]
@@ -326,6 +333,10 @@ class ProductionCompose:
                     or service.get("profiles") or service.get("container_name")
                     or service.get("privileged") or service.get("cap_add")):
                 fail("compose_image_or_execution_override")
+            if (service.get("network_mode") is not None
+                    or not isinstance(service.get("networks"), dict)
+                    or set(service["networks"]) != {"default"}):
+                fail("compose_service_network_changed")
         firewall = model["services"]["firewall"]
         ports = firewall.get("ports", [])
         if (firewall.get("read_only") is not True or firewall.get("cap_drop") != ["ALL"]
@@ -379,6 +390,9 @@ class ProductionCompose:
             self.configuration = None
 
     def verify_containers(self, names, *, required=True):
+        # Check a pre-existing project network even before its first container.
+        # Only a successful exact-name listing can establish genuine absence.
+        network = self.verify_network()
         for name in names:
             ids = self.compose(["ps", "--all", "--quiet", name]).split()
             if not ids and not required:
@@ -422,6 +436,7 @@ class ProductionCompose:
                     or config.get("Entrypoint") != entrypoint
                     or config.get("User", "") != service.get("user", defaults.get("User", ""))):
                 fail("container_process_or_environment_mismatch")
+            self._verify_container_network(row, network)
             self._verify_container_isolation(name, row)
             if required and (not row.get("State", {}).get("Running")
                     or row.get("State", {}).get("Health", {}).get("Status") != "healthy"):
@@ -436,6 +451,60 @@ class ProductionCompose:
         if len(result) != len(parsed):
             fail("duplicate_container_environment")
         return result
+
+    def verify_network(self):
+        expected = self.configuration["networks"]["default"]["name"]
+        listed = self.docker.run(["network", "ls", "--no-trunc", "--filter",
+                                  "name=" + expected, "--format", "{{json .}}"])
+        matches = []
+        for line in listed.splitlines():
+            row = decode(line)
+            if not isinstance(row, dict) or not isinstance(row.get("Name"), str):
+                fail("network_listing_invalid")
+            # Docker's name filter also matches substrings. Never inspect or
+            # accept a prefix/suffix collision as the expected project network.
+            if row["Name"] == expected:
+                matches.append(row.get("ID"))
+        if not matches:
+            return None
+        if (len(matches) != 1 or not isinstance(matches[0], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", matches[0])):
+            fail("network_listing_invalid")
+        actual = self.docker.json(["network", "inspect", matches[0]])
+        if not isinstance(actual, list) or len(actual) != 1 or not isinstance(actual[0], dict):
+            fail("network_inspection_incomplete")
+        row = actual[0]
+        labels = row.get("Labels")
+        options = row.get("Options")
+        if (row.get("Id") != matches[0] or row.get("Name") != expected
+                or row.get("Driver") != "bridge" or row.get("Scope") != "local"
+                or (options is not None and (not isinstance(options, dict) or options))
+                or row.get("ConfigOnly") or not isinstance(labels, dict)
+                or labels.get("com.docker.compose.project") != self.project
+                or labels.get("com.docker.compose.network") != "default"):
+            fail("project_network_identity_or_owner_mismatch")
+        return {"name": expected, "id": matches[0]}
+
+    @staticmethod
+    def _verify_container_network(container, network):
+        host = container.get("HostConfig")
+        settings = container.get("NetworkSettings")
+        attached = settings.get("Networks") if isinstance(settings, dict) else None
+        if (network is None or not isinstance(host, dict)
+                or not isinstance(host.get("NetworkMode"), str)
+                or host["NetworkMode"] not in {network["name"], network["id"]}
+                or not isinstance(attached, dict) or set(attached) != {network["name"]}
+                or not isinstance(attached[network["name"]], dict)):
+            fail("container_project_network_mismatch")
+        identifier = attached[network["name"]].get("NetworkID")
+        state = container.get("State", {})
+        # Docker records the configured network by name before a container's
+        # first start, but fills its immutable attachment ID only on start.
+        # Exited/restarted containers retain that ID; endpoint IP/ID may clear.
+        pending = (isinstance(state, dict) and state.get("Status") == "created"
+                   and state.get("Running") is False and identifier == "")
+        if identifier != network["id"] and not pending:
+            fail("container_project_network_mismatch")
 
     def _verify_container_isolation(self, name, container):
         host = container.get("HostConfig", {})
