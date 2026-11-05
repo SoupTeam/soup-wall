@@ -35,6 +35,37 @@ impl Consumer {
         owned_host_exited(&mut self.child)
     }
 
+    /// Withdraw the exact run's authority and await its existing namespace
+    /// cleanup before terminating the held recipient. Cleanup failure still
+    /// requires physical termination, but cannot yield a successful receipt.
+    pub(super) async fn stop_after_cleanup<F>(
+        &mut self,
+        expected: &Identity,
+        grace: Duration,
+        cleanup: &mut Option<F>,
+    ) -> Result<ExitStatus>
+    where
+        F: FnOnce() -> Result<()> + Send + 'static,
+    {
+        ensure!(
+            &self.identity == expected,
+            "analysis_consumer_generation_mismatch"
+        );
+        ensure!(!self.stop_spent, "analysis_consumer_stop_spent");
+        let confirmation = match cleanup.take() {
+            Some(waiter) => tokio::task::spawn_blocking(waiter)
+                .await
+                .context("selected-owner cleanup worker failed")
+                .and_then(|result| result),
+            None => Ok(()),
+        };
+        let stopped = self.stop(expected, grace).await;
+        // Do not skip physical cleanup when the daemon/namespace is lost.
+        let status = stopped?;
+        confirmation?;
+        Ok(status)
+    }
+
     /// Always target the held Child. Copied PID/generation claims cannot replace it.
     /// A failed attempt remains spent; it cannot produce a later success receipt.
     pub(super) async fn stop(
@@ -110,6 +141,62 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
         consumer
+    }
+
+    #[tokio::test]
+    async fn cleanup_precedes_stop_and_failure_or_panic_cannot_confirm() {
+        for failure in 0..3 {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("effect");
+            let mut child = running(&path).await;
+            let identity = child.identity();
+            let witness = path.clone();
+            let observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let observed_in_worker = observed.clone();
+            let mut cleanup = Some(move || {
+                // The held recipient must still be alive throughout withdrawal
+                // and namespace drain. Observe actual writes, not a PID flag.
+                let before = fs::metadata(&witness)?.len();
+                let deadline = std::time::Instant::now() + Duration::from_secs(2);
+                while fs::metadata(&witness)?.len() == before {
+                    ensure!(
+                        std::time::Instant::now() < deadline,
+                        "recipient stopped before cleanup"
+                    );
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                observed_in_worker.store(true, std::sync::atomic::Ordering::SeqCst);
+                match failure {
+                    1 => bail!("namespace cleanup unconfirmed"),
+                    2 => panic!("cleanup witness worker failure"),
+                    _ => Ok(()),
+                }
+            });
+            let mut wrong = identity.clone();
+            wrong.generation.push('x');
+            assert!(child
+                .stop_after_cleanup(&wrong, Duration::ZERO, &mut cleanup)
+                .await
+                .is_err());
+            assert!(cleanup.is_some(), "substitution must not spend cleanup");
+            let result = child
+                .stop_after_cleanup(&identity, Duration::ZERO, &mut cleanup)
+                .await;
+            assert_eq!(result.is_ok(), failure == 0);
+            assert!(observed.load(std::sync::atomic::Ordering::SeqCst));
+            assert!(cleanup.is_none());
+            assert!(
+                child.child.try_wait().unwrap().is_some(),
+                "failure still terminates the child"
+            );
+            let length = fs::metadata(&path).unwrap().len();
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            assert_eq!(fs::metadata(&path).unwrap().len(), length);
+            assert!(child
+                .stop_after_cleanup(&identity, Duration::ZERO, &mut cleanup)
+                .await
+                .is_err());
+        }
     }
 
     #[tokio::test]

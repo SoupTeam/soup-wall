@@ -1907,11 +1907,8 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         #[cfg(target_os = "linux")]
         if child_environment_ready.is_err() {
             let host_deadline_expired = tokio::time::Instant::now() >= deadline;
-            let stopped = child.stop(&consumer_identity, Duration::from_millis(200)).await;
+            let stopped = child.stop_after_cleanup(&consumer_identity, Duration::from_millis(200), &mut cleanup_waiter).await;
             host_stopped = stopped.is_ok();
-            if let Some(waiter) = cleanup_waiter.take() {
-                let _ = tokio::task::spawn_blocking(waiter).await;
-            }
             if host_deadline_expired {
                 bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
             }
@@ -1922,7 +1919,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
 
         loop {
             if tokio::time::Instant::now() >= deadline {
-                let stopped = child.stop(&consumer_identity, Duration::from_millis(200)).await;
+                let stopped = child.stop_after_cleanup(&consumer_identity, Duration::from_millis(200), &mut cleanup_waiter).await;
                 host_stopped = stopped.is_ok();
                 bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
             }
@@ -1932,20 +1929,11 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     // Every host exit must let enrolled owners acknowledge
                     // namespace cleanup before group TERM/KILL. Keep the leader
                     // unreaped so its process-group identity cannot be reused.
-                    let owner_confirmation = if let Some(waiter) = cleanup_waiter.take() {
-                        tokio::task::spawn_blocking(waiter)
-                            .await
-                            .context("selected-owner cleanup worker failed")
-                            .and_then(|result| result)
-                    } else {
-                        Ok(())
-                    };
-                    // A missing/failed acknowledgement never skips physical
-                    // cleanup, but cannot turn the terminal result into success.
-                    let result = child.stop(&consumer_identity, Duration::from_millis(50)).await;
+                    let result = child.stop_after_cleanup(
+                        &consumer_identity, Duration::from_millis(50), &mut cleanup_waiter
+                    ).await;
                     host_stopped = result.is_ok();
                     let status = result?;
-                    owner_confirmation?;
                     return Ok(status);
                 }
                 Ok(false) => {}
@@ -1957,7 +1945,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
 
             tokio::select! {
                 _ = tokio::time::sleep_until(deadline) => {
-                    let stopped = child.stop(&consumer_identity, Duration::from_millis(200)).await;
+                    let stopped = child.stop_after_cleanup(&consumer_identity, Duration::from_millis(200), &mut cleanup_waiter).await;
                     host_stopped = stopped.is_ok();
                     bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
                 }
@@ -1967,7 +1955,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     #[cfg(not(unix))]
                     let _ = tokio::signal::ctrl_c().await;
                 } => {
-                    let stopped = child.stop(&consumer_identity, Duration::from_millis(200)).await;
+                    let stopped = child.stop_after_cleanup(&consumer_identity, Duration::from_millis(200), &mut cleanup_waiter).await;
                     host_stopped = stopped.is_ok();
                     bail!("pilot host interrupted by SIGINT");
                 }
@@ -1978,14 +1966,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     futures_util::future::pending::<()>().await;
                 } => {
                     intercepted_term = true;
-                    if let Some(waiter) = cleanup_waiter.take() {
-                        // A native revoke wakes the enrolled collectors first.
-                        // Give their existing owners time to acknowledge the
-                        // whole namespace before host-group termination.
-                        // finish() independently checks the actual observations.
-                        let _ = tokio::task::spawn_blocking(waiter).await;
-                    }
-                    let stopped = child.stop(&consumer_identity, Duration::from_millis(200)).await;
+                    let stopped = child.stop_after_cleanup(&consumer_identity, Duration::from_millis(200), &mut cleanup_waiter).await;
                     host_stopped = stopped.is_ok();
                     bail!("pilot host terminated by SIGTERM");
                 }
@@ -1994,7 +1975,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                         match probe_daemon_liveness(&home_path, &current_token).await {
                             Ok(live_id) if live_id == initial_instance => {}
                             _ => {
-                                let stopped = child.stop(&consumer_identity, Duration::from_millis(200)).await;
+                                let stopped = child.stop_after_cleanup(&consumer_identity, Duration::from_millis(200), &mut cleanup_waiter).await;
                                 host_stopped = stopped.is_ok();
                                 bail!("daemon instance lost or restarted during pilot session");
                             }

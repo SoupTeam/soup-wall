@@ -307,3 +307,31 @@ gate. Control exit 0 means only that the 24 synthetic attacks were inspected and
 refused, not completion of SOU-218. Output directories must be new. Stdout/stderr
 and the declared inputs survive adapter failure. Registry/profile asset hashes
 are identity metadata only, never execution or trust evidence.
+
+
+### November 5 terminal cleanup ordering
+
+All held-consumer termination branches now invoke the existing exact-run
+`RunGuard::cleanup_waiter` before group termination: normal exit, timeout,
+SIGINT, SIGTERM, daemon loss/restart and provider-environment failure.
+Previously the cancellation branches could terminate first, and SIGTERM
+ignored a failed namespace acknowledgement. The shared `stop_after_cleanup`
+consumes the waiter once, checks recipient generation before withdrawal, and
+still terminates/reaps the held child if cleanup returns an error or panics.
+Neither failure can produce a successful stop confirmation for `RunGuard::finish`.
+The existing cleanup worker retains its bounded daemon requests and six-second
+namespace polling deadline; this does not introduce a new authority channel.
+
+Two focused Windows process tests passed (one test-only child entry is ignored
+in the parent runner and invoked explicitly by the witnesses). Actual file
+writes prove the child remains alive during cleanup and stops afterward,
+including cleanup failure and worker panic. Substitution cannot consume the
+cleanup waiter, and replay is refused. This is not Linux namespace confirmation:
+independent Linux execution is still required. The authenticated daemon/launcher
+consumer registration and restricted-recipient handoff remain unfinished;
+production purpose issuance/release stays unsupported and all six cases remain
+open.
+
+```sh
+cargo test --locked -p agentfw --lib pilot_launcher::consumer::tests
+```
