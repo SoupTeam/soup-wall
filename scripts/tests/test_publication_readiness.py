@@ -67,7 +67,7 @@ class PublicationReadinessTests(unittest.TestCase):
         payload = Path(self.external.name) / "candidate"
         payload.mkdir()
         candidate_fixture.populate(payload, self.fixture.m["candidate"]["commit"], self.binary,
-                                   self.fixture.m["candidate"]["tree"])
+                                   self.fixture.m["candidate"]["tree"], self.fixture.paths["git_launcher"].read_bytes())
         self.make_archive(archive, [(name[:-7] + "/" + path.name, path.read_bytes()) for path in payload.iterdir()])
         self.manifest = {"tag": self.tag, "checksums": [p.sha(archive.read_bytes()) + "  " + name]}
         self.manifest_path.write_bytes(encoded(self.manifest))
