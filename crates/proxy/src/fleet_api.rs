@@ -51,6 +51,24 @@ pub async fn detail(
     };
     result(store.fleet_detail(&tenant, &agent, q).await)
 }
+/// Reuse the tenant-scoped detail projection with a query selector so that
+/// valid dot Agent IDs are not normalized by a browser or reverse proxy.
+pub async fn selected_detail(
+    State(st): State<Shared>,
+    Path(tenant): Path<String>,
+    Query(selected): Query<crate::managed_agent_api::SelectedAgent>,
+) -> Response {
+    detail(
+        State(st),
+        Path((tenant, selected.agent_id)),
+        Query(FleetQuery {
+            limit: 1,
+            ..FleetQuery::default()
+        }),
+    )
+    .await
+}
+
 /// Cross-Agent triage overview: recorded problems, bounded counts and one
 /// keyset page. Same read authorization as the fleet inventory.
 pub async fn triage(

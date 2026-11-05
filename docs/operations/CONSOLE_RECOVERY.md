@@ -10,14 +10,21 @@ operator acceptance are required. No customer or default database is used by the
 
 The [versioned inventory](../../scripts/fixtures/console_recovery_inventory_v1.json)
 binds format 1 to accepted schema source `4f428e4b983111e5b2480e40d658628e3d198fe7`.
-PostgreSQL requires exactly migrations 1 through 30. SQLite has no native migration
+PostgreSQL requires exactly migrations 1 through 31. SQLite has no native migration
 version; the inventory binds its native table/column layouts, indexes, triggers and
 expected PRAGMA versions, including lazily created managed Agent tables when present.
 Unknown schemas require an explicit compatibility review, including future fleet tables.
 
+A pre-31 SQLite source can still be inventoried with no operator history.
+Archives bind the inventory used to create them. For a schema-30 archive,
+use the matching reviewed recovery tool and a separate target, then run the
+normal Console migration on that restored target. Recovery itself performs
+no schema upgrade or reconciliation.
+
 The archive contains every native table and sequence: tenants, principals, memberships,
 active/revoked credentials, approved policies, immutable Agent revisions, enrollment
-credential hashes, signed deployment sequence/status/acknowledgements, security events,
+credential hashes, signed deployment sequence/status/acknowledgements, operator audit events and their
+sequence, security events,
 webhook destinations, retry/lease ownership and usage/identity state. Comparison is
 private full-row and sequence equality; counts alone cannot pass recovery.
 

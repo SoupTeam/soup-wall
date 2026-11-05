@@ -6,11 +6,15 @@
 // never written to a URL, browser storage, the console log or an attribute.
 const enrollment = (() => {
   const ID = /^[A-Za-z0-9_.-]{1,128}$/;
-  let tenant = null, epoch = 0, controller = null, agents = [], issuer = null;
+  let tenant = null, epoch = 0, controller = null, agents = [];
+  let setup = null, setupRequest = null;
   let busy = false, blocked = "", pending = null, secret = null;
 
   const owner = () => currentAdmin?.role === "owner";
   const base = id => `/admin/v1/tenants/${encodeURIComponent(id)}/agents`;
+  const agentAction = (id, agent, action) => agent === "." || agent === ".."
+    ? `${base(id)}/${action}?${new URLSearchParams({agent_id: agent})}`
+    : `${base(id)}/${encodeURIComponent(agent)}/${action}`;
   const say = (text, kind = "note") => { const n = $("enroll-status"); n.textContent = text; n.className = kind; };
   const when = v => v == null ? "" : new Date(v * 1000).toLocaleString();
   // The shared helper rejects with `status` for HTTP errors; no status or a
@@ -31,8 +35,27 @@ const enrollment = (() => {
     if (stale(id, generation)) return null;
     if (!Array.isArray(value) || value.some(a => a.tenant_id !== id)) throw new Error("Agent inventory identity mismatch");
     agents = value;
+    if (setup && agents.some(a => a.agent_id === setup.agent && a.revoked_at_unix != null)) closeSetup();
     render();
     return value;
+  }
+
+  async function readEnrollment(id, agent, generation) {
+    try {
+      const row = await request(`${base(id)}/enrollment?${new URLSearchParams({agent_id: agent})}`,
+        {signal: controller.signal, cache: "no-store"});
+      if (stale(id, generation)) return null;
+      if (row?.tenant_id !== id || row?.agent_id !== agent || !Number.isSafeInteger(row.credential_generation))
+        throw new Error("Enrollment identity mismatch");
+      const index = agents.findIndex(a => a.agent_id === agent);
+      if (index < 0) agents.push(row); else agents[index] = row;
+      if (setup?.agent === agent && row.revoked_at_unix != null) closeSetup();
+      render();
+      return row;
+    } catch (error) {
+      if (error.status === 404) return null;
+      throw error;
+    }
   }
 
   async function refresh(message) {
@@ -58,6 +81,13 @@ const enrollment = (() => {
       id.append(make("code", a.agent_id));
       row.append(id, make("td", a.revoked_at_unix == null ? `Enrolled ${when(a.created_at_unix)}` : `Revoked ${when(a.revoked_at_unix)}`),
         make("td", String(a.credential_generation)));
+      if (a.revoked_at_unix == null) {
+        const connect = make("button", "Connection setup", "secondary tiny");
+        connect.type = "button";
+        connect.setAttribute("aria-label", `Connection setup for ${a.agent_id}`);
+        connect.addEventListener("click", () => openSetup(a.agent_id));
+        actions.append(connect);
+      }
       if (owner() && a.revoked_at_unix == null) {
         const rotate = make("button", "Rotate credential", "secondary tiny owner-action enroll-mutation");
         const revoke = make("button", "Revoke", "danger tiny owner-action enroll-mutation");
@@ -104,46 +134,141 @@ const enrollment = (() => {
   // The credential is read from the terminal, never from argv or history.
   const installer = file => [
     "( f=" + file + "; d=$(dirname -- \"$f\")",
+    "  p=$(dirname -- \"$d\")",
+    "  case \"$f\" in /*) ;; *) echo 'Refused: use an absolute credential path.' >&2; exit 1 ;; esac",
+    "  if [ \"$(realpath -e -- \"$p\")\" != \"$p\" ]; then echo 'Refused: use a canonical credential directory.' >&2; exit 1; fi",
     "  [ -e \"$d\" ] || [ -L \"$d\" ] || mkdir -m 700 -- \"$d\" || exit 1",
     "  if [ -L \"$d\" ] || [ ! -d \"$d\" ] || [ ! -O \"$d\" ] || [ -n \"$(find \"$d\" -maxdepth 0 -perm /022)\" ]; then",
     "    echo \"Refused: $d must be your own directory, not a link and not writable by others.\" >&2; exit 1; fi",
-    "  if [ -L \"$f\" ] || { [ -e \"$f\" ] && { [ ! -f \"$f\" ] || [ ! -O \"$f\" ] || [ -n \"$(find \"$f\" -maxdepth 0 -perm /077)\" ]; }; }; then",
+    "  if [ -L \"$f\" ] || { [ -e \"$f\" ] && { [ ! -f \"$f\" ] || [ ! -O \"$f\" ] || [ -n \"$(find \"$f\" -maxdepth 0 \\( -perm /077 -o -links +1 \\))\" ]; }; }; then",
     "    echo \"Refused: $f is a link or not a private regular file of yours. Inspect it yourself.\" >&2; exit 1; fi",
     "  t=$(mktemp -- \"$d/.agent-token.XXXXXXXXXX\") || exit 1",
-    "  head -c 52 > \"$t\"",
+    "  tty_state=",
+    "  trap 'if [ -n \"$tty_state\" ]; then stty \"$tty_state\"; fi; rm -f -- \"$t\"' 0",
+    "  trap 'exit 1' HUP INT TERM",
+    "  if [ -t 0 ]; then",
+    "    tty_state=$(stty -g) && stty -echo || exit 1",
+    "    printf '%s' 'Paste the credential and press Enter: ' >&2",
+    "    IFS= read -r credential || exit 1",
+    "    stty \"$tty_state\" || exit 1; tty_state=; printf '\\n' >&2",
+    "    printf '%s' \"$credential\" > \"$t\" || exit 1; unset credential",
+    "  else head -c 53 > \"$t\" || exit 1; fi",
     "  if [ \"$(wc -c < \"$t\")\" -ne 52 ] || ! grep -Eq '^sw_agent_[A-Za-z0-9_-]{43}$' \"$t\"; then",
-    "    rm -f -- \"$t\"; echo \"Refused: this is not a 52-character Agent credential.\" >&2; exit 1; fi",
+    "    echo \"Refused: this is not a 52-character Agent credential.\" >&2; exit 1; fi",
     "  mv -fT -- \"$t\" \"$f\" && echo \"Installed $f\" )"
   ].join("\n");
 
-  // ------------------------------------------------------------ secret view
-  async function showSecret(value) {
+  const credentialPath = '"$HOME/.agentfw/enrollment-token"';
+  const targetPath = '"${AGENT_CREDENTIAL_FILE:-$HOME/.agentfw/enrollment-token}"';
+  const shellQuote = value => "'" + value.replace(/'/g, "'\\''") + "'";
+
+  function step(root, text, command) {
+    const li = make("li", text);
+    if (command) li.append(make("code", command));
+    root.append(li);
+  }
+
+  function renderCommands() {
+    if (!setup) return;
+    const root = $("enroll-connection-steps");
+    const supplied = $("enroll-console-origin").value.trim();
+    let consoleOrigin;
+    try {
+      const url = new URL(supplied);
+      const supported = url.protocol === "https:" || (url.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(url.hostname));
+      if (supported && [url.origin, url.origin + "/"].includes(supplied)) consoleOrigin = url.origin + "/";
+    } catch (_) { /* Incomplete origin while the operator is typing. */ }
+    if (!consoleOrigin) {
+      root.replaceChildren(make("li", "Enter a canonical HTTPS origin without a path, query or credentials."));
+      return;
+    }
+    const args = `--console ${shellQuote(consoleOrigin)} --tenant ${shellQuote(tenant)} --agent ${shellQuote(setup.agent)} \\\n  --credential-file ${targetPath} --issuer-keyring "$HOME/.agentfw/trusted-issuers.json"` +
+      ($("enroll-private-ca").checked ? ' \\\n  --ca-file "$HOME/.agentfw/console-ca.pem"' : "");
+    root.replaceChildren();
+    step(root, "Use the installed Linux Agent account and its private home. For an existing connection, read settings.credential_file with inspect. If that path differs from the default, set the shell variable AGENT_CREDENTIAL_FILE to the absolute path before using the installer or the commands below.", "agentfw managed-console inspect");
+    step(root, "Obtain the issuer keyring through your trusted provisioning channel and independently verify the expected issuer key. The advertised key above is for comparison only. For a private TLS CA, verify it separately and place the PEM in the private file shown by the CA option. For a publicly trusted Console, use system TLS roots. Confirm that the origin shown is the address reachable from the Agent host.");
+    step(root, "Keep the Agent stopped during configuration. For an installed user service, stop and unregister it before applying; register it again after setup. Clear legacy SOUP_MANAGED_AGENT_* settings from the Agent service environment before starting the explicit profile.", "agentfw lifecycle stop");
+    step(root, "Review the exact Console, tenant, Agent, private credential, trust files and preview digest.", `agentfw managed-console preview ${args}`);
+    step(root, "Repeat the reviewed options and replace PREVIEW_DIGEST with the confirmation printed by preview. A failed apply preserves the previous connection.", `agentfw managed-console apply ${args} --confirm PREVIEW_DIGEST`);
+    step(root, "Start the Agent and inspect its configured and authenticated running identities. Verify checks connection and signatures; it does not apply or acknowledge a policy.", "agentfw lifecycle start\nagentfw managed-console inspect\nagentfw managed-console verify");
+    step(root, "Review, approve and deploy a signed policy in the selected Agent’s policy panel. Refresh connection evidence after the running Agent fetches it and reports application. Match the revision, sequence and SHA-256 to the recorded application from inspect.");
+    step(root, "To disconnect, stop the Agent, preview the change, and confirm with the new disconnect digest before starting again. This stops synchronization and retains the last verified policy and local data.", "agentfw lifecycle stop\nagentfw managed-console disconnect-preview\nagentfw managed-console disconnect --confirm DISCONNECT_DIGEST\nagentfw lifecycle start");
+  }
+
+  function closeSetup() {
+    setupRequest?.abort();
+    setup = null;
+    $("enroll-console-origin").value = "";
+    $("enroll-private-ca").checked = false;
+    $("enroll-connection").classList.add("hidden");
+    ["enroll-connection-agent", "enroll-connection-evidence", "enroll-connection-issuer", "enroll-connection-steps"].forEach(id => $(id).replaceChildren());
+  }
+
+  async function openSetup(agent, refresh = false) {
+    const id = tenant, generation = epoch;
+    if (!id || !ID.test(id) || !ID.test(agent)) return;
+    if (!refresh) {
+      const previous = setup?.agent === agent;
+      if (!previous) {
+        $("enroll-private-ca").checked = false;
+        $("enroll-console-origin").value = location.protocol === "https:" ? location.origin + "/" : "";
+      }
+    }
+    setup = { agent };
+    const selected = setup;
+    setupRequest?.abort(); setupRequest = new AbortController();
+    const options = { signal: setupRequest.signal, cache: "no-store" };
+    $("enroll-connection-agent").textContent = `${id} / ${agent}`;
+    $("enroll-connection").classList.remove("hidden");
+    const trust = $("enroll-connection-issuer"), evidence = $("enroll-connection-evidence");
+    trust.textContent = "Reading advertised issuer…";
+    evidence.textContent = "Reading policy evidence…";
+    renderCommands();
+    const [issuer, fleet] = await Promise.allSettled([
+      request("/admin/v1/managed-issuer", options),
+      request(`/admin/v1/tenants/${encodeURIComponent(id)}/agent-fleet-detail?${new URLSearchParams({agent_id: agent})}`, options),
+    ]);
+    if (stale(id, generation) || setup !== selected) return;
+    if (issuer.status === "fulfilled" && ID.test(issuer.value?.key_id || "") && /^[0-9a-f]{64}$/.test(issuer.value?.public_key_hex || "")) {
+      trust.textContent = `Console advertises ${issuer.value.key_id} · ${issuer.value.public_key_hex}. Verify both against the independently supplied issuer keyring.`;
+    } else trust.textContent = "Advertised issuer unavailable. Use the independently verified keyring; setup cannot verify a signed policy without the matching issuer.";
+    const observed = fleet.status === "fulfilled" ? fleet.value : null;
+    if (observed?.contract_version !== "sw-agent-fleet/1" || observed.agent?.tenant_id !== id || observed.agent?.agent_id !== agent) {
+      evidence.textContent = "Policy evidence unavailable. Refresh before making an application claim.";
+      return;
+    }
+    const row = observed.agent;
+    if (row.revoked_at_unix != null) {
+      evidence.textContent = "This Agent enrollment is revoked. Its credential cannot connect.";
+      return;
+    }
+    const latest = row.latest_issued, applied = row.last_reported_applied;
+    const state = {issued: "Issued, awaiting fetch", delivered: "Bundle fetched, awaiting application acknowledgement", applied: "Application acknowledged by Agent", rejected: "Candidate rejected", cancelled: "Candidate cancelled"};
+    const identity = record => `#${record.sequence} · ${record.revision} · SHA-256 ${record.policy_sha256}`;
+    evidence.replaceChildren(
+      make("p", latest ? `Latest deployment: ${identity(latest)} · ${state[latest.recorded_state] || "Unknown recorded state"}.` : "No signed deployment issued for this Agent yet."),
+      make("p", applied ? `Last authenticated application acknowledgement: ${identity(applied)} · ${when(applied.reported_applied_at_unix)}.` : "No authenticated application acknowledgement yet."),
+    );
+  }
+
+  // Only the one-time view receives the credential. Setup and its refresh are public metadata.
+  function showSecret(value) {
     secret = value;
     $("enroll-secret-agent").textContent = `${value.agent} · generation ${value.generation}`;
     $("enroll-secret-value").textContent = value.token;
     $("enroll-secret").classList.remove("hidden");
+    const steps = $("enroll-secret-steps");
+    steps.replaceChildren();
+    if (value.kind === "rotate") {
+      step(steps, "On the Agent host, use inspect to confirm the configured credential path. The command uses the default from setup unless you set AGENT_CREDENTIAL_FILE to the selected path. Paste the credential at the hidden prompt; an atomic rename replaces the old file.", installer(targetPath));
+      step(steps, "The running Agent reloads the selected file before its next fetch. Verify the current connection. If the profile is missing, continue with the setup below.");
+    } else {
+      step(steps, "On the installed Linux Agent host, as its user, run this and paste the credential at the hidden prompt. It stores the exact bytes in a private file.", installer(credentialPath));
+    }
+    step(steps, "If the credential was lost before installation, it cannot be shown again. Find the same enrollment and rotate it; do not create a second enrollment.");
     lock();
     $("enroll-secret-copy").focus();
-    const steps = $("enroll-secret-steps"), id = value.tenant, generation = epoch;
-    steps.replaceChildren();
-    try { issuer = issuer || await request("/admin/v1/managed-issuer", { cache: "no-store" }); } catch (_) { issuer = null; }
-    if (stale(id, generation) || secret !== value) return;
-    const key = issuer ? ` SOUP_MANAGED_AGENT_KEY_ID=${issuer.key_id} SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX=${issuer.public_key_hex}` : "";
-    // [explanation, command] pairs; commands never contain the credential.
-    const lines = value.kind === "rotate" ? [
-      ["On the Agent host, as the Agent's user, with SOUP_MANAGED_AGENT_TOKEN_FILE set to the Agent's token file, run this, paste the credential and press Enter. It refuses unsafe existing files or directories and replaces the file only by an atomic rename:",
-       installer('"${SOUP_MANAGED_AGENT_TOKEN_FILE:?set it to the Agent token file}"')],
-      ["The running agentfw serve re-reads the file before its next policy fetch; no restart. An Agent configured with the SOUP_MANAGED_AGENT_TOKEN variable cannot reload: restart it with the token file configured.", null],
-      ["Check this Agent's next applied acknowledgement in the Agent fleet. The old credential is refused from now on.", null]
-    ] : [
-      ["On the Agent host, as the Agent's user, run this, paste the credential and press Enter. It stores it in a private file without a newline and refuses unsafe existing files or directories:",
-       installer('"$HOME/.agentfw/enrollment-token"')],
-      ["Start the existing daemon. Add SOUP_MANAGED_AGENT_TLS_CA_FILE=/absolute/ca.pem for a private CA" + (issuer ? "." : " and the pinned issuer key (SOUP_MANAGED_AGENT_KEY_ID, SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX)."),
-       `SOUP_MANAGED_AGENT_CONSOLE=https://CONSOLE_HOST/ SOUP_MANAGED_AGENT_TENANT=${value.tenant} SOUP_MANAGED_AGENT_ID=${value.agent} SOUP_MANAGED_AGENT_TOKEN_FILE="$HOME/.agentfw/enrollment-token"${key} agentfw serve`],
-      ["Deploy an approved policy; the Agent fleet then shows its applied acknowledgement. Enrollment alone protects nothing.", null]
-    ];
-    lines.push(["If the credential is lost before it is stored, it cannot be shown again: rotate the credential to issue a new one.", null]);
-    lines.forEach(([text, command]) => { const li = make("li", text); if (command) li.append(make("code", command)); steps.append(li); });
+    void openSetup(value.agent);
   }
 
   function clearSecret() {
@@ -182,7 +307,7 @@ const enrollment = (() => {
         if (issued?.tenant_id !== id || issued?.agent_id !== agent || !/^sw_agent_[A-Za-z0-9_-]{43}$/.test(issued?.token || ""))
           throw Object.assign(new Error("enrollment response identity mismatch"), { status: 0 });
         $("enroll-agent-id").value = "";
-        await showSecret({ kind: "enroll", tenant: id, agent, generation: issued.credential_generation, token: issued.token });
+        showSecret({ kind: "enroll", tenant: id, agent, generation: issued.credential_generation, token: issued.token });
         say(`${agent} enrolled. Store the credential now; it is shown only once.`, "ok");
         await refresh(false); fleet.reload();
       } catch (e) {
@@ -204,7 +329,7 @@ const enrollment = (() => {
   function rotate_(agent) {
     return guarded(`Rotate ${agent}`, async (id, generation) => {
       let current;
-      try { await load(); current = agents.find(a => a.agent_id === agent); }
+      try { current = await readEnrollment(id, agent, generation); }
       catch (e) { if (!stale(id, generation) && !failure(e, `Rotate ${agent}`)) say("Unable to read the current credential generation; nothing was sent.", "error"); return; }
       if (stale(id, generation)) return;
       if (!current || current.revoked_at_unix != null) { say(`${agent} is not an active enrollment; nothing was sent.`, "error"); return; }
@@ -219,13 +344,13 @@ const enrollment = (() => {
   // byte-identical, which the server acknowledges without another change.
   async function send(op, generation) {
     try {
-      const receipt = await request(`${base(op.tenant)}/${encodeURIComponent(op.agent)}/credential-rotations`, { method: "POST",
+      const receipt = await request(agentAction(op.tenant, op.agent, "credential-rotations"), { method: "POST",
         body: JSON.stringify({ expected_generation: op.expected, operation_id: op.operation_id, replacement_token: op.token }) });
       if (stale(op.tenant, generation)) return;
       if (receipt?.tenant_id !== op.tenant || receipt?.agent_id !== op.agent || receipt?.operation_id !== op.operation_id || receipt?.generation !== op.expected + 1)
         throw Object.assign(new Error("rotation receipt identity mismatch"), { status: 0 });
       pending = null;
-      await showSecret({ kind: "rotate", tenant: op.tenant, agent: op.agent, generation: receipt.generation, token: op.token });
+      showSecret({ kind: "rotate", tenant: op.tenant, agent: op.agent, generation: receipt.generation, token: op.token });
       say(`Credential of ${op.agent} rotated to generation ${receipt.generation}${receipt.already_applied ? " (this exact request was already committed)" : ""}. The old credential is refused from now on.`, "ok");
       await refresh(false);
     } catch (e) {
@@ -242,10 +367,10 @@ const enrollment = (() => {
   function revoke_(agent) {
     return guarded(`Revoke ${agent}`, async (id, generation) => {
       try {
-        await request(`${base(id)}/${encodeURIComponent(agent)}/revoke`, { method: "POST", body: "{}" });
+        await request(agentAction(id, agent, "revoke"), { method: "POST", body: "{}" });
         if (stale(id, generation)) return;
-        await load();
-        const row = agents.find(a => a.agent_id === agent);
+        const row = await readEnrollment(id, agent, generation);
+        if (stale(id, generation)) return;
         say(row?.revoked_at_unix != null ? `${agent} revoked. Its credential is refused; it keeps its last verified policy.` : `Revocation of ${agent} was accepted but the record does not show it yet. Refresh before acting again.`, row?.revoked_at_unix != null ? "ok" : "error");
         fleet.reload();
       } catch (e) {
@@ -265,13 +390,12 @@ const enrollment = (() => {
     busy = true; lock(); box.replaceChildren();
     const button = (text, cls, run) => { const b = make("button", text, cls + " enroll-reconcile"); b.type = "button"; b.addEventListener("click", run); box.append(b); };
     try {
-      await load();
+      const row = await readEnrollment(op.tenant, op.agent, generation);
       if (stale(op.tenant, generation)) return;
-      const row = agents.find(a => a.agent_id === op.agent);
       if (op.kind === "enroll") {
         pending = null;
         say(row ? `The enrollment of ${op.agent} is recorded, but its one-time credential did not reach this browser. The Console does not keep it: use "Rotate credential" to issue a new one, or revoke it.`
-                : `The enrollment of ${op.agent} is not recorded. You may enroll it again.`, "error");
+                : `The enrollment of ${op.agent} is not recorded. You may enroll it again using the same Agent ID.`, "error");
       } else if (op.kind === "revoke") {
         pending = null;
         say(row?.revoked_at_unix != null ? `Server state confirms ${op.agent} is revoked.` : `Server state shows ${op.agent} is not revoked. Revoke again only if you still intend to.`, "error");
@@ -299,12 +423,18 @@ const enrollment = (() => {
     }
   }
 
+  $("enroll-console-origin").addEventListener("input", renderCommands);
+  $("enroll-private-ca").addEventListener("change", renderCommands);
+  $("enroll-connection-refresh").addEventListener("click", () => { if (setup) void openSetup(setup.agent, true); });
+  $("enroll-connection-policy").addEventListener("click", () => { if (setup) void singlePolicy.open(tenant, setup.agent); });
+  $("enroll-connection-close").addEventListener("click", closeSetup);
   $("enroll-form").addEventListener("submit", e => { e.preventDefault(); enroll($("enroll-agent-id").value.trim()); });
   $("enroll-refresh").addEventListener("click", () => { if (!busy) refresh(); });
   $("enroll-secret-copy").addEventListener("click", async () => {
     if (!secret) return;
-    try { await navigator.clipboard.writeText(secret.token); say("Credential copied. Paste it into the Agent host's token file, then clear your clipboard.", "ok"); }
-    catch (_) { say("Copy failed. Select the credential text and copy it manually.", "error"); }
+    const copied = secret;
+    try { await navigator.clipboard.writeText(copied.token); if (secret === copied) say("Credential copied. Paste it into the Agent host's token file, then clear your clipboard.", "ok"); }
+    catch (_) { if (secret === copied) say("Copy failed. Select the credential text and copy it manually.", "error"); }
   });
   $("enroll-secret-dismiss").addEventListener("click", () => { clearSecret(); say("Credential cleared from this page. It cannot be shown again.", "note"); });
 
@@ -313,10 +443,10 @@ const enrollment = (() => {
       controller?.abort(); controller = new AbortController(); epoch++;
       tenant = id; agents = []; busy = false; blocked = ""; pending = null;
       $("enroll-agent-id").value = "";
-      clearSecret();
+      clearSecret(); closeSetup();
       $("enroll-confirm").replaceChildren(); $("enroll-pending").replaceChildren(); $("enroll-list").replaceChildren();
       if (id) refresh(); else say("Select a tenant to manage Agent enrollment.");
     },
-    clear() { clearSecret(); }
+    clear() { clearSecret(); closeSetup(); }
   };
 })();

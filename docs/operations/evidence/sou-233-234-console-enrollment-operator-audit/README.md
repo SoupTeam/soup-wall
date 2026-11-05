@@ -1,0 +1,58 @@
+# SOU-233 and SOU-234 acceptance
+
+Accepted base: `8003fac2d271156e2229c8c15c6eddb98ee2da8e`.
+
+## SOU-233 — Enrollment to actual policy application
+
+The browser witness provisions an owned Agent credential, installs the exact
+bytes via the displayed command, and runs the displayed preview and apply
+commands with an installed binary and working directory outside the checkout.
+It uses independently derived issuer trust and an owned HTTPS CA. It checks
+wrong issuer and CA refusals, corrected setup, the distinction between fetched
+and applied, the authenticated application record and a real hook verdict.
+It also exercises rotation without restart, an actual lost committed response,
+role denial, a rejected candidate with the old applied policy still visible,
+and guarded disconnect.
+
+## SOU-234 — Operator audit
+
+The same Console exercises separate denied, failed and committed facts, exact
+actor and target attribution, stable pagination, tenant isolation, bounded
+retention and restart. A fixture trigger suppresses the audit insert to verify
+that the state mutation rolls back. Concurrent requests and exact receipt
+replays verify one committed fact per storage change. The schema upgrade
+control recreates the preceding schema in the owned fixture and verifies that
+the existing records survive the upgrade. The encrypted recovery fixture
+checks the accepted schema and preserves audit rows and sequence state.
+
+## Reproduction and evidence scope
+
+- The existing `agent-fleet.yml` workflow runs the enrollment and operator
+  audit witness on SQLite and TLS PostgreSQL, with an actual Linux Agent.
+- The existing `console-recovery.yml` workflow exercises the encrypted
+  backup and restore contract on both stores.
+- Each enrollment report records its source commit, clean-tree status, build
+  and configuration digests, source file hashes and individual check outcomes.
+  The workflow reports are the acceptance evidence. Local browser and HTTP
+  controls do not establish installed Linux behavior.
+- Retain failed attempt reports with their source attribution. Never include
+  fixture credentials, raw policy documents, database URLs, browser state,
+  or unsanitized Console logs in evidence.
+
+## Local qualification
+
+- Workspace Rust tests completed with 2,044 passed and 16 explicit ignores.
+  The first run stopped at an outdated assertion for the rotation route in
+  the rendered dashboard. The final run includes the updated assertion.
+- Real Console HTTP controls passed 15/15 on SQLite and 15/15 on TLS
+  PostgreSQL 16.15 on macOS. The controls include audit-write suppression
+  for enrollment and policy deployments, concurrent rotation and deployment,
+  audit retention, scope, and persistence after restart. The token-shaped
+  ID control failed before redacting the Console token prefix and passed
+  on both stores after the fix.
+- The broader macOS browser sweep hit `Download.path: canceled` in the
+  existing Agent history export test. The same test reproduced that result
+  on the exact accepted base. The operator audit export has its own check.
+
+Operator instructions: [installed connection](../../INSTALLED_MANAGED_CONSOLE.md)
+and [operator audit](../../CONSOLE_OPERATOR_AUDIT.md).

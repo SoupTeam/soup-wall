@@ -13,6 +13,7 @@ mod fleet_triage;
 #[path = "managed_postgres.rs"]
 mod managed;
 
+use super::operator_audit::{AuditFact, AuditOperation, AuditTarget};
 use std::future::Future;
 use std::path::Path;
 use std::str::FromStr;
@@ -59,6 +60,7 @@ use super::{
 #[derive(Clone)]
 pub(super) struct PostgresTenantStore {
     pool: Pool,
+    pub(super) operator: Option<super::operator_audit::OperatorContext>,
     audit_max_rows: i64,
     command_timeout: Duration,
     pool_wait_timeout: Duration,
@@ -140,6 +142,7 @@ impl PostgresTenantStore {
 
         let store = Self {
             pool,
+            operator: None,
             audit_max_rows: i64::try_from(audit_max_rows.max(1))
                 .context("tenant audit row cap exceeds PostgreSQL integer range")?,
             command_timeout,
@@ -180,6 +183,7 @@ impl PostgresTenantStore {
                 .runtime(Runtime::Tokio1)
                 .build()
                 .map_err(|_| anyhow::anyhow!("failed to build PostgreSQL migration pool"))?,
+            operator: None,
             audit_max_rows: i64::try_from(audit_max_rows.max(1))
                 .context("tenant audit row cap exceeds PostgreSQL integer range")?,
             command_timeout,
@@ -1437,7 +1441,7 @@ impl PostgresTenantStore {
     }
 
     async fn ensure_schema_current(&self) -> anyhow::Result<()> {
-        const VERSION: i64 = 27;
+        const VERSION: i64 = super::operator_audit::SCHEMA_VERSION;
         let client = self.checkout().await?;
         let applied = self
             .bounded(client.query_opt(
@@ -4707,6 +4711,17 @@ impl PostgresTenantStore {
         ))
         .await
         .context("failed to append PostgreSQL tenant policy version")?;
+        self.audit_committed(
+            &transaction,
+            tenant_id,
+            AuditFact::new(
+                AuditOperation::PolicyCreate,
+                AuditTarget::PolicyVersion,
+                &id,
+            )
+            .source(&id, Some(&content_sha256)),
+        )
+        .await?;
         self.bounded(transaction.commit())
             .await
             .context("failed to commit PostgreSQL policy version")?;
@@ -4793,6 +4808,11 @@ impl PostgresTenantStore {
             .bounded(client.transaction())
             .await
             .context("failed to begin PostgreSQL policy approval")?;
+        self.bounded(transaction.query_one(
+            "SELECT id FROM tenants WHERE id=$1 FOR KEY SHARE",
+            &[&tenant_id],
+        ))
+        .await?;
         let row = self
             .bounded(transaction.query_opt(
                 "SELECT approvals.approved_by
@@ -4821,6 +4841,16 @@ impl PostgresTenantStore {
                 ))
                 .await
                 .context("failed to approve PostgreSQL policy version")?;
+                self.audit_committed(
+                    &transaction,
+                    tenant_id,
+                    AuditFact::new(
+                        AuditOperation::PolicyApprove,
+                        AuditTarget::PolicyVersion,
+                        version_id,
+                    ),
+                )
+                .await?;
             }
         }
         self.bounded(transaction.commit())
@@ -4855,7 +4885,7 @@ impl PostgresTenantStore {
         .context("failed to lock PostgreSQL tenant for policy deployment")?;
         let version_row = self
             .bounded(transaction.query_opt(
-                "SELECT versions.document_json
+                "SELECT versions.document_json, versions.content_sha256
                  FROM tenant_policy_versions AS versions
                  JOIN tenant_policy_approvals AS approvals
                    ON approvals.version_id = versions.id
@@ -4865,6 +4895,7 @@ impl PostgresTenantStore {
             .await
             .context("failed to load approved PostgreSQL policy version")?
             .ok_or_else(|| anyhow::anyhow!("approved policy version not found"))?;
+        let content_sha256: String = version_row.get(1);
         let document: TenantPolicyDocument = serde_json::from_str(&version_row.get::<_, String>(0))
             .context("stored tenant policy version is invalid")?;
         validate_policy_document(&document)?;
@@ -5036,6 +5067,18 @@ impl PostgresTenantStore {
             .await
             .context("failed to enqueue PostgreSQL webhook delivery")?;
         }
+        let operation = match action {
+            PolicyDeploymentAction::Activate => AuditOperation::PolicyActivate,
+            PolicyDeploymentAction::Rollback => AuditOperation::PolicyRollback,
+        };
+        self.audit_committed(
+            &transaction,
+            tenant_id,
+            AuditFact::new(operation, AuditTarget::PolicyVersion, version_id)
+                .source(&deployment.id, Some(&content_sha256))
+                .sequence(deployment.sequence),
+        )
+        .await?;
         self.bounded(transaction.commit())
             .await
             .context("failed to commit PostgreSQL policy deployment")?;
@@ -5774,6 +5817,22 @@ impl PostgresTenantStore {
         ))
         .await
         .context("failed to append PostgreSQL customer policy audit event")?;
+        self.audit_workspace_committed(
+            &transaction,
+            &tenant_id,
+            principal_id,
+            self.operator
+                .as_ref()
+                .map_or(now, |actor| actor.receipt_time()),
+            AuditFact::new(
+                AuditOperation::ModelPolicySet,
+                AuditTarget::PolicyVersion,
+                &version_id,
+            )
+            .source(&deployment.id, Some(&content_sha256))
+            .sequence(deployment.sequence),
+        )
+        .await?;
         self.bounded(transaction.commit())
             .await
             .context("failed to commit PostgreSQL customer policy transaction")?;
@@ -6894,14 +6953,14 @@ impl PostgresTenantStore {
         Ok(())
     }
 
-    async fn checkout(&self) -> anyhow::Result<deadpool_postgres::Client> {
+    pub(super) async fn checkout(&self) -> anyhow::Result<deadpool_postgres::Client> {
         timeout(self.pool_wait_timeout, self.pool.get())
             .await
             .map_err(|_| anyhow::anyhow!("PostgreSQL tenant-store pool wait timed out"))?
             .map_err(|_| anyhow::anyhow!("PostgreSQL tenant-store pool is unavailable"))
     }
 
-    async fn bounded<T>(
+    pub(super) async fn bounded<T>(
         &self,
         operation: impl Future<Output = Result<T, tokio_postgres::Error>>,
     ) -> anyhow::Result<T> {

@@ -41,6 +41,8 @@
     #enroll-status.error{color:var(--red)}
     #enroll-status.ok{color:var(--green)}
     #enroll-panel form,#enroll-confirm,#enroll-pending{margin:12px 0}
+    #enroll-connection-steps code{display:block;white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0 12px}
+    #enroll-connection-issuer,#enroll-connection-evidence{overflow-wrap:anywhere}
     #enroll-panel td{overflow-wrap:anywhere;vertical-align:top}
     #enroll-panel td button{margin:0 6px 6px 0}
     .secret-view{border:1px solid var(--amber);border-radius:12px;padding:14px;margin:12px 0}
@@ -123,6 +125,16 @@
   <p id="enroll-status" role="status" class="note">Select a tenant to manage Agent enrollment.</p>
   <div id="enroll-pending" class="inline"></div>
   <section id="enroll-secret" class="hidden secret-view" aria-labelledby="enroll-secret-title"><h3 id="enroll-secret-title">One-time Agent credential</h3><p id="enroll-secret-agent" class="note"></p><p class="note">Shown once. The Console does not keep it and cannot show it again; this page forgets it when you clear it, switch tenant or lock the console.</p><pre id="enroll-secret-value" class="secret" translate="no"></pre><div class="inline"><button id="enroll-secret-copy" type="button">Copy credential</button><button id="enroll-secret-dismiss" type="button" class="secondary">I stored it, clear it</button></div><ol id="enroll-secret-steps"></ol></section>
+  <section id="enroll-connection" class="section hidden" aria-labelledby="enroll-connection-title">
+    <div class="detail-head"><div><h3 id="enroll-connection-title">Installed Linux Agent connection</h3><p id="enroll-connection-agent"></p></div><button id="enroll-connection-close" class="secondary tiny" type="button">Close setup</button></div>
+    <p class="note">Configured and connected are separate checks on the Agent host. Console evidence below records delivery and authenticated application; current protection and liveness must be verified on the host.</p>
+    <p id="enroll-connection-issuer" class="note"></p>
+    <label class="field">Console origin reachable from the Agent<input id="enroll-console-origin" type="url" maxlength="256" autocomplete="off" spellcheck="false"></label>
+    <label class="field"><input type="checkbox" id="enroll-private-ca"> Console uses a private TLS CA</label>
+    <ol id="enroll-connection-steps"></ol>
+    <div class="inline"><button id="enroll-connection-policy" type="button" class="secondary">Open Agent policy</button><button id="enroll-connection-refresh" type="button" class="secondary">Refresh connection evidence</button></div>
+    <div id="enroll-connection-evidence" role="status"></div>
+  </section>
   <div id="enroll-confirm"></div>
   <div id="enroll-list" class="table-wrap"></div>
 </section>
@@ -156,6 +168,12 @@
             <div class="section"><h3>Model allowlist</h3><p class="note">One exact model identifier per line. A saved empty list deliberately blocks every model.</p><textarea id="allowed-models" spellcheck="false" placeholder="gpt-5.6-mini"></textarea><div class="inline write-action"><button id="save-policy" type="button">Save allowlist</button><button id="clear-policy" type="button" class="secondary">Remove policy</button></div></div>
             <div class="section"><h3>Rate and spend limits</h3><p class="note">Spend limits use the operator’s configured model prices. They reserve a budget per request; this panel does not present them as final billing.</p><div class="grid-two"><label class="field">Requests per window<input id="rate-requests" inputmode="numeric" placeholder="60"></label><label class="field">Rate window seconds<input id="rate-window" inputmode="numeric" placeholder="60"></label><label class="field">Spend window seconds<input id="spend-window" inputmode="numeric" placeholder="86400"></label><label class="field">Budget, USD micros<input id="spend-budget" inputmode="numeric" placeholder="5000000"></label><label class="field">Reserve/request, USD micros<input id="spend-reserve" inputmode="numeric" placeholder="500000"></label></div><div class="inline write-action"><button id="save-limits" type="button">Save limits</button></div></div>
             <div class="section"><h3>Client token inventory</h3><p class="note">Raw client tokens are never listed. A newly created token is shown only once below.</p><div id="token-list" class="table-wrap"><p class="empty">No token inventory loaded.</p></div><form id="issue-form" class="inline write-action"><label class="field">New token label<input id="token-label" maxlength="128" required placeholder="production"></label><button>Issue token</button></form><pre id="issued-token" class="secret">No client token issued in this tab.</pre><div class="inline write-action"><button id="copy-client-token" type="button" class="secondary">Copy shown client token</button></div></div>
+            <section id="operator-audit" class="section" aria-labelledby="operator-audit-title">
+              <div class="detail-head"><div><h3 id="operator-audit-title">Operator audit history</h3><p class="note">Recorded changes and refused requests for this tenant. “Committed” records a Console mutation. Check Agent delivery history separately for application acknowledgements. Older events may have expired or predate this audit.</p></div></div>
+              <div class="inline"><button id="operator-audit-load" type="button" class="secondary tiny">Load latest operator events</button><button id="operator-audit-next" type="button" class="secondary tiny" disabled>Older events</button><button id="operator-audit-download" type="button" class="secondary tiny" disabled>Download displayed page</button></div>
+              <p id="operator-audit-status" role="status" class="note">Load the latest page to review recorded operator actions.</p>
+              <div class="table-wrap"><table><thead><tr><th>Event</th><th>Received</th><th>Actor</th><th>Operation</th><th>Target</th><th>Outcome</th><th>Source</th></tr></thead><tbody id="operator-audit-rows"></tbody></table></div>
+            </section>
             <div class="section"><div class="detail-head"><div><h3>Audit history</h3><p class="note">No prompts, completions, or credentials are included.</p></div><button id="load-audit" type="button" class="secondary tiny">Load latest 100</button></div><div id="audit-list" class="table-wrap"><p class="empty">No audit history loaded.</p></div></div>
           </div>
         </section>
@@ -173,7 +191,8 @@
     /* ENROLLMENT_PANEL */
     /* AGENT_HISTORY */
     /* FLEET_TRIAGE */
-    const selectPanels=id=>{singlePolicy.select(id);agentHistory.clear();fleetTriage.select(id);fleet.select(id);enrollment.select(id);rollout.select(id)};
+    /* OPERATOR_AUDIT */
+    const selectPanels=id=>{singlePolicy.select(id);agentHistory.clear();fleetTriage.select(id);fleet.select(id);enrollment.select(id);rollout.select(id);operatorAudit.select(id)};
     $("lock-console").addEventListener("click",()=>{adminToken="";currentAdmin=null;enrollment.clear();location.replace("/admin")});
     const applyRole=()=>{const role=currentAdmin.role;document.body.classList.remove("role-owner","role-operator","role-viewer");document.body.classList.add("role-"+role);$("current-admin").textContent=currentAdmin.admin_name+" · "+role;$("role-display").textContent=role};
     const renderTenants=()=>{const q=$("tenant-search").value.trim().toLowerCase(),shown=tenants.filter(t=>!q||t.name.toLowerCase().includes(q)||t.id.toLowerCase().includes(q));$("tenant-total").textContent=tenants.length;$("tenant-active").textContent=tenants.filter(t=>t.active).length;$("tenant-suspended").textContent=tenants.filter(t=>!t.active).length;const list=$("tenant-list");list.replaceChildren();if(!shown.length){list.append(make("p",q?"No tenants match this search.":"No tenants yet.","empty"));return}shown.forEach(t=>{const b=make("button",undefined,"tenant "+(t.active?"active":"inactive")+(selectedTenant?.id===t.id?" selected":""));b.append(make("span",t.name),make("small",t.id));b.addEventListener("click",()=>selectTenant(t));list.append(b)})};
