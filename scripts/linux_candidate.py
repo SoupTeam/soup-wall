@@ -45,9 +45,12 @@ def stage(root, directory, binaries, commit):
             "candidate_agent_stage_mismatch")
     tools = {}
     for name in ("rustc", "cargo"):
-        path = Path(shutil.which(name) or "")
+        manager = shutil.which("rustup")
+        require(manager is not None, "candidate_toolchain_manager_unavailable")
+        selected = subprocess.check_output([manager, "which", "--toolchain", PIN, name],
+            env={**os.environ, "RUSTUP_AUTO_INSTALL": "0"}, timeout=10).decode().strip()
+        path = Path(selected).resolve(strict=True)
         require(path.is_absolute(), "candidate_compiler_unavailable")
-        path = path.resolve(strict=True)
         version = subprocess.check_output([str(path), "--version"], timeout=10).decode().strip()
         require(version.startswith(name + " " + PIN + " "), "candidate_compiler_version_mismatch")
         tools[name] = {"version": version, "sha256": file_record(path)["sha256"]}
