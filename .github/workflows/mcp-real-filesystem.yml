@@ -223,6 +223,9 @@ jobs:
             ${{ runner.temp }}/linux-candidate/report.json
             ${{ runner.temp }}/linux-candidate/native.json
             ${{ runner.temp }}/linux-candidate/installed/report.json
+            ${{ runner.temp }}/linux-candidate/installed/installed-tools/demo/report.json
+            ${{ runner.temp }}/linux-candidate/installed/installed-tools/support/report.json
+            ${{ runner.temp }}/linux-candidate/installed/installed-tools/support/index.html
             ${{ runner.temp }}/linux-candidate/exercise/report.json
             ${{ runner.temp }}/linux-candidate/exercise/*.json
             ${{ runner.temp }}/linux-candidate/apparmor*.json

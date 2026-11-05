@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Retention controls for installed-tool qualification reports."""
 import contextlib
 import hashlib
@@ -6,6 +7,7 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -72,6 +74,15 @@ class InstalledToolsEvidence(unittest.TestCase):
             text = (ROOT / ".github/workflows" / workflow).read_text()
             for path in expected:
                 self.assertIn("${{ runner.temp }}/sou215-pilot-scope/" + path, text)
+
+    def test_candidate_lane_retains_complete_installed_tool_reports(self):
+        text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
+        with patch.object(sys, "path", [str(ROOT / "scripts"), *sys.path]):
+            parser = load("installed_tools_workflow_parser", "ci_components.py")
+        candidate = parser.blocks(text)["manual-linux-candidate"]
+        for name in ("demo/report.json", "support/report.json", "support/index.html"):
+            self.assertIn("${{ runner.temp }}/linux-candidate/installed/installed-tools/" + name,
+                          candidate)
 
     def test_failed_demo_report_is_preserved_and_bound_before_failure(self):
         self.demo_status = "failed"
