@@ -438,9 +438,11 @@ pub(super) fn open_verified_file(
     // descriptor pins the resolved regular file; the mount destination remains
     // the explicitly declared interpreter/library path.
     let canonical = path.canonicalize()?;
+    // Open special files without waiting for a peer, then reject them using
+    // the opened descriptor's metadata before reading any asset bytes.
     let file = std::fs::OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
         .open(canonical)?;
     let before = file.metadata()?;
     if !before.is_file() || (executable && before.permissions().mode() & 0o111 == 0) {
