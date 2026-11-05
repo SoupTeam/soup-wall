@@ -38,10 +38,13 @@ def stage(root, directory, binaries, commit):
     require(identity == {key: source[key] for key in identity}, "candidate_component_source_mismatch")
     require(all(not (directory / name).exists() for name in FILES), "candidate_stage_already_exists")
     launcher = binaries / LAUNCHER
-    file_record(launcher)
+    builder.cargo_artifact_source(launcher)
+    launcher_sha = builder.native.digest(launcher)
     shutil.copyfile(launcher, directory / LAUNCHER)
     os.chmod(directory / LAUNCHER, 0o755)
-    require(file_record(directory / "agentfw")["sha256"] == file_record(binaries / "agentfw")["sha256"],
+    require(file_record(directory / LAUNCHER)["sha256"] == launcher_sha, "candidate_launcher_copy_mismatch")
+    builder.cargo_artifact_source(binaries / "agentfw")
+    require(file_record(directory / "agentfw")["sha256"] == builder.native.digest(binaries / "agentfw"),
             "candidate_agent_stage_mismatch")
     tools = {}
     for name in ("rustc", "cargo"):
@@ -53,7 +56,8 @@ def stage(root, directory, binaries, commit):
         require(path.is_absolute(), "candidate_compiler_unavailable")
         version = subprocess.check_output([str(path), "--version"], timeout=10).decode().strip()
         require(version.startswith(name + " " + PIN + " "), "candidate_compiler_version_mismatch")
-        tools[name] = {"version": version, "sha256": file_record(path)["sha256"]}
+        builder.cargo_artifact_source(path)
+        tools[name] = {"version": version, "sha256": builder.native.digest(path)}
     for name, raw in ((SOURCE, canonical(source)), (COMPONENT, archive)):
         (directory / name).write_bytes(raw)
         os.chmod(directory / name, 0o644)
