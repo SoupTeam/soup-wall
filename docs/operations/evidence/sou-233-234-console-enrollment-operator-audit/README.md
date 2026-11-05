@@ -50,6 +50,14 @@ checks the accepted schema and preserves audit rows and sequence state.
   audit retention, scope, and persistence after restart. The token-shaped
   ID control failed before redacting the Console token prefix and passed
   on both stores after the fix.
+- Final browser/recovery controls passed 51 tests with one Linux GNU
+  installer control skipped on macOS. Release archive controls passed
+  22/22, Console endpoint regressions 22/22, and workspace/all-target
+  Clippy with `-D warnings` and formatting passed.
+- An unchanged Agent lifecycle test failed once in a final parallel run.
+  It passed in isolation and the complete workspace retry passed on the
+  same final source. All failed development outcomes and private log digests
+  are retained in [local qualification](local-qualification.json).
 - The broader macOS browser sweep hit `Download.path: canceled` in the
   existing Agent history export test. The same test reproduced that result
   on the exact accepted base. The operator audit export has its own check.
@@ -58,6 +66,24 @@ Operator instructions: [installed connection](../../INSTALLED_MANAGED_CONSOLE.md
 and [operator audit](../../CONSOLE_OPERATOR_AUDIT.md).
 
 ## Linux results
+
+Final clean runtime: `64ad83dbac02fb1efac0012bfe0d33a7d62a1896`.
+
+| Final source-bound qualification | SQLite | PostgreSQL |
+| --- | --- | --- |
+| Installed connection and operator audit | 62/62 | 64/64 |
+| Encrypted recovery | 74/74 | 88/88 |
+
+The [final browser and real Agent run](https://github.com/SoupTeam/soup-wall/actions/runs/42077685062)
+passed the complete fleet component, including the browser regressions and
+both installed enrollment journeys. The [final encrypted recovery run](https://github.com/SoupTeam/soup-wall/actions/runs/42077691691)
+passed on the same source. Every check in all four reports passed. Each report
+declares a clean source, whose 271 enrollment or 343 recovery input hashes
+were independently verified through `git show` at that commit. Both artifact
+digests and all ZIP CRCs matched. The final reports are retained under
+[final enrollment](final-enrollment/run.json) and
+[final recovery](final-recovery/run.json). The earlier attempts below retain
+their original source attribution.
 
 The [encrypted recovery run](https://github.com/SoupTeam/soup-wall/actions/runs/42070311455)
 passed 74 SQLite and 88 PostgreSQL controls on clean runtime
