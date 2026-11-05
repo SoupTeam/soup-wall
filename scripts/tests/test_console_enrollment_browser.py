@@ -208,6 +208,54 @@ class EnrollmentPanelBrowserTests(unittest.TestCase):
         self.assertFalse(self.page.evaluate(f"document.documentElement.outerHTML.includes('{SYNTHETIC}')"))
         self.assertGreater(self.enabled_mutations(), 0)
 
+    def test_new_enrollment_outside_bounded_inventory_opens_its_policy(self):
+        self.agents[TENANT] = [self.row(f"edge-{index:03d}", 1) for index in range(256)]
+        base = f"/admin/v1/tenants/{TENANT}/agents"
+        self.overrides[("GET", base)] = lambda route: self.json(
+            route, sorted(self.agents[TENANT], key=lambda row: row["agent_id"])[:256])
+        self.overrides[("POST", base)] = self.enroll_ok("zzz-new-agent")
+        self.overrides[("GET", base + "/policy-revisions")] = (200, [])
+        self.overrides[("GET", base + "/policy-deployments")] = (200, [])
+        self.open()
+        self.page.locator("#enroll-agent-id").fill("zzz-new-agent")
+        self.page.locator("#enroll-form button").click()
+        self.wait_status("zzz-new-agent enrolled")
+        self.page.get_by_role("button", name="I stored it, clear it").click()
+        self.page.locator("#enroll-connection-policy").click()
+        self.page.wait_for_function(
+            "document.getElementById('single-agent').value === 'zzz-new-agent'"
+            " && !document.getElementById('single-create').disabled")
+        self.page.locator("#single-refresh").click()
+        self.page.wait_for_function("!document.getElementById('single-create').disabled")
+        self.assertEqual(self.page.locator("#single-agent").input_value(), "zzz-new-agent")
+        self.assertEqual(len(self.posts), 1)
+
+    def test_policy_handoff_outside_inventory_checks_scope_role_and_revocation(self):
+        base = f"/admin/v1/tenants/{TENANT}/agents"
+        self.overrides[("GET", base)] = (200, [self.row("edge-1", 1)])
+        self.overrides[("POST", base)] = self.enroll_ok("zzz-new-agent")
+        self.overrides[("GET", base + "/policy-revisions")] = (200, [])
+        self.overrides[("GET", base + "/policy-deployments")] = (200, [])
+        self.open()
+        self.page.locator("#enroll-agent-id").fill("zzz-new-agent")
+        self.page.locator("#enroll-form button").click()
+        self.wait_status("zzz-new-agent enrolled")
+        self.page.get_by_role("button", name="I stored it, clear it").click()
+        for status, row, message in (
+                (200, self.row("zzz-new-agent", 1, OTHER), "Unresolved:"),
+                (200, self.row("wrong-agent", 1), "Unresolved:"),
+                (403, {"error": "forbidden"}, "Authorization changed."),
+                (404, {"error": "not found"}, "Unresolved:"),
+                (200, self.row("zzz-new-agent", 1, revoked=1800000100), "Agent revoked")):
+            with self.subTest(status=status, agent=row.get("agent_id"), tenant=row.get("tenant_id")):
+                self.overrides[("GET", base + "/enrollment")] = (status, row)
+                self.page.locator("#enroll-connection-policy").click()
+                self.page.wait_for_function(
+                    "message => document.getElementById('single-policy-status').textContent.includes(message)",
+                    arg=message)
+                self.assertTrue(self.page.locator("#single-create").is_disabled())
+        self.assertEqual(len(self.posts), 1)
+
     def test_delayed_enrollment_response_never_reaches_another_tenant(self):
         self.overrides[("POST", f"/admin/v1/tenants/{TENANT}/agents")] = "hold"
         self.open()

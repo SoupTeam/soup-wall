@@ -55,7 +55,13 @@ const singlePolicy = (() => {
         read(agentUrl("revisions", `&limit=50&after=${enc(after)}`)), read(agentUrl("deployments"))
       ]);
       if (!same(stamp)) return;
-      if (!Array.isArray(inventory) || inventory.some(a => a.tenant_id !== tenant) || !inventory.some(a => a.agent_id === agent)) throw new Error("Agent identity mismatch");
+      if (!Array.isArray(inventory) || inventory.some(a => a.tenant_id !== tenant)) throw new Error("Agent identity mismatch");
+      if (!inventory.some(a => a.agent_id === agent)) {
+        const selected = await read(`/admin/v1/tenants/${enc(tenant)}/agents/enrollment?agent_id=${enc(agent)}`);
+        if (!same(stamp)) return;
+        if (!identity(selected)) throw new Error("Agent identity mismatch");
+        inventory.push(selected);
+      }
       if (!Array.isArray(revs) || revs.length > 50 || revs.some(r => !identity(r) || typeof r.approved !== "boolean" || !/^[a-f0-9]{64}$/.test(r.policy_sha256))) throw new Error("Revision identity mismatch");
       if (!Array.isArray(deps) || deps.some(d => !identity(d) || typeof d.revision !== "string" || !/^[a-f0-9]{64}$/.test(d.policy_sha256) || !["activate", "rollback"].includes(d.action) || (d.status === "applied" && !Number.isSafeInteger(d.applied_at_unix)) || !Number.isSafeInteger(d.deployment_sequence) || d.deployment_sequence < 1 || !["issued", "delivered", "applied", "rejected"].includes(d.status)) || new Set(deps.map(d => d.deployment_sequence)).size !== deps.length) throw new Error("Deployment identity mismatch");
       agents = inventory; revisions = revs; deployments = deps;
@@ -131,6 +137,12 @@ const singlePolicy = (() => {
       const values = await read(`/admin/v1/tenants/${enc(id)}/agents`);
       if (stamp !== epoch || tenant !== id) return;
       if (!Array.isArray(values) || values.some(a => a.tenant_id !== id)) throw new Error("Agent identity mismatch");
+      if (openAgent && !values.some(a => a.agent_id === openAgent)) {
+        const selected = await read(`/admin/v1/tenants/${enc(id)}/agents/enrollment?agent_id=${enc(openAgent)}`);
+        if (stamp !== epoch || tenant !== id) return;
+        if (selected?.tenant_id !== id || selected?.agent_id !== openAgent) throw new Error("Agent identity mismatch");
+        values.push(selected);
+      }
       agents = values;
       values.forEach(a => { const o = make("option", `${a.agent_id}${a.revoked_at_unix != null ? " (revoked)" : ""}`); o.value = a.agent_id; $("single-agent").append(o); });
       if (openAgent && agents.some(a => a.agent_id === openAgent)) {
