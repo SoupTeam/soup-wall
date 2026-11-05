@@ -48,9 +48,25 @@ lifetime lease. Files/directories become `0400`/`0500`; the generation stays
 `0700`. Publication syncs the full generation and uses Linux exclusive rename.
 Failure or interruption cannot publish a selectable partial generation, and a
 concurrent winner is never overwritten/deleted. A process killed before cleanup
-may leave an unselectable `.snapshot-*` staging directory; preserve uncertain
-evidence before ordinary operator cleanup. There is no automatic recovery that
-promotes an incomplete generation.
+may leave an unselectable `.snapshot-*` staging directory.
+
+## Recover an interrupted capture
+
+Use the private directory that contained the intended snapshot destination as
+the store. Review the reported stage and use the confirmation from its preview.
+
+```sh
+agentfw pilot snapshot recovery-inventory --store "$store"
+agentfw pilot snapshot recovery-preview --store "$store" --stage "$stage"
+agentfw pilot snapshot recovery-apply --store "$store" --stage "$stage" --confirm "$confirmation"
+```
+
+Only an abandoned stage with a verified owner record is eligible. Active
+captures and unknown stages, including older stages without an owner record,
+stay in place. Keep uncertain stages for manual review. If recovery stops
+after recording consent, repeat the same apply command with the same token.
+Keep the private recovery journal for retry. Recovery never publishes a
+snapshot or modifies the original workspace.
 
 ## Explicit installed selection
 
