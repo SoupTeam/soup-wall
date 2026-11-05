@@ -19,20 +19,33 @@ pub(super) struct Quarantine {
     records: BTreeMap<String, Record>,
 }
 
+pub(super) struct Capture<'a> {
+    pub session: &'a Session,
+    pub call: &'a Call,
+    pub request: &'a Request,
+    pub firewall: &'a soup_wall_agent::AgentFirewall,
+    pub events: &'a [AgentEvent],
+    pub outcome: &'a Outcome,
+    pub now: Instant,
+}
+
 impl Quarantine {
     /// Requires the private consumed result, not a copied execution receipt.
     /// The caller holds admission and firewall locks through capture and audit.
     pub(super) fn hold(
         &mut self,
         consumed: execution::Consumed,
-        session: &Session,
-        call: &Call,
-        request: &Request,
-        firewall: &soup_wall_agent::AgentFirewall,
-        events: &[AgentEvent],
-        outcome: &Outcome,
-        now: Instant,
+        capture: Capture<'_>,
     ) -> Result<String, &'static str> {
+        let Capture {
+            session,
+            call,
+            request,
+            firewall,
+            events,
+            outcome,
+            now,
+        } = capture;
         self.records.retain(|_, record| record.expires > now);
         if self.records.len() >= MAX_RECORDS {
             return Err("analysis_quarantine_capacity");

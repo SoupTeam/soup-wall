@@ -1889,6 +1889,12 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     #[cfg(target_os = "linux")]
     drop(selected_ca);
     let consumer_identity = child.identity();
+    #[cfg(target_os = "linux")]
+    let consumer_registration = pilot_run
+        .as_ref()
+        .map(|run| child.register(run))
+        .transpose();
+
     drop(cmd);
     #[cfg(target_os = "linux")]
     let child_environment_ready = child_environment
@@ -1904,6 +1910,13 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     let mut intercepted_term = false;
     let mut cleanup_waiter = pilot_run.as_ref().map(|run| run.cleanup_waiter());
     let exit_status = rt.block_on(async {
+        #[cfg(target_os = "linux")]
+        if consumer_registration.is_err() {
+            let stopped = child.stop_after_cleanup(&consumer_identity, Duration::from_millis(200), &mut cleanup_waiter).await;
+            host_stopped = stopped.is_ok();
+            bail!("analysis_consumer_registration_unconfirmed");
+        }
+
         #[cfg(target_os = "linux")]
         if child_environment_ready.is_err() {
             let host_deadline_expired = tokio::time::Instant::now() >= deadline;

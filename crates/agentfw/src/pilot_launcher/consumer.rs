@@ -13,6 +13,8 @@ pub(super) struct Consumer {
     child: Child,
     identity: Identity,
     stop_spent: bool,
+    #[cfg(target_os = "linux")]
+    registration: Option<fs::File>,
 }
 
 impl Consumer {
@@ -24,7 +26,21 @@ impl Consumer {
             },
             child,
             stop_spent: false,
+            #[cfg(target_os = "linux")]
+            registration: None,
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(super) fn register(&mut self, run: &crate::pilot_approval::RunGuard) -> Result<()> {
+        ensure!(
+            !self.stop_spent && self.registration.is_none(),
+            "consumer_registration_spent"
+        );
+        ensure!(!self.exited()?, "consumer_exited");
+        self.registration =
+            Some(run.register_consumer(self.child.id(), &self.identity.generation)?);
+        Ok(())
     }
 
     pub(super) fn identity(&self) -> Identity {

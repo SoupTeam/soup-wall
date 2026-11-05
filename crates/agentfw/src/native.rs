@@ -26,6 +26,7 @@ pub mod continuity;
 pub mod execution;
 mod invocation;
 // SOU-218 executable contract experiment. No shipped endpoint or release path.
+pub mod consumer;
 pub mod liveness;
 pub mod pilot_cleanup;
 pub mod pilot_stop;
@@ -483,6 +484,7 @@ impl Session {
 
 #[derive(Default)]
 pub(crate) struct Sessions {
+    pub(crate) consumers: BTreeMap<String, crate::pilot_approval::consumer::Registration>,
     #[cfg(test)]
     analysis_hosts: BTreeSet<String>,
     pub(crate) entries: BTreeMap<String, Session>,
@@ -3368,13 +3370,15 @@ fn inspect_bound_measured(
                 .map_err(|_| "analysis_quarantine_state")?
                 .hold(
                     consumed,
-                    session,
-                    &call,
-                    &request,
-                    &firewall,
-                    &events,
-                    outcome,
-                    native.monotonic_now(),
+                    quarantine::Capture {
+                        session,
+                        call: &call,
+                        request: &request,
+                        firewall: &firewall,
+                        events: &events,
+                        outcome,
+                        now: native.monotonic_now(),
+                    },
                 ) {
                 Ok(id) => response.quarantine_id = Some(id),
                 Err(reason) => response.quarantine_error = Some(reason),

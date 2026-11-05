@@ -335,3 +335,54 @@ open.
 ```sh
 cargo test --locked -p agentfw --lib pilot_launcher::consumer::tests
 ```
+
+
+### November 5 held-consumer registration
+
+Independent review 5780668918 accepted the previous component at
+`1f170f0a515fa120fd45ec2d7fce58ad61beb0ad`, with 26 executed Linux tests.
+
+The next increment connects the existing launcher to a separate protected
+`/native/held-consumer/v1` registration endpoint. It uses the same native-token
+and verified loopback configuration as pilot control, with a 64 KiB request
+limit and at most 32 retained host registrations. It does not accept purpose
+intent or deliver any quarantined bytes.
+
+After spawning the held Child, the launcher seals a second immutable manifest
+containing its existing sealed run selection, the receiving PID/start time,
+random Consumer generation and held descriptor. The daemon checks both sealed
+manifests against the live same-binary pilot launcher, the direct child parent,
+process group and start time. It rejects stale instances/registries/expiry,
+retired source grants, foreign active host authority, duplicate host binding and
+capacity overflow. Admission and retirement share the registration lock.
+Registration failure takes the existing withdrawal/cleanup/stop path; the sealed
+manifest remains owned by Consumer until disposal. Windows registration fails
+closed because it cannot provide the selected Linux process proof.
+
+This registers the original receiving process only. A stored registration is
+not a reusable liveness, drain or purpose attestation. Atomic purpose spending,
+source/call/result binding at quarantine selection, terminal acknowledgement and
+a separately confined receiving process remain unfinished. The operator issuer
+and payload release remain unsupported; the six before/after outcomes above do
+not change. Independent Linux compilation and execution of the new registration
+path are required before accepting this increment. No full/native qualification
+or model calls were made.
+
+Local Windows: `cargo test -p agentfw --lib consumer` executes five passing tests
+(one existing grant test, two held-process tests, two registration controls),
+with the child helper ignored in the parent runner. The new Linux-only witness
+for sealed descriptor substitution, actual child generation/parent and exit is
+not counted as executed on Windows. Initial local compilation found an unhandled
+poisonable mutex result and an unqualified macro; both were corrected before the
+passing run.
+
+```sh
+cargo test --locked -p agentfw --lib consumer
+cargo check --locked -p agentfw --bin agentfw
+```
+
+The strict Clippy run also identified the earlier quarantine capture function's
+argument count. Its inputs are now grouped in a borrowed `Capture` structure;
+all 18 execution regressions passed afterward. Windows library Clippy with
+`-D warnings`, binary check, and documentation validation (426 files / 1356
+local links) passed. This refactor changes no capture condition or wire field.
