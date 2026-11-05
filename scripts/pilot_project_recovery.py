@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import tarfile
 
 FORMAT = 'sw-pilot-project-export/1'
@@ -101,22 +102,43 @@ def export(home, archive, consent, front, profiles, presets):
             b = record['binding']
             roots += [Path(b['selection']['path']).parent, Path(b['state_root']['path'])]
             roots += [Path(w['path']) for w in b['workspaces'].values()]
-        presets.require(all(not archive.is_relative_to(root) for root in roots), 'export_overlaps_preserved_state')
-        raw = archive_bytes(doc, presets)
-        def verify():
-            store.check()
-            presets.require(store.read() == value, 'export_catalog_changed')
-        exchange = front.load('project_export_private_publication', 'pilot_prerequisite_cache_exchange.py')
-        class Claim:
-            pass
-        claim = Claim(); claim.verify = verify
-        def writer(fd):
-            pending = memoryview(raw)
-            while pending:
-                count = os.write(fd, pending)
-                presets.require(count > 0, 'export_write_incomplete')
-                pending = pending[count:]
-        exchange._publish_private(archive.parent, archive.name, writer, claim)
+        def outside_preserved_roots():
+            presets.require(all(not archive.is_relative_to(root)
+                and not archive.is_relative_to(root.resolve()) for root in roots),
+                'export_overlaps_preserved_state')
+        outside_preserved_roots()
+        destination = presets.directory_identity(archive.parent, profiles)
+        # Retain this inode while the publisher independently opens the parent.
+        pinned = profiles._open_absolute_directory(archive.parent)
+        try:
+            def verify_directory(fd):
+                current = presets.directory_identity(archive.parent, profiles)
+                for descriptor in (pinned, fd):
+                    info = os.fstat(descriptor)
+                    presets.require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid()
+                        and stat.S_IMODE(info.st_mode) == 0o700
+                        and [info.st_dev, info.st_ino, info.st_uid] == destination == current,
+                        'export_destination_changed')
+                outside_preserved_roots()
+            verify_directory(pinned)
+            raw = archive_bytes(doc, presets)
+            def verify():
+                store.check()
+                presets.require(store.read() == value, 'export_catalog_changed')
+            exchange = front.load('project_export_private_publication', 'pilot_prerequisite_cache_exchange.py')
+            class Claim:
+                pass
+            claim = Claim(); claim.verify = verify
+            def writer(fd):
+                pending = memoryview(raw)
+                while pending:
+                    count = os.write(fd, pending)
+                    presets.require(count > 0, 'export_write_incomplete')
+                    pending = pending[count:]
+            exchange._publish_private(archive.parent, archive.name, writer, claim,
+                                      verify_directory=verify_directory)
+        finally:
+            os.close(pinned)
     return report('exported', archive_sha256=presets.digest(raw), records=len(doc['records']))
 
 
