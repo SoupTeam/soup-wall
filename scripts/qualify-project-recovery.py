@@ -11,7 +11,7 @@ import time
 import signal
 import subprocess
 
-CASES = ('private-export-consent', 'declarative-export', 'fresh-home-explicit-provider-inputs',
+CASES = ('private-export-consent', 'export-ancestor-symlink-refused', 'declarative-export', 'fresh-home-explicit-provider-inputs',
          'unresolved-preview-inert', 'stale-plan-refused', 'tampered-archive-refused',
          'changed-destination-catalog-refused', 'two-record-atomic-import',
          'duplicate-import-explicit', 'native-interruption-recovery', 'source-sibling-state-preserved')
@@ -164,6 +164,23 @@ def qualify(args, door, source_home, env, report, selections, states, versions, 
     call(['export','--archive',archive],target=source_home,expected=2)
     require(not archive.exists(),'project_unconsented_export_created')
     finish('private-export-consent',published_archives=0)
+    begin('export-ancestor-symlink-refused')
+    aliases=args.output/'project-export-aliases';aliases.mkdir(mode=0o700)
+    roots={source_home}
+    for record in json.loads(source_catalog)['records'].values():
+        binding=record['binding']
+        roots.update((Path(binding['selection']['path']).parent,Path(binding['state_root']['path'])))
+        roots.update(Path(root['path'])for root in binding['workspaces'].values())
+    for number,root in enumerate(sorted(roots)):
+        alias=aliases/('root-'+str(number));alias.symlink_to(root.parent,target_is_directory=True)
+        name='sou230-refused-export-'+str(number)+'.tar'
+        require(not(root/name).exists()and not(root/name).is_symlink(),'project_export_control_not_fresh')
+        try:
+            refused=call(['export','--archive',alias/root.name/name,'--consent'],target=source_home,expected=2)
+            require(refused['status']=='refused'and not(root/name).exists()
+                    and not(root/name).is_symlink(),'project_export_followed_symlink_ancestor')
+        finally:alias.unlink()
+    finish('export-ancestor-symlink-refused',preserved_roots_checked=len(roots),created_archives=0)
     begin('declarative-export')
     exported=call(['export','--archive',archive,'--consent'],target=source_home)
     require(exported['status']=='exported'and exported['records']==2,'project_export_incomplete')
