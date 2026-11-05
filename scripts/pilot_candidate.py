@@ -123,4 +123,3 @@ def validate_directory(directory, expected_commit=None):
     small = {name: (directory / name).read_bytes() for name in (RECEIPT, SOURCE)}
     small["component_manifest"] = component_manifest(directory / COMPONENT)
     return validate(rows, small, expected_commit)
-
