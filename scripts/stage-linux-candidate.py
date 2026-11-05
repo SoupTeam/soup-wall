@@ -46,14 +46,16 @@ def run(args):
         manifest_path=args.output/'candidate-manifest.json';manifest_path.write_bytes(candidate.canonical(manifest))
         publication_readiness.linux_binary(args.output,manifest_path,candidate.sha(manifest_path.read_bytes()),
                                            custody['binaries']['agentfw']['sha256'],args.expected_commit)
-        extracted=args.output/'extracted';extracted.mkdir(mode=0o700)
+        candidate_home=args.output/'candidate-home';candidate_home.mkdir(mode=0o700)
+        candidate.require(os.geteuid()!=0,'ordinary_user_required')
+        extracted=candidate_home/'extracted';extracted.mkdir(mode=0o700)
         # Prior shared bounds/link/inventory checks have already validated every
         # entry. Extract with the standard data filter into our fresh directory.
         with tarfile.open(archive,'r:gz') as package:package.extractall(extracted,filter='data')
         pilot_candidate.validate_directory(extracted/name,args.expected_commit)
         report.update(status='passed',custody=custody,archive_sha256=checked['archive_sha256'],
                       archive_inventory='verified',publication_readiness_archive_binding='verified',
-                      extracted_directory=str(extracted/name))
+                      extracted_directory=str(extracted/name),fresh_ordinary_user_home=str(candidate_home),uid=os.geteuid())
     finally:
         (args.output/'report.json').write_text(json.dumps(report,sort_keys=True)+'\n')
     return 0
