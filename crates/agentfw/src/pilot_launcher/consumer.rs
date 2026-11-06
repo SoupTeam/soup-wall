@@ -131,6 +131,11 @@ impl FixtureProcess {
         self.0.exited()
     }
 
+    /// Observe only after stop has successfully reaped the held child.
+    pub(crate) fn reaped(&mut self) -> std::io::Result<bool> {
+        self.0.child.try_wait().map(|status| status.is_some())
+    }
+
     pub(crate) async fn stop(&mut self) -> Result<()> {
         let identity = self.0.identity();
         self.0.stop(&identity, Duration::ZERO).await?;

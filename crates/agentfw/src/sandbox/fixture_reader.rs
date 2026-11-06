@@ -553,7 +553,7 @@ mod linux {
             if mode == "timeout" {
                 assert_eq!(result.as_ref().unwrap_err().to_string(), "reader deadline");
             }
-            assert!(process.exited().unwrap());
+            assert!(process.reaped().unwrap());
             assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
             // A setsid descendant retaining the channel must also be gone.
             let mut remainder = Vec::new();
