@@ -25,7 +25,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from ci_admission import GitHub, SHA, component_names, get_jobs, latest, required_names
 from ci_components import blocks
-from ci_impact import WORKFLOW_JOBS, plan
+from ci_impact import BUILD_CONSUMERS, BUILD_PRODUCER, WORKFLOW_JOBS, plan
 
 REPO = "SoupTeam/soup-wall"
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +65,10 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def bounded_body(response, deadline: float) -> bytes:
+    # read1 parses chunk-size/trailer lines internally through multiple receives.
+    # Unsupported framing must refuse before a per-receive timeout can overrun.
+    if getattr(response, "chunked", False):
+        raise Refusal("job_log_reader_unavailable")
     header = response.getheader("Content-Length")
     if header is not None and (not re.fullmatch(r"[0-9]{1,8}", header) or int(header) > MAX_LOG):
         raise Refusal("job_log_limit")
@@ -86,6 +90,8 @@ def bounded_body(response, deadline: float) -> bytes:
         if expected is not None:
             limit = min(limit, expected - len(data))
         block = response.read1(limit)
+        if time.monotonic() >= deadline:
+            raise Refusal("job_log_timeout")
         data.extend(block)
         if len(data) > MAX_LOG:
             raise Refusal("job_log_limit")
@@ -210,6 +216,8 @@ def needs(body: str) -> tuple[str, ...]:
 
 
 def leaf_and_body(workflow: str, job_id: str) -> str:
+    if (workflow, job_id) == BUILD_PRODUCER and any(BUILD_CONSUMERS.values()):
+        raise Refusal("job_has_dependents")
     try:
         source = (ROOT / ".github/workflows" / workflow).read_text(encoding="utf-8-sig")
         jobs = blocks(source)
@@ -437,12 +445,6 @@ def journal_record(fd: int, state: str, plan_id: str) -> None:
 
 def confirm_dispatch_freshness(api, identity: dict) -> None:
     """Fence changes after the final potentially slow log/annotation read."""
-    pr = api.get(f"/pulls/{identity['pr']}")
-    if (pr.get("state") != "open" or pr.get("draft") is not False or
-            pr.get("base", {}).get("sha") != identity["base"] or
-            pr.get("head", {}).get("sha") != identity["head"] or
-            pr.get("merge_commit_sha") != identity["merge"]):
-        raise Refusal("candidate_changed_before_dispatch")
     parents = [item.get("sha") for item in
                api.get("/git/commits/" + identity["merge"]).get("parents", [])]
     if parents != [identity["base"], identity["head"]]:
@@ -466,6 +468,15 @@ def confirm_dispatch_freshness(api, identity: dict) -> None:
     if current is None or (current.get("id"), current.get("run_attempt")) != \
             (identity["run_id"], 1):
         raise Refusal("newer_run_or_attempt_before_dispatch")
+    # Read candidate identity last, after all other network reads and the
+    # durable dispatch intent. The caller performs no journal I/O before POST.
+    pr = api.get(f"/pulls/{identity['pr']}")
+    if (pr.get("state") != "open" or pr.get("draft") is not False or
+            pr.get("base", {}).get("ref") != "main" or
+            pr.get("base", {}).get("sha") != identity["base"] or
+            pr.get("head", {}).get("sha") != identity["head"] or
+            pr.get("merge_commit_sha") != identity["merge"]):
+        raise Refusal("candidate_changed_before_dispatch")
 
 
 def execute(api, pr_number: int, job_id: int, trusted_base: str,
@@ -480,11 +491,11 @@ def execute(api, pr_number: int, job_id: int, trusted_base: str,
             second = retry_plan(api, pr_number, job_id, trusted_base)
             if second != first:
                 raise Refusal("plan_changed_before_dispatch")
+            journal_record(fd, "attempted", approved_plan_id)
             confirm_dispatch_freshness(api, first["identity"])
         except Refusal:
             journal_record(fd, "aborted", approved_plan_id)
             raise
-        journal_record(fd, "attempted", approved_plan_id)
         try:
             api.rerun_job(job_id)
         except Exception:

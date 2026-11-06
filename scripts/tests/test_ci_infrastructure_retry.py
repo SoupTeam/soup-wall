@@ -161,10 +161,16 @@ class RetryPlanTests(unittest.TestCase):
 
     def test_nonleaf_and_unregistered_dependency_refuse(self):
         with self.assertRaises(retry.Refusal) as context:
-            retry.leaf_and_body("ci.yml", "test")
+            retry.leaf_and_body("ci.yml", "impact")
         self.assertEqual(context.exception.reason, "job_has_dependents")
         with self.assertRaises(retry.Refusal):
             retry.needs("      needs: upstream\n")
+
+    def test_registered_cross_workflow_build_producer_is_not_a_leaf(self):
+        self.assertTrue(any(retry.BUILD_CONSUMERS.values()))
+        with self.assertRaises(retry.Refusal) as context:
+            retry.leaf_and_body(*retry.BUILD_PRODUCER)
+        self.assertEqual(context.exception.reason, "job_has_dependents")
 
     def test_successful_job_lineage_changes_plan(self):
         api = Evidence()
@@ -247,7 +253,95 @@ class RetryPlanTests(unittest.TestCase):
                     retry.execute(api, 22, JOB, BASE, plan_id, journal)
                 self.assertEqual(api.posts, 0)
                 records = [json.loads(line) for line in next(journal.iterdir()).read_text().splitlines()]
-                self.assertEqual([item["state"] for item in records], ["reserved", "aborted"])
+                self.assertEqual([item["state"] for item in records],
+                                 ["reserved", "attempted", "aborted"])
+
+    @unittest.skipUnless(os.name == "posix", "private journal is Linux-only")
+    def test_candidate_change_during_final_listing_blocks_post(self):
+        changes = {
+            "head": lambda e: e.pr["head"].update(sha="d" * 40),
+            "base_ref": lambda e: e.pr["base"].update(ref="release"),
+        }
+        for label, change in changes.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as parent:
+                api = Evidence()
+                plan_id = retry.retry_plan(api, 22, JOB, BASE)["plan_id"]
+                original_pages = api.pages
+                listings = []
+
+                def pages(path, field):
+                    value = original_pages(path, field)
+                    if path.startswith("/actions/runs?"):
+                        listings.append(path)
+                        if len(listings) == 3:
+                            change(api)
+                    return value
+
+                api.pages = pages
+                journal = Path(parent) / "private"
+                journal.mkdir(mode=0o700)
+                with self.assertRaises(retry.Refusal):
+                    retry.execute(api, 22, JOB, BASE, plan_id, journal)
+                self.assertEqual(api.posts, 0)
+                records = [json.loads(line) for line in next(journal.iterdir()).read_text().splitlines()]
+                self.assertEqual([item["state"] for item in records],
+                                 ["reserved", "attempted", "aborted"])
+
+    @unittest.skipUnless(os.name == "posix", "private journal is Linux-only")
+    def test_candidate_or_attempt_change_during_journal_sync_blocks_post(self):
+        changes = {
+            "head": lambda e: e.pr["head"].update(sha="d" * 40),
+            "attempt": lambda e: e.run.update(run_attempt=2),
+        }
+        for label, change in changes.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as parent:
+                api = Evidence()
+                plan_id = retry.retry_plan(api, 22, JOB, BASE)["plan_id"]
+                original_record = retry.journal_record
+
+                def record(fd, state, identity):
+                    original_record(fd, state, identity)
+                    if state == "attempted":
+                        change(api)
+
+                journal = Path(parent) / "private"
+                journal.mkdir(mode=0o700)
+                with patch.object(retry, "journal_record", side_effect=record):
+                    with self.assertRaises(retry.Refusal):
+                        retry.execute(api, 22, JOB, BASE, plan_id, journal)
+                self.assertEqual(api.posts, 0)
+                records = [json.loads(line) for line in next(journal.iterdir()).read_text().splitlines()]
+                self.assertEqual([item["state"] for item in records],
+                                 ["reserved", "attempted", "aborted"])
+
+    @unittest.skipUnless(os.name == "posix", "private journal is Linux-only")
+    def test_post_acknowledgement_changes_preserve_the_single_dispatch(self):
+        changes = {
+            "head": lambda e: e.pr["head"].update(sha="d" * 40),
+            "attempt": lambda e: e.run.update(run_attempt=2),
+        }
+        for label, change in changes.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as parent:
+                api = Evidence()
+                plan_id = retry.retry_plan(api, 22, JOB, BASE)["plan_id"]
+                original_post = api.rerun_job
+
+                def post(job_id):
+                    original_post(job_id)
+                    change(api)
+
+                api.rerun_job = post
+                journal = Path(parent) / "private"
+                journal.mkdir(mode=0o700)
+                result = retry.execute(api, 22, JOB, BASE, plan_id, journal)
+                self.assertEqual(result["status"], "acknowledged")
+                self.assertEqual(api.posts, 1)
+                with self.assertRaises(retry.Refusal):
+                    retry.execute(api, 22, JOB, BASE, plan_id, journal)
+                self.assertEqual(api.posts, 1)
+                records = [json.loads(line) for line in next(journal.iterdir()).read_text().splitlines()]
+                self.assertEqual([item["state"] for item in records],
+                                 ["reserved", "attempted", "acknowledged"])
 
     @unittest.skipUnless(os.name == "posix", "private journal is Linux-only")
     def test_two_concurrent_operators_dispatch_once(self):
@@ -303,6 +397,42 @@ class RetryPlanTests(unittest.TestCase):
 
 
 class TransportTests(unittest.TestCase):
+    def test_real_chunked_framing_refuses_before_slow_chunk_header(self):
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Transfer-Encoding", "chunked")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.close_connection = True
+                try:
+                    for byte in b"000000000000000000000000000000001\r\n":
+                        self.wfile.write(bytes([byte]))
+                        self.wfile.flush()
+                        time.sleep(0.025)
+                    self.wfile.write(b"x\r\n0\r\n\r\n")
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+
+            def log_message(self, *_):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with urlopen(f"http://127.0.0.1:{server.server_port}/", timeout=3) as response:
+                started = time.monotonic()
+                with self.assertRaises(retry.Refusal) as caught:
+                    retry.bounded_body(response, started + 0.15)
+                self.assertEqual(caught.exception.reason, "job_log_reader_unavailable")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=3)
+
     def test_real_socket_content_length_finishes_without_closed_socket_read(self):
         body = b"2026-11-06T00:00:04Z " + b"x" * 90
         class Handler(BaseHTTPRequestHandler):
@@ -337,6 +467,13 @@ class TransportTests(unittest.TestCase):
         with self.assertRaises(retry.Refusal) as context:
             retry.bounded_body(response, time.monotonic() + 3)
         self.assertEqual(context.exception.reason, "job_log_limit")
+
+    def test_completed_body_after_deadline_still_refuses(self):
+        response = self.Response(b"finite")
+        with patch.object(retry.time, "monotonic", side_effect=[0, 2]):
+            with self.assertRaises(retry.Refusal) as context:
+                retry.bounded_body(response, 1)
+        self.assertEqual(context.exception.reason, "job_log_timeout")
 
     class Response:
         def __init__(self, body):

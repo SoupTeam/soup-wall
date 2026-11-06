@@ -22,6 +22,12 @@ selected job that has not succeeded. The aggregate `Components` wrapper may
 reflect the one failed component leaf. A missing API page or inaccessible log is a refusal, not a
 successful plan. A previously rerun attempt is outside this one-shot action.
 
+Log body reads support finite Content-Length and close-delimited responses.
+Chunked transfer encoding is refused before framing parsing. Body reads have
+a 2 MiB byte limit and a 20-second deadline per attempt. Connection and response
+header reads use the existing eight-second socket inactivity timeout. DNS and
+header acquisition follow urllib and system resolver timing.
+
 ## Operator procedure
 
 Use an Actions-read token for planning. Start from a clean, trusted checkout
@@ -46,14 +52,20 @@ python3 scripts/ci_infrastructure_retry.py --pr 123 --job-id 456 \
 ```
 
 Execution re-reads all evidence before and after atomically reserving a
-create-new `0600` journal. After the final log read it checks current
-base/head/merge, job and run attempt again immediately before dispatch. It
-writes `attempted` before the POST. An
+create-new `0600` journal. It records durable dispatch intent as `attempted`
+before the final job, run and latest-attempt checks. The current PR's
+base/head/merge and Ready state are read last, immediately before the POST.
+A failed final check appends `aborted`. An
 acknowledged `201` is recorded as `acknowledged`; a lost response or HTTP
 failure is `uncertain` and **must not be blindly retried**. Inspect the run
 and journal manually. A second operator using the same plan ID is refused.
 Keep this private journal across process restarts. Do not remove entries to
 force another request.
+
+GitHub's job rerun API accepts a job ID. These cross-resource reads form a
+sequence of snapshots, and source or attempt can change after the last read.
+A known `201` response is recorded as `acknowledged` even if the source moves
+after acceptance. Trusted admission evaluates the resulting completion event.
 
 GitHub emits the existing workflow completion event when the rerun finishes.
 The trusted SOU-91 admission workflow then recomputes current base/head/merge,
