@@ -20,7 +20,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 import urllib.error
 import urllib.request
 
@@ -156,19 +155,6 @@ def cleanup_owned(docker, project, compose_args, frozen):
     require(not safe_project_containers(docker, project), "owned_container_cleanup_incomplete")
 
 
-def wait_healthy(gate, module):
-    deadline = time.monotonic() + 120
-    while time.monotonic() < deadline:
-        try:
-            gate.verify_containers(gate.images)
-            return
-        except module.ClosureError as error:
-            if str(error) != "service_not_healthy":
-                raise
-        time.sleep(2)
-    raise QualificationError("restarted_stack_not_healthy")
-
-
 def shell(gate, service, program):
     return gate.compose(["exec", "-T", service, "sh", "-c", program]).strip()
 
@@ -208,6 +194,120 @@ def existing_drill(module, values, project, gateway, platform):
     return phases
 
 
+def exercise_operations(gate, module, report):
+    """Exercise the operator commands against the same fresh owned stack."""
+    docker = gate.docker
+
+    class AuditedDocker:
+        def __init__(self):
+            self.interrupt = False
+            self.audit_status = False
+
+        def run(self, args, **kwargs):
+            if self.audit_status:
+                require(args[0] in {"version", "exec"}
+                        or args[:2] in (["context", "inspect"], ["container", "inspect"],
+                                        ["image", "inspect"], ["network", "ls"], ["network", "inspect"],
+                                        ["volume", "ls"], ["volume", "inspect"])
+                        or (args[0] == "compose" and (args[-3:] == ["config", "--format", "json"]
+                                                      or args[-4:-1] == ["ps", "--all", "--quiet"])),
+                        "status_attempted_docker_mutation")
+            result = docker.run(args, **kwargs)
+            if self.interrupt and args[:2] == ["container", "start"]:
+                self.interrupt = False
+                raise module.ClosureError("owned_restart_interruption")
+            return result
+
+        def json(self, args, **kwargs):
+            return module.decode(self.run(args, **kwargs))
+
+        def require_local(self):
+            docker.require_local()
+
+    def status():
+        audited.audit_status = True
+        try:
+            return gate.execute("status")
+        finally:
+            audited.audit_status = False
+
+    audited = AuditedDocker()
+    gate.docker = audited
+    witness = None
+    try:
+        first = status()
+        require(all(row["state"] == "healthy" and row["probe"] in {"ready", "available"}
+                    for row in first["services"].values()), "status_healthy_stack_not_verified")
+        closure = first["closure"]
+        report["operations_status"] = {"healthy": first["services"], "closure": closure}
+        report["checks"].append("observed-healthy-stack-and-authenticated-readiness")
+
+        policy = gate.policy_snapshot
+        original = policy.read_bytes()
+        try:
+            policy.write_bytes(b"# owned checkpoint changed policy\n")
+            try:
+                status()
+            except module.ClosureError as error:
+                require(str(error) == "staged_policy_changed", "status_wrong_policy_failure")
+            else:
+                raise QualificationError("status_accepted_changed_policy")
+        finally:
+            policy.write_bytes(original)
+        report["checks"].append("read-only-status-refuses-changed-policy")
+
+        owner = gate.project + "-witness"
+        witness = docker.run(["create", "--pull", "never", "--network", "none", "--tmpfs", "/data",
+                              "--label", "com.docker.compose.project=" + owner, "--entrypoint", "sh",
+                              gate.images["redis"]["reference"], "-c", "sleep 600"]).strip()
+        require(module.CONTAINER_ID.fullmatch(witness) is not None, "invalid_unrelated_witness_id")
+        docker.run(["container", "start", witness])
+        before = docker.json(["container", "inspect", witness])[0]["State"]["StartedAt"]
+
+        docker.run(["container", "stop", "--time", "10", closure["containers"]["redis"]])
+        outage = status()
+        require(outage["closure"] == closure and outage["services"]["redis"]["state"] == "stopped"
+                and outage["services"]["firewall"]["probe"] == "not_ready", "status_dependency_outage_not_observed")
+        report["operations_status"]["dependency_outage"] = outage["services"]
+        report["checks"].append("read-only-status-distinguishes-stopped-redis-and-gateway-not-ready")
+
+        stop = gate.execute("stop")
+        require(stop["phase"] == "preview" and stop["closure"] == closure, "stop_preview_wrong_closure")
+        result = gate.execute("stop", confirmation=stop["confirmation"])
+        require(result["closure"] == closure and set(result["services"].values()) == {"stopped"},
+                "stop_did_not_preserve_closure")
+        report["operations_status"]["stopped"] = status()["services"]
+        report["checks"].append("confirmed-stop-retains-exact-containers-network-and-volumes")
+
+        restart = gate.execute("restart")
+        audited.interrupt = True
+        try:
+            gate.execute("restart", confirmation=restart["confirmation"])
+        except module.ClosureError as error:
+            require(str(error) == "owned_restart_interruption" and gate.recovery_required,
+                    "restart_recovery_not_recorded")
+        else:
+            raise QualificationError("restart_interruption_not_triggered")
+        result = gate.execute("restart", confirmation=restart["confirmation"])
+        require(result["closure"] == closure and set(result["services"].values()) == {"healthy"},
+                "restarted_closure_changed_or_unhealthy")
+        recovered = status()
+        require(recovered["closure"] == closure and recovered["services"] == first["services"],
+                "status_did_not_verify_recovery")
+        report["operations_status"]["recovered"] = recovered["services"]
+        row = docker.json(["container", "inspect", witness])[0]
+        require(row["State"]["Running"] and row["State"]["StartedAt"] == before,
+                "unrelated_project_was_interrupted")
+        report["checks"].append("interrupted-restart-resumes-exact-closure-and-preserves-unrelated-project")
+    finally:
+        gate.docker = docker
+        if witness and module.CONTAINER_ID.fullmatch(witness):
+            row = docker.json(["container", "inspect", witness])[0]
+            require(row["Id"] == witness and row["Config"]["Labels"]["com.docker.compose.project"] == owner,
+                    "unrelated_witness_cleanup_owner_mismatch")
+            docker.run(["container", "rm", "--force", witness])
+
+
 def qualify(args, report):
     clean_source(args.expected_commit)
     module = load_gate()
@@ -242,6 +342,25 @@ def qualify(args, report):
             refused = str(error) == "docker_command_failed"
         require(refused and not safe_project_containers(docker, project), "missing_image_did_not_refuse")
         checks.append("missing-image-refused-before-container-creation")
+
+        def status_refuses(category):
+            try:
+                gate.execute("status")
+            except module.ClosureError as error:
+                require(str(error) == category, "unexpected_status_refusal")
+            else:
+                raise QualificationError("status_accepted_unverified_closure")
+
+        foreign = docker.run(["network", "create", "--label", "com.docker.compose.project=" + project + "-foreign",
+                              project + "_default"]).strip()
+        require(module.CONTAINER_ID.fullmatch(foreign) is not None, "invalid_foreign_network_id")
+        try:
+            status_refuses("project_network_identity_or_owner_mismatch")
+            require(not safe_project_containers(docker, project), "foreign_network_refusal_created_container")
+            checks.append("status-refuses-foreign-project-network-without-creating-resources")
+        finally:
+            docker.run(["network", "rm", foreign])
+
         cleanup_needed = False
         cleanup_config = None
         try:
@@ -257,12 +376,13 @@ def qualify(args, report):
                                        "--label", "com.docker.compose.oneoff=False",
                                        "--label", "com.docker.compose.config-hash=owned-wrong-image-control",
                                        "--entrypoint", "/bin/true", args.gateway_image_id]).strip()
-                refused = False
+                observer = module.ProductionCompose(ROOT, project, env_file, args.gateway_image_id, docker)
                 try:
-                    gate.verify_containers(gate.images, required=False)
+                    observer.execute("status")
                 except module.ClosureError as error:
-                    refused = str(error) == "container_identity_or_owner_mismatch"
-                require(refused, "wrong_container_image_not_refused")
+                    require(str(error) == "container_identity_or_owner_mismatch", "wrong_container_refusal_category")
+                else:
+                    raise QualificationError("wrong_container_image_not_refused")
                 require(safe_project_containers(docker, project) == [wrong_id[:12]]
                         or safe_project_containers(docker, project) == [wrong_id],
                         "unexpected_container_created_during_refusal")
@@ -300,8 +420,8 @@ def qualify(args, report):
                                'redis-cli --no-auth-warning --raw GET compose:qualification')
                 require(shell(gate, "redis", redis_write) == marker, "redis_auth_or_write_failed")
                 checks.append("postgres-and-redis-authenticated-data-witnesses")
-                gate.compose(["restart", "postgres", "redis", "firewall"])
-                wait_healthy(gate, module)
+            exercise_operations(gate, module, report)
+            with gate.freeze():
                 require(shell(gate, "postgres", postgres_program("SELECT value FROM compose_qualification_probe"))
                         == "x", "postgres_data_lost_after_restart")
                 require(shell(gate, "redis", 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli --no-auth-warning '

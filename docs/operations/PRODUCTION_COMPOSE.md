@@ -130,6 +130,46 @@ prints a fixed category; diagnose it privately without copying raw secret-bearin
 tool output into a ticket. Earlier observations remain attributed to their actual
 source and inputs.
 
+## Observe, stop and restart
+
+Use the same checkout, project, protected environment file and Gateway image ID
+as for `start`. These commands require a local Docker Unix socket or local
+Windows named pipe so the Gateway readiness probe addresses the selected host.
+
+```text
+python3 scripts/production-compose.py status --project soup-wall-production --env-file <protected-file> --gateway-image-id sha256:<reviewed-image-id>
+python3 scripts/production-compose.py stop --project soup-wall-production --env-file <protected-file> --gateway-image-id sha256:<reviewed-image-id>
+python3 scripts/production-compose.py stop --project soup-wall-production --env-file <protected-file> --gateway-image-id sha256:<reviewed-image-id> --confirm <stop-confirmation>
+python3 scripts/production-compose.py restart --project soup-wall-production --env-file <protected-file> --gateway-image-id sha256:<reviewed-image-id>
+python3 scripts/production-compose.py restart --project soup-wall-production --env-file <protected-file> --gateway-image-id sha256:<reviewed-image-id> --confirm <restart-confirmation>
+```
+
+`status` reports verified configuration, each container's Docker state and the
+result of each application probe separately. Check `services.firewall.probe`
+for Gateway readiness and each dependency's `probe` for authenticated
+availability. A successful observation can show stopped or unhealthy services.
+The command only inspects resources, runs transient authenticated `SELECT 1`
+and `PING` probes by container ID, and calls the selected Gateway's loopback
+`/readyz`. It leaves the container, image, network, volume and policy snapshot
+inventory intact. If identity checks or observations fail, it reports a fixed
+refusal and marks the configuration unverifiable.
+
+`stop` and `restart` first print a preview. Review the service states and
+container, network and volume identities before using the action-specific
+confirmation. Use it within five minutes. The wrapper revalidates the selected
+closure before every Docker lifecycle call and targets exact container IDs.
+Stop takes down the Gateway first. Restart starts the same dependencies,
+waits for authenticated availability, then starts the same Gateway and checks
+readiness. Both operations retain the existing containers and data volumes.
+
+If a confirmed operation is interrupted, keep its confirmation and the local
+recovery record in `target/production-compose/<project>/operation.json`.
+Resolve the reported condition and repeat the same command with the same
+confirmation. The saved phase and verified container states let it continue
+from the interruption. Use the same checkout for wrapper operations on this
+stack. The project lock serializes local wrapper commands and cannot coordinate
+direct Docker or Compose commands, so avoid those during an operation.
+
 ## Update and rollback
 
 1. Back up owned PostgreSQL and Redis data and drill restoration using the
@@ -192,7 +232,9 @@ The reproducible owned-stack qualification uses an already-built image whose
 source. It creates a random project and disposable credentials, runs the existing
 health/dependency drill, verifies admin and database authentication, writes
 PostgreSQL/Redis witnesses and verifies those witnesses plus the tenant after a
-three-container restart. It also checks missing-image and wrong-owned-container
+confirmed stop and interrupted restart. It records read-only status before,
+during and after dependency outage and verifies that an unrelated project keeps
+running. It also checks missing-image and wrong-owned-container
 refusal without replacement. Only that owned project's containers and volumes are
 removed afterwards; no deployment or external database is reused.
 
