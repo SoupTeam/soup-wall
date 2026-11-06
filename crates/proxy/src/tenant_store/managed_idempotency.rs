@@ -238,6 +238,8 @@ fn load_issuance(
                     status: r.get(3)?,
                     issued_at_unix: r.get(4)?,
                     applied_at_unix: r.get(5)?,
+                    rejected_at_unix: None,
+                    rejection_code: None,
                 },
                 r.get::<_, String>(6)?,
             ))

@@ -23,7 +23,7 @@ PROBLEMS = ["pending", "rejected", "mismatch", "revoked", "incomplete_history", 
 
 def page_html():
     html = (SRC / "admin_dashboard.html").read_text(encoding="utf-8")
-    for marker, name in (("FLEET_PANEL", "fleet_panel.js"), ("ROLLOUT_PANEL", "rollout_panel.js"), ("SINGLE_AGENT_POLICY", "single_agent_policy.js"),
+    for marker, name in (("AGENT_REJECTION_REASONS", "agent_rejection_reasons.js"), ("FLEET_PANEL", "fleet_panel.js"), ("ROLLOUT_PANEL", "rollout_panel.js"), ("SINGLE_AGENT_POLICY", "single_agent_policy.js"),
                          ("ENROLLMENT_PANEL", "enrollment_panel.js"), ("AGENT_HISTORY", "agent_history.js"),
                          ("FLEET_TRIAGE", "fleet_triage.js"), ("AGENT_HEARTBEAT", "heartbeat_panel.js"), ("OPERATOR_AUDIT", "operator_audit_panel.js")):
         html = html.replace(f"/* {marker} */", (SRC / name).read_text(encoding="utf-8"))

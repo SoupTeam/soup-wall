@@ -23,7 +23,7 @@ T0 = 1800000000
 
 def page_html():
     html = (SRC / "admin_dashboard.html").read_text(encoding="utf-8")
-    for marker, name in (("FLEET_PANEL", "fleet_panel.js"), ("ROLLOUT_PANEL", "rollout_panel.js"), ("SINGLE_AGENT_POLICY", "single_agent_policy.js"),
+    for marker, name in (("AGENT_REJECTION_REASONS", "agent_rejection_reasons.js"), ("FLEET_PANEL", "fleet_panel.js"), ("ROLLOUT_PANEL", "rollout_panel.js"), ("SINGLE_AGENT_POLICY", "single_agent_policy.js"),
                          ("ENROLLMENT_PANEL", "enrollment_panel.js"), ("AGENT_HISTORY", "agent_history.js"), ("FLEET_TRIAGE", "fleet_triage.js"), ("AGENT_HEARTBEAT", "heartbeat_panel.js"), ("OPERATOR_AUDIT", "operator_audit_panel.js")):
         html = html.replace(f"/* {marker} */", (SRC / name).read_text(encoding="utf-8"))
     return html
@@ -190,6 +190,62 @@ class AgentHistoryBrowserTests(unittest.TestCase):
         self.assertEqual(len(snap["unresolved_event_ids"]), 2)
         self.assertEqual(len({e["event_id"] for e in snap["events"]}), len(snap["events"]))
         self.assertEqual(self.mutations, [])
+
+    def test_rejection_reason_time_and_next_step_are_fixed_text(self):
+        """SOU-241: a recorded reason renders only from the fixed table; the
+        rejected candidate stays separate from the last applied policy."""
+        rejected = dict(dep(3, "rejected"), rejected_at_unix=T0 + 320, rejection_code="bundle_expired")
+        legacy = dep(6, "rejected")
+        unknown = dict(dep(7, "rejected"), rejected_at_unix=T0 + 720, rejection_code="from_a_newer_console")
+        self.history[(TENANT, "edge-1")] = [dep(1, "applied", T0 + 150), dep(2, "issued"), rejected,
+                                           dep(4, "applied", T0 + 450, action="rollback"), dep(5, "delivered"), legacy, unknown]
+        self.open()
+        self.pick()
+        self.wait_status("No older pages")
+        events = self.events()
+        by_seq = {e.split(" · ")[2]: e for e in events if e.startswith("Rejected")}
+        self.assertIn("Bundle had expired when the Agent checked it", by_seq["#3"])
+        self.assertIn("Next step: Check the Agent host clock", by_seq["#3"])
+        self.assertIn("the Agent kept its previous policy", by_seq["#3"])
+        self.assertNotIn("time not recorded", by_seq["#3"].lower())
+        self.assertIn("did not report a reason", by_seq["#6"])
+        self.assertIn("Time not recorded", by_seq["#6"])
+        self.assertIn("does not recognise", by_seq["#7"])
+        self.assertNotIn("from_a_newer_console", "\n".join(events))
+        fleet = self.page.locator("#fleet-agent-detail").inner_text()
+        self.assertIn("Latest deployment was rejected: Rejected with a reason this Console does not recognise", fleet)
+        self.assertIn("never became active", fleet)
+        self.assertIn("Bundle had expired when the Agent checked it · received", fleet)
+        self.assertNotIn("from_a_newer_console", fleet)
+        # Historical last applied remains #4, never the rejected candidate.
+        self.assertEqual(self.page.locator("#history-summary a").evaluate_all("a => a.map(x => x.getAttribute('href'))"),
+                         ["#history-dep-7", "#history-dep-4"])
+        snap = self.snapshot()
+        kinds = {e["sequence"]: e for e in snap["events"] if e["kind"] == "rejected"}
+        self.assertEqual((kinds["3"]["at_unix"], kinds["3"]["rejection_code"], kinds["3"]["rejection_category"]), (T0 + 320, "bundle_expired", "expiry"))
+        self.assertEqual((kinds["6"]["at_unix"], kinds["6"]["rejection_code"]), (None, None))
+        self.assertIsNone(kinds["7"]["rejection_code"])
+        self.assertEqual(snap["summary"]["historical_last_reported_applied"]["sequence"], "4")
+        self.assertIn("from_a_newer_console", json.dumps(self.history[(TENANT, "edge-1")]))
+        self.assertNotIn("from_a_newer_console", json.dumps(snap))
+        self.assertIn("fetch_and_rejection_times_not_recorded", [r["code"] for r in snap["completeness"]["reasons"]])
+        self.assertEqual(self.mutations, [])
+
+    def test_rejection_fields_outside_a_rejected_record_are_dropped(self):
+        self.history[(TENANT, "edge-1")] = [dep(1, "applied", T0 + 150),
+                                           dict(dep(2, "issued"), rejection_code="bundle_expired"),
+                                           dict(dep(3, "rejected"), rejection_code="Bundle <b>expired</b>"),
+                                           dict(dep(4, "rejected"), rejected_at_unix="soon"),
+                                           dict(dep(5, "rejected"), rejected_at_unix=T0 + 520, rejection_code="policy_invalid")]
+        self.open()
+        self.pick()
+        self.wait_status("No older pages")
+        snap = self.snapshot()
+        self.assertEqual(snap["coverage"]["malformed_records_dropped"], 3)
+        self.assertNotIn("<b>", self.page.content().split("<script")[0])
+        self.assertIn("fetch_times_not_recorded", [r["code"] for r in snap["completeness"]["reasons"]])
+        rejected = [e for e in snap["events"] if e["kind"] == "rejected"]
+        self.assertEqual([(e["sequence"], e["rejection_code"]) for e in rejected], [("5", "policy_invalid")])
 
     def test_pagination_denominators_and_export_bounds(self):
         self.page_size = 2

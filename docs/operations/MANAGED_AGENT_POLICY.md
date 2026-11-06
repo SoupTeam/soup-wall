@@ -117,7 +117,7 @@ Keyring properties and guarantees:
 
 ## Failure semantics and outstanding review boundaries
 
-- **Replayed, cross-tenant/Agent, modified, expired, unknown/revoked-key or invalid YAML**: reject before activation and attempt an authenticated `rejected` acknowledgement; preserve the last active policy.
+- **Replayed, cross-tenant/Agent, modified, expired, unknown/revoked-key or invalid YAML**: reject before activation and attempt an authenticated `rejected` acknowledgement with a finite reason code ([Agent policy rejections](AGENT_POLICY_REJECTIONS.md)); preserve the last active policy.
 - **Console offline/unavailable**: retain the last accepted active policy, expose transport status separately, and retry. If an `applied` ack failed, the same signed pending deployment can be acknowledged again *without* a second application.
 - **Rollback**: issue a **new** higher-sequence signed deployment of a previously approved payload; do not replay an old signed bundle.
 - **Revoked enrollment**: server refuses all future fetches and acknowledgements using the old Agent token. Already active policy is not remotely erased.
@@ -265,8 +265,10 @@ Enrollment and past acknowledgements never prove current liveness, active
 protection, model consumption or registry identity. Those runtime facts remain
 `unknown` (registry identity is `null`). Refresh rereads stored records; it does
 not obtain live Agent telemetry. No new Agent-to-Console protocol is introduced.
-The store has issued and reported-applied timestamps, but no distinct delivery
-or rejection timestamp; these missing dates remain `null`, not the issue time.
+The store has issued and reported-applied timestamps and, since SOU-241, the
+Console receipt time and finite reason of the first authenticated rejection
+([Agent policy rejections](AGENT_POLICY_REJECTIONS.md)). There is no distinct
+delivery timestamp; missing dates remain `null`, not the issue time.
 
 ### Fleet read API
 
