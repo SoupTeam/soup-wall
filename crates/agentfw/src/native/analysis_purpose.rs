@@ -322,6 +322,68 @@ pub(super) fn lifecycle_fixture(
     grant
 }
 
+#[cfg(all(test, target_os = "linux"))]
+pub(super) fn expiry_lock_wait_regression(
+    st: &crate::handlers::Shared,
+    registration: &crate::pilot_approval::consumer::Registration,
+    expire_registration: bool,
+) {
+    let native = st.native.as_ref().unwrap();
+    let mut grant = lifecycle_fixture(st, registration, "expired-wait-q");
+    grant.expires_at_ms = if expire_registration {
+        registration.expires()
+    } else {
+        super::wall_time_ms().unwrap() + 1_000
+    };
+    grant.signature = URL_SAFE_NO_PAD.encode(
+        mac(&derive_key(&native.token), &grant)
+            .finalize()
+            .into_bytes(),
+    );
+    let firewall = st.firewall.lock().unwrap();
+    std::thread::scope(|scope| {
+        let worker = scope.spawn(|| consume(st, &grant));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            if matches!(
+                native.sessions.try_lock(),
+                Err(std::sync::TryLockError::WouldBlock)
+            ) {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                // Release before panicking so scoped thread join cannot deadlock.
+                drop(firewall);
+                panic!("consume did not acquire admission lock");
+            }
+            std::thread::yield_now();
+        }
+        while super::wall_time_ms().unwrap() <= grant.expires_at_ms + 100 {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        drop(firewall);
+        let error = if expire_registration {
+            "analysis_consumer_unverified"
+        } else {
+            "analysis_purpose_time"
+        };
+        assert!(matches!(worker.join().unwrap(), Err(actual) if actual == error));
+    });
+    let sessions = native.sessions.lock().unwrap();
+    assert!(sessions.purpose_spent.is_empty());
+    assert!(sessions.spent_authorities.is_empty());
+    assert!(sessions.scoped_hosts.is_empty());
+    assert!(
+        !native
+            .quarantine
+            .lock()
+            .unwrap()
+            .retained("expired-wait-q")
+            .unwrap()
+            .1
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -540,66 +602,4 @@ mod tests {
         assert_eq!(sessions.purpose_spent.len(), 1);
         assert_eq!(sessions.spent_authorities.len(), 2);
     }
-}
-
-#[cfg(all(test, target_os = "linux"))]
-pub(super) fn expiry_lock_wait_regression(
-    st: &crate::handlers::Shared,
-    registration: &crate::pilot_approval::consumer::Registration,
-    expire_registration: bool,
-) {
-    let native = st.native.as_ref().unwrap();
-    let mut grant = lifecycle_fixture(st, registration, "expired-wait-q");
-    grant.expires_at_ms = if expire_registration {
-        registration.expires()
-    } else {
-        super::wall_time_ms().unwrap() + 1_000
-    };
-    grant.signature = URL_SAFE_NO_PAD.encode(
-        mac(&derive_key(&native.token), &grant)
-            .finalize()
-            .into_bytes(),
-    );
-    let firewall = st.firewall.lock().unwrap();
-    std::thread::scope(|scope| {
-        let worker = scope.spawn(|| consume(st, &grant));
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        loop {
-            if matches!(
-                native.sessions.try_lock(),
-                Err(std::sync::TryLockError::WouldBlock)
-            ) {
-                break;
-            }
-            if std::time::Instant::now() >= deadline {
-                // Release before panicking so scoped thread join cannot deadlock.
-                drop(firewall);
-                panic!("consume did not acquire admission lock");
-            }
-            std::thread::yield_now();
-        }
-        while super::wall_time_ms().unwrap() <= grant.expires_at_ms + 100 {
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
-        drop(firewall);
-        let error = if expire_registration {
-            "analysis_consumer_unverified"
-        } else {
-            "analysis_purpose_time"
-        };
-        assert!(matches!(worker.join().unwrap(), Err(actual) if actual == error));
-    });
-    let sessions = native.sessions.lock().unwrap();
-    assert!(sessions.purpose_spent.is_empty());
-    assert!(sessions.spent_authorities.is_empty());
-    assert!(sessions.scoped_hosts.is_empty());
-    assert!(
-        !native
-            .quarantine
-            .lock()
-            .unwrap()
-            .retained("expired-wait-q")
-            .unwrap()
-            .1
-    );
 }

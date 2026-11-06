@@ -241,6 +241,11 @@ pub(crate) fn held_fixture_with_ttl(
 }
 
 #[cfg(test)]
+pub(crate) fn transaction_fixture() -> Registration {
+    tests::fixture()
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -342,9 +347,4 @@ mod tests {
         child.wait().unwrap();
         assert!(verify_child(pid, start, parent).is_err());
     }
-}
-
-#[cfg(test)]
-pub(crate) fn transaction_fixture() -> Registration {
-    tests::fixture()
 }
