@@ -577,8 +577,9 @@ local reader milestone, entirely under `cfg(test)` in the existing sandbox and
 launcher modules. It does not introduce a production CLI, classifier or launcher.
 
 The Linux parent starts a fixed libtest entry through required bubblewrap user,
-mount, PID and network namespaces. It binds the live parent's executable inode
-via `/proc/<parent>/exe`, not a caller-selected program or mutable checkout path.
+mount, PID and network namespaces. It opens and hashes `/proc/self/exe` before
+launch and binds that held inode using `--ro-bind-fd`. The owned file stays alive
+through spawn; no parent proc path is resolved after entering the namespace.
 Before any fixture bytes, the private-channel handshake must match that binary's
 SHA-256 and show four namespace identities different from the parent. Only
 read-only runtime library directories are mounted; project, home, `/etc`, tools
@@ -589,9 +590,13 @@ The system root-owned, non-setuid, non-group/other-writable `/usr/bin/bwrap` is
 required; there is no PATH selection or unsandboxed fallback. This depends on the
 trusted system runtime/library installation, not an independently pinned distro.
 
-One anonymous socket is inherited as stdin. Stdout/stderr go to null; every other
-descriptor is marked close-on-exec, including a deliberately inheritable canary
-in the witness. The parent closes its retained Command/Stdio copy after spawn.
+One anonymous socket is inherited as stdin. Stdout/stderr go to null. All other
+descriptors are marked close-on-exec, then only the held executable descriptor
+is allowed into bubblewrap for the mount. Bubblewrap consumes that descriptor;
+the reader rejects all descriptors beyond stdio, including a deliberately
+inheritable canary in the witness. The parent drops its Command and retained file
+after spawn. The finite environment accepts bubblewrap's `PWD` only as `/` and
+independently requires the real current directory to be `/`.
 An affine in-memory **fixture ticket**, not a daemon grant or cleanup receipt,
 reserves one exact generation/hash/length before writing, preserving its original
 monotonic deadline. Mismatch and expiry consume that attempt. The reader returns
@@ -631,3 +636,20 @@ semantic-output boundary. This test fixture ticket cannot substitute for those
 proofs. The fixed public attack-shaped fixture is transported as inert bytes;
 that is not an attack-Deny result. All six benign cases remain unresolved,
 original labels/counts stay unchanged, and SOU-218/#346 remain In Progress/Draft.
+
+#### Reader review corrections
+
+[Review 5801800918](https://github.com/SoupTeam/soup-wall/pull/346#pullrequestreview-5801800918)
+compiled exact `7107c287` on Linux but found early EOF in normal readiness.
+The parent proc executable path was inaccessible after namespace entry, and
+the environment check rejected bubblewrap 0.9.0's own `PWD=/`. The reviewer
+confirmed an inherited held-descriptor `--ro-bind-fd` control works. The original
+normal-path failure means the other seven lifecycle scenarios were not qualified;
+two portable protocol tests and two existing cleanup tests passed independently.
+
+The follow-up uses the pre-opened, verified executable described above and an
+exact PWD plus actual-cwd check. A new portable regression rejects missing,
+wrong or duplicate PWD, a mismatched real cwd and unexpected environment names.
+Local portable validation does not qualify Linux descriptor consumption or the
+eight kernel scenarios. Repeat both narrow commands above on the corrected exact
+head before accepting this milestone. The failed `7107c287` evidence is retained.
