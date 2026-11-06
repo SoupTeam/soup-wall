@@ -24,6 +24,8 @@ use crate::native::child_authority;
 use crate::Config;
 
 mod consumer;
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) use consumer::FixtureProcess;
 
 pub const DEFAULT_TIMEOUT_SECONDS: u64 = 180;
 pub const FILESYSTEM_SERVER_ID: &str = "filesystem";

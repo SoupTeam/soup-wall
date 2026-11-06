@@ -111,6 +111,45 @@ impl Consumer {
     }
 }
 
+/// Test-only adapter around the existing held-child owner and stop path.
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) struct FixtureProcess(Consumer);
+
+#[cfg(all(test, target_os = "linux"))]
+impl FixtureProcess {
+    pub(crate) fn spawn(command: &mut Command) -> Result<Self> {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+        Ok(Self(Consumer::new(command.spawn()?)))
+    }
+
+    pub(crate) fn pid(&self) -> u32 {
+        self.0.child.id()
+    }
+
+    pub(crate) fn exited(&mut self) -> std::io::Result<bool> {
+        self.0.exited()
+    }
+
+    pub(crate) async fn stop(&mut self) -> Result<()> {
+        let identity = self.0.identity();
+        self.0.stop(&identity, Duration::ZERO).await?;
+        Ok(())
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+impl Drop for FixtureProcess {
+    fn drop(&mut self) {
+        // Cancellation/panic still kills the held bwrap supervisor. Its private
+        // PID namespace loses init and all descendants, including setsid children.
+        if matches!(self.0.child.try_wait(), Ok(None)) {
+            let _ = self.0.child.kill();
+            let _ = self.0.child.wait();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

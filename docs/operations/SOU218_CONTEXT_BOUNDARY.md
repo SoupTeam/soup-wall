@@ -565,3 +565,69 @@ which this proposal does not approve or enable. No new model budget is requested
 
 This proposal is not an implementation or a six-case correction. Production
 issuer, handoff and signature interpretation remain unchanged and unsupported.
+
+### Public-fixture reader implementation - November 6
+
+The fixture-only slice was approved in
+[review 5796949598](https://github.com/SoupTeam/soup-wall/pull/346#pullrequestreview-5796949598)
+and General at 13:45. The useful target is a separate analysis-only worker under
+private review/control; provider/egress and semantic-output authorization still
+need a separately reviewed design. This increment implements only the approved
+local reader milestone, entirely under `cfg(test)` in the existing sandbox and
+launcher modules. It does not introduce a production CLI, classifier or launcher.
+
+The Linux parent starts a fixed libtest entry through required bubblewrap user,
+mount, PID and network namespaces. It binds the live parent's executable inode
+via `/proc/<parent>/exe`, not a caller-selected program or mutable checkout path.
+Before any fixture bytes, the private-channel handshake must match that binary's
+SHA-256 and show four namespace identities different from the parent. Only
+read-only runtime library directories are mounted; project, home, `/etc`, tools
+and provider/control credentials are absent. Root is remounted read-only, nested
+user namespaces disabled, capabilities dropped and `no_new_privs` required.
+CPU, address-space, descriptor, core and file-size limits are set before exec.
+The system root-owned, non-setuid, non-group/other-writable `/usr/bin/bwrap` is
+required; there is no PATH selection or unsandboxed fallback. This depends on the
+trusted system runtime/library installation, not an independently pinned distro.
+
+One anonymous socket is inherited as stdin. Stdout/stderr go to null; every other
+descriptor is marked close-on-exec, including a deliberately inheritable canary
+in the witness. The parent closes its retained Command/Stdio copy after spawn.
+An affine in-memory **fixture ticket**, not a daemon grant or cleanup receipt,
+reserves one exact generation/hash/length before writing, preserving its original
+monotonic deadline. Mismatch and expiry consume that attempt. The reader returns
+only 72 fixed bytes (generation, SHA-256, length), never source text. The parent
+reads at most 73 bytes to detect overflow. No acknowledgement grants authority.
+
+The required Linux witness does not skip missing isolation. It tests actual host
+loopback denial against a listening socket; host file read/write denial with an
+unchanged canary; absent home/workspace/config; read-only root; absent extra FDs
+and environment; zero effective capabilities and denied nested user namespaces.
+Eight lifecycle paths cover exact acknowledgement, partial/oversized ack, explicit
+cancellation and deadline timeout with an actual `setsid` descendant holding the
+channel, generation substitution, expiry and truncated source delivery. Every
+path uses the existing held-Child stop/reap implementation. Reaped supervisor,
+bounded channel EOF, unchanged canary and no accepted network connection are
+required. The descendant must report successful `setsid` before the control is
+counted. Portable tests cover source substitution, oversize, replay and exact
+acknowledgement/deadline refusal.
+
+Local Windows validation: two new protocol tests and two existing held-process
+witnesses pass; three existing framed-reader tests also passed in the `reader_`
+selector. Strict production-library Clippy passed. **Linux code has not been
+compiled or executed locally**: WSL enumeration still fails. The following exact
+head checks are requested from the independent Linux reviewer; do not infer a
+kernel isolation pass from the portable tests:
+
+```sh
+cargo test --locked -p agentfw --lib sandbox::fixture_reader -- --test-threads=1
+cargo test --locked -p agentfw --lib pilot_launcher::consumer::tests -- --test-threads=1
+```
+
+Remaining work is explicit: carry the authentic withdrawal receipt and original
+quarantine deadline into fresh-recipient verification and one-use reservation;
+prove connected source-owner cleanup, instance/restart, policy changes and
+partial-delivery terminality; then review any production release and useful
+semantic-output boundary. This test fixture ticket cannot substitute for those
+proofs. The fixed public attack-shaped fixture is transported as inert bytes;
+that is not an attack-Deny result. All six benign cases remain unresolved,
+original labels/counts stay unchanged, and SOU-218/#346 remain In Progress/Draft.
