@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-from ci_components import blocks, generated, TARGET
+from ci_components import blocks, generated, inventory, TARGET
 import ci_components
 from ci_impact import WORKFLOW_JOBS, BUILD_CONSUMERS
 from ci_admission import component_names
@@ -103,6 +103,34 @@ class SharedComponents(unittest.TestCase):
                     self.assertNotIn("needs.impact", new)
                     self.assertIn("fromJSON(inputs.plan).workflows['" + wf + "']", new)
 
+    def test_every_registered_component_has_source_runner_and_only_real_build_edges(self):
+        rows = inventory()["components"]
+        generated_jobs = blocks(generated())
+        self.assertEqual(len(rows), 47)
+        self.assertEqual({row["component_job"] for row in rows}, set(generated_jobs))
+        for row in rows:
+            source = blocks((ROOT / ".github/workflows" / row["source_workflow"]).read_text(
+                encoding="utf-8-sig"))[row["source_job"]]
+            mirror = generated_jobs[row["component_job"]]
+            with self.subTest(component=row["component_job"]):
+                self.assertIn("    runs-on: " + row["runs_on"] + "\n", source)
+                self.assertIn("    runs-on: " + row["runs_on"] + "\n", mirror)
+                condition = re.search(r"(?m)^    if: >-\n      ([^\n]+)$", mirror)
+                self.assertIsNotNone(condition)
+                self.assertTrue(condition[1].startswith("!cancelled() && ("))
+                self.assertTrue(condition[1].endswith(")"))
+                expected = row["source_job"] in BUILD_CONSUMERS.get(row["source_workflow"], ())
+                self.assertEqual(bool(row["build_producer"]), expected)
+                if expected:
+                    self.assertIn("    needs: " + row["build_producer"] + "\n", mirror)
+                else:
+                    self.assertNotIn("    needs: ", mirror.split("    steps:", 1)[0])
+        # These source conditions contain top-level OR branches. Cancellation
+        # must guard the whole expression, not only its first branch.
+        for job in ("sou86-crash-supervision--required-disposable-linux-crash-supervision",
+                    "mcp-real-filesystem--native-ubuntu-2404"):
+            self.assertIn("!cancelled() && (", generated_jobs[job])
+
     def test_shared_workflow_cannot_be_triggered_independently_or_allocate_planners(self):
         text = TARGET.read_text()
         self.assertIn("  workflow_call:", text)
@@ -127,7 +155,7 @@ class SharedComponents(unittest.TestCase):
             for job in jobs:
                 body = central[workflow.removesuffix('.yml') + "--" + job]
                 self.assertIn("    needs: " + producer, body)
-                self.assertIn("    if: >-\n      !cancelled() && contains(", body)
+                self.assertIn("    if: >-\n      !cancelled() && (contains(", body)
                 self.assertIn("      SOU166_MODE: shared", body)
                 self.assertIn("${{ needs." + producer + ".result }}", body)
                 self.assertIn("${{ needs." + producer + ".outputs.artifact_id }}", body)

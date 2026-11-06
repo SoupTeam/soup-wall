@@ -68,15 +68,18 @@ def generated() -> str:
             if before not in body:
                 raise ValueError("Missing planner condition: " + workflow)
             body = body.replace(before, "fromJSON(inputs.plan).workflows['" + workflow + "']")
-            # Selected consumers report a failed producer through their own
-            # explicit guard, but must not start on an obsolete cancelled run.
-            # Step-level always() evidence uploads remain unchanged.
+            # The parent Ready job no longer waits for unrelated platforms.
+            # Every child still refuses an obsolete cancelled run. Selected
+            # build consumers may start after a failed producer only to report
+            # that failure through their existing guard and evidence upload.
+            if len(re.findall(r"(?m)^    if: ", body)) != 1 or re.search(r"(?m)^    if: >-", body):
+                raise ValueError("Unsupported component condition: " + workflow)
+            body = re.sub(r"(?m)^    if: ([^\n]+)$",
+                          lambda match: "    if: >-\n      !cancelled() && (" + match[1] + ")",
+                          body, count=1)
             if job_id in BUILD_CONSUMERS.get(workflow, ()):
                 producer = BUILD_PRODUCER[0].removesuffix(".yml") + "--" + BUILD_PRODUCER[1]
                 body = "    needs: " + producer + "\n" + body
-                # A leading ! is YAML tag syntax unless the expression is
-                # quoted or emitted as a block scalar.
-                body = body.replace("    if: ", "    if: >-\n      !cancelled() && ", 1)
                 body = body.replace(" && github.event.inputs.build_mode != 'shared'", "", 1)
                 body = body.replace("      SOU166_MODE: source\n", "      SOU166_MODE: shared\n", 1)
                 for key, field in {"RESULT": "result", "ATTEMPT": "outputs.producer_attempt",
@@ -111,10 +114,35 @@ def generated() -> str:
     return "".join(output)
 
 
+def inventory() -> dict[str, object]:
+    """Report the finite registered source, runner and real artifact edges."""
+    mirrored = blocks(generated())
+    rows = []
+    for workflow, jobs in WORKFLOW_JOBS.items():
+        if workflow == "ci.yml":
+            continue
+        for job in jobs:
+            mirror_id = workflow.removesuffix(".yml") + "--" + job
+            body = mirrored[mirror_id]
+            runners = re.findall(r"(?m)^    runs-on: (.+)$", body)
+            if len(runners) != 1:
+                raise ValueError("Unregistered component runner: " + mirror_id)
+            rows.append({"source_workflow": workflow, "source_job": job,
+                         "component_job": mirror_id, "runs_on": runners[0],
+                         "build_producer": (BUILD_PRODUCER[0].removesuffix(".yml") + "--" + BUILD_PRODUCER[1]
+                                            if job in BUILD_CONSUMERS.get(workflow, ()) else None)})
+    return {"schema": "sou239-component-inventory/1", "components": rows}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true")
+    options = parser.add_mutually_exclusive_group()
+    options.add_argument("--check", action="store_true")
+    options.add_argument("--inventory", action="store_true")
     args = parser.parse_args()
+    if args.inventory:
+        print(json.dumps(inventory(), sort_keys=True, separators=(",", ":")))
+        return 0
     content = generated()
     if args.check:
         if not TARGET.is_file() or TARGET.read_text(encoding="utf-8") != content:
