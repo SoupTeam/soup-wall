@@ -39,6 +39,8 @@ class FakeDocker:
         self.modern = False
         self.descriptor_override = None
         self.network = self.owned_network()
+        self.volume_owner = "owned-test"
+        self.volume_created_at = "2026-11-06T00:00:00Z"
 
     def model(self):
         services = {name: {"image": row["image"], "platform": "linux/" + self.arch,
@@ -108,7 +110,10 @@ class FakeDocker:
                                   "com.docker.compose.service": name,
                                   "com.docker.compose.oneoff": "False"}},
             "State": {"Running": True, "Status": "running", "Health": {"Status": "unhealthy" if self.unhealthy else "healthy"}},
-            "NetworkSettings": {"Networks": {"owned-test_default": {"NetworkID": (self.network or self.owned_network())["Id"]}}},
+            "NetworkSettings": {"Ports": MODULE.LOOPBACK_PORT if name == "firewall" else {},
+                                "Networks": {"owned-test_default": {
+                                    "NetworkID": (self.network or self.owned_network())["Id"],
+                                    "IPAddress": "172.18.0.2"}}},
             "HostConfig": {"ReadonlyRootfs": name == "firewall", "CapDrop": ["ALL"] if name == "firewall" else [],
                            "NetworkMode": "owned-test_default",
                            "SecurityOpt": ["no-new-privileges:true"] if name == "firewall" else [],
@@ -116,7 +121,8 @@ class FakeDocker:
             "Mounts": ([{"Type": "bind", "Destination": "/app/firewall.yaml", "RW": False,
                          "Source": service["volumes"][0]["source"].replace("\\", "/")}]
                        if name == "firewall" else [{"Type": "volume", "Name": "owned-test_" + name + "-data",
-                           "Destination": "/var/lib/postgresql/data" if name == "postgres" else "/data", "RW": True}])}
+                           "Destination": "/var/lib/postgresql/data" if name == "postgres" else "/data",
+                           "Source": "/volumes/owned-test_" + name + "-data", "RW": True}])}
         if self.modern:
             self.containers[name]["ImageManifestDescriptor"] = self.descriptor(name)
 
@@ -143,6 +149,26 @@ class FakeDocker:
             return json.dumps({"ID": self.network["Id"], "Name": self.network["Name"]}) if self.network else ""
         if args[:2] == ["network", "inspect"]:
             return json.dumps([self.network])
+        if args[:2] == ["volume", "ls"]:
+            return "\n".join("owned-test_" + name + "-data" for name in ("postgres", "redis")
+                             if name in self.containers)
+        if args[:2] == ["volume", "inspect"]:
+            volume = args[-1]
+            return json.dumps([{"Name": volume, "Driver": "local", "Scope": "local", "Options": None,
+                                "CreatedAt": self.volume_created_at, "Mountpoint": "/volumes/" + volume,
+                                "Labels": {"com.docker.compose.project": self.volume_owner,
+                                           "com.docker.compose.volume": volume.split("_", 1)[1]}}])
+        if args[:2] in (["container", "stop"], ["container", "start"]):
+            row = next(row for row in self.containers.values() if row["Id"] == args[-1])
+            if args[1] == "stop":
+                row["State"] = {"Running": False, "Status": "exited"}
+            else:
+                row["State"] = {"Running": True, "Status": "running", "Health": {"Status": "healthy"}}
+            return args[-1]
+        if args[0] == "info":
+            return "owned-engine-id"
+        if args[0] == "exec":
+            return "1\n" if args[1] == self.containers["postgres"]["Id"] else "PONG\n"
         if args[0] == "version":
             return json.dumps({"Os": "linux", "Arch": self.arch, "ApiVersion": "1.56" if self.modern else "1.43"})
         if args[-3:] == ["config", "--format", "json"]:
@@ -168,8 +194,12 @@ class FakeDocker:
     def json(self, args, **kwargs):
         return MODULE.decode(self.run(args, **kwargs))
 
+    def require_local(self):
+        pass
+
     def mutations(self):
-        return [args for args in self.calls if "up" in args or "run" in args]
+        return [args for args in self.calls if "up" in args or "run" in args
+                or args[:2] in (["container", "stop"], ["container", "start"])]
 
 
 class ProductionComposeControls(unittest.TestCase):
@@ -189,6 +219,112 @@ class ProductionComposeControls(unittest.TestCase):
     def closure(self, **kwargs):
         return MODULE.ProductionCompose(self.root, "owned-test", self.env_file,
                                         GATEWAY, self.docker, **kwargs)
+
+    def test_status_observes_absence_without_staging_and_reports_running_stack(self):
+        self.docker.network = None
+        missing = self.closure().execute("status")
+        self.assertEqual({s["state"] for s in missing["services"].values()}, {"absent"})
+        self.assertFalse((self.root / "target").exists())
+        self.assertEqual(self.docker.mutations(), [])
+        self.closure().execute("start")
+        self.docker.calls.clear()
+        with patch.object(MODULE, "loopback_readiness", return_value="ready"):
+            report = self.closure().execute("status")
+        self.assertEqual(report["configuration"], "verified")
+        self.assertEqual({s["state"] for s in report["services"].values()}, {"healthy"})
+        self.assertEqual(report["services"]["postgres"]["probe"], "available")
+        self.assertEqual(report["services"]["firewall"]["probe"], "ready")
+        self.assertNotIn(SECRET, json.dumps(report))
+        self.assertEqual(self.docker.mutations(), [])
+
+    def test_status_distinguishes_stopped_unhealthy_and_unverifiable(self):
+        self.closure().execute("start")
+        self.docker.containers["postgres"]["State"] = {"Running": False, "Status": "exited"}
+        self.docker.containers["redis"]["State"]["Health"]["Status"] = "unhealthy"
+        self.docker.containers["firewall"]["NetworkSettings"]["Ports"] = {}
+        with patch.object(MODULE, "loopback_readiness") as probe:
+            report = self.closure().execute("status")["services"]
+        probe.assert_not_called()
+        self.assertEqual(report["postgres"]["state"], "stopped")
+        self.assertEqual(report["redis"]["state"], "unhealthy")
+        self.assertEqual(report["firewall"]["probe"], "unverifiable")
+        self.assertEqual(MODULE.service_state({"State": {"Status": "created", "Running": False}}), "created")
+        self.assertEqual(MODULE.service_state({"State": {"Status": "restarting", "Restarting": True}}), "restarting")
+        self.assertEqual(MODULE.service_state({"State": {"Status": "running", "Running": True}}), "unverifiable")
+
+    def test_status_rejects_changed_observation_and_never_repairs_policy(self):
+        self.closure().execute("start")
+        policy = next(self.closure().staging().glob("*.yaml"))
+        original = policy.read_bytes()
+        policy.write_bytes(b"changed")
+        with self.assertRaisesRegex(MODULE.ClosureError, "staged_policy_changed"):
+            self.closure().execute("status")
+        self.assertEqual(policy.read_bytes(), b"changed")
+        policy.write_bytes(original)
+
+        def changed():
+            self.docker.containers["firewall"]["RestartCount"] = 1
+            return "ready"
+
+        with patch.object(MODULE, "loopback_readiness", side_effect=changed):
+            with self.assertRaisesRegex(MODULE.ClosureError, "observation_changed_during_probes"):
+                self.closure().execute("status")
+
+    def test_preview_refuses_stale_token_changed_inputs_and_foreign_or_replaced_resources(self):
+        self.closure().execute("start")
+        self.docker.calls.clear()
+        preview = self.closure().execute("stop")
+        token = preview["confirmation"]
+        with patch.object(MODULE.time, "time", return_value=MODULE.time.time() + MODULE.CONFIRM_SECONDS + 1):
+            with self.assertRaisesRegex(MODULE.ClosureError, "operation_confirmation_expired"):
+                self.closure().execute("stop", confirmation=token)
+        self.env_file.write_text("# changed\n")
+        with self.assertRaisesRegex(MODULE.ClosureError, "operation_closure_changed"):
+            self.closure().execute("stop", confirmation=token)
+        self.env_file.write_text("")
+        self.docker.volume_owner = "foreign"
+        with self.assertRaisesRegex(MODULE.ClosureError, "project_volume_identity_or_owner_mismatch"):
+            self.closure().execute("stop", confirmation=token)
+        self.docker.volume_owner = "owned-test"
+        self.docker.volume_created_at = "2026-11-06T00:01:00Z"
+        with self.assertRaisesRegex(MODULE.ClosureError, "operation_closure_changed"):
+            self.closure().execute("stop", confirmation=token)
+        self.assertEqual(self.docker.mutations(), [])
+
+    def test_restart_retries_interruption_without_repeating_completed_effects(self):
+        self.closure().execute("start")
+        self.docker.calls.clear()
+        token = self.closure().execute("restart")["confirmation"]
+        run = self.docker.run
+
+        def interrupted(args, **kwargs):
+            result = run(args, **kwargs)
+            if args[:2] == ["container", "start"]:
+                MODULE.fail("docker_command_failed")
+            return result
+
+        with patch.object(self.docker, "run", side_effect=interrupted):
+            gate = self.closure()
+            with self.assertRaisesRegex(MODULE.ClosureError, "docker_command_failed"):
+                gate.execute("restart", confirmation=token)
+            self.assertTrue(gate.recovery_required)
+        with self.assertRaisesRegex(MODULE.ClosureError, "operation_recovery_pending"):
+            self.closure().execute("stop")
+        with patch.object(MODULE, "loopback_readiness", return_value="ready"):
+            result = self.closure().execute("restart", confirmation=token)
+        self.assertEqual(result["phase"], "complete")
+        self.assertEqual([(args[1], args[-1][0]) for args in self.docker.mutations()],
+                         [("stop", "d"), ("stop", "c"), ("stop", "b"),
+                          ("start", "b"), ("start", "c"), ("start", "d")])
+        with self.assertRaisesRegex(MODULE.ClosureError, "operation_confirmation_mismatch"):
+            self.closure().execute("restart", confirmation=token)
+
+    def test_project_lock_serializes_confirmation_with_other_mutating_commands(self):
+        with MODULE.project_lock(self.closure().staging()):
+            for action in ("start", "migrate", "stop", "restart"):
+                with self.assertRaisesRegex(MODULE.ClosureError, "project_operation_busy"):
+                    self.closure().execute(action)
+        self.assertEqual(self.docker.mutations(), [])
 
     def test_check_is_read_only_and_report_omits_secrets(self):
         report = self.closure().execute("check")
