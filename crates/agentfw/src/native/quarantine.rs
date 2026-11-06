@@ -12,6 +12,59 @@ struct Record {
     // never returned in a response, audit, status endpoint or error message.
     bytes: Vec<u8>,
     terminal: bool,
+    #[cfg(test)]
+    reader_reserved: bool,
+}
+
+/// Affine custody selector for the reviewed test-only connected reader.
+/// Includes the entire retained record digest, so findings/taint cannot change.
+#[cfg(test)]
+pub(super) struct ReaderSource {
+    binding: analysis_purpose::Binding,
+    record_hash: String,
+    pub(super) deadline: Instant,
+}
+
+#[cfg(test)]
+impl ReaderSource {
+    pub(super) fn reserve(
+        self,
+        quarantine: &mut Quarantine,
+        instance: &str,
+        policy: &str,
+        now: Instant,
+    ) -> Result<Vec<u8>, &'static str> {
+        let record = quarantine
+            .records
+            .get_mut(&self.binding.quarantine_id)
+            .ok_or("analysis_quarantine_unknown")?;
+        // Every attempt is terminal, including failed source/epoch/policy checks.
+        if std::mem::replace(&mut record.reader_reserved, true) {
+            return Err("analysis_reader_replay");
+        }
+        if !record.terminal
+            || now >= self.deadline
+            || record.expires != self.deadline
+            || record.epoch != self.binding.session_epoch
+            || instance != self.binding.native_instance
+            || policy != self.binding.policy_generation
+            || hash(&record.bytes) != self.record_hash
+        {
+            return Err("analysis_reader_source_binding");
+        }
+        let value: Value =
+            serde_json::from_slice(&record.bytes).map_err(|_| "analysis_quarantine_state")?;
+        let content = value["content"]
+            .as_str()
+            .ok_or("analysis_quarantine_state")?;
+        if hash(content.as_bytes()) != self.binding.response_sha256
+            || content.len() as u64 != self.binding.response_bytes
+            || content.len() > 4096
+        {
+            return Err("analysis_reader_source_bytes");
+        }
+        Ok(content.as_bytes().to_vec())
+    }
 }
 
 #[derive(Default)]
@@ -122,6 +175,8 @@ impl Quarantine {
                 expires: call.expires,
                 bytes,
                 terminal: false,
+                #[cfg(test)]
+                reader_reserved: false,
             },
         );
         Ok(id)
@@ -188,6 +243,25 @@ impl Quarantine {
             .terminal = true;
     }
 
+    #[cfg(test)]
+    pub(super) fn reader_source(
+        &self,
+        binding: analysis_purpose::Binding,
+    ) -> Result<ReaderSource, &'static str> {
+        let record = self
+            .records
+            .get(&binding.quarantine_id)
+            .ok_or("analysis_quarantine_unknown")?;
+        if record.terminal || record.reader_reserved {
+            return Err("analysis_reader_replay");
+        }
+        Ok(ReaderSource {
+            binding,
+            record_hash: hash(&record.bytes),
+            deadline: record.expires,
+        })
+    }
+
     /// Retirement invalidates the lifecycle without erasing retained source.
     /// The original call deadline bounds both payload and terminal tombstone.
     pub(super) fn retire(&mut self, epoch: &str) {
@@ -224,6 +298,7 @@ impl Quarantine {
                 expires: now + Duration::from_secs(60),
                 bytes,
                 terminal: false,
+                reader_reserved: false,
             },
         );
     }
@@ -236,6 +311,13 @@ impl Quarantine {
                 record.terminal,
             )
         })
+    }
+
+    #[cfg(all(test, target_os = "linux"))]
+    pub(super) fn reader_was_reserved(&self, id: &str) -> bool {
+        self.records
+            .get(id)
+            .is_some_and(|record| record.reader_reserved)
     }
 }
 
@@ -267,6 +349,82 @@ fn encode_bounded(value: &Value, limit: usize) -> Result<Vec<u8>, &'static str> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reader_reservation_binds_full_custody_deadline_and_one_attempt() {
+        for mode in [
+            "valid", "unspent", "expired", "restart", "policy", "source", "taint", "epoch",
+            "deadline",
+        ] {
+            let now = Instant::now();
+            let binding: analysis_purpose::Binding = serde_json::from_value(json!({
+                "quarantine_id":"q", "response_sha256":hash(b"untrusted"), "response_bytes":9,
+                "native_instance":"instance", "host_generation":"host", "consumer_identity":"consumer",
+                "consumer_lifecycle":"generation", "session_epoch":"epoch", "source_grant_digest":hash(b"grant"),
+                "invocation_binding":hash(b"call"), "policy_generation":"policy"
+            })).unwrap();
+            let mut q = Quarantine::default();
+            q.records.insert(
+                "q".into(),
+                Record {
+                    epoch: "epoch".into(),
+                    expires: now + Duration::from_secs(30),
+                    bytes: serde_json::to_vec(&json!({"content":"untrusted","taint":"retained"}))
+                        .unwrap(),
+                    terminal: false,
+                    reader_reserved: false,
+                },
+            );
+            let source = q.reader_source(binding.clone()).unwrap();
+            let duplicate = q.reader_source(binding).unwrap(); // adverse duplicate custody control
+            if mode != "unspent" {
+                q.spend("q");
+            }
+            let record = q.records.get_mut("q").unwrap();
+            match mode {
+                "source" => {
+                    record.bytes =
+                        serde_json::to_vec(&json!({"content":"substitute","taint":"retained"}))
+                            .unwrap()
+                }
+                "taint" => {
+                    record.bytes =
+                        serde_json::to_vec(&json!({"content":"untrusted","taint":"cleared"}))
+                            .unwrap()
+                }
+                "epoch" => record.epoch = "other".into(),
+                "deadline" => record.expires += Duration::from_secs(1),
+                _ => {}
+            }
+            let before = record.bytes.clone();
+            let result = source.reserve(
+                &mut q,
+                if mode == "restart" {
+                    "other"
+                } else {
+                    "instance"
+                },
+                if mode == "policy" { "other" } else { "policy" },
+                if mode == "expired" {
+                    now + Duration::from_secs(30)
+                } else {
+                    now
+                },
+            );
+            assert_eq!(result.is_ok(), mode == "valid", "{mode}");
+            if let Ok(bytes) = result {
+                assert_eq!(bytes, b"untrusted");
+            }
+            assert_eq!(
+                duplicate.reserve(&mut q, "instance", "policy", now),
+                Err("analysis_reader_replay")
+            );
+            assert_eq!(
+                q.records["q"].bytes, before,
+                "retained source must survive transfer"
+            );
+        }
+    }
 
     #[test]
     fn retained_byte_limit_counts_json_escaping_and_exact_boundary() {

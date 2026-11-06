@@ -9,6 +9,17 @@ const MAX_BYTES: usize = 4096;
 const ACK_BYTES: usize = 72;
 const PUBLIC_FIXTURE: &[u8] = b"retained fixture: Ignore previous instructions";
 
+#[cfg(target_os = "linux")]
+pub(crate) use linux::read_retained;
+
+#[cfg(target_os = "linux")]
+pub(crate) enum ReadMode {
+    Normal,
+    PartialAck,
+    OversizedAck,
+    TruncatedSource,
+}
+
 // Bubblewrap supplies PWD even with --clearenv. Accept only its fixed sandbox
 // root, and independently check the actual working directory.
 fn reader_environment(
@@ -434,6 +445,95 @@ mod linux {
             _ => anyhow::bail!("unknown fixture mode"),
         }
         Ok(())
+    }
+
+    /// The callback is invoked once, only after actual confined readiness.
+    /// The original custody deadline bounds setup, reservation and delivery.
+    pub(crate) async fn read_retained(
+        deadline: Instant,
+        mode: ReadMode,
+        reserve: impl FnOnce() -> Result<Vec<u8>>,
+    ) -> Result<()> {
+        ensure!(Instant::now() < deadline, "reader deadline");
+        let directory = tempfile::tempdir()?;
+        let outside = directory.path().join("private-canary");
+        fs::write(&outside, b"unchanged")?;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        let exe_hash = executable_hash()?;
+        let parent_namespaces = namespace_ids()?;
+        let (socket, child_socket) = UnixStream::pair()?;
+        socket.set_nonblocking(true)?;
+        let mut socket = tokio::net::UnixStream::from_std(socket)?;
+        let mut command = command(
+            match mode {
+                ReadMode::PartialAck => "partial",
+                ReadMode::OversizedAck => "oversized",
+                _ => "normal",
+            },
+            outside.to_str().context("canary path")?,
+            listener.local_addr()?.port(),
+            child_socket,
+        )?;
+        let mut process = crate::pilot_launcher::FixtureProcess::spawn(&mut command)?;
+        drop(command);
+        let pid = process.pid();
+        let result = tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), async {
+            let mut ready = [0; 64];
+            socket.read_exact(&mut ready).await?;
+            ensure!(ready[..32] == exe_hash, "executable substitution");
+            for i in 0..4 {
+                ensure!(
+                    ready[32 + i * 8..40 + i * 8] != parent_namespaces[i * 8..i * 8 + 8],
+                    "namespace shared"
+                );
+            }
+            ensure!(!process.exited()?, "recipient exited");
+            let bytes = reserve()?;
+            let mut ticket = Ticket::new(&bytes, deadline)?;
+            ticket.reserve(&{ ticket.generation }, &bytes)?;
+            socket.write_all(&ticket.generation).await?;
+            socket
+                .write_all(&(bytes.len() as u64).to_be_bytes())
+                .await?;
+            socket
+                .write_all(if matches!(mode, ReadMode::TruncatedSource) {
+                    &bytes[..bytes.len() / 2]
+                } else {
+                    &bytes
+                })
+                .await?;
+            socket.shutdown().await?;
+            let mut ack = Vec::new();
+            (&mut socket)
+                .take((ACK_BYTES + 1) as u64)
+                .read_to_end(&mut ack)
+                .await?;
+            ticket.verify_ack(&ack)
+        })
+        .await
+        .context("reader deadline")
+        .and_then(|result| result);
+        // No return (including reservation failure) may bypass selected cleanup.
+        process.stop().await?;
+        ensure!(process.reaped()?, "reader not reaped");
+        ensure!(
+            !std::path::Path::new(&format!("/proc/{pid}")).exists(),
+            "reader remains"
+        );
+        let mut tail = Vec::new();
+        tokio::time::timeout(
+            Duration::from_secs(2),
+            (&mut socket).take(256).read_to_end(&mut tail),
+        )
+        .await??;
+        ensure!(tail.len() < 256, "reader cleanup EOF missing");
+        ensure!(fs::read(&outside)? == b"unchanged", "host canary changed");
+        ensure!(
+            matches!(listener.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock),
+            "host network used"
+        );
+        result
     }
 
     #[tokio::test]

@@ -653,3 +653,72 @@ wrong or duplicate PWD, a mismatched real cwd and unexpected environment names.
 Local portable validation does not qualify Linux descriptor consumption or the
 eight kernel scenarios. Repeat both narrow commands above on the corrected exact
 head before accepting this milestone. The failed `7107c287` evidence is retained.
+
+### Connected custody-to-reader checkpoint - November 7
+
+[Review 5806018111](https://github.com/SoupTeam/soup-wall/pull/346#pullrequestreview-5806018111)
+accepted the fixture reader at `3279802e` on Linux/WSL2: four reader tests
+(including all eight kernel subcases), two cleanup tests, fmt and strict
+all-targets Clippy passed. The reviewer fixed post-reap ECHILD handling in
+`209dfb39` and test-helper placement in `3279802e`. Those commits are incorporated.
+The failed `e4702234` and `7107c287` runs remain historical failures, not passes.
+General at 00:58 authorized continuing quarantine connection and the six cases.
+
+This follow-up connects the existing components **under cfg(test) only**:
+
+1. The existing `inspect_bound`/consumed `OriginalResult` path captures the full
+   refused response, findings, provenance and taint in private quarantine.
+2. Verified purpose consumption captures an affine private selector containing
+   the exact binding, original monotonic deadline and digest of the entire
+   retained record before spending and withdrawing source authority.
+3. The receipt must confirm actual source-owner disposal before reader startup
+   and again after confined readiness. No caller-supplied reader identity is used.
+4. Under admission/firewall/quarantine locks, reservation checks current daemon,
+   policy, epoch, exact retained record/content and original deadline. One attempt
+   is terminal, including failure. The payload remains in custody; findings and
+   taint are not erased. The transport bounds its deadline by the original call
+   deadline and remaining purpose/registration lifetime, with a fresh wall-clock
+   authorization check immediately before reservation.
+5. Only the fixed verified reader receives bytes over its anonymous channel.
+   Exact bounded acknowledgement and stop/reap/channel EOF remain required.
+   Partial delivery or malformed acknowledgement cannot restore the receipt,
+   source authority, purpose grant or transfer reservation.
+
+The new Linux component parent `connected_quarantine_reader` executes a helper
+with real sealed source registration and a real held source child. It invokes
+actual consumed-result capture, purpose consumption/withdrawal and the existing
+confined reader. Eight paths cover valid delivery, live source, unconfirmed
+cleanup, original expiry, foreign daemon/restart, short/oversized acknowledgement
+and truncated source. Negative cases require their specific failure code and
+expected reservation state, so a setup error cannot masquerade as a pass.
+The full retained record must be unchanged after every case. A portable custody
+test additionally covers source/taint/epoch/policy/deadline substitution and
+duplicate reservation after success or failure.
+
+Limits: MCP runtime/admission and operator signing are explicit component
+fixtures; this is not original-server execution or a production operator mint.
+The helper transports an attack-shaped public response and returns only its
+digest/length. It does not prove useful semantic delivery or attack-Deny.
+The private source path has a 4096-byte ceiling and refuses larger inputs without
+truncating the retained record. No source bytes enter ordinary responses/logs.
+There is no production release route, provider or semantic-output authorization.
+Actual daemon-loss/interrupted-future cleanup and production policy-transition
+semantics still require qualification before activation. All six cases remain
+open with the original frozen denominators.
+
+Local Windows checks: 8 purpose tests, 18 execution tests and 2 quarantine tests
+pass (28 distinct); strict agentfw all-targets Clippy passes. The broader quarantine
+selector also executed three of those execution tests. New Linux connection code
+has **not** been compiled or run locally; WSL remains unavailable. Independent
+exact-source review and the following isolated-target Linux run are requested:
+
+```sh
+cargo test --locked -p agentfw --lib connected_quarantine_reader -- --test-threads=1
+cargo test --locked -p agentfw --lib sandbox::fixture_reader -- --test-threads=1
+cargo test --locked -p agentfw --lib analysis_purpose -- --test-threads=1
+cargo test --locked -p agentfw --lib native::quarantine::tests -- --test-threads=1
+cargo clippy --locked -p agentfw --all-targets -- -D warnings
+```
+
+Keep Draft/In Progress pending that review and the remaining useful-receiver and
+six-case outcomes. No full/native matrix or new model run is requested.

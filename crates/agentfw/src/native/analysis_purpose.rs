@@ -127,6 +127,10 @@ pub fn operator_request(_derived_key: &[u8], _quarantine_id: &str) -> Result<(),
 pub struct PendingWithdrawal {
     instance: String,
     registration: crate::pilot_approval::consumer::Registration,
+    #[cfg(all(test, target_os = "linux"))]
+    source: super::quarantine::ReaderSource,
+    #[cfg(all(test, target_os = "linux"))]
+    purpose_expires_at_ms: u64,
 }
 
 /// Consume authenticated purpose and withdraw both source authorities under the
@@ -139,6 +143,8 @@ pub fn consume(
     if !st.config.enforce || st.config.judge.enabled {
         return Err("native_enforcement_required");
     }
+    #[cfg(all(test, target_os = "linux"))]
+    let source;
     let registration = {
         let mut sessions = native
             .sessions
@@ -173,6 +179,10 @@ pub fn consume(
         // Refresh authorization time after all transaction locks and custody checks.
         let now = super::wall_time_ms()?;
         verify(&derive_key(&native.token), grant, &expected, now)?;
+        #[cfg(all(test, target_os = "linux"))]
+        {
+            source = quarantine.reader_source(expected.clone())?;
+        }
         commit_withdrawal(&mut sessions, grant, &registration, super::wall_time_ms()?)?;
         quarantine.spend(&expected.quarantine_id);
         registration
@@ -189,6 +199,10 @@ pub fn consume(
     Ok(PendingWithdrawal {
         instance: native.instance_id().into(),
         registration,
+        #[cfg(all(test, target_os = "linux"))]
+        source,
+        #[cfg(all(test, target_os = "linux"))]
+        purpose_expires_at_ms: grant.expires_at_ms,
     })
 }
 
@@ -237,6 +251,10 @@ impl PendingWithdrawal {
     /// Confirms only selected-process disposal. It is not a receipt for effect
     /// rollback, sandbox isolation, safe content, or a fresh restricted reader.
     pub fn confirm(self, st: &crate::handlers::Shared) -> Result<(), &'static str> {
+        self.confirm_disposal(st)
+    }
+
+    fn confirm_disposal(&self, st: &crate::handlers::Shared) -> Result<(), &'static str> {
         let native = st.native.as_ref().ok_or("native_not_configured")?;
         if native.instance_id() != self.instance {
             return Err("analysis_purpose_instance");
@@ -276,6 +294,62 @@ impl PendingWithdrawal {
         }
         Ok(())
     }
+
+    /// Test-only connection: no issuer/HTTP/CLI route exposes retained bytes.
+    /// Consumes the receipt even if setup, identity, delivery or cleanup fails.
+    #[cfg(all(test, target_os = "linux"))]
+    pub(super) async fn deliver_to_reader(
+        self,
+        st: &crate::handlers::Shared,
+        mode: crate::sandbox::fixture_reader::ReadMode,
+    ) -> anyhow::Result<()> {
+        self.confirm_disposal(st).map_err(anyhow::Error::msg)?;
+        let now = super::wall_time_ms().map_err(anyhow::Error::msg)?;
+        let expires = self.purpose_expires_at_ms.min(self.registration.expires());
+        anyhow::ensure!(now < expires, "analysis_reader_purpose_expired");
+        let deadline = self
+            .source
+            .deadline
+            .min(std::time::Instant::now() + std::time::Duration::from_millis(expires - now));
+        crate::sandbox::fixture_reader::read_retained(deadline, mode, || {
+            // Recheck disposal after recipient readiness, before reservation.
+            self.confirm_disposal(st).map_err(anyhow::Error::msg)?;
+            let native = st
+                .native
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("native_not_configured"))?;
+            let _sessions = native
+                .sessions
+                .lock()
+                .map_err(|_| anyhow::anyhow!("native_state_unavailable"))?;
+            let firewall = st
+                .firewall
+                .lock()
+                .map_err(|_| anyhow::anyhow!("native_state_unavailable"))?;
+            let policy =
+                super::canonical_digest(&serde_json::to_value(firewall.policy_for_diagnostics())?);
+            let mut quarantine = native
+                .quarantine
+                .lock()
+                .map_err(|_| anyhow::anyhow!("analysis_quarantine_state"))?;
+            if !st.config.enforce || st.config.judge.enabled {
+                anyhow::bail!("native_enforcement_required");
+            }
+            anyhow::ensure!(
+                super::wall_time_ms().map_err(anyhow::Error::msg)? < expires,
+                "analysis_reader_purpose_expired"
+            );
+            self.source
+                .reserve(
+                    &mut quarantine,
+                    native.instance_id(),
+                    &policy,
+                    native.monotonic_now(),
+                )
+                .map_err(anyhow::Error::msg)
+        })
+        .await
+    }
 }
 
 #[cfg(all(test, target_os = "linux"))]
@@ -296,6 +370,21 @@ pub(super) fn lifecycle_fixture(
         &policy,
         native.monotonic_now(),
     );
+    drop(quarantine);
+    grant_for_retained(st, registration, id)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub(super) fn grant_for_retained(
+    st: &crate::handlers::Shared,
+    registration: &crate::pilot_approval::consumer::Registration,
+    id: &str,
+) -> Grant {
+    let native = st.native.as_ref().unwrap();
+    let policy = super::canonical_digest(
+        &serde_json::to_value(st.firewall.lock().unwrap().policy_for_diagnostics()).unwrap(),
+    );
+    let quarantine = native.quarantine.lock().unwrap();
     let binding = quarantine
         .purpose_binding(
             id,

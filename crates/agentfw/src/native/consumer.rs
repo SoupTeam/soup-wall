@@ -254,6 +254,126 @@ mod lifecycle_tests {
         assert!(status.success());
     }
 
+    #[test]
+    fn connected_quarantine_reader() {
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "pilot-launch",
+                "native::consumer::lifecycle_tests::connected_quarantine_reader_child",
+                "--ignored",
+                "--nocapture",
+            ])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[tokio::test]
+    #[ignore = "re-executed by connected_quarantine_reader with launcher identity"]
+    async fn connected_quarantine_reader_child() {
+        assert_eq!(std::env::args().nth(1).as_deref(), Some("pilot-launch"));
+        // Actual consumed OriginalResult capture connects to signed-purpose
+        // withdrawal and the independently confined reader. The MCP source
+        // runtime/admission and operator mint remain explicit test fixtures.
+        for mode in [
+            "valid",
+            "live-source",
+            "unconfirmed",
+            "expired",
+            "restart",
+            "partial",
+            "oversized",
+            "truncated",
+        ] {
+            let mut child = child();
+            let captured = execution::tests::reader_capture(&child.0);
+            let st = &captured.st;
+            let registration = &captured.registration;
+            assert_eq!(register(st, registration).await, StatusCode::NO_CONTENT);
+            let grant = analysis_purpose::grant_for_retained(st, registration, &captured.id);
+            let pending = analysis_purpose::consume(st, &grant).unwrap();
+            assert!(analysis_purpose::consume(st, &grant).is_err());
+            if mode != "live-source" {
+                child.0.kill().unwrap();
+                child.0.wait().unwrap();
+            }
+            if mode == "unconfirmed" {
+                st.native
+                    .as_ref()
+                    .unwrap()
+                    .sessions
+                    .lock()
+                    .unwrap()
+                    .pilot_cleanup
+                    .insert(
+                        registration.authorities()["filesystem"].clone(),
+                        pilot_cleanup::unconfirmed_consumer_fixture(
+                            registration.host(),
+                            "filesystem",
+                        ),
+                    );
+            }
+            if mode == "expired" {
+                st.native.as_ref().unwrap().advance_test_time_ms(120_000);
+            }
+            let before = st
+                .native
+                .as_ref()
+                .unwrap()
+                .quarantine
+                .lock()
+                .unwrap()
+                .retained(&captured.id)
+                .unwrap();
+            use crate::sandbox::fixture_reader::ReadMode;
+            let reader_mode = match mode {
+                "partial" => ReadMode::PartialAck,
+                "oversized" => ReadMode::OversizedAck,
+                "truncated" => ReadMode::TruncatedSource,
+                _ => ReadMode::Normal,
+            };
+            let result = if mode == "restart" {
+                let dir = tempfile::tempdir().unwrap();
+                pending
+                    .deliver_to_reader(&super::super::tests::fixture(dir.path()), reader_mode)
+                    .await
+            } else {
+                pending.deliver_to_reader(st, reader_mode).await
+            };
+            assert_eq!(result.is_ok(), mode == "valid", "{mode}: {result:?}");
+            if mode != "valid" {
+                let expected = match mode {
+                    "live-source" | "unconfirmed" => "analysis_purpose_cleanup_unconfirmed",
+                    "restart" => "analysis_purpose_instance",
+                    "expired" => "analysis_reader_source_binding",
+                    _ => "fixture_ack",
+                };
+                assert_eq!(result.unwrap_err().to_string(), expected, "{mode}");
+            }
+            assert_eq!(
+                st.native
+                    .as_ref()
+                    .unwrap()
+                    .quarantine
+                    .lock()
+                    .unwrap()
+                    .reader_was_reserved(&captured.id),
+                !matches!(mode, "live-source" | "unconfirmed" | "restart"),
+                "{mode}"
+            );
+            let after = st
+                .native
+                .as_ref()
+                .unwrap()
+                .quarantine
+                .lock()
+                .unwrap()
+                .retained(&captured.id)
+                .unwrap();
+            assert_eq!(before, after, "full source/taint must remain in custody");
+        }
+    }
+
     #[tokio::test]
     #[ignore = "re-executed with the real launcher argv marker by the parent witness"]
     async fn handler_lifecycle_child() {
