@@ -1,4 +1,4 @@
-"""Exercise the actual Ready workflow job expressions with selected CI plans."""
+"""SOU-239: independent scheduling keeps complete exact-source admission."""
 from pathlib import Path
 import re
 import sys
@@ -6,48 +6,42 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-from ci_components import blocks
-from ci_impact import plan, BUILD_CONSUMERS
+from ci_components import blocks  # noqa: E402
+from ci_impact import plan, WORKFLOW_JOBS, BUILD_CONSUMERS, BUILD_PRODUCER  # noqa: E402
+from ci_admission import assess_job_names, component_names, required_names  # noqa: E402
 
 
-BARRIERS = ("test", "native-macos-resilience", "agent-windows-security")
-DEFERRED = ("components", "agent-lifecycle-macos", "all-features",
-            "saml-release-targets", "redis-integration", "postgres-integration",
-            "docker-build")
 SOURCE = blocks((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
 MIRROR = blocks((ROOT / ".github/workflows/ci-components.yml").read_text(encoding="utf-8"))
+INDEPENDENT = ("components", "agent-lifecycle-macos", "all-features",
+               "saml-release-targets", "redis-integration", "postgres-integration",
+               "docker-build")
+BASE_CHECKS = ("test", "native-macos-resilience", "agent-windows-security")
 
 
 def condition(job: str) -> str:
+    """Read the checked-in Actions expression; refuse unexpected graph syntax."""
     body = SOURCE[job]
-    expected = "    needs: [impact, " + ", ".join(BARRIERS) + "]"
-    if expected not in body:
-        raise AssertionError(f"{job}: a required preflight edge is missing")
+    if re.findall(r"(?m)^    needs: (.+)$", body) != ["impact"]:
+        raise AssertionError(f"{job}: only the trusted impact plan may precede independent work")
     match = re.search(r"(?m)^    if: >-\n((?: {6,}[^\n]*\n)+)", body)
     if not match:
-        raise AssertionError(f"{job}: missing explicit fail-closed expression")
-    return " ".join(match[1].split())
+        raise AssertionError(f"{job}: missing explicit scheduling expression")
+    expression = " ".join(match[1].split())
+    if any(f"needs.{name}.result" in expression for name in BASE_CHECKS):
+        raise AssertionError(f"{job}: unrelated platform check is still a prerequisite")
+    return expression
 
 
-def scheduled(job: str, selected: set[str], results: dict[str, str], *,
+def scheduled(job: str, selected: set[str], impact: str = "success", *,
               event: str = "pull_request", draft: bool = False,
               cancelled: bool = False, smoke_only: bool = False) -> bool:
-    """Evaluate the checked-in expression's small, literal Actions subset.
-
-    This refuses unknown syntax instead of a separate hand-written gate model.
-    The test is an offline contract, not a claim to run GitHub's scheduler.
-    """
+    """Evaluate the finite literal Actions subset used by these seven jobs."""
     expression = condition(job)
-    for name in BARRIERS:
-        needle = f"(!contains(fromJSON(needs.impact.outputs.jobs || '[]'), '{name}') || needs.{name}.result == 'success')"
-        if expression.count(needle) != 1:
-            raise AssertionError(f"{job}: {name} must be selected-or-success exactly once")
     expression = re.sub(
         r"contains\(fromJSON\(needs\.impact\.outputs\.jobs \|\| '\[\]'\), '([a-z-]+)'\)",
         lambda match: repr(match[1] in selected), expression)
-    expression = re.sub(
-        r"needs\.([a-z-]+)\.result",
-        lambda match: repr(results.get(match[1], "")), expression)
+    expression = expression.replace("needs.impact.result", repr(impact))
     expression = expression.replace("github.event_name", repr(event))
     expression = expression.replace("github.event.pull_request.draft", repr(draft))
     expression = expression.replace("inputs.smoke_only", repr(smoke_only))
@@ -57,61 +51,94 @@ def scheduled(job: str, selected: set[str], results: dict[str, str], *,
     try:
         return bool(eval(expression, {"__builtins__": {}}, {}))
     except (NameError, SyntaxError) as error:
-        raise AssertionError(f"{job}: unsupported gate syntax: {expression}") from error
+        raise AssertionError(f"{job}: unsupported scheduling expression: {expression}") from error
 
 
-class ReadyPreflight(unittest.TestCase):
+class IndependentComponents(unittest.TestCase):
     def setUp(self):
-        self.full = set(plan([".github/workflows/ci.yml"])["workflows"]["ci.yml"])
-        self.healthy = {"impact": "success", **dict.fromkeys(BARRIERS, "success")}
+        self.full_plan = plan([".github/workflows/ci.yml"])
+        self.full = set(self.full_plan["workflows"]["ci.yml"])
 
-    def test_healthy_ready_keeps_every_expensive_lane_and_existing_barriers(self):
-        for job in DEFERRED:
+    def test_ready_jobs_depend_only_on_trusted_plan(self):
+        for job in INDEPENDENT:
             with self.subTest(job=job):
-                self.assertTrue(scheduled(job, self.full, self.healthy))
-        for job in BARRIERS:
-            self.assertIn("    needs: impact\n", SOURCE[job])
-            self.assertNotIn("needs: [impact,", SOURCE[job])
-        self.assertEqual(len(plan([".github/workflows/ci.yml"])["codeql"]), 5)
+                self.assertTrue(scheduled(job, self.full))
+                self.assertIn("!cancelled()", condition(job))
+                self.assertIn("needs.impact.result == 'success'", condition(job))
+        for name in BASE_CHECKS:
+            self.assertIn("    needs: impact\n", SOURCE[name])
+        self.assertEqual(len(self.full_plan["codeql"]), 5)
+        self.assertEqual(len(MIRROR), sum(len(ids) for wf, ids in WORKFLOW_JOBS.items()
+                                          if wf != "ci.yml"))
 
-    def test_failed_missing_stale_or_skipped_barrier_withholds_expensive_jobs(self):
-        for barrier in BARRIERS:
-            for result in ("failure", "cancelled", "skipped", "", "neutral", "timed_out"):
-                with self.subTest(barrier=barrier, result=result):
-                    results = {**self.healthy, barrier: result}
-                    for job in DEFERRED:
-                        self.assertFalse(scheduled(job, self.full, results), job)
+    def test_runner_allocation_and_ordinary_failure_leave_other_jobs_runnable(self):
+        for failed in BASE_CHECKS:
+            for job in INDEPENDENT:
+                with self.subTest(failed=failed, independent=job):
+                    self.assertNotIn("needs." + failed + ".result", condition(job))
+                    self.assertTrue(scheduled(job, self.full), job)
 
-    def test_cancelled_or_superseded_attempt_never_starts_deferred_work(self):
-        for job in DEFERRED:
-            self.assertFalse(scheduled(job, self.full, self.healthy, cancelled=True), job)
-            self.assertFalse(scheduled(job, self.full, {**self.healthy, "impact": "failure"}), job)
-
-    def test_draft_is_preparation_not_expensive_qualification(self):
-        for job in DEFERRED:
-            self.assertFalse(scheduled(job, self.full, self.healthy, draft=True), job)
-
-    def test_docs_and_gateway_scope_do_not_require_unselected_platform_jobs(self):
+    def test_cancellation_failed_plan_draft_and_selective_scope(self):
+        for job in INDEPENDENT:
+            self.assertFalse(scheduled(job, self.full, cancelled=True), job)
+            self.assertFalse(scheduled(job, self.full, impact="failure"), job)
+            self.assertFalse(scheduled(job, self.full, draft=True), job)
+        self.assertFalse(scheduled("components", self.full, event="workflow_dispatch",
+                                   smoke_only=True))
         docs = set(plan(["README.md"])["workflows"]["ci.yml"])
-        skipped = {"impact": "success", **dict.fromkeys(BARRIERS, "skipped")}
         self.assertEqual(docs, {"documentation"})
-        self.assertTrue(scheduled("components", docs, skipped))
-        for job in DEFERRED[1:]:
-            self.assertFalse(scheduled(job, docs, skipped), job)
+        self.assertTrue(scheduled("components", docs))
+        for job in INDEPENDENT[1:]:
+            self.assertFalse(scheduled(job, docs), job)
         gateway = set(plan(["crates/proxy/src/lib.rs"])["workflows"]["ci.yml"])
-        self.assertTrue(scheduled("components", gateway, {**skipped, "test": "success"}))
+        self.assertFalse(scheduled("agent-lifecycle-macos", gateway))
         for job in ("all-features", "saml-release-targets", "redis-integration",
                     "postgres-integration", "docker-build"):
-            self.assertTrue(scheduled(job, gateway, {**skipped, "test": "success"}), job)
-        self.assertFalse(scheduled("agent-lifecycle-macos", gateway, skipped))
+            self.assertTrue(scheduled(job, gateway), job)
+        self.assertEqual(plan(["README.md", "unknown/new-file"])["mode"], "full")
 
-    def test_cancelled_shared_consumer_cannot_restart_after_producer(self):
-        for workflow, jobs in BUILD_CONSUMERS.items():
-            for job in jobs:
-                body = MIRROR[workflow.removesuffix('.yml') + "--" + job]
-                self.assertIn("    if: >-\n      !cancelled() && contains(", body)
-                self.assertIn("ci_qualification_build.py guard", body)
-                self.assertIn("        if: always()", body)
+    def test_selected_failure_missing_job_or_stale_head_still_blocks_admission(self):
+        expected = list(required_names("ci.yml", self.full_plan["workflows"]["ci.yml"]))
+        for workflow, ids in self.full_plan["workflows"].items():
+            if workflow != "ci.yml":
+                expected.extend(component_names(workflow, ids))
+        merge, head = "c" * 40, "b" * 40
+        run = {"id": 7, "run_attempt": 1}
+
+        def job(name):
+            return {"name": name, "status": "completed", "conclusion": "success",
+                    "run_id": 7, "run_attempt": 1, "head_sha": head}
+
+        jobs = [job("impact / Candidate " + merge), *(job(name) for name in expected)]
+        self.assertEqual(assess_job_names(jobs, tuple(expected), merge, run, head).state, "success")
+        for name in ("Native macOS admission resilience", "test", "agent-windows-security",
+                     component_names("mcp-real-filesystem.yml", ["native-ubuntu-2404"])[0]):
+            for result in ("failure", "cancelled", "skipped", "timed_out"):
+                with self.subTest(required=name, result=result):
+                    target = next(item for item in jobs if item["name"] == name)
+                    target["conclusion"] = result
+                    self.assertEqual(assess_job_names(jobs, tuple(expected), merge, run, head).state,
+                                     "failure")
+                    target["conclusion"] = "success"
+            with self.subTest(required=name, result="absent"):
+                target = next(item for item in jobs if item["name"] == name)
+                jobs.remove(target)
+                self.assertEqual(assess_job_names(jobs, tuple(expected), merge, run, head).state,
+                                 "pending")
+                jobs.append(target)
+        jobs[-1]["head_sha"] = "d" * 40
+        self.assertEqual(assess_job_names(jobs, tuple(expected), merge, run, head).state, "failure")
+
+    def test_real_build_edges_and_producer_refusal_survive_generation(self):
+        producer = BUILD_PRODUCER[0].removesuffix(".yml") + "--" + BUILD_PRODUCER[1]
+        for workflow, ids in BUILD_CONSUMERS.items():
+            for job in ids:
+                body = MIRROR[workflow.removesuffix(".yml") + "--" + job]
+                with self.subTest(workflow=workflow, job=job):
+                    self.assertIn("    needs: " + producer + "\n", body)
+                    self.assertIn("!cancelled()", body)
+                    self.assertIn("ci_qualification_build.py guard", body)
+                    self.assertIn("${{ needs." + producer + ".result }}", body)
 
 
 if __name__ == "__main__":
