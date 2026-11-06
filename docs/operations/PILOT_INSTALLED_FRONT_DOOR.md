@@ -49,7 +49,7 @@ rename. Files are mode 0400 and directories 0700 under
 ## 3. Use
 
 ```bash
-agentfw pilot preview --prefix "$HOME/soup-wall-pilot" --agentfw ... --git-launcher ... --sandbox-tests ... [inputs]
+agentfw pilot preview --prefix "$HOME/soup-wall-pilot" --agentfw ... --git-launcher ... [inputs]
 agentfw pilot prepare --apply --prefix "$HOME/soup-wall-pilot" [same inputs]
 agentfw pilot run --prefix "$HOME/soup-wall-pilot" --prompt '...'
 agentfw pilot status --prefix "$HOME/soup-wall-pilot"
@@ -64,12 +64,72 @@ download. The helpers report the component's recorded commit as their source,
 so a selection prepared from that commit (by `agentfw pilot` or by
 `scripts/pilot.py` in the reviewed checkout) is used unchanged.
 
-The installed command never builds from source: supply `--agentfw`,
-`--git-launcher` and `--sandbox-tests` built from the same commit (for example
-with `scripts/build-native-pilot-inputs.py` in the checkout). Native Git and
+The installed command never builds from source. The Linux candidate archive
+supplies `agentfw`, `agentfw-git-sandbox`, `pilot-front-door.tar`,
+`pilot-binaries.json` and `pilot-source.json` from one clean source. After verifying
+the outer archive against its independently retained checksum, install that
+component with the recorded archive SHA-256 and an explicit CPython 3.11–3.13.
+From the extracted directory, select its receipt for preparation:
+
+```sh
+./agentfw pilot preview --prefix "$HOME/soup-wall-pilot" --scope linux-v1 \
+  --candidate-receipt "$PWD/pilot-binaries.json" [declared runtime inputs]
+./agentfw pilot prepare --apply --prefix "$HOME/soup-wall-pilot" --scope linux-v1 \
+  --candidate-receipt "$PWD/pilot-binaries.json" [same inputs]
+```
+
+The receipt selects the two production binaries. It verifies their actual bytes
+and modes, the component manifest and source identity before a preparation
+subprocess starts. Preparation retains that custody result; later runs recheck
+it before starting a daemon or host. Keep the extracted inputs at their selected
+paths. No source checkout, Cargo, compiler or libtest executable is needed by
+these installed commands. Existing explicit `--agentfw`/`--git-launcher` inputs
+remain supported. The old `--sandbox-tests` argument and selection field remain
+for migration; when omitted the field aliases Agent and is never executed as
+libtest. The source builder's original v1 receipts and native test selectors
+remain supported separately.
+
+The candidate receipt v2 records the **release Rust 1.99.1** lane, target,
+compiler identities, source tree/tracked-byte digest and binary hashes. The
+older native source builder still explicitly selects Rust 1.94.1. Neither lane
+substitutes for qualification of the actual staged bytes. The candidate excludes
+the SOU-87 private offline kit; SOU-130 license/advisory clearance remains a
+separate handoff. Native Git and
 bubblewrap preparation, Node, Claude Code and the selection step work as in the
 checkout. A component install, `verify` or a file hash never reports
 protection; only `agentfw pilot status` reports it, with the same meanings.
+
+## Explicit installed sandbox exercise
+
+`doctor` remains read-only. To execute the bounded common sandbox exercise with
+selected installed runtime/package/library pins, explicitly supply a profile and
+its SHA-256:
+
+```sh
+./agentfw sandbox-exercise --execute --kind filesystem \
+  --profile /absolute/filesystem-profile/profile.json --profile-sha256 PROFILE_SHA256
+./agentfw sandbox-exercise --execute --kind git \
+  --profile /absolute/git-profile/profile.json --profile-sha256 PROFILE_SHA256
+```
+
+Both commands create owned fixtures; the Git exercise creates its own repository.
+The selected Node or Python/Git actually runs. Calibrated TCP/Unix/FIFO receivers,
+outside-file and inherited-descriptor witnesses check denied effects alongside
+useful reads, environment isolation, private network/PID namespaces and the
+existing authenticated owner cleanup. The exercised common read-only profile is
+named separately from the supplied profile; this does not qualify advanced
+profile-specific operations. Existing ignored native tests call the same shared
+implementation and retain their selectors and positive markers.
+
+Stdout is a versioned `sw-linux-sandbox-exercise/1` JSON object. Exit 0 means the
+exercise passed; 3 means refusal/failure; 5 means unsupported platform. Profile
+input is capped at 64 KiB, each runtime output stream at 64 KiB, calibration at
+5 seconds and sandbox collection at 15 seconds, with the existing owner's finite
+cleanup deadline. Missing prerequisites, malformed/mismatched inputs, failed
+calibration, timeout, interruption and unconfirmed cleanup fail visibly. SIGTERM
+or Ctrl-C after sandbox startup requests owned cleanup; a failed interrupted run
+can report confirmed cleanup without becoming a pass. The report always sets
+`active_protection: false`: only a live protected host can supply that status.
 
 ## Frozen v1 scope
 
@@ -77,6 +137,83 @@ protection; only `agentfw pilot status` reports it, with the same meanings.
 [v1 scope](PILOT_V1_SCOPE.md). The descriptor and its helper are part of the verified component, so the same bindings
 are recomputed from the installed files, and a component whose descriptor differs from a prefix's recorded scope
 refuses before any launch.
+
+## Read-only lifecycle preflight
+
+Before acquiring or compiling pilot inputs, inspect the current environment:
+
+```bash
+agentfw doctor --lifecycle --json
+agentfw pilot preflight --json
+# Optional: require the current environment prerequisites for later removal.
+agentfw doctor --lifecycle --require-removal-eligible --json
+agentfw pilot preflight --require-removal-eligible --json
+```
+
+`doctor --lifecycle` needs no component, configured home or selected project.
+`pilot preflight` runs the same pre-build diagnosis from the verified installed
+component, outside a checkout. The additive `lifecycle` field also accompanies
+`doctor --pilot`; existing report schemas and protection meanings remain intact.
+The new nested schema is `sw-pilot-lifecycle-preflight/1`.
+
+The report distinguishes three phases using `satisfied`, `blocked` and `unknown`:
+
+- `setup`: native Ubuntu 24.04 x86-64, ordinary operator and observable static
+  user-namespace controls. A disabled namespace limit blocks preparation; missing
+  or inconsistent required setup evidence refuses before preparation effects.
+- `protected_run`: the exact selected namespace/runtime admission remains
+  **unknown** until the existing protected-launch checks run. A readable sysctl,
+  successful setup or preflight is not proof of bubblewrap admission, active
+  protection or an AppArmor exception. Existing runtime checks remain required.
+- `removal`: current host-user-namespace and same-UID process-evidence
+  prerequisites. EACCES is `blocked`; hidden/inaccessible inventory, PID reuse,
+  inconsistent identity and exhausted inspection limits cannot be positive.
+  This does not inspect selected retained-run inactivity or issue consent.
+
+Preview and preparation expose this report before downloads, compilation or
+selected-runtime execution. Setup prerequisites are required for preparation.
+An environment limitation confined to removal is reported separately and does
+not relabel every protected run as unsupported. To require removal prerequisites
+before spending preparation resources, select the explicit option:
+
+```bash
+agentfw pilot prepare --apply --prefix /absolute/private/pilot \
+  --require-removal-eligible [same pinned inputs]
+# Direct existing preparation entry has the same explicit option.
+python3 -B scripts/prepare-installed-pilot.py --prepare \
+  --require-removal-eligible [same preparation inputs]
+```
+
+A required-prerequisite refusal occurs before state creation, downloads,
+compilation or selected-runtime execution. An installed invocation still
+verifies its component and execs its recorded interpreter. The inspection itself
+launches no child. It reads at most 4096 processes, 1024 fds per process, 1 MiB
+per content read (8 KiB stat and 16 KiB status records), 64 MiB total content/link bytes and
+checks a ten-second inspection budget between kernel operations. Reports and
+support exports contain fixed phase/reason codes and guidance, never raw PIDs,
+argv, environment values, maps, project paths or credentials.
+
+The scan checks bounded kernel UID records as well as directory identities:
+[Linux proc ownership can change with dumpability](https://www.man7.org/linux/man-pages/man5/proc_pid.5.html),
+so a root-owned proc object alone does not establish an unrelated process.
+For same-UID EACCES, privately review the operator-owned session/services or use
+a clean environment with complete process visibility. Diagnosis stops nothing
+and changes no credentials, namespace, permissions, ptrace/AppArmor settings or
+host configuration. Do not ignore unreadable processes or use sudo to manufacture
+a positive result. A good result is a point-in-time prerequisite observation:
+removal still independently rechecks its exact current scope, process evidence,
+retained runs, fresh confirmation and journal before applying anything.
+
+The explicit WSL2 preparation path retains its existing opt-in validation and
+qualification boundary. Native Linux observations do not qualify WSL2. This
+feature uses no SOU-216 CI session-preparation helper and adds no service control.
+The opt-in workflow focus `lifecycle-preflight` runs ordinary and installed
+observations in separate disposable native jobs; only sanitized original reports
+are uploaded. [Exact-source observations and original failed attempts,
+2026-11-04](evidence/LINUX_LIFECYCLE_PREFLIGHT_2026-11-04.md) retain the conditional
+results: seven diagnosis/refusal cases passed, while removal stayed blocked. The
+disposable installed-component environment does not qualify a fully prepared
+protected MCP runtime, applying removal, live inference or WSL2.
 
 ## Named project presets
 

@@ -24,7 +24,12 @@ pub async fn dashboard() -> Response {
                 include_str!("enrollment_panel.js"),
             )
             .replace("/* AGENT_HISTORY */", include_str!("agent_history.js"))
-            .replace("/* FLEET_TRIAGE */", include_str!("fleet_triage.js")),
+            .replace("/* FLEET_TRIAGE */", include_str!("fleet_triage.js"))
+            .replace("/* AGENT_HEARTBEAT */", include_str!("heartbeat_panel.js"))
+            .replace(
+                "/* OPERATOR_AUDIT */",
+                include_str!("operator_audit_panel.js"),
+            ),
     )
     .into_response();
     let headers = response.headers_mut();

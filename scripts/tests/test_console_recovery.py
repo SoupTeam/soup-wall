@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Real SQLite/age controls plus pre-execution PostgreSQL target guards."""
+import importlib.util
 import io
 import json
 from contextlib import contextmanager
@@ -12,7 +13,8 @@ import sys
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import console_recovery as recovery
@@ -32,7 +34,9 @@ def native_sqlite_schema():
         source = (ROOT / 'crates/proxy/src/tenant_store' / filename).read_text()
         start = source.index('CREATE TABLE IF NOT EXISTS ' + first + ' (')
         result += '\n' + source[start:source.index(';",', start) + 1]
-    return result
+    audit = (ROOT / 'crates/proxy/src/tenant_store/operator_audit.rs').read_text()
+    start = audit.index('CREATE TABLE IF NOT EXISTS operator_audit_events (')
+    return result + '\n' + audit[start:audit.index(';";', start) + 1]
 
 
 def native_group_schema():
@@ -71,6 +75,13 @@ class RecoveryTests(unittest.TestCase):
                            (label, 'tenant_a', bytes([active]) * 32, label, active, 1, None if active else 2))
             db.execute("INSERT INTO tenant_audit VALUES (999,'tenant_a',1,'/controlled','allowed',200,1)")
             db.execute('DELETE FROM tenant_audit WHERE id=999')
+            db.execute("INSERT INTO operator_audit_events "
+                "(id,tenant_id,received_at_unix,actor_kind,actor_id,operation,target_kind,target_id,outcome) "
+                "VALUES (321,'tenant_a',2,'admin','admin_test','agent.rotate','agent','edge-1','committed')")
+            db.execute("INSERT INTO operator_audit_events "
+                "(id,tenant_id,received_at_unix,actor_kind,operation,target_kind,target_id,outcome) "
+                "VALUES (456,'tenant_a',3,'unavailable','agent.rotate','tenant','tenant_a','denied')")
+            db.execute('DELETE FROM operator_audit_events WHERE id=456')
         os.chmod(self.source, 0o600)
         self.identity = self.directory / 'identity.age'
         self.archive = self.directory / 'backup.age'
@@ -119,13 +130,19 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(recovery.canonical(before), recovery.canonical(recovery.inspect_sqlite(self.target)))
         self.assertEqual(source_bytes, self.source.read_bytes())
         self.assertEqual(backed['private_state_sha256'], restored['private_state_sha256'])
-        self.assertEqual(restored['tables_verified'], 43)
+        self.assertEqual(restored['tables_verified'], 44)
         self.assertFalse(restored['operator_signing_and_trust_restored'])
         self.assertEqual(list(self.work.iterdir()), [])
         with local_database(self.target) as connection:
             self.assertEqual(connection.execute('SELECT id,active,revoked_at_unix FROM tenant_tokens ORDER BY id').fetchall(),
                              [('retained', 1, None), ('revoked', 0, 2)])
             self.assertEqual(connection.execute("SELECT seq FROM sqlite_sequence WHERE name='tenant_audit'").fetchone(), (999,))
+            self.assertEqual(connection.execute(
+                "SELECT id,actor_id,operation,target_id,outcome FROM operator_audit_events"
+            ).fetchall(), [(321, 'admin_test', 'agent.rotate', 'edge-1', 'committed')])
+            self.assertEqual(connection.execute(
+                "SELECT seq FROM sqlite_sequence WHERE name='operator_audit_events'"
+            ).fetchone(), (456,))
             connection.execute("INSERT INTO tenant_audit(tenant_id,created_at_unix,path,outcome,status_code,latency_ms) "
                                "VALUES ('tenant_a',1,'/after','allowed',200,1)")
             self.assertEqual(connection.execute('SELECT id FROM tenant_audit').fetchone(), (1000,))
@@ -162,7 +179,7 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(value['status'], 'passed')
             self.assertEqual(value['phase'], arguments[0])
             self.assertEqual(value['backend'], 'sqlite')
-            self.assertEqual(value['tables_verified'], 43)
+            self.assertEqual(value['tables_verified'], 44)
             self.assertTrue(value['plaintext_temporary_cleaned'])
             self.assertFalse(value['operator_signing_and_trust_restored'])
             self.assertGreaterEqual(value['duration_seconds'], 0)
@@ -303,7 +320,7 @@ class RecoveryTests(unittest.TestCase):
             connection.execute('DROP TABLE managed_agent_revisions')
             connection.execute('DROP TABLE managed_agent_enrollments')
         state = recovery.inspect_sqlite(self.source)
-        self.assertEqual(len(state['tables']), 40)
+        self.assertEqual(len(state['tables']), 41)
         with local_database(self.source) as connection:
             connection.executescript(native_sqlite_schema())
             connection.execute('DROP TABLE managed_agent_deployments')
@@ -317,7 +334,7 @@ class RecoveryTests(unittest.TestCase):
             connection.execute("INSERT INTO managed_agent_groups VALUES ('tenant_a','legacy','Legacy',100)")
             connection.execute("ALTER TABLE managed_group_rollouts ADD COLUMN initial_sequences_json TEXT NOT NULL DEFAULT '{}'")
         state = recovery.inspect_sqlite(self.source)
-        self.assertEqual(len(state['tables']), 47)
+        self.assertEqual(len(state['tables']), 48)
         self.assertEqual(state['tables']['managed_agent_groups']['rows'][0][1], ['text', 'legacy'])
 
     def test_populated_group_recovery_control(self):
@@ -329,7 +346,7 @@ class RecoveryTests(unittest.TestCase):
             connection.execute("INSERT INTO managed_group_revisions VALUES ('tenant_a','grp_1','v1','default: allow\\n','sha_v1',100)")
             connection.execute("INSERT INTO managed_group_rollouts (tenant_id,group_id,rollout_id,revision,policy_sha256,issuer_key_id,phase,pilot_agents_json,standard_agents_json,active_deployments_json,previous_revisions_json,failure_reason,created_at_unix,updated_at_unix) VALUES ('tenant_a','grp_1','r_1','v1','sha_v1',NULL,'completed','[]','[]','{}','{}',NULL,100,100)")
         state = recovery.inspect_sqlite(self.source)
-        self.assertEqual(len(state['tables']), 47)
+        self.assertEqual(len(state['tables']), 48)
         self.assertEqual(state['tables']['managed_agent_groups']['rows'],
                          [[['text', 'tenant_a'], ['text', 'grp_1'], ['text', 'Group 1'], ['integer', 100]]])
         with local_database(self.source) as connection:
@@ -340,7 +357,7 @@ class RecoveryTests(unittest.TestCase):
     def test_postgres_alias_and_populated_guards_precede_restore_executor(self):
         # Genuine age archive decoding plus the actual production guard ordering.
         recipient = self.age_identity()
-        state = {'backend': 'postgres', 'schema_version':30,
+        state = {'backend': 'postgres', 'schema_version': recovery.POSTGRES_SCHEMA_VERSION,
                  'schema':recovery.inventory().get('postgres_schema'),
                  'tables': {name: [] for name in recovery.inventory()['postgres_tables']},
                  'sequences': {name: {'last_value':1,'is_called':False}
@@ -416,6 +433,100 @@ class RecoveryTests(unittest.TestCase):
              patch.object(backend, 'sql', return_value='1'):
             with self.assertRaises(recovery.RecoveryError):
                 backend.require_empty()
+
+    def pg_backend(self):
+        return recovery.PostgresBackend('postgresql://owned:private@127.0.0.1:5555/source?sslmode=disable', directory=self.work)
+
+    def test_pg_catalog_accepts_only_the_exact_observation_schema(self):
+        backend = self.pg_backend()
+        plain = json.dumps({'tables': ['tenants'], 'sequences': [], 'unexpected': 0})
+        def answers(present, unexpected=0):
+            def sql(query):
+                if query.startswith("SELECT json_build_object('tables'"):
+                    return json.dumps({'tables': ['tenants'], 'sequences': [], 'unexpected': unexpected})
+                if 'FROM pg_namespace WHERE nspname=' in query:
+                    return '1' if present else '0'
+                raise AssertionError('unexpected query')
+            return sql
+        # No observation schema: unchanged behavior.
+        with patch.object(backend, 'sql', side_effect=answers(False)):
+            self.assertEqual(backend.catalog(), json.loads(plain))
+        # Exactly the reviewed observation schema is accepted.
+        with patch.object(backend, 'sql', side_effect=answers(True)), \
+             patch.object(backend, 'logical_schema', return_value=recovery.OBSERVATION_CATALOG) as schema:
+            self.assertEqual(backend.catalog(), json.loads(plain))
+            schema.assert_called_once_with(recovery.OBSERVATION_SCHEMA)
+        # Any deviation in that schema refuses (an extra table here).
+        changed = json.loads(json.dumps(recovery.OBSERVATION_CATALOG))
+        changed['tables'].append(dict(changed['tables'][0], name='extra'))
+        with patch.object(backend, 'sql', side_effect=answers(True)), \
+             patch.object(backend, 'logical_schema', return_value=changed):
+            with self.assertRaisesRegex(recovery.RecoveryError, 'Unsupported PostgreSQL schema catalog'):
+                backend.catalog()
+        # Any other schema still refuses, with or without observations.
+        for present in (False, True):
+            with patch.object(backend, 'sql', side_effect=answers(present, unexpected=1)), \
+                 patch.object(backend, 'logical_schema', return_value=recovery.OBSERVATION_CATALOG):
+                with self.assertRaisesRegex(recovery.RecoveryError, 'Unsupported PostgreSQL schema catalog'):
+                    backend.catalog()
+        with self.assertRaisesRegex(recovery.RecoveryError, 'Unsupported PostgreSQL schema catalog'):
+            backend.logical_schema('rogue')
+
+    def test_pg_restore_target_with_observations_is_not_empty(self):
+        backend = self.pg_backend()
+        with patch.object(backend, 'catalog', return_value={'tables': [], 'sequences': [], 'unexpected': 0}), \
+             patch.object(backend, 'sql', side_effect=lambda q: '1' if 'nspname=' in q and 'COUNT(*) FROM pg_namespace' in q else '0'):
+            with self.assertRaisesRegex(recovery.RecoveryError, 'contains schema objects'):
+                backend.require_empty()
+
+    def test_pg_archive_with_observations_is_refused(self):
+        backend = self.pg_backend()
+        listing = b"; Archive\n215; 2615 16385 SCHEMA - agent_observations owned\n"
+        with patch.object(backend, 'invoke', return_value=listing):
+            with self.assertRaisesRegex(recovery.RecoveryError, 'volatile Agent observations'):
+                recovery.require_no_observations(backend, self.work / 'database.dump')
+        with patch.object(backend, 'invoke', return_value=b"; Archive\n200; 1259 16390 TABLE public tenants owned\n") as invoke:
+            recovery.require_no_observations(backend, self.work / 'database.dump', '/usr/bin/pg_restore')
+            invoke.assert_called_once_with(['/usr/bin/pg_restore', '--list', self.work / 'database.dump'])
+
+
+class PostgresToolSelection(unittest.TestCase):
+    def load(self, filename):
+        spec = importlib.util.spec_from_file_location('recovery_tool_selection', ROOT / 'scripts' / filename)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_public_backup_cli_preserves_default_and_explicit_pg_restore(self):
+        cli = self.load('console-recovery.py')
+        for selected in (None, '/owned/postgres16/bin/pg_restore'):
+            with self.subTest(selected=selected):
+                words = ['backup', '--backend', 'postgres', '--archive', '/owned/archive.age',
+                         '--workdir', '/owned/private', '--database-url-env', 'OWNED_RECOVERY_URL',
+                         '--recipient', 'owned-recipient', '--source-quiesced']
+                if selected is not None:
+                    words += ['--pg-restore', selected]
+                with patch.dict(os.environ, {'OWNED_RECOVERY_URL': 'postgresql://owned@127.0.0.1:5555/source?sslmode=disable'}), \
+                     patch.object(cli, 'backup_postgres', return_value={'status': 'passed'}) as backup, \
+                     patch('sys.stdout', new_callable=io.StringIO):
+                    self.assertEqual(cli.main(words), 0)
+                self.assertEqual(backup.call_args.kwargs['pg_restore'], selected or 'pg_restore')
+
+    def test_acceptance_backup_passes_its_selected_pg_restore(self):
+        acceptance = self.load('console-recovery-acceptance.py')
+        run = acceptance.Run.__new__(acceptance.Run)
+        run.args = SimpleNamespace(backend='postgres', age='/owned/age', psql='/owned/psql',
+                                   pg_dump='/owned/pg_dump', pg_restore='/owned/pg_restore')
+        run.directory = Path('/owned/recovery')
+        run.console = Mock()
+        run.console.poll.return_value = 0
+        run.check = Mock()
+        run.backup_module = SimpleNamespace(backup_postgres=Mock())
+        run.databases = {'source': 'postgresql://owned@127.0.0.1:5555/source?sslmode=disable'}
+        run.recipient = 'owned-recipient'
+        self.assertEqual(run.backup('explicit'), run.directory / 'explicit.age')
+        run.check.assert_called_once_with('source-stopped-before-backup-explicit', True)
+        self.assertEqual(run.backup_module.backup_postgres.call_args.kwargs['pg_restore'], run.args.pg_restore)
 
 
 if __name__ == '__main__':

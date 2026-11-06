@@ -100,7 +100,7 @@ def run(args, report):
             stream.write(json.dumps(report, sort_keys=True, indent=2) + "\n")
 
 
-def main():
+def parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--selection", type=Path)
@@ -108,7 +108,11 @@ def main():
     parser.add_argument("--output", type=Path)
     parser.add_argument("--strace", type=Path, default=Path("/usr/bin/strace"))
     parser.add_argument("--validation-timeout-seconds", type=int, default=120)
-    args = parser.parse_args()
+    return parser
+
+
+def main(argv=None):
+    args = parser().parse_args(argv)
     report = {"format": "sw-pilot-demo/1", "status": "plan", "executed": False,
               "provider": "owned-scripted-loopback", "live_model_effectiveness": "not_tested",
               "required_platform": "native Ubuntu 24.04 x86_64, non-root",
