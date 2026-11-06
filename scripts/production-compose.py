@@ -848,6 +848,8 @@ class ProductionCompose:
             closure, rows = verified()
             if action == "stop" and any(service_state(row) not in {"created", "stopped"} for row in rows.values()):
                 fail("operation_stop_not_confirmed")
+            if action == "restart" and any(service_state(row) != "healthy" for row in rows.values()):
+                fail("operation_restart_health_changed")
             path.unlink()
             self.recovery_required = False
             return {**self.report(action), "phase": "complete", "closure": closure,
@@ -948,8 +950,11 @@ def main(argv=None):
             handle.write("\n")
         print(json.dumps(observation, sort_keys=True))
         return 0
-    except (ClosureError, OSError, KeyError, TypeError, AttributeError, ValueError) as error:
-        category = str(error) if isinstance(error, ClosureError) else "invalid_input_or_output"
+    except (ClosureError, OSError, KeyError, TypeError, AttributeError, ValueError, KeyboardInterrupt) as error:
+        interrupted = isinstance(error, KeyboardInterrupt)
+        category = "operator_interrupted" if interrupted else "invalid_input_or_output"
+        if isinstance(error, ClosureError):
+            category = str(error)
         observation = {"format": "sw-production-compose-observation/1", "status": "refused",
                        "action": args.action, "reason": category}
         if args.action == "status":
@@ -962,7 +967,7 @@ def main(argv=None):
             json.dump(observation, handle, indent=2)
             handle.write("\n")
         print(json.dumps(observation), file=sys.stderr)
-        return 1
+        return 130 if interrupted else 1
     finally:
         if handle:
             handle.close()

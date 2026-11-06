@@ -326,6 +326,21 @@ class ProductionComposeControls(unittest.TestCase):
                     self.closure().execute(action)
         self.assertEqual(self.docker.mutations(), [])
 
+    def test_interrupted_cli_confirmation_reports_the_retry(self):
+        def interrupted(*args, **kwargs):
+            raise KeyboardInterrupt
+
+        gate = SimpleNamespace(execute=interrupted, recovery_required=True)
+        output = io.StringIO()
+        with patch.object(MODULE, "ProductionCompose", return_value=gate), redirect_stderr(output):
+            result = MODULE.main(["restart", "--project", "owned-test", "--env-file", str(self.env_file),
+                                  "--gateway-image-id", GATEWAY, "--confirm", "a" * 48])
+        self.assertEqual(result, 130)
+        report = json.loads(output.getvalue())
+        self.assertEqual(report["reason"], "operator_interrupted")
+        self.assertIn("same confirmation", report["next_action"])
+        self.assertNotIn("a" * 48, output.getvalue())
+
     def test_check_is_read_only_and_report_omits_secrets(self):
         report = self.closure().execute("check")
         self.assertEqual(report["status"], "passed")
