@@ -55,7 +55,8 @@ Execution re-reads all evidence before and after atomically reserving a
 create-new `0600` journal. It records durable dispatch intent as `attempted`
 before the final job, run and latest-attempt checks. The current PR's
 base/head/merge and Ready state are read last, immediately before the POST.
-A failed final check appends `aborted`. An
+A final identity refusal appends `aborted`. An unavailable final read
+leaves durable `attempted` for operator inspection. An
 acknowledged `201` is recorded as `acknowledged`; a lost response or HTTP
 failure is `uncertain` and **must not be blindly retried**. Inspect the run
 and journal manually. A second operator using the same plan ID is refused.
