@@ -41,6 +41,16 @@ MAX_NAME = 100
 # helpers read at run time. `scripts/tests/test_pilot_front_door_component.py`
 # derives the closure from the sources and fails when this list misses one.
 SCRIPTS = (
+    "scripts/pilot-demo.py",
+    "scripts/qualify-prepared-pilot-run.py",
+    "scripts/qualify-pilot-launcher.py",
+    "scripts/qualify-pilot-ask.py",
+    "scripts/pilot_ask_latency.py",
+    "scripts/verify-sou105-selected-approval.py",
+    "scripts/sou84_owned_acceptance.py",
+    "scripts/prepared_stop_witness.py",
+    "scripts/pilot_provider_witness.py",
+    "scripts/prepared_syscall_witness.py",
     "scripts/agent-audit-report.py",
     "scripts/agent-command-help.py",
     "scripts/agent-diagnostic-diff.py",
@@ -56,6 +66,7 @@ SCRIPTS = (
     "scripts/pilot-run-archive.py",
     "scripts/pilot-selection-lock.py",
     "scripts/pilot.py",
+    "scripts/pilot_candidate.py",
     "scripts/pilot_maintenance.py",
     "scripts/pilot_maintenance_launch.py",
     "scripts/pilot_configuration_backup.py",
@@ -95,9 +106,16 @@ SCRIPTS = (
     "scripts/verify-sou68-real-mcp.py",
     "scripts/verify-sou79-resource-budgets.py",
     "scripts/wsl_preflight.py",
+    "scripts/pilot_lifecycle_preflight.py",
     "scripts/wsl_qualification.py",
 )
 DATA_FILES = (
+    "crates/proxy/tests/fixtures/saml/local-idp-cert.pem",
+    "docs/operations/INSTALLED_PILOT_TOOLS.md",
+    "docs/ROADMAP.md",
+    "docs/operations/roadmap-support-index.json",
+    "scripts/roadmap_support_assets/report.css",
+    "scripts/roadmap_support_assets/report.js",
     "docs/operations/AGENT_COMMAND_HELP.md",
     "docs/operations/AGENT_DIAGNOSTIC_DIFF.md",
     "profiles/mcp/git-linked-worktree-readonly-v1/contract.json",

@@ -5,6 +5,31 @@ and explicitly confirmed disconnect. It uses the existing managed credential,
 signed-policy, TLS and lifecycle contracts. It does not create an enrollment,
 obtain issuer keys from Console, approve a revision or change enforcement mode.
 
+## Start from Console enrollment
+
+In the platform Console, select a tenant and enroll an Agent as an Owner.
+Store the one-time credential with the displayed private installer on the
+Agent host. It disables terminal echo while reading the credential. If the
+one-time response is lost, reconcile the same Agent ID and rotate that
+enrollment. A cancelled rotation sends no mutation before confirmation. An
+uncertain rotation can be retried using the same request in the same tab.
+After a committed rotation, install the replacement at the credential path
+shown by `managed-console inspect`. The old credential stops working.
+
+Open **Connection setup** for that Agent. Enter the Console origin reachable
+from the Agent and select the private TLS CA option only when using an
+independently verified private CA. Compare the advertised issuer against
+your independently provisioned keyring. Use the preview and apply commands
+with the same options and the exact preview digest.
+
+After starting the service, inspect the authenticated running connection
+and verify transport. Use **Open Agent policy** to review, approve and deploy
+a signed policy. **Refresh connection evidence** distinguishes issuance,
+bundle delivery and application acknowledgement. Match the Agent's actual
+revision, sequence and digest to the Console acknowledgement. If a candidate
+is rejected, the previously applied revision remains visible separately.
+Verify actual protection on the Agent host.
+
 ## Prerequisites
 
 Use an installed Linux binary and an owner-private Agent home (0700). The

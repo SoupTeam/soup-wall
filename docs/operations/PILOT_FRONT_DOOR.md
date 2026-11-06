@@ -26,6 +26,13 @@ Add `--scope linux-v1` to `preview` and `prepare` (and optionally to `run`) to s
 `scope_excludes_capability` before any step, and a selection outside the scope refuses before every run.
 The scope grants nothing and certifies nothing.
 
+Before preparation, `pilot.py preflight --json` reports current setup,
+protected-run and removal prerequisites separately. Preview/prepare include the
+same bounded diagnosis; `--require-removal-eligible` makes removal prerequisites
+an explicit preparation requirement. See the
+[installed lifecycle preflight](PILOT_INSTALLED_FRONT_DOOR.md#read-only-lifecycle-preflight)
+for phase meanings, privacy, limits and unchanged removal rechecks.
+
 ## 1. Preview (no effects)
 
 Use a clean reviewed checkout and an absolute private prefix outside the

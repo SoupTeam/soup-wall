@@ -554,7 +554,8 @@ class Prepare(unittest.TestCase):
             selection.parent.mkdir(parents=True, exist_ok=True)
             selection.write_text("{}")
             return 0, {"status": "prepared-not-active", "selection": str(selection)}
-        with mock.patch.object(M, "plan", lambda _: dict(report)), mock.patch.object(M, "child", child), \
+        with mock.patch.object(M.LIFECYCLE, "inspect", return_value={"setup": "satisfied", "removal": "satisfied"}), \
+                mock.patch.object(M, "plan", lambda _: dict(report)), mock.patch.object(M, "child", child), \
                 mock.patch.object(M.PREP, "private_dir", lambda path, create=False: path):
             result = M.prepare(args)
         self.assertEqual(result["status"], "prepared-not-active")

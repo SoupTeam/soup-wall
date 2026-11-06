@@ -24,7 +24,8 @@ from roadmap_support import safe_file, write_private
 MODULES = ('test_validate_candidate', 'test_publication_readiness', 'test_pilot_dossier',
            'test_pilot_runtime_identity', 'test_roadmap_support')
 FILES = ('scripts/validate_candidate.py', 'scripts/validate_candidate.sh',
-         'scripts/publication_readiness.py', 'scripts/qualify-publication-admission.py',
+         'scripts/publication_readiness.py', 'scripts/pilot_candidate.py',
+         'scripts/tests/candidate_fixture.py', 'scripts/qualify-publication-admission.py',
          'scripts/tests/test_validate_candidate.py', 'scripts/tests/test_publication_readiness.py',
          '.github/workflows/release.yml')
 

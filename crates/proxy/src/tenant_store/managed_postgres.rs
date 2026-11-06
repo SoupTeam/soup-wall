@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! PostgreSQL managed Agent storage. The enrollment row serializes deployment,
 //! delivery, acknowledgement and revocation for one tenant/Agent audience.
+use super::super::operator_audit::{AuditFact, AuditOperation, AuditTarget};
 use super::PostgresTenantStore;
 use crate::tenant_store::{
     agent_enrollment::{credential_hash, valid_id, validated_rotation},
@@ -279,6 +280,31 @@ impl PostgresTenantStore {
             ))
             .await?;
         }
+        let audit_version = super::super::operator_audit::SCHEMA_VERSION;
+        if self
+            .bounded(tx.query_opt(
+                "SELECT version FROM llm_firewall_schema_migrations WHERE version=$1",
+                &[&audit_version],
+            ))
+            .await?
+            .is_none()
+        {
+            self.bounded(tx.batch_execute(super::super::operator_audit::POSTGRES_SCHEMA))
+                .await?;
+            self.bounded(tx.execute(
+                "INSERT INTO llm_firewall_schema_migrations(version,applied_at_unix) VALUES($1,$2)",
+                &[&audit_version, &now_unix()],
+            ))
+            .await?;
+        }
+        let audit_exists: bool = self
+            .bounded(tx.query_one(
+                "SELECT to_regclass('public.operator_audit_events') IS NOT NULL",
+                &[],
+            ))
+            .await?
+            .get(0);
+        ensure!(audit_exists, "operator audit migration table is missing");
         self.bounded(tx.commit()).await?;
         Ok(())
     }
@@ -359,6 +385,12 @@ impl PostgresTenantStore {
         let token = format!("sw_agent_{}", random_base64url(32));
         let hash = credential_hash(&token).context("invalid generated Agent credential")?;
         let row = self.bounded(tx.query_one("INSERT INTO managed_agent_enrollments(tenant_id,agent_id,token_hash,created_at_unix) VALUES($1,$2,$3,$4) RETURNING tenant_id,agent_id,created_at_unix,revoked_at_unix,credential_generation", &[&tenant,&agent,&hash,&now_unix()])).await?;
+        self.audit_committed(
+            &tx,
+            tenant,
+            AuditFact::new(AuditOperation::AgentEnroll, AuditTarget::Agent, agent).sequence(1),
+        )
+        .await?;
         self.bounded(tx.commit()).await?;
         Ok(IssuedAgentCredential {
             agent: enrollment(row),
@@ -431,6 +463,13 @@ impl PostgresTenantStore {
             ],
         ))
         .await?;
+        self.audit_committed(
+            &tx,
+            tenant,
+            AuditFact::new(AuditOperation::AgentRotate, AuditTarget::Agent, agent)
+                .sequence(next as u64),
+        )
+        .await?;
         self.bounded(tx.commit()).await?;
         Ok(RotationOutcome {
             tenant_id: tenant.into(),
@@ -464,9 +503,34 @@ impl PostgresTenantStore {
         let client = self.bounded(connection.transaction()).await?;
         self.lock_managed_tenant(&client, tenant).await?;
         let changed = self.bounded(client.execute("UPDATE managed_agent_enrollments SET revoked_at_unix=$3 WHERE tenant_id=$1 AND agent_id=$2 AND revoked_at_unix IS NULL", &[&tenant,&agent,&now_unix()])).await? == 1;
+        if changed {
+            self.audit_committed(
+                &client,
+                tenant,
+                AuditFact::new(AuditOperation::AgentRevoke, AuditTarget::Agent, agent),
+            )
+            .await?;
+        }
         self.bounded(client.commit()).await?;
         Ok(changed)
     }
+    pub(in crate::tenant_store) async fn get_managed_agent(
+        &self,
+        tenant: &str,
+        agent: &str,
+    ) -> Result<Option<EnrolledAgent>> {
+        ensure!(
+            valid_id(tenant) && valid_id(agent),
+            "invalid tenant/Agent identity"
+        );
+        let client = self.checkout().await?;
+        Ok(self.bounded(client.query_opt(
+            "SELECT tenant_id, agent_id, created_at_unix, revoked_at_unix, credential_generation
+             FROM managed_agent_enrollments WHERE tenant_id=$1 AND agent_id=$2",
+            &[&tenant, &agent],
+        )).await?.map(enrollment))
+    }
+
     pub(in crate::tenant_store) async fn list_managed_agents(
         &self,
         tenant: &str,
@@ -515,6 +579,13 @@ impl PostgresTenantStore {
             }
         }
         self.bounded(tx.execute("INSERT INTO managed_agent_revisions(tenant_id,agent_id,revision,policy_yaml,policy_sha256) VALUES($1,$2,$3,$4,$5)", &[&tenant,&agent,&revision,&yaml,&digest])).await?;
+        self.audit_committed(
+            &tx,
+            tenant,
+            AuditFact::new(AuditOperation::AgentPolicyCreate, AuditTarget::Agent, agent)
+                .source(revision, Some(&digest)),
+        )
+        .await?;
         self.bounded(tx.commit()).await?;
         Ok(ManagedRevision {
             tenant_id: tenant.into(),
@@ -555,6 +626,19 @@ impl PostgresTenantStore {
             }
         }
         let changed = self.bounded(tx.execute("UPDATE managed_agent_revisions SET approved_at_unix=$4 WHERE tenant_id=$1 AND agent_id=$2 AND revision=$3 AND approved_at_unix IS NULL", &[&tenant,&agent,&revision,&now_unix()])).await?;
+        if changed == 1 {
+            self.audit_committed(
+                &tx,
+                tenant,
+                AuditFact::new(
+                    AuditOperation::AgentPolicyApprove,
+                    AuditTarget::Agent,
+                    agent,
+                )
+                .source(revision, None),
+            )
+            .await?;
+        }
         self.bounded(tx.commit()).await?;
         Ok(changed == 1)
     }
@@ -581,6 +665,8 @@ impl PostgresTenantStore {
                 },
                 issuer,
             )
+            .await?;
+        self.audit_committed(&tx, tenant, AuditFact::deployment(&result))
             .await?;
         self.bounded(tx.commit()).await?;
         Ok(result)
@@ -674,6 +760,10 @@ impl PostgresTenantStore {
             .await?;
         let bundle_json: String = row.get(9);
         let result = keyed_result(deployment(row)?, &bundle_json, replayed)?;
+        if !replayed {
+            self.audit_committed(&tx, tenant, AuditFact::deployment(&result.deployment))
+                .await?;
+        }
         self.bounded(tx.commit()).await?;
         Ok(result)
     }
@@ -881,6 +971,12 @@ impl PostgresTenantStore {
             "INSERT INTO managed_agent_groups (tenant_id, group_id, name, created_at_unix) VALUES ($1,$2,$3,$4)",
             &[&tenant, &group_id, &name, &now],
         )).await.context("group already exists or cannot be created")?;
+        self.audit_committed(
+            &tx,
+            tenant,
+            AuditFact::new(AuditOperation::GroupCreate, AuditTarget::Group, group_id),
+        )
+        .await?;
         self.bounded(tx.commit()).await?;
         Ok(ManagedAgentGroup {
             tenant_id: tenant.into(),
@@ -956,6 +1052,14 @@ impl PostgresTenantStore {
                 &[&tenant, &group_id],
             ))
             .await?;
+        if count > 0 {
+            self.audit_committed(
+                &tx,
+                tenant,
+                AuditFact::new(AuditOperation::GroupDelete, AuditTarget::Group, group_id),
+            )
+            .await?;
+        }
         self.bounded(tx.commit()).await?;
         Ok(count > 0)
     }
@@ -976,12 +1080,22 @@ impl PostgresTenantStore {
         let tx = self.bounded(client.transaction()).await?;
         self.lock_managed_agent(&tx, tenant, agent_id).await?;
         let now = now_unix();
-        self.bounded(tx.execute(
+        let changed = self.bounded(tx.execute(
             "INSERT INTO managed_agent_group_members (tenant_id, group_id, agent_id, is_pilot, joined_at_unix)
              VALUES ($1,$2,$3,$4,$5)
-             ON CONFLICT(tenant_id, group_id, agent_id) DO UPDATE SET is_pilot=EXCLUDED.is_pilot",
+             ON CONFLICT(tenant_id, group_id, agent_id) DO UPDATE SET is_pilot=EXCLUDED.is_pilot
+             WHERE managed_agent_group_members.is_pilot <> EXCLUDED.is_pilot",
             &[&tenant, &group_id, &agent_id, &is_pilot, &now],
         )).await?;
+        if changed != 0 {
+            self.audit_committed(
+                &tx,
+                tenant,
+                AuditFact::new(AuditOperation::GroupAddMember, AuditTarget::Group, group_id)
+                    .source(agent_id, None),
+            )
+            .await?;
+        }
         self.bounded(tx.commit()).await?;
         Ok(ManagedGroupMember {
             tenant_id: tenant.into(),
@@ -1010,6 +1124,19 @@ impl PostgresTenantStore {
             "DELETE FROM managed_agent_group_members WHERE tenant_id=$1 AND group_id=$2 AND agent_id=$3",
             &[&tenant, &group_id, &agent_id],
         )).await?;
+        if count > 0 {
+            self.audit_committed(
+                &client,
+                tenant,
+                AuditFact::new(
+                    AuditOperation::GroupRemoveMember,
+                    AuditTarget::Group,
+                    group_id,
+                )
+                .source(agent_id, None),
+            )
+            .await?;
+        }
         self.bounded(client.commit()).await?;
         Ok(count > 0)
     }
@@ -1074,6 +1201,17 @@ impl PostgresTenantStore {
              VALUES ($1,$2,$3,$4,$5)",
             &[&tenant, &group_id, &revision, &yaml, &digest],
         )).await.context("group revision exists or cannot be created")?;
+        self.audit_committed(
+            &tx,
+            tenant,
+            AuditFact::new(
+                AuditOperation::GroupPolicyCreate,
+                AuditTarget::Group,
+                group_id,
+            )
+            .source(revision, Some(&digest)),
+        )
+        .await?;
         self.bounded(tx.commit()).await?;
         Ok(ManagedGroupRevision {
             tenant_id: tenant.into(),
@@ -1090,15 +1228,31 @@ impl PostgresTenantStore {
         group_id: &str,
         revision: &str,
     ) -> Result<bool> {
-        let client = self.checkout().await?;
+        let mut client = self.checkout().await?;
+        let tx = self.bounded(client.transaction()).await?;
+        self.lock_managed_tenant(&tx, tenant).await?;
 
         let count = self
-            .bounded(client.execute(
+            .bounded(tx.execute(
                 "UPDATE managed_group_revisions SET approved_at_unix=$4
              WHERE tenant_id=$1 AND group_id=$2 AND revision=$3 AND approved_at_unix IS NULL",
                 &[&tenant, &group_id, &revision, &now_unix()],
             ))
             .await?;
+        if count == 1 {
+            self.audit_committed(
+                &tx,
+                tenant,
+                AuditFact::new(
+                    AuditOperation::GroupPolicyApprove,
+                    AuditTarget::Group,
+                    group_id,
+                )
+                .source(revision, None),
+            )
+            .await?;
+        }
+        self.bounded(tx.commit()).await?;
         Ok(count == 1)
     }
 
@@ -1154,6 +1308,12 @@ impl PostgresTenantStore {
             .get_managed_group_rollout_query(&*tx, tenant, group_id)
             .await?
             .context("rollout disappeared during transaction")?;
+        self.audit_committed(
+            &tx,
+            tenant,
+            AuditFact::rollout(AuditOperation::RolloutStart, &result),
+        )
+        .await?;
         self.bounded(tx.commit()).await?;
         Ok(result)
     }
@@ -1819,6 +1979,12 @@ impl PostgresTenantStore {
             consumed == 1,
             ConfirmationRefused(ConfirmationFailure::Invalid)
         );
+        self.audit_committed(
+            &tx,
+            tenant,
+            AuditFact::rollout(AuditOperation::RolloutStart, &rollout),
+        )
+        .await?;
         self.bounded(tx.commit()).await?;
         Ok(GuardedStart {
             rollout,
@@ -1975,6 +2141,12 @@ impl PostgresTenantStore {
                 return Ok(None);
             }
         }
+        let before = if self.operator.is_some() {
+            self.operator_rollout_snapshot(&tx, tenant, group_id)
+                .await?
+        } else {
+            None
+        };
         let result = self
             .advance_managed_group_rollout_tx(&tx, tenant, group_id, issuer)
             .await?;
@@ -1984,6 +2156,16 @@ impl PostgresTenantStore {
         } else {
             None
         };
+        if let (Some(previous), Some(plan)) = (before, &result) {
+            if previous.changed(plan) {
+                self.audit_committed(
+                    &tx,
+                    tenant,
+                    AuditFact::rollout(AuditOperation::RolloutAdvance, plan),
+                )
+                .await?;
+            }
+        }
         self.bounded(tx.commit()).await?;
         Ok(result)
     }
@@ -2790,6 +2972,12 @@ impl PostgresTenantStore {
         ))
         .await?;
 
+        let before = if self.operator.is_some() {
+            self.operator_rollout_snapshot(&tx, tenant, group_id)
+                .await?
+        } else {
+            None
+        };
         let result = self
             .rollback_managed_group_rollout_tx(&tx, tenant, group_id, issuer)
             .await?;
@@ -2799,6 +2987,16 @@ impl PostgresTenantStore {
         } else {
             None
         };
+        if let (Some(previous), Some(plan)) = (before, &result) {
+            if previous.changed(plan) {
+                self.audit_committed(
+                    &tx,
+                    tenant,
+                    AuditFact::rollout(AuditOperation::RolloutRollback, plan),
+                )
+                .await?;
+            }
+        }
         self.bounded(tx.commit()).await?;
         Ok(result)
     }
@@ -2948,6 +3146,12 @@ impl PostgresTenantStore {
         ))
         .await?;
 
+        let before = if self.operator.is_some() {
+            self.operator_rollout_snapshot(&tx, tenant, group_id)
+                .await?
+        } else {
+            None
+        };
         let result = self
             .pause_managed_group_rollout_tx(&tx, tenant, group_id)
             .await?;
@@ -2957,6 +3161,16 @@ impl PostgresTenantStore {
         } else {
             None
         };
+        if let (Some(previous), Some(plan)) = (before, &result) {
+            if previous.changed(plan) {
+                self.audit_committed(
+                    &tx,
+                    tenant,
+                    AuditFact::rollout(AuditOperation::RolloutPause, plan),
+                )
+                .await?;
+            }
+        }
         self.bounded(tx.commit()).await?;
         Ok(result)
     }
@@ -3008,6 +3222,12 @@ impl PostgresTenantStore {
         ))
         .await?;
 
+        let before = if self.operator.is_some() {
+            self.operator_rollout_snapshot(&tx, tenant, group_id)
+                .await?
+        } else {
+            None
+        };
         let result = self
             .resume_managed_group_rollout_tx(&tx, tenant, group_id, issuer)
             .await?;
@@ -3017,6 +3237,16 @@ impl PostgresTenantStore {
         } else {
             None
         };
+        if let (Some(previous), Some(plan)) = (before, &result) {
+            if previous.changed(plan) {
+                self.audit_committed(
+                    &tx,
+                    tenant,
+                    AuditFact::rollout(AuditOperation::RolloutResume, plan),
+                )
+                .await?;
+            }
+        }
         self.bounded(tx.commit()).await?;
         Ok(result)
     }
