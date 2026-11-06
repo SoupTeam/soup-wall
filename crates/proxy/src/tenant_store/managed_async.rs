@@ -175,6 +175,17 @@ impl TenantStore {
             None => self.revoke_managed_agent(tenant_id, agent_id),
         }
     }
+    pub(crate) async fn get_managed_agent_async(
+        &self,
+        tenant: &str,
+        agent: &str,
+    ) -> anyhow::Result<Option<EnrolledAgent>> {
+        match &self.postgres {
+            Some(pg) => pg.get_managed_agent(tenant, agent).await,
+            None => self.get_managed_agent(tenant, agent),
+        }
+    }
+
     pub async fn list_managed_agents_async(
         &self,
         tenant_id: &str,

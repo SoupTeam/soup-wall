@@ -5,6 +5,7 @@
 //! committed issuance always has its key and an uncommitted one has neither. A key is bound to
 //! tenant, Agent, the authenticated admin and the canonical deployment intent. It never grants
 //! authority: every retry re-checks the Agent, tenant and admin before a stored result is returned.
+use super::operator_audit::AuditFact;
 use anyhow::{ensure, Context, Result};
 use rusqlite::{params, OptionalExtension};
 use sha2::{Digest, Sha256};
@@ -209,6 +210,7 @@ impl TenantStore {
                 r
             },
         )?;
+        self.audit_committed(&tx, tenant, AuditFact::deployment(&result.deployment))?;
         tx.commit()?;
         Ok(result)
     }

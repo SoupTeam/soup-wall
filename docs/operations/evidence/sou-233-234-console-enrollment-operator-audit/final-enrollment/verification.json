@@ -1,0 +1,27 @@
+{
+  "archive_sha256": "45ced3b712b75435acdd19ecc77a0fa0294834295b1c94ed34b0d8a90b82c75b",
+  "kind": "enrollment",
+  "reports": [
+    {
+      "backend": "postgres",
+      "checks": 64,
+      "failed_checks": [],
+      "runtime_commit": "64ad83dbac02fb1efac0012bfe0d33a7d62a1896",
+      "sha256": "8a5d0eec5e96e265c3ba53a7b83a4c28fd1caee9a2db7c29370360e265733fa3",
+      "source_hashes_verified": 271,
+      "source_matches_head": "64ad83dbac02fb1efac0012bfe0d33a7d62a1896",
+      "status": "passed"
+    },
+    {
+      "backend": "sqlite",
+      "checks": 62,
+      "failed_checks": [],
+      "runtime_commit": "64ad83dbac02fb1efac0012bfe0d33a7d62a1896",
+      "sha256": "5921afeb34186b73be4c6f176ad92d26e857148ff43f30283c0ec988b013dc2d",
+      "source_hashes_verified": 271,
+      "source_matches_head": "64ad83dbac02fb1efac0012bfe0d33a7d62a1896",
+      "status": "passed"
+    }
+  ],
+  "zip_crc": "passed"
+}

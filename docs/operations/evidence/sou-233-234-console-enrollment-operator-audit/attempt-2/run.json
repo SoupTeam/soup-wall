@@ -1,0 +1,8 @@
+{
+  "run_id": 42073386456,
+  "artifact_id": 13438656087,
+  "conclusion": "failure",
+  "url": "https://github.com/SoupTeam/soup-wall/actions/runs/42073386456",
+  "source_commit": "dcdc67b81ed2626bf72c170b2a4a8cb5180e16ac",
+  "cause": "SQLite passed all 61 controls. PostgreSQL reached the committed-response-loss witness and remained in sending until its browser expectation expired. A deterministic stalled-body browser regression subsequently reproduced the unbounded wait."
+}

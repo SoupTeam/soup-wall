@@ -25,7 +25,7 @@ def page_html():
     html = (SRC / "admin_dashboard.html").read_text(encoding="utf-8")
     for marker, name in (("FLEET_PANEL", "fleet_panel.js"), ("ROLLOUT_PANEL", "rollout_panel.js"), ("SINGLE_AGENT_POLICY", "single_agent_policy.js"),
                          ("ENROLLMENT_PANEL", "enrollment_panel.js"), ("AGENT_HISTORY", "agent_history.js"),
-                         ("FLEET_TRIAGE", "fleet_triage.js")):
+                         ("FLEET_TRIAGE", "fleet_triage.js"), ("AGENT_HEARTBEAT", "heartbeat_panel.js"), ("OPERATOR_AUDIT", "operator_audit_panel.js")):
         html = html.replace(f"/* {marker} */", (SRC / name).read_text(encoding="utf-8"))
     return html
 
@@ -135,6 +135,11 @@ class FleetTriageBrowserTests(unittest.TestCase):
             tenant = parts[4]
             return self.json(route, {"contract_version": "sw-agent-fleet/1", "tenant_id": tenant, "agents": [], "next_after": None,
                                      "observed_at_unix": T0 + 1000})
+        if path.endswith("/heartbeat"):
+            parts = path.split("/")
+            return self.json(route, {"contract_version": "sw-agent-heartbeat-status/1", "tenant_id": parts[4], "agent_id": parts[6],
+                                     "observed_at_unix": 1800000000, "status": "unsupported", "expires_after_seconds": 90,
+                                     "age_seconds": None, "current_credential_generation": 1, "reported": None, "note": "fixture"})
         if "/agent-fleet/" in path:
             tenant, agent_id = parts[4], parts[6]
             a = next(x for x in self.agents[tenant] if x["agent_id"] == agent_id)

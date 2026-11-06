@@ -13,6 +13,7 @@ use axum::Json;
 use serde::Deserialize;
 
 use crate::handlers::Shared;
+use crate::tenant_store::operator_audit::OperatorContext;
 use crate::tenant_store::{
     valid_idempotency_key, AdminIdentity, AppliedReport, ConfirmationRefused,
     DeploymentIdempotency, EnrolledAgent, IdempotencyConflict, ManagedIssuer, RotationRequest,
@@ -37,12 +38,13 @@ fn store(state: &Shared) -> Option<TenantStore> {
 }
 
 /// Owner-only: issues the Agent credential once, never on later reads.
-pub async fn enroll(
+pub(crate) async fn enroll(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Path(tenant_id): Path<String>,
     Json(input): Json<EnrollRequest>,
 ) -> Response {
-    let Some(store) = store(&state) else {
+    let Some(store) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "managed Agent enrollment unavailable",
@@ -55,7 +57,12 @@ pub async fn enroll(
     })
     .await;
     match result {
-        Ok(Ok(credential)) => (StatusCode::CREATED, Json(credential)).into_response(),
+        Ok(Ok(credential)) => (
+            StatusCode::CREATED,
+            [(axum::http::header::CACHE_CONTROL, "no-store")],
+            Json(credential),
+        )
+            .into_response(),
         Ok(Err(error_value)) => {
             tracing::warn!(error = %error_value, "managed Agent enrollment refused");
             failure(StatusCode::BAD_REQUEST, "Agent enrollment refused")
@@ -96,11 +103,12 @@ pub async fn list(State(state): State<Shared>, Path(tenant_id): Path<String>) ->
 }
 
 /// Owner-only revocation. The Bearer token stops working immediately.
-pub async fn revoke(
+pub(crate) async fn revoke(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Path((tenant_id, agent_id)): Path<(String, String)>,
 ) -> Response {
-    let Some(store) = store(&state) else {
+    let Some(store) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "managed Agent enrollment unavailable",
@@ -127,12 +135,13 @@ pub async fn revoke(
 }
 
 /// Admin-only credential rotation. Never authenticates using the Agent bearer.
-pub async fn rotate_credential(
+pub(crate) async fn rotate_credential(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Path((tenant_id, agent_id)): Path<(String, String)>,
     Json(input): Json<RotationRequest>,
 ) -> Response {
-    let Some(store) = store(&state) else {
+    let Some(store) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -209,13 +218,14 @@ pub struct NewDeploymentRequest {
 
 /// Strictly privileged Console authoring: payload is AgentPolicySet YAML,
 /// never a Gateway TenantPolicyDocument.
-pub async fn create_revision(
+pub(crate) async fn create_revision(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Extension(identity): Extension<AdminIdentity>,
     Path((tenant, agent)): Path<(String, String)>,
     Json(input): Json<NewRevisionRequest>,
 ) -> Response {
-    let Some(db) = store(&state) else {
+    let Some(db) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -245,12 +255,13 @@ pub async fn create_revision(
     }
 }
 
-pub async fn approve_revision(
+pub(crate) async fn approve_revision(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Extension(identity): Extension<AdminIdentity>,
     Path((tenant, agent, revision)): Path<(String, String, String)>,
 ) -> Response {
-    let Some(db) = store(&state) else {
+    let Some(db) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -277,8 +288,9 @@ pub async fn approve_revision(
 ///
 /// With an `Idempotency-Key` header an exact retry returns the original issuance. Without it the
 /// request is the documented keyless operation and always issues a new sequence.
-pub async fn deploy_revision(
+pub(crate) async fn deploy_revision(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Extension(identity): Extension<AdminIdentity>,
     headers: HeaderMap,
     Path((tenant, agent, revision)): Path<(String, String, String)>,
@@ -288,7 +300,7 @@ pub async fn deploy_revision(
         Ok(key) => key,
         Err(()) => return failure(StatusCode::BAD_REQUEST, "invalid Idempotency-Key"),
     };
-    let Some(db) = store(&state) else {
+    let Some(db) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -591,12 +603,13 @@ pub struct RolloutActionRequest {
     pub issuer_key_id: Option<String>,
 }
 
-pub async fn create_group(
+pub(crate) async fn create_group(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Path(tenant_id): Path<String>,
     Json(input): Json<CreateGroupRequest>,
 ) -> Response {
-    let Some(db) = store(&state) else {
+    let Some(db) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -649,11 +662,12 @@ pub async fn get_group(
     }
 }
 
-pub async fn delete_group(
+pub(crate) async fn delete_group(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Path((tenant_id, group_id)): Path<(String, String)>,
 ) -> Response {
-    let Some(db) = store(&state) else {
+    let Some(db) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -670,12 +684,13 @@ pub async fn delete_group(
     }
 }
 
-pub async fn add_group_member(
+pub(crate) async fn add_group_member(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Path((tenant_id, group_id)): Path<(String, String)>,
     Json(input): Json<AddGroupMemberRequest>,
 ) -> Response {
-    let Some(db) = store(&state) else {
+    let Some(db) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -696,11 +711,12 @@ pub async fn add_group_member(
     }
 }
 
-pub async fn remove_group_member(
+pub(crate) async fn remove_group_member(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Path((tenant_id, group_id, agent_id)): Path<(String, String, String)>,
 ) -> Response {
-    let Some(db) = store(&state) else {
+    let Some(db) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -739,12 +755,13 @@ pub async fn list_group_members(
     }
 }
 
-pub async fn create_group_revision(
+pub(crate) async fn create_group_revision(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Path((tenant_id, group_id)): Path<(String, String)>,
     Json(input): Json<CreateGroupRevisionRequest>,
 ) -> Response {
-    let Some(db) = store(&state) else {
+    let Some(db) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -773,11 +790,12 @@ pub async fn create_group_revision(
     }
 }
 
-pub async fn approve_group_revision(
+pub(crate) async fn approve_group_revision(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Path((tenant_id, group_id, revision)): Path<(String, String, String)>,
 ) -> Response {
-    let Some(db) = store(&state) else {
+    let Some(db) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -820,13 +838,14 @@ pub async fn list_group_revisions(
     }
 }
 
-pub async fn start_group_rollout(
+pub(crate) async fn start_group_rollout(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Extension(identity): Extension<AdminIdentity>,
     Path((tenant_id, group_id)): Path<(String, String)>,
     Json(input): Json<StartRolloutRequest>,
 ) -> Response {
-    let Some(db) = store(&state) else {
+    let Some(db) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -961,12 +980,13 @@ pub async fn get_group_rollout(
     }
 }
 
-pub async fn advance_group_rollout(
+pub(crate) async fn advance_group_rollout(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Path((tenant_id, group_id)): Path<(String, String)>,
     body: Option<Json<RolloutActionRequest>>,
 ) -> Response {
-    let Some(db) = store(&state) else {
+    let Some(db) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -990,12 +1010,13 @@ pub async fn advance_group_rollout(
     }
 }
 
-pub async fn rollback_group_rollout(
+pub(crate) async fn rollback_group_rollout(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Path((tenant_id, group_id)): Path<(String, String)>,
     body: Option<Json<RolloutActionRequest>>,
 ) -> Response {
-    let Some(db) = store(&state) else {
+    let Some(db) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -1019,11 +1040,12 @@ pub async fn rollback_group_rollout(
     }
 }
 
-pub async fn pause_group_rollout(
+pub(crate) async fn pause_group_rollout(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Path((tenant_id, group_id)): Path<(String, String)>,
 ) -> Response {
-    let Some(db) = store(&state) else {
+    let Some(db) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -1045,12 +1067,13 @@ pub async fn pause_group_rollout(
     }
 }
 
-pub async fn resume_group_rollout(
+pub(crate) async fn resume_group_rollout(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Path((tenant_id, group_id)): Path<(String, String)>,
     body: Option<Json<RolloutActionRequest>>,
 ) -> Response {
-    let Some(db) = store(&state) else {
+    let Some(db) = store(&state).map(|store| store.for_operator(&operator)) else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "Console storage unavailable",
@@ -1138,7 +1161,7 @@ pub async fn read_revision(
 #[serde(deny_unknown_fields)]
 pub struct SelectedAgent {
     #[serde(deserialize_with = "selected_identifier")]
-    pub agent_id: String,
+    pub(crate) agent_id: String,
 }
 
 #[derive(Deserialize)]
@@ -1191,8 +1214,9 @@ pub async fn list_selected_revisions(
     .await
 }
 
-pub async fn create_selected_revision(
+pub(crate) async fn create_selected_revision(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Extension(identity): Extension<AdminIdentity>,
     Path(tenant): Path<String>,
     axum::extract::Query(selected): axum::extract::Query<SelectedAgent>,
@@ -1200,9 +1224,69 @@ pub async fn create_selected_revision(
 ) -> Response {
     create_revision(
         State(state),
+        Extension(operator),
         Extension(identity),
         Path((tenant, selected.agent_id)),
         Json(input),
+    )
+    .await
+}
+
+/// Read one enrollment beyond the bounded list, including after a lost one-time response.
+pub(crate) async fn selected_enrollment(
+    State(state): State<Shared>,
+    Path(tenant): Path<String>,
+    axum::extract::Query(selected): axum::extract::Query<SelectedAgent>,
+) -> Response {
+    let Some(db) = store(&state) else {
+        return failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Console storage unavailable",
+        );
+    };
+    match db
+        .get_managed_agent_async(&tenant, &selected.agent_id)
+        .await
+    {
+        Ok(Some(agent)) => (
+            [(axum::http::header::CACHE_CONTROL, "no-store")],
+            Json(agent),
+        )
+            .into_response(),
+        Ok(None) => failure(StatusCode::NOT_FOUND, "Agent enrollment not found"),
+        Err(_) => failure(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Agent enrollment unavailable",
+        ),
+    }
+}
+
+pub(crate) async fn rotate_selected_credential(
+    State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
+    Path(tenant): Path<String>,
+    axum::extract::Query(selected): axum::extract::Query<SelectedAgent>,
+    Json(input): Json<RotationRequest>,
+) -> Response {
+    rotate_credential(
+        State(state),
+        Extension(operator),
+        Path((tenant, selected.agent_id)),
+        Json(input),
+    )
+    .await
+}
+
+pub(crate) async fn revoke_selected_agent(
+    State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
+    Path(tenant): Path<String>,
+    axum::extract::Query(selected): axum::extract::Query<SelectedAgent>,
+) -> Response {
+    revoke(
+        State(state),
+        Extension(operator),
+        Path((tenant, selected.agent_id)),
     )
     .await
 }
@@ -1227,22 +1311,25 @@ pub async fn read_selected_revision(
     .await
 }
 
-pub async fn approve_selected_revision(
+pub(crate) async fn approve_selected_revision(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Extension(identity): Extension<AdminIdentity>,
     Path(tenant): Path<String>,
     axum::extract::Query(selected): axum::extract::Query<SelectedRevision>,
 ) -> Response {
     approve_revision(
         State(state),
+        Extension(operator),
         Extension(identity),
         Path((tenant, selected.agent_id, selected.revision)),
     )
     .await
 }
 
-pub async fn deploy_selected_revision(
+pub(crate) async fn deploy_selected_revision(
     State(state): State<Shared>,
+    Extension(operator): Extension<OperatorContext>,
     Extension(identity): Extension<AdminIdentity>,
     headers: HeaderMap,
     Path(tenant): Path<String>,
@@ -1251,6 +1338,7 @@ pub async fn deploy_selected_revision(
 ) -> Response {
     deploy_revision(
         State(state),
+        Extension(operator),
         Extension(identity),
         headers,
         Path((tenant, selected.agent_id, selected.revision)),

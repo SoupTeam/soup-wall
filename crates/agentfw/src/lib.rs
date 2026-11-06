@@ -19,6 +19,7 @@ pub mod judge;
 pub mod lifecycle;
 pub mod managed_connection;
 pub mod managed_credential;
+pub mod managed_heartbeat;
 pub mod managed_policy;
 pub mod managed_sync;
 pub mod map;
@@ -32,6 +33,7 @@ pub mod pilot_component;
 pub mod pilot_doctor;
 mod pilot_host;
 pub mod pilot_launcher;
+pub mod pilot_lifecycle_preflight;
 pub mod pilot_observation;
 pub mod pilot_workspaces;
 #[cfg(target_os = "linux")]

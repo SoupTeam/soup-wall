@@ -1,0 +1,9 @@
+{
+  "archive_sha256": "3a68eb401bbef5820ecd1821b71558ab284f10b5d253751020ec00f90158d1fd",
+  "artifact_id": 13436286938,
+  "artifact_name": "console-recovery-outcomes",
+  "conclusion": "success",
+  "run_id": 42070311455,
+  "source_commit": "29bf830a7fbb2c4da067bf484b338bb12a7eaefc",
+  "url": "https://github.com/SoupTeam/soup-wall/actions/runs/42070311455"
+}

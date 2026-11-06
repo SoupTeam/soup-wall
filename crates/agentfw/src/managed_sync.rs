@@ -702,6 +702,18 @@ impl ManagedSync {
     /// Never follow 3xx to another origin: a redirect must not receive the
     /// enrolled Agent Bearer credential (including across HTTPS→HTTP).
     /// no_proxy also disables inherited HTTP_PROXY/HTTPS_PROXY routing.
+    /// The opt-in heartbeat sender over this same Console origin, private CA,
+    /// credential source and pinned tenant/Agent; no other destination.
+    pub fn heartbeat_sender(&self) -> Result<crate::managed_heartbeat::HeartbeatSender> {
+        crate::managed_heartbeat::HeartbeatSender::new(
+            self.console.clone(),
+            self.build_client()?,
+            self.credential_source.clone(),
+            self.tenant.clone(),
+            self.agent.clone(),
+        )
+    }
+
     fn build_client(&self) -> Result<reqwest::Client> {
         let mut builder = reqwest::Client::builder()
             .no_proxy()

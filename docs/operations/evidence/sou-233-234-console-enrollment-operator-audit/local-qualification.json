@@ -1,0 +1,147 @@
+{
+  "baseline_download_reproduced_on": "8003fac2d271156e2229c8c15c6eddb98ee2da8e",
+  "deliberate_negative_controls": [
+    "audit-redaction-negative used the new token-shaped-ID witness against the pre-fix binary and failed as expected.",
+    "negative-stalled-committed-response reproduced the unbounded response-body wait before the deadline fix."
+  ],
+  "existing_lifecycle_test": "The unchanged install_works_with_nonexistent_relative_home test failed once during final64-workspace. It passed isolated and in the complete final64-workspace-retry on the same source.",
+  "failed_development_controls": [
+    {
+      "exit": 101,
+      "label": "proxy-check",
+      "log_sha256": "61a1163b0805ca464667b4ee07a2750d551c1bb16cb0e244d6ead1c4730cb1a6",
+      "record": "1793895849842182000-proxy-check.json",
+      "seconds": 55.25815558293834
+    },
+    {
+      "exit": 1,
+      "label": "audit-catalog",
+      "log_sha256": "610b586a75e6ef616f88d8cf9cf34105733cea783f59c35acf45a5dc91af2b59",
+      "record": "1793895998847962000-audit-catalog.json",
+      "seconds": 1.814581542275846
+    },
+    {
+      "exit": 1,
+      "label": "local-operator-audit-sqlite",
+      "log_sha256": "c4f7fb7d8ebb4f9125506cac1c7a9451d9862c9c823fa7d5ba4e0bcbf81201c1",
+      "record": "1793896721275885000-local-operator-audit-sqlite.json",
+      "seconds": 2.413408125285059
+    },
+    {
+      "exit": 1,
+      "label": "browser-and-recovery",
+      "log_sha256": "4da8f0ec9753e0c064460693faef87fd5a7c8fe1f495db2c5043db607465dcd0",
+      "record": "1793896856474317000-browser-and-recovery.json",
+      "seconds": 13.28879537479952
+    },
+    {
+      "exit": 1,
+      "label": "console-browser",
+      "log_sha256": "0621b45f18162fc9bf85023b0f49ab46f702ca6154447766324b9bbd30cebd45",
+      "record": "1793896957128590000-console-browser.json",
+      "seconds": 34.885608250275254
+    },
+    {
+      "exit": 101,
+      "label": "workspace-tests",
+      "log_sha256": "d95f35997c539171c459a111f8888c3d534a40cce3f41960f4c6939319b1940e",
+      "record": "1793897181958133000-workspace-tests.json",
+      "seconds": 242.83618974965066
+    },
+    {
+      "exit": 1,
+      "label": "accepted-base-download",
+      "log_sha256": "03809986cb1ee2504d74abacfa53346dbc7b8f726ad5dcc32f45f39c4ba65b94",
+      "record": "1793897202860841000-accepted-base-download.json",
+      "seconds": 1.233031999785453
+    },
+    {
+      "exit": 1,
+      "label": "audit-redaction-negative",
+      "log_sha256": "965753191f0c9da88dfd0d5061a656f856cc669cfff6d9391eeb9196e59db020",
+      "record": "1793897937008154000-audit-redaction-negative.json",
+      "seconds": 0.4990600408054888
+    },
+    {
+      "exit": 1,
+      "label": "release-docs-manifest",
+      "log_sha256": "aba0ceda389bd25ff7f5ffa13df33b0e0b0584f728220ec909d74f2500a4bcfd",
+      "record": "1793898404648504000-release-docs-manifest.json",
+      "seconds": 1.437058792449534
+    },
+    {
+      "exit": 1,
+      "label": "real-browser-loss-pg",
+      "log_sha256": "464c709653cbbd53a2581f9b7a02b7ffc6f860b74d38af9dfc35e9fd8cca19f3",
+      "record": "1793900341022225000-real-browser-loss-pg.json",
+      "seconds": 2.495373333338648
+    },
+    {
+      "exit": 1,
+      "label": "negative-stalled-committed-response",
+      "log_sha256": "597eeae51ea99e7e0891d3341ad739314123ac579ad5d7fa5b73406ff897d84c",
+      "record": "1793900508372678000-negative-stalled-committed-response.json",
+      "seconds": 2.177692750003189
+    },
+    {
+      "exit": 101,
+      "label": "final64-workspace",
+      "log_sha256": "df90722dc45754b4eb655afbfa2c55db6873588b4ed12d74d6753c43339bdb8e",
+      "record": "1793900834055574000-final64-workspace.json",
+      "seconds": 38.97534562507644
+    }
+  ],
+  "final_controls": [
+    {
+      "exit": 0,
+      "label": "bounded-real-browser-loss-pg",
+      "log_sha256": "b30abb31ca880279aca09fdbf6b632e89454361251f35c06beaccc6290ce0d96",
+      "record": "1793900559801702000-bounded-real-browser-loss-pg.json",
+      "seconds": 6.210658666212112
+    },
+    {
+      "exit": 0,
+      "label": "deadline-final-browser",
+      "log_sha256": "a2febf513c53c9a0afade6454eb4ed7ae4f90330e795d6f8edbb366ca9534d2f",
+      "record": "1793900626730949000-deadline-final-browser.json",
+      "seconds": 9.490144916810095
+    },
+    {
+      "exit": 0,
+      "label": "deadline-final-clippy",
+      "log_sha256": "dae5fe2b1c4aec1dface85f72a17105c126adfe03490a6f44ab0395b77dc1cdc",
+      "record": "1793900636251275000-deadline-final-clippy.json",
+      "seconds": 8.503834416158497
+    },
+    {
+      "exit": 0,
+      "label": "deadline-release-docs",
+      "log_sha256": "fc3018f2aa490b3efb39bd5dfb38f7bb2bae0462c8372aa452296cc78027c0db",
+      "record": "1793900644789324000-deadline-release-docs.json",
+      "seconds": 22.037188792135566
+    },
+    {
+      "exit": 0,
+      "label": "deadline-proxy-endpoints",
+      "log_sha256": "cd6024478800c317f7b4974a940c65874567795b97c56069fad09eabbb1f9117",
+      "record": "1793900743858408000-deadline-proxy-endpoints.json",
+      "seconds": 10.366917999926955
+    },
+    {
+      "exit": 0,
+      "label": "relative-home-isolated",
+      "log_sha256": "f412e2490e68e3d2cc2b244976acbd9159bb9cea4d554f46664c78576d007ad0",
+      "record": "1793900980512445000-relative-home-isolated.json",
+      "seconds": 26.202007208950818
+    },
+    {
+      "exit": 0,
+      "label": "final64-workspace-retry",
+      "log_sha256": "6591f0dfd0e907d4ea3e0c2968afa65bb20dbdf0a405f25f071e22afa4a8adc8",
+      "record": "1793901006757965000-final64-workspace-retry.json",
+      "seconds": 124.66388841625303
+    }
+  ],
+  "final_source_commit": "64ad83dbac02fb1efac0012bfe0d33a7d62a1896",
+  "scope": "Local macOS development and qualification. Earlier development runs can contain different uncommitted inputs. Native reports provide exact source bindings. Private logs remain local."
+}

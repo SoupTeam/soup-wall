@@ -1,0 +1,8 @@
+{
+  "archive_sha256": "45ced3b712b75435acdd19ecc77a0fa0294834295b1c94ed34b0d8a90b82c75b",
+  "artifact_id": 13438249376,
+  "conclusion": "success",
+  "run_id": 42077685062,
+  "source_commit": "64ad83dbac02fb1efac0012bfe0d33a7d62a1896",
+  "url": "https://github.com/SoupTeam/soup-wall/actions/runs/42077685062"
+}

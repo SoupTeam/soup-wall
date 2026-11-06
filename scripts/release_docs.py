@@ -24,6 +24,7 @@ from urllib.parse import quote, unquote, urlsplit
 import zipfile
 
 import check_docs
+import pilot_candidate as linux_candidate
 
 
 FORMAT = "sw-release-documentation/1"
@@ -294,7 +295,7 @@ def required_files(target):
     if target not in TARGETS:
         raise ValueError("unsupported release target")
     suffix = ".exe" if target.endswith("windows-msvc") else ""
-    return set(BASE) | {name + suffix for name in ("agentfw", "soup-wall-bench", "llm-firewall", "soup-wall-gateway")}
+    return set(BASE) | {name + suffix for name in ("agentfw", "soup-wall-bench", "llm-firewall", "soup-wall-gateway")} | (set(linux_candidate.FILES) if target == linux_candidate.TARGET else set())
 
 
 def inventory(root):
@@ -347,6 +348,8 @@ def validate_links(root, names):
 def stage(root, directory, commit, target):
     if not re.fullmatch(r"[a-f0-9]{40}", commit):
         raise ValueError("expected full source commit")
+    if target == linux_candidate.TARGET:
+        linux_candidate.validate_directory(directory, commit)
     documents, contract = rendered_documents(root, commit)
     before = inventory(directory)
     expected_before = required_files(target) | {"README.md"}
@@ -382,6 +385,8 @@ def validate_tree(source, directory, commit, target):
             record.get("target") != target or record.get("contract_sha256") != contract_digest(contract) or
             record.get("source_documents") != contract["documents"]):
         raise ValueError("stale or mismatched source documentation identity")
+    if target == linux_candidate.TARGET:
+        linux_candidate.validate_directory(directory, commit)
     actual = inventory(directory)
     del actual[MANIFEST]
     if actual != record.get("files") or set(actual) != required_files(target) | set(docs):
@@ -536,6 +541,8 @@ def check_archive(source, archive, commit, target, expected_root):
                 if len(data) != size:
                     raise ValueError("archive size mismatch")
                 path.write_bytes(data)
+                if not windows:
+                    path.chmod(member.mode & 0o777)
         result = validate_tree(source, Path(temporary) / expected_root, commit, target)
         result["archive_sha256"] = digest(archive.read_bytes())
         result["archive_format"] = "zip" if windows else "tar.gz"

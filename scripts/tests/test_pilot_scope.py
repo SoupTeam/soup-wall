@@ -310,6 +310,10 @@ class Conformance(unittest.TestCase):
 
 class FrontDoor(unittest.TestCase):
     def setUp(self):
+        lifecycle = mock.patch.object(M.LIFECYCLE, "inspect",
+                                      return_value={"setup": "satisfied", "removal": "satisfied"})
+        lifecycle.start()
+        self.addCleanup(lifecycle.stop)
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name).resolve()
