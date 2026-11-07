@@ -42,6 +42,11 @@ the preset's two identity hashes and its identity-tamper regression control.
 Runtime inputs are identical between those sources. Later documentation changes
 retain these source identities.
 
+The subsequent integration merges reviewed main `d7567b93` and refreshes the
+release documentation contract for the changed documents already in its explicit
+bundle. This integration does not extend the recorded native execution claims
+to a new source commit. Final current-source native qualification remains open.
+
 - Fresh official RustSec and OSV scans cover exactly 443 Cargo, 102 npm and 63
   unique Python identities. All 23 attribution mappings pass without notice or
   metadata mismatches. The Rust license gate passes. Twelve runtime license

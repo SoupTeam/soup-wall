@@ -568,6 +568,18 @@
       "Maintainer advisory applicability/maintenance decisions for pip-vendored setuptools, paste and unsafe-libyaml; no finding removed or waived.",
       "Current native binary, bundled-library and system-library review with exact identities and notice obligations.",
       "Maintainer admission of trusted setup inputs and TL-owned current-main Ready/CodeQL qualification, candidate admission and integration."
-    ]
+    ],
+    "current_main_integration": {
+      "main": "d7567b93",
+      "merge": "1a83872e",
+      "release_contract": "Refreshed only the 17 stale hashes within the existing explicit bundle; no document inclusion or admission threshold changes.",
+      "documentation_links": "452 files, 1440 links, 0 errors",
+      "windows_release_archive_controls": {
+        "run": 22,
+        "errors": 13,
+        "reason": "Unix candidate fixture modes are not represented by the Windows filesystem; candidate_binary_digest_or_mode_mismatch is retained. Linux Draft CI must execute the complete suite."
+      },
+      "qualification_limit": "Earlier native runs retain c8350ab4/73834147 source identities; current-main integration has not received final native acceptance."
+    }
   }
 }
