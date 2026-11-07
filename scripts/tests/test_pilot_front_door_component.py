@@ -110,6 +110,17 @@ class Format(unittest.TestCase):
     def test_recorded_identity_is_the_source(self):
         self.assertEqual(IDENTITY.installed_from_bytes(IDENTITY.record(SOURCE)), SOURCE)
 
+    def test_complete_notice_capacity_remains_bounded(self):
+        files = BUILDER.contents()
+        self.assertLessEqual(len(files) + 1, BUILDER.MAX_FILES)
+        for index in range(BUILDER.MAX_FILES - len(files) - 1):
+            files[f"notices/{index:03}.txt"] = b"notice\n"
+        _, manifest = BUILDER.assemble(files, SOURCE)
+        self.assertEqual(len(json.loads(manifest)["files"]), BUILDER.MAX_FILES)
+        files["notices/extra.txt"] = b"notice\n"
+        with self.assertRaisesRegex(SystemExit, "too many component files"):
+            BUILDER.assemble(files, SOURCE)
+
 
 class InstalledIdentity(unittest.TestCase):
     def test_checkout_uses_git_and_malformed_records_fail_closed(self):
