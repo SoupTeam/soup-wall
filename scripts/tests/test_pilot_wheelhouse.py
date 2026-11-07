@@ -88,8 +88,9 @@ class Wheelhouse(unittest.TestCase):
     def test_shipped_manifest_matches_every_name_version_and_lock_digest(self):
         assets = ROOT / "profiles/mcp/git-readonly-v1"
         wheels = W.load_manifest(assets / "wheels.lock.json", assets / "requirements.lock")
-        self.assertEqual(len(wheels), 33)
-        self.assertEqual(len({(row["name"], row["version"]) for row in wheels}), 33)
+        self.assertEqual(len(wheels), 34)
+        self.assertEqual(len({(row["name"], row["version"]) for row in wheels}), 34)
+        self.assertIn(("pip", "26.3"), {(row["name"], row["version"]) for row in wheels})
 
     def test_unknown_missing_and_duplicate_names_fail_even_with_same_count(self):
         for key, value in (("name", "gamma"), ("name", "beta"), ("version", "2.0"), ("sha256", "0" * 64)):

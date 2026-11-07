@@ -1,7 +1,7 @@
 {
   "format": "sw-pilot-wheelhouse/1",
   "target": "cpython-3.11-linux-x86_64",
-  "requirements_sha256": "f0a76f362f54cd19a7efd235f94645f296814cdc428daa0bd0e72ee8c5e2cc77",
+  "requirements_sha256": "3d304899b81d2543b264aead69d0ea6ec08401d436a306336cb3e7800f328dad",
   "wheels": [
     {
       "name": "annotated-types",
@@ -146,6 +146,14 @@
       "url": "https://files.pythonhosted.org/packages/d9/a7/d38c6db1df603d4fe4aa95400319384970b27b0afcfa15d7d28de7860e43/mcp_server_git-2026.10.10-py3-none-any.whl",
       "size": 13981,
       "sha256": "5bd3dc5736d67ab01b664363055001b2ce84e945c17af98875e5e04b5823d335"
+    },
+    {
+      "name": "pip",
+      "version": "26.3",
+      "filename": "pip-26.3-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+      "size": 1950951,
+      "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13"
     },
     {
       "name": "pycparser",

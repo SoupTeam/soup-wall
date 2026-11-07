@@ -191,6 +191,15 @@
     }
   },
   {
+    "name": "pip",
+    "version": "26.3",
+    "license": "MIT",
+    "project_urls": {
+      "Source": "https://github.com/pypa/pip",
+      "Documentation": "https://pip.pypa.io/"
+    }
+  },
+  {
     "name": "pycparser",
     "version": "3.11",
     "license": "BSD-3-Clause",
