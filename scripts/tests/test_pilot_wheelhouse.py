@@ -343,7 +343,7 @@ class Wheelhouse(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("wheelhouse_test_ci", ROOT / "scripts/ci/native-prepared-host-inputs.py")
         ci = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(ci)
-        self.assertEqual(ci.ACCEPTED, '04efdf1d959599238a0a9a3eb42cbe26b3531b74')
+        self.assertEqual(ci.ACCEPTED, '37dd43e268573be3eab92e3b211e9cec224025af')
         names = ["wheels.lock.json", "requirements.lock"]
         data = {name: (self.root / name).read_bytes() for name in names}
         def git(*words):
@@ -362,11 +362,12 @@ class Wheelhouse(unittest.TestCase):
         self.assertEqual(staged['helper'].read_bytes(), b"# accepted helper")
         with self.assertRaisesRegex(RuntimeError, "accepted_setup_input_changed"):
             ci.accepted_inputs(self.root, names, git)
-        # Current admission does not contain the helper: do not silently advance it.
+        # The explicitly reviewed snapshot supplies the helper; equality still gates setup.
         def actual_git(*words):
             return subprocess.check_output(["git", *words], cwd=ROOT, stderr=subprocess.DEVNULL, timeout=20)
-        with self.assertRaises(subprocess.CalledProcessError):
-            ci.accepted_inputs(ROOT, ["scripts/pilot_wheelhouse.py"], actual_git)
+        self.assertEqual(ci.accepted_inputs(ROOT, ["scripts/pilot_wheelhouse.py"], actual_git),
+                         {"scripts/pilot_wheelhouse.py": (ROOT / "scripts/pilot_wheelhouse.py").read_bytes()})
+        actual_git("merge-base", "--is-ancestor", ci.ACCEPTED, "HEAD")
 
 
 if __name__ == "__main__":
