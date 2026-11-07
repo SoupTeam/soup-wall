@@ -34,7 +34,9 @@ SCHEMA = "sw-pilot-front-door-component/1"
 ENTRY = "scripts/pilot.py"
 PYTHON = "cpython>=3.11,<3.14"
 MAX_FILE = 1024 * 1024
-MAX_FILES = 128
+# The full helper and runtime-notice closure contains 142 files. Keep the
+# producer aligned with the consumer's bounded component capacity.
+MAX_FILES = 160
 MAX_NAME = 100
 # The complete transitive runtime of the guided front door: every helper it
 # loads directly or through the accepted scripts, and every checkout file those
@@ -95,6 +97,7 @@ SCRIPTS = (
     "scripts/pilot_resumable_download.py",
     "scripts/pilot_source_identity.py",
     "scripts/pilot_runtime_identity.py",
+    "scripts/pilot_wheelhouse.py",
     "scripts/roadmap_support.py",
     "scripts/pilot_update.py",
     "scripts/switch-prepared-pilot.py",

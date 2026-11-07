@@ -45,7 +45,9 @@ const TREE: &str = "tree";
 const DIR_NAME: &str = "pilot-front-door";
 const MAX_ARCHIVE: usize = 32 * 1024 * 1024;
 const MAX_FILE: u64 = 1024 * 1024;
-const MAX_FILES: usize = 128;
+// The full helper and runtime-notice closure contains 142 files. Archive,
+// manifest and individual-file byte budgets remain independently enforced.
+const MAX_FILES: usize = 160;
 const MAX_MANIFEST: usize = 64 * 1024;
 const MAX_NAME: usize = 100;
 const MAX_INTERPRETER: u64 = 256 * 1024 * 1024;
@@ -1398,6 +1400,24 @@ mod tests {
         let package = parse(&archive()).unwrap();
         assert_eq!(package.manifest.files.len(), 3);
         assert_eq!(package.id(), sha(&package.manifest_bytes));
+    }
+
+    #[test]
+    fn complete_notice_capacity_remains_bounded() {
+        let mut list = files();
+        for index in 0..MAX_FILES - list.len() {
+            list.push((format!("notices/{index:03}.txt"), b"notice\n".to_vec()));
+        }
+        list.sort();
+        let bytes = serde_json::to_vec(&manifest_for(&list)).unwrap();
+        let package = parse(&archive_with(&bytes, &list)).unwrap();
+        assert_eq!(package.manifest.files.len(), MAX_FILES);
+
+        list.push(("notices/extra.txt".into(), b"notice\n".to_vec()));
+        list.sort();
+        let bytes = serde_json::to_vec(&manifest_for(&list)).unwrap();
+        let error = parse(&archive_with(&bytes, &list)).err().unwrap();
+        assert!(error.to_string().contains("manifest file count"));
     }
 
     #[test]

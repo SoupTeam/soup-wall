@@ -194,7 +194,7 @@ run; preserve the original artifact and qualify the exact candidate separately.
 ## Pinned SDK cancellation compatibility
 
 The original `mcp-server-git 2026.10.10` uses `mcp 1.29.0` and `anyio 4.15.1`
-on pinned Python 3.11.14. These versions satisfy their declared dependency
+on pinned Python 3.11.18. These versions satisfy their declared dependency
 constraints. Under response backpressure, however, `RequestResponder.__exit__`
 discards the Boolean result of `CancelScope.__exit__`. Cancellation escapes the
 request task, cancels sibling handlers and the session receive loop, and leaves

@@ -372,8 +372,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config zlib1g-dev
           mkdir "$RUNNER_TEMP/sou182-node" "$RUNNER_TEMP/sou182-git" "$RUNNER_TEMP/sou182-bwrap"
-          curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz --output "$RUNNER_TEMP/sou182-node.tar.xz"
-          printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 "$RUNNER_TEMP/sou182-node.tar.xz" | sha256sum --check
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz --output "$RUNNER_TEMP/sou182-node.tar.xz"
+          printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce "$RUNNER_TEMP/sou182-node.tar.xz" | sha256sum --check
           tar -xJf "$RUNNER_TEMP/sou182-node.tar.xz" -C "$RUNNER_TEMP/sou182-node" --strip-components=1 --no-same-owner --no-same-permissions
           printf '%s\n' "$RUNNER_TEMP/sou182-node/bin" >> "$GITHUB_PATH"
           curl --fail --location --retry 3 https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz --output "$RUNNER_TEMP/sou182-git.tar.xz"

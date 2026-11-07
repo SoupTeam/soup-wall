@@ -172,7 +172,7 @@ reported as `withheld_attack_no_effect`, not as prevention.
 
 ```sh
 python3 eval/sou123/effect_controls.py --run \
-  --agentfw target/debug/agentfw --node <pinned node v22.22.0> --bwrap <bwrap with --ro-bind-fd> \
+  --agentfw target/debug/agentfw --node <pinned node v22.23.4> --bwrap <bwrap with --ro-bind-fd> \
   --identity source=main@<sha> --output /new/directory/outside/the/checkout
 ```
 

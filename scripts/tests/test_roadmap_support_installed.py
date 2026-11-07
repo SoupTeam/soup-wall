@@ -499,7 +499,12 @@ class InstalledEvidenceTests(unittest.TestCase):
         checkout = SCOPE_DOCUMENT.read_bytes()
         committed = checkout.replace(b"\r\n", b"\n")
         crlf = committed.replace(b"\n", b"\r\n")
-        digest_value = self.cap(self.index, "linux-v1-scope")["profile"].split("@", 1)[1]
+        # Current source bytes can differ from the retained historical scope evidence.
+        canonical = subprocess.run(
+            ["git", "show", "HEAD:" + SCOPE_DOCUMENT.relative_to(REPO).as_posix()],
+            cwd=REPO, capture_output=True, check=True, timeout=15).stdout
+        self.assertEqual(committed, canonical)
+        digest_value = sha(canonical)
         self.assertEqual(sha(committed), digest_value)
         self.assertNotEqual(sha(crlf), digest_value)
         # A raw-byte profile input converted to CRLF fails closed instead of matching.

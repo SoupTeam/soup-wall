@@ -34,7 +34,7 @@
   },
   "git_runtime": {
    "implementation": "CPython",
-   "version": "3.11.14"
+   "version": "3.11.18"
   }
  },
  "inputs": {
