@@ -114,9 +114,9 @@ being trusted:
 | Filesystem classifier (`rule_baseline/rule_baseline.py`) | `d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd` |
 | Git classifier (`rule_baseline/git_readonly_v1/rule_baseline.py`) | `8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474` |
 | Filesystem profile `filesystem-readonly-v1`: registry / profile policy | `63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7` / `55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec` |
-| Git profile `git-readonly-v1`: registry / profile policy / selection binding | `5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385` / `788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c` / `ed1f8950b821adf7da39c8057f4809add335fee662819ec50df0c02bc46ab13c` |
+| Git profile `git-readonly-v1`: registry / profile policy / selection binding | `5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385` / `788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c` / `693d13f29d8d169871085b47e4469cd95bbc49ee44ef3688fbe83f73f79f8512` |
 | Claude Code 2.1.251 locked package | `6eb6fd9ccda39b10b4cd21e3236fa179330ce4252a3405f193093722be3668e6` |
-| Node 22.22.0 archive | `9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37` |
+| Node 22.23.4 archive | `1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce` |
 
 The installed entry points select the front-door policy above. The separately documented
 [`linux-readonly-v1` preset](LINUX_PILOT_POLICY.md) (policy `8a8a8f7e7147a977...`)
