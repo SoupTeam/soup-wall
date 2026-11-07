@@ -20,11 +20,11 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from ci_components import blocks
-from ci_impact import WORKFLOW_JOBS
+from ci_impact import WORKFLOW_JOBS, BUILD_CONSUMERS
 
 FORMAT = "sw-ci-build-inventory/1"
 TUPLE = "ubuntu2404-x86_64-rust1.99.1-agent-default-debug-v1"
-CONSUMERS = ("linux-create-file", "linux-installed-edit")
+CONSUMERS = BUILD_CONSUMERS
 OVERRIDES = ("RUSTUP_TOOLCHAIN", "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "RUSTC_WRAPPER",
              "CARGO_TARGET_DIR", "CARGO_BUILD_JOBS", "CC", "CXX", "CARGO_PROFILE_")
 DELEGATES = ("build-native-pilot-inputs.py", "native-verified-execution-build.py", "ci_qualification_build.py")
@@ -90,12 +90,12 @@ def job_inventory(workflow, job, body):
                                              "CARGO_TARGET_DIR", "--ro-bind", "--unshare-net", "SOU161_SCRATCH",
                                              "$PWD/target/", '"$CARGO_TARGET_DIR/') )],
             "compatibility": "selected-declaration-candidate" if (
-                workflow == "mcp-create-file.yml" and job in CONSUMERS) else "not-selected"}
+                job in CONSUMERS.get(workflow, ())) else "not-selected"}
 
 
 def compatible_declaration(value):
     """Only a candidate: producer/consumer independently verify real image/ABI."""
-    if value["workflow"] != "mcp-create-file.yml" or value["job"] not in CONSUMERS:
+    if value["job"] not in CONSUMERS.get(value["workflow"], ()):
         return False
     if value["runner"] != "ubuntu-24.04" or set(value["toolchain_actions"]) != {"1.99.1"}:
         return False
@@ -120,7 +120,7 @@ def inventory(root=ROOT):
         files[str(path.relative_to(root))] = hashlib.sha256(raw).hexdigest()
         # Include explicit manual development jobs, but never double-count the
         # generated shared copy of these original declarations.
-        for job, body in blocks(raw.decode("utf-8-sig")).items():
+        for job, body in blocks(raw.decode("utf-8-sig").replace("\r\n", "\n")).items():
             if cargo_commands(body) or any(name in body for name in DELEGATES):
                 jobs.append(job_inventory(workflow, job, body))
     return {"format": FORMAT, "workflow_files_sha256": files, "jobs": jobs,

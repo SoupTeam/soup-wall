@@ -45,6 +45,7 @@ class InstallerFailurePrivacy(unittest.TestCase):
 
         with ExitStack() as stack:
             stack.enter_context(patch.object(PREP, "supported_platform"))
+            stack.enter_context(patch.object(PREP.lifecycle_preflight, "inspect", return_value={"setup": "satisfied", "removal": "satisfied"}))
             stack.enter_context(patch.object(PREP.PILOT, "source", return_value={
                 "dirty": False, "commit": args.expected_commit}))
             stack.enter_context(patch.object(PREP, "selected_paths", return_value=paths))
@@ -389,7 +390,8 @@ class PreparationBoundary(unittest.TestCase):
             def init_git(command, **_):
                 (Path(command[-1]) / ".git").mkdir()
 
-            with patch.object(PREP, "supported_platform"), patch.object(PREP.PILOT, "source", return_value=before), \
+            with patch.object(PREP.lifecycle_preflight, "inspect", return_value={"setup": "satisfied", "removal": "satisfied"}), \
+                 patch.object(PREP, "supported_platform"), patch.object(PREP.PILOT, "source", return_value=before), \
                  patch.object(PREP, "selected_paths", return_value=paths), \
                  patch.object(PREP, "verify_profile", side_effect=lambda kind, *_, **__: profiles[kind]), \
                  patch.object(PREP, "verify_generation", side_effect=lambda gen, *_: (gen / "selection.json", profiles)), \

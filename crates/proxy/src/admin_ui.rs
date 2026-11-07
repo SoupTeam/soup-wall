@@ -16,10 +16,20 @@ pub async fn dashboard() -> Response {
             .replace("/* FLEET_PANEL */", include_str!("fleet_panel.js"))
             .replace("/* ROLLOUT_PANEL */", include_str!("rollout_panel.js"))
             .replace(
+                "/* SINGLE_AGENT_POLICY */",
+                include_str!("single_agent_policy.js"),
+            )
+            .replace(
                 "/* ENROLLMENT_PANEL */",
                 include_str!("enrollment_panel.js"),
             )
-            .replace("/* AGENT_HISTORY */", include_str!("agent_history.js")),
+            .replace("/* AGENT_HISTORY */", include_str!("agent_history.js"))
+            .replace("/* FLEET_TRIAGE */", include_str!("fleet_triage.js"))
+            .replace("/* AGENT_HEARTBEAT */", include_str!("heartbeat_panel.js"))
+            .replace(
+                "/* OPERATOR_AUDIT */",
+                include_str!("operator_audit_panel.js"),
+            ),
     )
     .into_response();
     let headers = response.headers_mut();

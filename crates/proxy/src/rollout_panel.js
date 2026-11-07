@@ -120,7 +120,7 @@ const rollout = (() => {
   function renderMembers() {
     const root = $("rollout-members"), cohort = previewCohort();
     root.replaceChildren(make("h3", "Current membership (preview targets)"),
-      make("p", "A preview only. Starting a deployment freezes the actual cohort on the server; later membership changes never alter that plan.", "note"));
+      make("p", "This list is this page's own view and is not authoritative. Start asks the server for its preview of the exact cohort before anything is issued; once started, later membership changes never alter the frozen plan.", "note"));
     if (!members.length) { root.append(make("p", "This group has no members.", "empty")); }
     else {
       root.append(table(["Agent", "Preview wave", ""], members.map(m => {
@@ -201,15 +201,9 @@ const rollout = (() => {
       approved.forEach(r => { const o = make("option", r.revision); o.value = r.revision; select.append(o); });
       const label = make("label", "Approved revision", "field"); label.append(select);
       row.append(label, button("Start pilot deployment", "", () => {
-        const revision = select.value, r = approved.find(x => x.revision === revision);
-        if (!r) { say("Approve a revision before starting a deployment.", "error"); return; }
-        preview = previewCohort();
-        confirmAction({ title: `Start pilot deployment of ${revision}`,
-          lines: [`Policy SHA-256: ${r.policy_sha256}`, `Preview pilots: ${preview.pilots.join(", ") || "none"}`,
-                  `Preview workers: ${preview.workers.join(", ") || "none"}`,
-                  "Only pilots receive the policy now. The server issues the worker wave only after every pilot's exact applied acknowledgement is recorded (when it arrives, or when an Owner evaluates the gate). Pause first to hold workers.",
-                  "The server freezes the actual cohort at start; it is shown after the request."],
-          expected: revision, run: () => mutate(`Start ${revision}`, "POST", "/rollout", { revision }, { started: preview }) });
+        const revision = select.value;
+        if (!approved.find(x => x.revision === revision)) { say("Approve a revision before starting a deployment.", "error"); return; }
+        reviewStart(revision);
       }));
       if (!approved.length) row.append(make("p", "No approved revision is available.", "note"));
     }
@@ -237,6 +231,70 @@ const rollout = (() => {
     lock();
   }
 
+  // The server, not this page, states what a start would freeze and issue. The preview issues nothing
+  // and is not authority: the server rechecks every fact when the typed confirmation is sent.
+  const REFUSAL = {
+    confirmation_stale: "The cohort, an Agent's authorization, the revision, a baseline or a sequence changed after the preview.",
+    confirmation_expired: "The confirmation expired.",
+    confirmation_invalid: "The confirmation is no longer valid for this request."
+  };
+  let refusal = null;
+
+  async function reviewStart(revision, notice) {
+    if (busy || blocked || !owner() || !tenant || !group) return;
+    const id = tenant, g = group, generation = epoch;
+    busy = true; lock(); $("rollout-confirm").replaceChildren(); say("Asking the server for its authoritative preview…");
+    try {
+      const p = await request(groupUrl("/rollout/preview"), { method: "POST", body: JSON.stringify({ revision }), signal: controller.signal });
+      if (generation !== epoch || id !== tenant || g !== group) return;
+      if (!p || p.contract_version !== "sw-group-rollout-preview/1" || p.tenant_id !== id || p.group_id !== g || p.revision !== revision || p.executed !== false)
+        throw new Error("Preview response identity mismatch");
+      preview = { pilots: [...p.pilots], workers: [...p.workers] };
+      busy = false;
+      showPreview(p, revision, notice);
+    } catch (e) {
+      if (generation !== epoch || e.name === "AbortError") return;
+      if (e.status === 401) { blocked = "session"; say("The admin session is no longer authorized. Reconnect before any further change.", "error"); }
+      else if (e.status === 403) { blocked = "role"; say("This admin role does not permit rollout changes. The panel is read-only.", "error"); }
+      else say(`The server preview is unavailable (${e.message}). Nothing was issued; no deployment can be started without it.`, "error");
+    } finally {
+      if (generation === epoch) { busy = false; renderActions(); }
+    }
+  }
+
+  function showPreview(p, revision, notice) {
+    const root = $("rollout-confirm"), box = make("div", undefined, "outcome-block");
+    const list = values => values.join(", ") || "none";
+    box.append(make("strong", `Server preview: start pilot deployment of ${revision}`));
+    if (notice) box.append(make("p", notice, "outcome-block"));
+    box.append(make("p", `Policy SHA-256: ${p.policy_sha256 ?? "unknown"}`, "note"),
+               make("p", `Server preview pilots: ${list(p.pilots)}`, "note"),
+               make("p", `Server preview workers: ${list(p.workers)}`, "note"));
+    if (p.resolved_signer) box.append(make("p",
+      `Signing key: ${p.resolved_signer.issuer_key_id}; public key SHA-256: ${p.resolved_signer.public_key_sha256}`, "note"));
+    p.agents.forEach(a => box.append(make("p",
+      `${a.agent_id} (${a.wave}): baseline ${a.baseline_revision ?? "none"}, latest sequence ${a.latest_sequence}${a.latest_status ? ` (${a.latest_status})` : ""}${a.authorized ? "" : ", NOT AUTHORIZED"}`, "note")));
+    box.append(make("p", `Snapshot SHA-256: ${p.snapshot_sha256}`, "note"));
+    if (!p.startable) {
+      p.blockers.forEach(b => box.append(make("p", `Blocked: ${b.code}${b.agent_id ? ` (${b.agent_id})` : ""} - ${b.detail}`, "outcome-block")));
+      box.append(make("p", "The server will not accept a start for this scope. Nothing was issued. Resolve the blockers, then review again.", "note"));
+      root.replaceChildren(box);
+      say("The server preview is blocked. Nothing was issued.", "error");
+      return;
+    }
+    root.replaceChildren(box);
+    say("Review the server preview, then confirm. Nothing has been issued.");
+    confirmAction({ title: `Start pilot deployment of ${revision}`,
+      lines: [`Confirmation expires ${when(p.confirmation.expires_at_unix)}. The server rechecks the cohort, authorization, revision, baselines, sequences and signing key when you confirm and refuses with zero deployments if anything differs.`,
+              "Only pilots receive the policy now. The server issues the worker wave only after every pilot's exact applied acknowledgement is recorded (when it arrives, or when an Owner evaluates the gate). Pause first to hold workers."],
+      expected: revision, keep: box,
+      run: async () => {
+        refusal = null;
+        await mutate(`Start ${revision}`, "POST", "/rollout", { revision, confirmation_id: p.confirmation.id }, { started: preview });
+        if (refusal) { const code = refusal; refusal = null; reviewStart(revision, `${REFUSAL[code] || "The server refused the confirmation."} Nothing was issued. This is the server's new preview.`); }
+      } });
+  }
+
   function lock() {
     document.querySelectorAll("#rollout-panel .rollout-mutation").forEach(b => { b.disabled = busy || !!blocked || !owner(); });
     document.querySelectorAll("#rollout-panel .rollout-reconcile").forEach(b => { b.disabled = busy; });
@@ -245,7 +303,7 @@ const rollout = (() => {
   function render() { renderMembers(); renderRevisions(); renderPlan(); renderActions(); }
 
   // Destructive or wave-issuing actions need the exact identity typed back.
-  function confirmAction({ title, lines, expected, run }) {
+  function confirmAction({ title, lines, expected, run, keep }) {
     if (busy || blocked) return;
     const root = $("rollout-confirm"), input = make("input"), ok = make("button", "Confirm", "danger owner-action"), cancel = make("button", "Cancel", "secondary");
     input.id = "rollout-confirm-input"; input.autocomplete = "off"; input.setAttribute("aria-label", `Type ${expected} to confirm`);
@@ -259,7 +317,7 @@ const rollout = (() => {
     const label = make("label", "Type ", "field"); label.append(code(expected), make("span", " to confirm"), input);
     const actions = make("div", undefined, "inline"); actions.append(ok, cancel);
     box.append(label, actions);
-    root.replaceChildren(box);
+    root.replaceChildren(...(keep ? [keep, box] : [box]));
     input.focus();
   }
 
@@ -293,9 +351,10 @@ const rollout = (() => {
       }
       if (options.started && result?.rollout_id) {
         const frozen = { pilots: [...result.pilot_agents].sort(), workers: [...result.standard_agents].sort() };
-        note += JSON.stringify(frozen) === JSON.stringify(options.started)
-          ? " The frozen cohort matches your preview."
-          : " The server froze a different cohort than your preview (membership changed); the frozen cohort is authoritative.";
+        if (result.confirmation?.replayed) note += " The confirmation had already started this rollout; nothing new was issued.";
+        note += JSON.stringify(frozen) === JSON.stringify({ pilots: [...options.started.pilots].sort(), workers: [...options.started.workers].sort() })
+          ? " The frozen cohort is exactly the server preview you confirmed."
+          : " The frozen cohort differs from the confirmed preview; the frozen cohort shown below is authoritative. Report this.";
         if (result.phase !== "pilot" && result.phase !== "completed") note += ` Current phase: ${result.phase}.`;
       }
       say(note, "ok");
@@ -304,6 +363,11 @@ const rollout = (() => {
       if (generation !== epoch || e.name === "AbortError") return false;
       if (e.status === 401) { blocked = "session"; say("The admin session is no longer authorized. Reconnect before any further change.", "error"); }
       else if (e.status === 403) { blocked = "role"; say("This admin role does not permit rollout changes. The panel is read-only.", "error"); }
+      else if (e.status === 409 && typeof e.code === "string" && e.code.startsWith("confirmation_")) {
+        refusal = e.code;
+        say(`${label} refused: ${REFUSAL[e.code] || e.message} Nothing was issued.`, "error");
+        try { await refresh(); } catch (_) { /* the new preview below reads the server again */ }
+      }
       else if (ambiguous(e)) { blocked = "reconcile"; say(`${label}: the outcome is unknown (${e.message}). Reading persisted server state before allowing another change; nothing is retried.`, "error"); await reconcile(); }
       else {
         say(`${label} refused: ${e.message}.`, "error");
@@ -418,7 +482,18 @@ const rollout = (() => {
     } finally { if (generation === epoch) { busy = false; lock(); } }
   }
 
-  return { select(id) {
+  // Deep link from the triage overview: selects an existing group of this
+  // tenant exactly as the group menu does. Returns false when it is absent.
+  async function open(id, groupId) {
+    if (!id || id !== tenant) return false;
+    if (!groups.some(g => g.group_id === groupId)) { await loadGroups(); if (id !== tenant) return false; }
+    if (!groups.some(g => g.group_id === groupId)) return false;
+    $("rollout-group").value = groupId;
+    $("rollout-group").dispatchEvent(new Event("change"));
+    $("rollout-panel").scrollIntoView({ block: "start" });
+    return true;
+  }
+  return { open, select(id) {
     controller?.abort(); controller = new AbortController(); epoch++;
     tenant = id; group = null; busy = false; blocked = ""; groups = [];
     $("rollout-group").replaceChildren(); clearGroup();

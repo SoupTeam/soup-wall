@@ -1,0 +1,109 @@
+{
+ "description": "Sanitized SOU-228 fixtures. fixture_sha256 is the committed test file; original_sha256 is the immutable report member inside the GitHub artifact ZIP; artifact_zip_sha256 is GitHub's digest of the whole ZIP.",
+ "files": [
+  {
+   "path": "sou-228/41818201020/sou215-installed-pilot/report.json",
+   "fixture_sha256": "ccb70983134db020d58fef398985db654f9af2e5c7aca3a659ac3f5653ef7fbc",
+   "original_sha256": "f32c32feeb56952c87231e9a70a23fba49fe086616cf55f843a7b728d091523c",
+   "artifact_id": 13316278678,
+   "artifact_name": "sou215-pilot-scope-41818201020-1",
+   "artifact_zip_sha256": "864669ba33cb5df823e44d1c52c408948bcd342754bef38a3feab3d60ba44f1b"
+  },
+  {
+   "path": "sou-228/41818201020/sou215-pilot-demo/report.json",
+   "fixture_sha256": "5f0db06f5306d1ce976ea62db820a70693e66ce2919e29a644fb2906957a72d1",
+   "original_sha256": "9ffa0473e8d6ff5143c722bbfc4ddf33803c326720919d1da615569541bf339d",
+   "artifact_id": 13316278678,
+   "artifact_name": "sou215-pilot-scope-41818201020-1",
+   "artifact_zip_sha256": "864669ba33cb5df823e44d1c52c408948bcd342754bef38a3feab3d60ba44f1b"
+  },
+  {
+   "path": "sou-228/41818201020/sou215-pilot-scope/report.json",
+   "fixture_sha256": "26ce38e3f935523caf0d0d2b0bc8a35b77655a36f23dcefb8ce4bf0686d13f41",
+   "original_sha256": "c360bb3f2e03141969f0ed700134cf1477bc05b887b16bc35be2968ed349c084",
+   "artifact_id": 13316278678,
+   "artifact_name": "sou215-pilot-scope-41818201020-1",
+   "artifact_zip_sha256": "864669ba33cb5df823e44d1c52c408948bcd342754bef38a3feab3d60ba44f1b"
+  },
+  {
+   "path": "sou-228/41818211366/sou216-clean-user/walkthrough/report.json",
+   "fixture_sha256": "187e836657ed23aa075d1d4133ef4234c208894e581b0ca1516cb3946f24b815",
+   "original_sha256": "8ccb8c74ef3c99aa8367004c58dc1691e1d1c7fd32a5a271a521280f50fbdb7b",
+   "artifact_id": 13316597197,
+   "artifact_name": "sou216-clean-user-41818211366-1",
+   "artifact_zip_sha256": "ffa3b7a3f30f6707acdd1f5a2ac62128eab4557b1d4dca12ab8a032379faa1b1"
+  },
+  {
+   "path": "sou-228/41818211366/sou216-clean-user/ask/qualification.json",
+   "fixture_sha256": "515f4cfecbd808c8f45f5d5b7cb8ef7482daf800d84ed8d45cf92b67830d24f4",
+   "original_sha256": "d4ab3636dfb4deefbfb38d54b19ebc527316d6210620c0032f732ac9a3e02254",
+   "artifact_id": 13316597197,
+   "artifact_name": "sou216-clean-user-41818211366-1",
+   "artifact_zip_sha256": "ffa3b7a3f30f6707acdd1f5a2ac62128eab4557b1d4dca12ab8a032379faa1b1"
+  },
+  {
+   "path": "sou-228/41818211366/sou216-user-session/report.json",
+   "fixture_sha256": "5e960952ced732db422c4bbab55432dc0a2c0a009e7b975670e8ba685529ae4e",
+   "original_sha256": "b0279fd5181950331f34a447940a8f43469a249dc0fd6870bf1f3273e0966212",
+   "artifact_id": 13316597197,
+   "artifact_name": "sou216-clean-user-41818211366-1",
+   "artifact_zip_sha256": "ffa3b7a3f30f6707acdd1f5a2ac62128eab4557b1d4dca12ab8a032379faa1b1"
+  },
+  {
+   "path": "sou-228/41818211366/sou216-user-session-after-cleanup/report.json",
+   "fixture_sha256": "8cd759db2ec54e08e403b9f973c177fb197f6cb93b06efb9bb3a7c82bea5cc93",
+   "original_sha256": "e206f21c871e46d1d945eeb40ebc17f16a53f0d07497a0363b5b70d0414ccbfa",
+   "artifact_id": 13316597197,
+   "artifact_name": "sou216-clean-user-41818211366-1",
+   "artifact_zip_sha256": "ffa3b7a3f30f6707acdd1f5a2ac62128eab4557b1d4dca12ab8a032379faa1b1"
+  },
+  {
+   "path": "sou-228/41818211366/sou216-clean-user/report.json",
+   "fixture_sha256": "73b3ba4632009a24eca5937fede08dd162adefd3ae0403eed0b3da44641a23fc",
+   "original_sha256": "5ae594e027b9b03354504898e89d1bf85b523d8e3da095a1de6b26b9299c9515",
+   "artifact_id": 13316597197,
+   "artifact_name": "sou216-clean-user-41818211366-1",
+   "artifact_zip_sha256": "ffa3b7a3f30f6707acdd1f5a2ac62128eab4557b1d4dca12ab8a032379faa1b1"
+  },
+  {
+   "path": "sou-228/41818225908/sou216-clean-user/walkthrough/report.json",
+   "fixture_sha256": "8e959e8651ec04f924d0f61cec9e1a20aee88122f9d7000f06ed5f723ad7db86",
+   "original_sha256": "956ed8c4d28be8ddb80cc0fce79d54c99c6540c211b2392132eb73bded1f3423",
+   "artifact_id": 13317206981,
+   "artifact_name": "sou216-clean-user-41818225908-1",
+   "artifact_zip_sha256": "8daccd83d0f88d49bbc5152bcedd2fdbaa32e51c49c03bace5fc15db5c95d6a3"
+  },
+  {
+   "path": "sou-228/41818225908/sou216-clean-user/ask/qualification.json",
+   "fixture_sha256": "caeff71c4fb04b13f9a8b78a7dd71c6910f0dc776e6266d0f758a99f57e9be49",
+   "original_sha256": "0cd123d426ee0bb692bb8d554aa226ee3474917c12e659cc52e9d12381510bc6",
+   "artifact_id": 13317206981,
+   "artifact_name": "sou216-clean-user-41818225908-1",
+   "artifact_zip_sha256": "8daccd83d0f88d49bbc5152bcedd2fdbaa32e51c49c03bace5fc15db5c95d6a3"
+  },
+  {
+   "path": "sou-228/41818225908/sou216-user-session/report.json",
+   "fixture_sha256": "5e960952ced732db422c4bbab55432dc0a2c0a009e7b975670e8ba685529ae4e",
+   "original_sha256": "37fc011a06ce6a3561f2cbd2504a74c11c4ab648601517d26e0949a00eec1ec0",
+   "artifact_id": 13317206981,
+   "artifact_name": "sou216-clean-user-41818225908-1",
+   "artifact_zip_sha256": "8daccd83d0f88d49bbc5152bcedd2fdbaa32e51c49c03bace5fc15db5c95d6a3"
+  },
+  {
+   "path": "sou-228/41818225908/sou216-user-session-after-cleanup/report.json",
+   "fixture_sha256": "8cd759db2ec54e08e403b9f973c177fb197f6cb93b06efb9bb3a7c82bea5cc93",
+   "original_sha256": "adf66b664a65690f67a9314f019b26c0c771166ce0c39110eca990200e42b6cb",
+   "artifact_id": 13317206981,
+   "artifact_name": "sou216-clean-user-41818225908-1",
+   "artifact_zip_sha256": "8daccd83d0f88d49bbc5152bcedd2fdbaa32e51c49c03bace5fc15db5c95d6a3"
+  },
+  {
+   "path": "sou-228/41818225908/sou216-clean-user/report.json",
+   "fixture_sha256": "c1ac8b2c42d641899a0b49cff7033b5084247b3b13347aeb45133d4ed7e1d893",
+   "original_sha256": "55a53e973c8190408f8631ef75e02d5e20ad0580b3b7859b055dfad14986a51e",
+   "artifact_id": 13317206981,
+   "artifact_name": "sou216-clean-user-41818225908-1",
+   "artifact_zip_sha256": "8daccd83d0f88d49bbc5152bcedd2fdbaa32e51c49c03bace5fc15db5c95d6a3"
+  }
+ ]
+}

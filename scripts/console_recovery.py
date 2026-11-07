@@ -26,10 +26,220 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 
 INVENTORY_PATH = Path(__file__).parent / 'fixtures' / 'console_recovery_inventory_v1.json'
 FORMAT_VERSION = 1
+POSTGRES_SCHEMA_VERSION = 31
 MAX_FILE = 256 * 1024 * 1024
 NAME = re.compile(r'[a-z_][a-z0-9_]{0,62}\Z')
 RECIPIENT = re.compile(r'age1[0-9a-z]{58}\Z')
 FILES = {'manifest.json', 'inventory.json', 'state.json', 'database.dump'}
+# Volatile opt-in Agent heartbeat observations (sw-agent-heartbeat/1). Created
+# by `llm-firewall migrate` outside `public`, never archived: a backup accepts
+# the schema only with exactly this definition and excludes it from the dump;
+# a restore target must not have it. After restore, `migrate` recreates it
+# empty, so no restored observation can appear fresh.
+OBSERVATION_SCHEMA = 'agent_observations'
+# Logical catalog of that schema after a fresh `llm-firewall migrate` (PostgreSQL 16).
+OBSERVATION_CATALOG = json.loads("""{
+ "columns": [
+  {
+   "attgenerated": "",
+   "attidentity": "",
+   "collation": "pg_catalog.default",
+   "data_type": "text",
+   "default_expr": null,
+   "name": "agent_id",
+   "not_null": true,
+   "position": 2,
+   "table_name": "heartbeats"
+  },
+  {
+   "attgenerated": "",
+   "attidentity": "",
+   "collation": "pg_catalog.default",
+   "data_type": "text",
+   "default_expr": null,
+   "name": "instance_id",
+   "not_null": true,
+   "position": 4,
+   "table_name": "heartbeats"
+  },
+  {
+   "attgenerated": "",
+   "attidentity": "",
+   "collation": "pg_catalog.default",
+   "data_type": "text",
+   "default_expr": null,
+   "name": "policy_revision",
+   "not_null": false,
+   "position": 10,
+   "table_name": "heartbeats"
+  },
+  {
+   "attgenerated": "",
+   "attidentity": "",
+   "collation": "pg_catalog.default",
+   "data_type": "text",
+   "default_expr": null,
+   "name": "policy_sha256",
+   "not_null": false,
+   "position": 11,
+   "table_name": "heartbeats"
+  },
+  {
+   "attgenerated": "",
+   "attidentity": "",
+   "collation": "pg_catalog.default",
+   "data_type": "text",
+   "default_expr": null,
+   "name": "registration_id",
+   "not_null": true,
+   "position": 5,
+   "table_name": "heartbeats"
+  },
+  {
+   "attgenerated": "",
+   "attidentity": "",
+   "collation": "pg_catalog.default",
+   "data_type": "text",
+   "default_expr": null,
+   "name": "tenant_id",
+   "not_null": true,
+   "position": 1,
+   "table_name": "heartbeats"
+  },
+  {
+   "attgenerated": "",
+   "attidentity": "",
+   "collation": null,
+   "data_type": "bigint",
+   "default_expr": null,
+   "name": "credential_generation",
+   "not_null": true,
+   "position": 3,
+   "table_name": "heartbeats"
+  },
+  {
+   "attgenerated": "",
+   "attidentity": "",
+   "collation": null,
+   "data_type": "bigint",
+   "default_expr": null,
+   "name": "last_sequence",
+   "not_null": true,
+   "position": 6,
+   "table_name": "heartbeats"
+  },
+  {
+   "attgenerated": "",
+   "attidentity": "",
+   "collation": null,
+   "data_type": "bigint",
+   "default_expr": null,
+   "name": "policy_sequence",
+   "not_null": false,
+   "position": 9,
+   "table_name": "heartbeats"
+  },
+  {
+   "attgenerated": "",
+   "attidentity": "",
+   "collation": null,
+   "data_type": "bigint",
+   "default_expr": null,
+   "name": "received_at_unix",
+   "not_null": false,
+   "position": 8,
+   "table_name": "heartbeats"
+  },
+  {
+   "attgenerated": "",
+   "attidentity": "",
+   "collation": null,
+   "data_type": "bigint",
+   "default_expr": null,
+   "name": "registered_at_unix",
+   "not_null": true,
+   "position": 7,
+   "table_name": "heartbeats"
+  }
+ ],
+ "constraints": [
+  {
+   "contype": "c",
+   "definition": "CHECK ((credential_generation > 0))",
+   "name": "heartbeats_credential_generation_check",
+   "table_name": "heartbeats"
+  },
+  {
+   "contype": "c",
+   "definition": "CHECK ((last_sequence >= 0))",
+   "name": "heartbeats_last_sequence_check",
+   "table_name": "heartbeats"
+  },
+  {
+   "contype": "c",
+   "definition": "CHECK ((length(instance_id) = 32))",
+   "name": "heartbeats_instance_id_check",
+   "table_name": "heartbeats"
+  },
+  {
+   "contype": "c",
+   "definition": "CHECK ((length(registration_id) = 32))",
+   "name": "heartbeats_registration_id_check",
+   "table_name": "heartbeats"
+  },
+  {
+   "contype": "f",
+   "definition": "FOREIGN KEY (tenant_id, agent_id) REFERENCES public.managed_agent_enrollments(tenant_id, agent_id) ON DELETE CASCADE",
+   "name": "heartbeats_tenant_id_agent_id_fkey",
+   "table_name": "heartbeats"
+  },
+  {
+   "contype": "p",
+   "definition": "PRIMARY KEY (tenant_id, agent_id)",
+   "name": "heartbeats_pkey",
+   "table_name": "heartbeats"
+  }
+ ],
+ "functions": [],
+ "indexes": [
+  {
+   "definition": "CREATE UNIQUE INDEX heartbeats_pkey ON agent_observations.heartbeats USING btree (tenant_id, agent_id)",
+   "name": "heartbeats_pkey"
+  }
+ ],
+ "policies": [],
+ "sequences": [],
+ "tables": [
+  {
+   "name": "heartbeats",
+   "relforcerowsecurity": false,
+   "relkind": "r",
+   "relpersistence": "p",
+   "relreplident": "d",
+   "relrowsecurity": false
+  }
+ ],
+ "triggers": [],
+ "types": [
+  {
+   "base": "-",
+   "element": "-",
+   "name": "heartbeats",
+   "typcategory": "C",
+   "typnotnull": false,
+   "typtype": "c"
+  },
+  {
+   "base": "-",
+   "element": "agent_observations.heartbeats",
+   "name": "_heartbeats",
+   "typcategory": "A",
+   "typnotnull": false,
+   "typtype": "b"
+  }
+ ],
+ "views": []
+}""")
 
 
 class RecoveryError(Exception):
@@ -61,7 +271,7 @@ def strict_json(data):
 
 def inventory():
     value = strict_json(INVENTORY_PATH.read_bytes())
-    if value.get('format_version') != FORMAT_VERSION or value.get('postgres_schema_version') != 28:
+    if value.get('format_version') != FORMAT_VERSION or value.get('postgres_schema_version') != POSTGRES_SCHEMA_VERSION:
         raise RecoveryError('Unsupported recovery inventory.')
     return value
 
@@ -271,7 +481,7 @@ def pack_archive(directory, backend, identity, state, dump):
         raise RecoveryError('Recovery archive exceeds the supported size limit.')
     manifest = {'format_version': FORMAT_VERSION, 'backend': backend,
                 'source_identity': identity, 'accepted_source': inventory()['accepted_source'],
-                'schema_version': 28, 'inventory_sha256': digest(raw_inventory),
+                'schema_version': POSTGRES_SCHEMA_VERSION, 'inventory_sha256': digest(raw_inventory),
                 'files': {name: {'bytes': len(data), 'sha256': digest(data)} for name, data in files.items()}}
     files['manifest.json'] = canonical(manifest)
     path = directory / 'archive.tar'
@@ -314,7 +524,7 @@ def validate_private_state(state, backend):
     if backend != 'postgres':
         return  # SQLite's full image is independently inspected before target creation.
     if (set(state) != {'backend', 'schema_version', 'tables', 'sequences', 'schema'}
-            or type(state['schema_version']) is not int or state['schema_version'] != 28
+            or type(state['schema_version']) is not int or state['schema_version'] != POSTGRES_SCHEMA_VERSION
             or canonical(state.get('schema')) != canonical(definition.get('postgres_schema'))
             or not isinstance(state.get('schema'),dict)
             or set(state['tables']) != set(definition['postgres_tables'])
@@ -379,7 +589,7 @@ def decrypted_archive(archive, identity, *, workdir, age='age'):
                     'inventory_sha256', 'files'}
         if (not isinstance(manifest, dict) or set(manifest) != required
                 or type(manifest['format_version']) is not int or manifest['format_version'] != FORMAT_VERSION
-                or type(manifest['schema_version']) is not int or manifest['schema_version'] != 28
+                or type(manifest['schema_version']) is not int or manifest['schema_version'] != POSTGRES_SCHEMA_VERSION
                 or manifest['backend'] not in {'sqlite', 'postgres'}
                 or manifest['accepted_source'] != inventory()['accepted_source']
                 or not isinstance(manifest['source_identity'], dict)):
@@ -528,18 +738,29 @@ class PostgresBackend:
                     "AND backend_type='client backend';") != '0':
             raise RecoveryError('Console recovery requires all other database clients stopped.')
 
+    def observations_present(self):
+        value = self.sql("SELECT COUNT(*) FROM pg_namespace WHERE nspname='" + OBSERVATION_SCHEMA + "';")
+        if value not in {'0', '1'}:
+            raise RecoveryError('Unsupported PostgreSQL schema catalog.')
+        return value == '1'
+
     def catalog(self):
         result = strict_json(self.sql("SELECT json_build_object('tables',"
             "(SELECT COALESCE(json_agg(tablename ORDER BY tablename),'[]'::json) FROM pg_tables WHERE schemaname='public'),"
             "'sequences',(SELECT COALESCE(json_agg(sequencename ORDER BY sequencename),'[]'::json) "
             "FROM pg_sequences WHERE schemaname='public'),'unexpected',"
-            "(SELECT COUNT(*) FROM pg_namespace WHERE nspname NOT IN ('public','information_schema') "
-            "AND left(nspname,3)<>'pg_'));"))
+            "(SELECT COUNT(*) FROM pg_namespace WHERE nspname NOT IN ('public','information_schema','"
+            + OBSERVATION_SCHEMA + "') AND left(nspname,3)<>'pg_'));"))
         if (not isinstance(result, dict) or set(result) != {'tables', 'sequences', 'unexpected'}
                 or type(result['unexpected']) is not int or result['unexpected'] != 0
                 or any(not isinstance(result[key], list) or len(set(result[key])) != len(result[key])
                        or any(not isinstance(name, str) or not NAME.fullmatch(name) for name in result[key])
                        for key in ('tables', 'sequences'))):
+            raise RecoveryError('Unsupported PostgreSQL schema catalog.')
+        # The only accepted non-public schema must be exactly the reviewed
+        # observation definition: no other table, column, constraint, index,
+        # trigger, routine, type, sequence, view or policy.
+        if self.observations_present() and canonical(self.logical_schema(OBSERVATION_SCHEMA)) != canonical(OBSERVATION_CATALOG):
             raise RecoveryError('Unsupported PostgreSQL schema catalog.')
         return result
 
@@ -554,10 +775,10 @@ class PostgresBackend:
             "ON n.oid=p.pronamespace WHERE n.nspname='public') + (SELECT COUNT(*) FROM pg_type t "
             "JOIN pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname='public') "
             "+ (SELECT COUNT(*) FROM pg_extension WHERE extname<>'plpgsql');")
-        if result != '0':
+        if result != '0' or self.observations_present():
             raise RecoveryError('PostgreSQL restore target contains schema objects.')
 
-    def logical_schema(self):
+    def logical_schema(self, namespace='public'):
         """Complete native logical DDL, excluding physical OIDs, owners and rows.
 
         This is compared to a reviewed fresh native schema in the versioned
@@ -600,6 +821,13 @@ class PostgresBackend:
             'extensions': "SELECT e.extname AS name,e.extversion,n.nspname AS schema_name FROM pg_extension e "
                 "JOIN pg_namespace n ON n.oid=e.extnamespace",
         }
+        if namespace != 'public':
+            # The same catalog for the one reviewed observation schema;
+            # extensions are database-wide and stay in the public witness.
+            if namespace != OBSERVATION_SCHEMA:
+                raise RecoveryError('Unsupported PostgreSQL schema catalog.')
+            queries = {name: query.replace("n.nspname='public'", "n.nspname='" + namespace + "'")
+                       for name, query in queries.items() if name != 'extensions'}
         items = ["'" + name + "',(SELECT COALESCE(jsonb_agg(to_jsonb(x)),'[]'::jsonb) FROM (" + query + ') x)'
                  for name, query in queries.items()]
         result = strict_json(self.sql("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY; SET LOCAL search_path=pg_catalog; "
@@ -617,9 +845,9 @@ class PostgresBackend:
                 or set(catalog['sequences']) != set(definition['postgres_sequences'])):
             raise RecoveryError('PostgreSQL tables or sequences do not match the versioned inventory.')
         versions = strict_json(self.sql("SELECT json_agg(version ORDER BY version) FROM llm_firewall_schema_migrations;"))
-        if (not isinstance(versions,list) or versions != list(range(1, 29))
+        if (not isinstance(versions,list) or versions != list(range(1, POSTGRES_SCHEMA_VERSION + 1))
                 or any(type(value) is not int for value in versions)):
-            raise RecoveryError('PostgreSQL schema must have exactly accepted migrations 1 through 28.')
+            raise RecoveryError(f'PostgreSQL schema must have exactly accepted migrations 1 through {POSTGRES_SCHEMA_VERSION}.')
         columns = strict_json(self.sql("SELECT json_object_agg(table_name,columns) FROM "
             "(SELECT table_name,json_object_agg(column_name,udt_name) AS columns FROM information_schema.columns "
             "WHERE table_schema='public' GROUP BY table_name) t;"))
@@ -641,7 +869,7 @@ class PostgresBackend:
             return "(SELECT jsonb_object_agg(name,value) FROM (" + ' UNION ALL '.join(items) + ') t)'
         value = strict_json(self.sql("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; "
             "SET LOCAL TIME ZONE 'UTC'; SELECT jsonb_build_object('backend','postgres',"
-            "'schema_version',28,'tables'," + map_sql(catalog['tables']) + ",'sequences'," +
+            f"'schema_version',{POSTGRES_SCHEMA_VERSION},'tables'," + map_sql(catalog['tables']) + ",'sequences'," +
             map_sql(catalog['sequences'], True) + '); COMMIT;'))
         value['schema'] = schema
         for rows in value['tables'].values():
@@ -652,12 +880,19 @@ class PostgresBackend:
         return value
 
 
+def require_no_observations(backend, dump, pg_restore='pg_restore'):
+    """The archive boundary: no observation schema, table, constraint or row."""
+    listing = backend.invoke([pg_restore, '--list', dump])
+    if OBSERVATION_SCHEMA.encode() in listing:
+        raise RecoveryError('PostgreSQL archive contains volatile Agent observations.')
+
+
 def same_postgres_database(first, second):
     return (first['system_identifier'], first['database_oid']) == (second['system_identifier'], second['database_oid'])
 
 
 def backup_postgres(source_url, output, recipient, *, workdir, age='age', psql='psql',
-                    pg_dump='pg_dump', source_quiesced=False):
+                    pg_dump='pg_dump', source_quiesced=False, pg_restore='pg_restore'):
     started = time.monotonic()
     if source_quiesced is not True:
         raise RecoveryError('PostgreSQL backup requires explicit confirmation that all source writers are stopped.')
@@ -667,9 +902,11 @@ def backup_postgres(source_url, output, recipient, *, workdir, age='age', psql='
         identity = backend.identity()
         state = backend.snapshot()
         dump = directory / 'database.dump'
-        backend.invoke([pg_dump, '--format=custom', '--no-owner', '--no-privileges', '--file', dump])
+        backend.invoke([pg_dump, '--format=custom', '--no-owner', '--no-privileges',
+                        '--exclude-schema=' + OBSERVATION_SCHEMA, '--file', dump])
         os.chmod(dump, 0o600)
         private_file(dump)
+        require_no_observations(backend, dump, pg_restore)
         backend.require_owned()
         if backend.identity() != identity or canonical(backend.snapshot()) != canonical(state):
             raise RecoveryError('PostgreSQL source changed during backup.')
@@ -696,7 +933,7 @@ def restore_postgres(archive, target_url, identity, *, workdir, age='age', psql=
         backend.require_empty()
         # Validate the custom archive structure before any target statement. No
         # --clean, migration, owner alteration or unsupported compatibility edit.
-        backend.invoke([pg_restore, '--list', dump])
+        require_no_observations(backend, dump, pg_restore)
         if backend.identity() != target_identity:
             raise RecoveryError('PostgreSQL target identity changed before restoration.')
         backend.require_empty()

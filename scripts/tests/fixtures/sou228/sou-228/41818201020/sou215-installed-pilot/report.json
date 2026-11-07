@@ -1,0 +1,109 @@
+{
+ "cases": [
+  {
+   "id": "exact-installed-inputs",
+   "reason": null,
+   "status": "passed"
+  },
+  {
+   "id": "sandbox-positive",
+   "reason": null,
+   "status": "passed"
+  },
+  {
+   "id": "witness-calibration",
+   "reason": null,
+   "status": "passed"
+  },
+  {
+   "id": "read-and-history",
+   "reason": null,
+   "status": "passed"
+  },
+  {
+   "id": "inspect-and-diff",
+   "reason": null,
+   "status": "passed"
+  },
+  {
+   "id": "untrusted-input-refusal",
+   "reason": null,
+   "status": "passed"
+  },
+  {
+   "id": "independent-conversation",
+   "reason": null,
+   "status": "passed"
+  },
+  {
+   "id": "parallel-cancellation",
+   "reason": null,
+   "status": "passed"
+  },
+  {
+   "id": "collector-recovery",
+   "reason": null,
+   "status": "passed"
+  },
+  {
+   "id": "daemon-fresh-conversation",
+   "reason": null,
+   "status": "passed"
+  },
+  {
+   "id": "bad-input-controls",
+   "reason": null,
+   "status": "passed"
+  },
+  {
+   "id": "final-cleanup",
+   "reason": null,
+   "status": "passed"
+  }
+ ],
+ "counts": {
+  "failed": 0,
+  "incomplete": 0,
+  "passed": 12,
+  "unsupported": 0
+ },
+ "driver_sha256": "f37a31e1c4c669969399b13b23846c6c0bf6f5d80835f767b047a9a1699b0671",
+ "environment": {
+  "machine": "x86_64",
+  "os": "Linux"
+ },
+ "format": "sw-installed-pilot/1",
+ "live_model_effectiveness": "not_measured",
+ "pilot_readiness": "not_certified",
+ "remaining_blockers": [],
+ "required": 12,
+ "scope": "development-installed-host-scripted-provider",
+ "selected_sha256": {
+  "agentfw": "c528b62f1d1d9973c8679aaddf9d534eb058e74350d586e68948f3f09ea3fb85",
+  "bwrap": "ade37f573e2a075aa44b07e46de972035fec0d35ed323fd2ea837869ff420f5d",
+  "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+  "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+  "git": "4389f3ff06bc8f0f45d38ce78d484d12f472e489457a6d53f250105efd335ea3",
+  "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+  "git_launcher": "81c26234eaee95df71e33da22bda8516a900ecada5e2ce948e1855356b9f6c4c",
+  "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+  "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+  "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+  "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+  "sandbox_tests": "86e1cf4586ac96a7b49c0c036c2c2617c0e307c3926d3baa7b1c6dfade5c3f6d"
+ },
+ "selection_format": "sw-installed-pilot-selection/3",
+ "source_after": {
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "dirty": false,
+  "files_sha256": "303854b052bbc48eb0b28cc410def92f63a7b725bbc01c64ae29eb6e19fce98e",
+  "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+ },
+ "source_before": {
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "dirty": false,
+  "files_sha256": "303854b052bbc48eb0b28cc410def92f63a7b725bbc01c64ae29eb6e19fce98e",
+  "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+ },
+ "status": "passed"
+}

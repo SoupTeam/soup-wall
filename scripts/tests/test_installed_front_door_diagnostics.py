@@ -12,6 +12,8 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+from ci_components import blocks
 spec = importlib.util.spec_from_file_location("installed_front_door_diagnostics", ROOT / "scripts/qualify-installed-front-door.py")
 QUAL = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(QUAL)
@@ -133,12 +135,17 @@ class WorkflowInterpreter(unittest.TestCase):
             capture_code = "import json,os,sys;open(os.environ['CAPTURE_ARGV'],'w').write(json.dumps(sys.argv[1:]))"
             driver.write_text("#!/bin/sh\nexec " + shlex.quote(sys.executable) + " -I -c " + shlex.quote(capture_code) + ' "$@"\n')
             driver.chmod(0o775)
-            for name in ("mcp-real-filesystem.yml", "ci-components.yml"):
+            for name, job in (("mcp-real-filesystem.yml", "native-ubuntu-2404"),
+                              ("ci-components.yml", "mcp-real-filesystem--native-ubuntu-2404")):
                 with self.subTest(workflow=name):
                     text = (ROOT / ".github/workflows" / name).read_text()
-                    start = text.index("python3 -B scripts/qualify-installed-front-door.py --run")
-                    end = text.index("2>&1 | tee", start)
-                    command = text[start:end].rstrip().removesuffix("\\").rstrip()
+                    body = blocks(text)[job]
+                    step_start = body.index("      - name: Qualify the installed guided pilot front door through the original host\n")
+                    step_end = body.index("\n      - name:", step_start + 1)
+                    step = body[step_start:step_end]
+                    start = step.index("python3 -B scripts/qualify-installed-front-door.py --run")
+                    end = step.index("2>&1 | tee", start)
+                    command = step[start:end].rstrip().removesuffix("\\").rstrip()
                     capture = root / (name + ".json")
                     env = dict(os.environ, PATH=str(hosted) + ":/usr/bin:/bin", CAPTURE_ARGV=str(capture),
                                RUNNER_TEMP=str(root), SOU115_GIT="git-input", SOU111_BWRAP="bwrap-input",

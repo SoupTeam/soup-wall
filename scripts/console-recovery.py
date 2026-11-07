@@ -46,7 +46,7 @@ def main(argv=None):
             options['psql'] = args.psql
             if args.operation == 'backup':
                 value = backup_postgres(url, args.archive, args.recipient, pg_dump=args.pg_dump,
-                    source_quiesced=args.source_quiesced, **options)
+                    source_quiesced=args.source_quiesced, pg_restore=args.pg_restore, **options)
             else:
                 value = restore_postgres(args.archive, url, args.identity, pg_restore=args.pg_restore, **options)
     except RecoveryError as error:

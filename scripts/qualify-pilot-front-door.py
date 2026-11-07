@@ -140,7 +140,8 @@ PROVIDER_TRACE_STRING_BYTES = 131072  # Linux MAX_ARG_STRLEN, including NUL.
 
 
 def run_case(args, door, report, label, proposals, hold=False, cancel=None,
-             provider_setup=None, provider_trace=None, model=None, close_model=True, after_useful=None, diagnostic_writes=False):
+             provider_setup=None, provider_trace=None, model=None, close_model=True, after_useful=None, diagnostic_writes=False,
+             trace_events="execve,execveat", run_flags=()):
     """One protected run through `pilot.py run` with the owned scripted provider."""
     model = model if model is not None else BASE.DEMO.ScriptedModel([])
     offered, live = set(), {}
@@ -161,7 +162,7 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
             # Observe status while the protected host is active, for this
             # prefix and for a second prepared prefix that is not running.
             code, value, _ = door.call("status", "--state-root", str(args.state_root), inputs=False, timeout=60)
-            live.update(code=code, protection=value.get("protection"),
+            live.update(code=code, protection=value.get("protection"), scope=value.get("scope"),
                         runs=[{k: row.get(k) for k in ("protection", "run_ids")} for row in value.get("runs", [])])
             code, other, _ = door.call("status", "--state-root", str(args.state_root), inputs=False, timeout=60,
                                        prefix=args.other_prefix)
@@ -195,10 +196,10 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
         door.env, ANTHROPIC_BASE_URL=model.url, ANTHROPIC_API_KEY="owned-loopback-only",
         HTTP_PROXY="http://127.0.0.1:9", HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
     words = door.words("run", "--state-root", args.state_root, "--timeout-seconds", "120",
-                       "--prompt", "Read the project README and inspect Git history.", inputs=False)
+                       "--prompt", "Read the project README and inspect Git history.", *run_flags, inputs=False)
     if provider_trace is not None:
         words = [str(args.strace), "-f", "-qq", "-v", "-s", str(2048 if diagnostic_writes else PROVIDER_TRACE_STRING_BYTES),
-                 "-e", "trace=execve,execveat,write,writev" if diagnostic_writes else "trace=execve,execveat",
+                 "-e", "trace=execve,execveat,write,writev" if diagnostic_writes else "trace=" + trace_events,
                  "-o", str(provider_trace), *words]
     started = time.monotonic()
     try:

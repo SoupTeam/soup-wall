@@ -23,8 +23,8 @@ T0 = 1800000000
 
 def page_html():
     html = (SRC / "admin_dashboard.html").read_text(encoding="utf-8")
-    for marker, name in (("FLEET_PANEL", "fleet_panel.js"), ("ROLLOUT_PANEL", "rollout_panel.js"),
-                         ("ENROLLMENT_PANEL", "enrollment_panel.js"), ("AGENT_HISTORY", "agent_history.js")):
+    for marker, name in (("FLEET_PANEL", "fleet_panel.js"), ("ROLLOUT_PANEL", "rollout_panel.js"), ("SINGLE_AGENT_POLICY", "single_agent_policy.js"),
+                         ("ENROLLMENT_PANEL", "enrollment_panel.js"), ("AGENT_HISTORY", "agent_history.js"), ("FLEET_TRIAGE", "fleet_triage.js"), ("AGENT_HEARTBEAT", "heartbeat_panel.js"), ("OPERATOR_AUDIT", "operator_audit_panel.js")):
         html = html.replace(f"/* {marker} */", (SRC / name).read_text(encoding="utf-8"))
     return html
 
@@ -108,6 +108,11 @@ class AgentHistoryBrowserTests(unittest.TestCase):
                      "latest_issued": None, "last_reported_applied": None} for a in agents]
             return self.json(route, {"contract_version": "sw-agent-fleet/1", "tenant_id": tenant, "agents": rows,
                                      "next_after": None, "observed_at_unix": T0 + 1000})
+        if path.endswith("/heartbeat"):
+            parts = path.split("/")
+            return self.json(route, {"contract_version": "sw-agent-heartbeat-status/1", "tenant_id": parts[4], "agent_id": parts[6],
+                                     "observed_at_unix": 1800000000, "status": "unsupported", "expires_after_seconds": 90,
+                                     "age_seconds": None, "current_credential_generation": 1, "reported": None, "note": "fixture"})
         if "/agent-fleet/" in path:
             tenant, agent = parts[4], parts[6]
             limit = int(query["limit"][0])

@@ -41,6 +41,7 @@ def load(name, filename):
 
 PREP = load("pilot_run_preparation", "prepare-installed-pilot.py")
 GROUPS = load("pilot_run_groups", "prepare-native-pilot-prerequisites.py")
+BUDGET_PRESETS = load("pilot_run_budget_presets", "pilot_budget_presets.py")
 SELECTION_LOCK = load("pilot_run_selection_lock", "pilot-selection-lock.py")
 AUDIT = load("pilot_run_audit", "pilot_audit.py")
 PROVIDER = load("pilot_run_provider", "pilot_provider.py")
@@ -140,7 +141,7 @@ PUBLIC_FAILURE_CODES = frozenset({
     'unsupported_existing_git_layout_use_supported_standalone_repository',
     'project_provider_binding_required', 'project_selection_changed', 'project_provider_changed',
     'project_state_changed', 'project_budget_changed', 'project_provider_version_changed',
-}) | PREP.GIT_PROFILES.FAILURES
+}) | PREP.GIT_PROFILES.FAILURES | BUDGET_PRESETS.FAILURES
 
 
 class Failure(Exception):
@@ -217,6 +218,20 @@ def budget_input(path):
         raw = stream.read(16385)
     require(len(raw) <= 16384, "linux_budget_input_invalid")
     return raw
+
+
+def budget_requested(args):
+    return getattr(args, "linux_budget", None) is not None or getattr(args, "budget_preset", None) is not None
+
+
+def budget_bytes(args):
+    """Exact bytes for this run. A named preset is resolved afresh from its catalog and
+    must still match its confirmed digest and delegated-root identity; any refusal
+    stops the run, never continuing unbudgeted or with an earlier version."""
+    if getattr(args, "budget_preset", None) is not None:
+        return BUDGET_PRESETS.resolve(Path(args.budget_preset_home), args.budget_preset,
+                                      args.expected_budget_preset_digest)[0]
+    return budget_input(args.linux_budget)
 
 
 def budget_cli(paths, private, env, option, path, probe=False):
@@ -442,8 +457,8 @@ def run_owned(args, report, maintenance=None):
             ca_snapshot = PROVIDER_CA.pin(provider["SSL_CERT_FILE"])
             report["provider"]["ca_sha256"] = ca_snapshot.sha256
         budget_snapshot = None
-        if getattr(args, "linux_budget", None) is not None:
-            raw = budget_input(args.linux_budget)
+        if budget_requested(args):
+            raw = budget_bytes(args)
             require(getattr(args, 'expected_budget_sha256', None) is None or
                     hashlib.sha256(raw).hexdigest() == args.expected_budget_sha256, 'project_budget_changed')
             budget_snapshot = private / "selected-linux-budget.json"
@@ -455,6 +470,9 @@ def run_owned(args, report, maintenance=None):
                     and observation.get("protected_children_started") is False,
                     "linux_budget_observation_unverified")
             budget_expected_sha = observation["budget_sha256"]
+            if getattr(args, "budget_preset", None) is not None:
+                # The engine and the catalog must agree on the exact configuration identity.
+                require(budget_expected_sha == BUDGET_PRESETS.config_identity(json.loads(raw)), "budget_preset_stale")
             report["resource_budget"] = observation
         tools = []
         for kind in ("filesystem", "git"):
@@ -529,6 +547,9 @@ def run_owned(args, report, maintenance=None):
             if getattr(args, 'expected_budget_sha256', None) is not None:
                 require(hashlib.sha256(budget_input(args.linux_budget)).hexdigest() == args.expected_budget_sha256,
                         'project_budget_changed')
+            if getattr(args, "budget_preset", None) is not None:
+                # Last input before any host exists: a changed or removed preset refuses here.
+                require(budget_bytes(args) == budget_snapshot.read_bytes(), "budget_preset_stale")
             if ca_snapshot is not None:
                 ca_snapshot.verify_source()
             roots = PREP.workspace_paths(selection, args.selection.parent)
@@ -638,7 +659,7 @@ def run_owned(args, report, maintenance=None):
             signal.signal(sig, handler)
         # Stop processes before snapshot/export. Retention housekeeping never
         # resets a live session or its sticky risk, receipts or policy state.
-        if private is not None and getattr(args, "linux_budget", None) is not None:
+        if private is not None and budget_requested(args):
             try:
                 bindings = list((private / ".agentfw" / "pilot-budgets").glob("*/linux-budget-binding.json"))
                 require(len(bindings) <= 1, "linux_budget_observation_unverified")
@@ -708,6 +729,9 @@ def main():
                         help="private installed Agent home; absent preserves explicit environment mode")
     parser.add_argument("--linux-budget", type=Path,
                         help="Explicit owned Linux budget JSON; absent means unbudgeted")
+    parser.add_argument("--budget-preset", help=argparse.SUPPRESS)
+    parser.add_argument("--budget-preset-home", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--expected-budget-preset-digest", help=argparse.SUPPRESS)
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--timeout-seconds", type=int, default=180)
     parser.add_argument("--ask-wait-seconds", type=int, default=0)
@@ -719,16 +743,24 @@ def main():
     report = {"format": "sw-prepared-pilot-run/1", "status": "plan", "executed": False}
     try:
         report["resource_budget"] = {"status": "unbudgeted", "requested": False}
-        if args.linux_budget is not None:
-            raw = budget_input(args.linux_budget)
+        preset_fields = (args.budget_preset, args.budget_preset_home, args.expected_budget_preset_digest)
+        require(all(f is None for f in preset_fields) or (all(f is not None for f in preset_fields)
+                and args.linux_budget is None and args.expected_budget_sha256 is None), "budget_preset_selection_conflict")
+        if budget_requested(args):
+            raw = budget_bytes(args)
             report["resource_budget"] = {"status": "selected-not-validated", "requested": True,
                                          "input_sha256": hashlib.sha256(raw).hexdigest()}
         if args.run:
             PREP.supported_platform()
             # The lock spans admission, daemon/host lifetime and owned cleanup.
             # Transitions take the exclusive side before observing current.json.
-            with SELECTION_LOCK.hold(args.selection.parent.parent.parent, exclusive=False):
+            from contextlib import ExitStack
+            with SELECTION_LOCK.hold(args.selection.parent.parent.parent, exclusive=False), ExitStack() as snapshot_lease:
                 selection, _, profiles = selected(args)
+                if selection.get('workspace_snapshot') is not None:
+                    snapshot_lease.enter_context(PREP.SNAPSHOTS.hold(selection['workspace_snapshot']))
+                    selection, _, profiles=selected(args)
+                    report['workspace_snapshot']=PREP.SNAPSHOTS.inspect(selection['workspace_snapshot']['generation'])
                 report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
                               git_selection=selection.get("git_selection", {"id": PREP.GIT_PROFILES.DEFAULT,
                                   "selection_version": "legacy-default-only"}),
@@ -737,6 +769,8 @@ def main():
                 run(args, report)
         else:
             selection, _, profiles = selected(args)
+            if selection.get('workspace_snapshot') is not None:
+                report['workspace_snapshot']=PREP.SNAPSHOTS.inspect(selection['workspace_snapshot']['generation'])
             report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
                           git_selection=selection.get("git_selection", {"id": PREP.GIT_PROFILES.DEFAULT,
                               "selection_version": "legacy-default-only"}),
@@ -745,10 +779,10 @@ def main():
     except Exception as error:
         # Never echo subprocess output, raw paths, arguments, credentials or arbitrary exception strings.
         code = str(error)
-        if args.linux_budget is not None and code in {"native_linux_x86_64_required",
+        if budget_requested(args) and code in {"native_linux_x86_64_required",
                 "native_ubuntu_required_wsl_is_separate", "ubuntu_24_04_required"}:
             report["resource_budget"]["status"] = "unsupported"
-        report.update(status="failed", reason=code if code in PUBLIC_FAILURE_CODES
+        report.update(status="failed", reason=code if code in PUBLIC_FAILURE_CODES or code in PREP.SNAPSHOTS.PUBLIC_REASONS
                       else "pilot_input_or_runtime_failure")
         if args.maintenance_home is not None and (not report.get("executed") or code.startswith("maintenance_")):
             report["maintenance"] = {"status": "refused-or-uncertain",

@@ -77,7 +77,7 @@ fn main() {
             },
         };
         let started = Instant::now();
-        let outcome = firewall.preview_native_result(&event);
+        let (outcome, shadow) = firewall.preview_unattested_result_shadow(&event);
         let micros = started.elapsed().as_micros() as u64;
         let status = if outcome
             .rule
@@ -93,11 +93,12 @@ fn main() {
         let findings: Vec<Value> = outcome
             .findings
             .iter()
-            .map(|(facet, f)| json!({"facet": format!("{facet:?}"), "detector": f.detector, "severity": format!("{:?}", f.severity), "confidence": f.confidence}))
+            .map(|(facet, f)| json!({"facet": format!("{facet:?}"), "detector": f.detector, "severity": format!("{:?}", f.severity), "confidence": f.confidence, "label": f.label, "span": f.span}))
             .collect();
         out.push(json!({
             "case_id": id, "status": status, "verdict": format!("{:?}", outcome.verdict),
             "rule": outcome.rule, "findings": findings, "latency_micros": micros,
+            "policy_shadow": {"eligibility":"baseline_no_live_custody", "comparison":shadow, "production_authority":false,"task_complete":false},
         }));
     }
     println!(

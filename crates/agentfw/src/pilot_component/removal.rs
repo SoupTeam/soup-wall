@@ -12,6 +12,7 @@ mod inventory;
 mod io;
 mod journal;
 mod processes;
+pub(crate) use io::Budget as ProcessBudget;
 use io::{Budget, Dir, Identity};
 
 const FORMAT: &str = "sw-installed-pilot-removal/1";
@@ -225,4 +226,12 @@ pub fn run(cli: Cli) -> Result<()> {
         anyhow::bail!("{code}");
     }
     Ok(())
+}
+
+// The doctor reuses the exact removal process reader without any selected
+// scope, inactive-run claim, confirmation, journal or removal authority.
+pub(crate) fn environment_process_evidence(
+    budget: &mut ProcessBudget,
+) -> std::result::Result<Vec<&'static str>, &'static str> {
+    processes::environment(budget).map_err(|_| "process_inventory_unavailable_or_bounded")
 }

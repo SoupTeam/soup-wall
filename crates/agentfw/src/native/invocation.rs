@@ -12,7 +12,11 @@ use crate::mcp::server_profile;
 fn roles(tool: &Tool, args: &Value) -> Result<NativeArgumentRoles, &'static str> {
     if !matches!(
         tool.mcp_result_profile.as_deref(),
-        Some(server_profile::FORMAT | server_profile::filesystem_roots::FORMAT)
+        Some(
+            server_profile::FORMAT
+                | server_profile::filesystem_roots::FORMAT
+                | server_profile::filesystem_links::FORMAT
+        )
     ) {
         return Ok(NativeArgumentRoles::CommandBearing);
     }

@@ -1,0 +1,1751 @@
+{
+  "format": "sw-evidence/sou204-schema-upgrade-demo/1",
+  "observation_kind": "concrete local runs of the built analyzer (Windows host)",
+  "source": {
+    "original_task_base": "b385e7506ab26896637f348e3180e52d1fc6d423",
+    "integration_baseline": "7f973f0b82480090e3de51111a90f550ea6a0d57",
+    "changes_measured_against": "7f973f0b82480090e3de51111a90f550ea6a0d57",
+    "head": "0615e27642176550294cbaeac1b23709f17a6a71",
+    "head_contains_integration_baseline": true,
+    "working_tree": "uncommitted changes on top of head",
+    "binding": "changed_files_git_blob is authoritative; working_tree_sha256 depends on checkout line endings (core.autocrlf) and is informational",
+    "changed_files_git_blob": {
+      ".gitattributes": "fdf779621353672388bfd0678c390f203b53b0a1",
+      "CHANGELOG.md": "cc4315681e95306ea2ef6438b44cfc4326cb16f3",
+      "crates/agentfw/src/main.rs": "0987508a6b3ce72d3d48766719226f7cbbacc23f",
+      "crates/agentfw/src/mcp/mod.rs": "b9e4918922873d558e0dfdf9f0f39ccc7e2f143b",
+      "crates/agentfw/src/mcp/profile_author.rs": "ba556b361906670d8f7aca5b08bc57b909e0d5ca",
+      "crates/agentfw/src/mcp/schema_upgrade.rs": "2fcbe01f4ba60a4320b83669f16c2aec2329d406",
+      "crates/agentfw/src/mcp/schema_upgrade/examples.rs": "c48b2203b40aa4f3dfdabc74f1c39acc555495ee",
+      "crates/agentfw/src/mcp/schema_upgrade/render.rs": "08f1bacc21386bef1f7cbe8f5ebebc944ec89c01",
+      "crates/agentfw/src/mcp/schema_upgrade/tests.rs": "c84430fec0d6d31e143ae92e09f4c18bde0d3a28",
+      "crates/agentfw/tests/fixtures/schema_upgrade/MANIFEST.json": "36a2cda13e3f15148734ab8b0b9ed8bf7bb3c03e",
+      "crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json": "6898b92f71d7ff53dba90d0f779f3ba9b4384a3f",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-control-current.registry.json": "0b86a2841f212768762d50cff7900e74793440df",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-control-proposed.registry.json": "c9fdd7532b822895c3567f26591b94ec0c739abb",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-destination-controls.json": "c12b7414668c6be4be6069a1be38d79332f54724",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-keys-reordered.json": "097028556ef4b4ac134ea066e3e5b6c6097882e1",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-malicious-metadata.json": "1053346e8058a1ff3fc7e2a16337dcb622132806",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-metadata-inert.json": "17016035c4e9f3cfe5ada45789869eeaa930f2f5",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-nested-array.json": "40332d4dff6ad383cc7bb020e0cb06476622e8c8",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-proposed-action-only.registry.json": "bbb0c1a6f57d797ff55083919d2efaff29ee6e45",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-required-default-type-enum.json": "74f63b39ceb84364bcf212a449866c0b4c592822",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-result-capability.json": "25402bbd5292c3aad3cc71e7fdab34d57a0da0f7",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-tools-added-removed.json": "04dca9e52b8f2ea5c2c8c358f3a23d11c9ef44e5",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-tools-reordered.json": "8119d54d09ff7cc1cd8abca6a26ec0340a95612b",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-unsupported.json": "86c4195c39a45e5ee9443a141ce04e579972ccde",
+      "crates/agentfw/tests/fixtures/schema_upgrade/git-extreme-bound-before.json": "5a5aec7d7fea6eff9f1dbdf2e87b91933c464815",
+      "crates/agentfw/tests/fixtures/schema_upgrade/git-extreme-bound.json": "5a5aec7d7fea6eff9f1dbdf2e87b91933c464815",
+      "crates/agentfw/tests/fixtures/schema_upgrade/git-metadata-inert.json": "1f3dedf49afd5876fb4bb465c12bf34f6d18857d",
+      "crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json": "8197dd740871b134716b1f84ddefc96ea9b2a1ca",
+      "crates/agentfw/tests/fixtures/schema_upgrade/git-recursive-ref.json": "3952487ecc25a442a895b629c85d5990a61489bf",
+      "crates/agentfw/tests/fixtures/schema_upgrade/git-semantic.json": "49b16c4b584256c549473451ecbe27795f30c17b",
+      "crates/agentfw/tests/fixtures/schema_upgrade/invalid-deep.json": "52b08d06002925905d2ef19b68470e9adc052483",
+      "crates/agentfw/tests/fixtures/schema_upgrade/invalid-duplicate-key.json": "e3280c72710a4dd2aaef83bc0779b37a1e8faee3",
+      "crates/agentfw/tests/fixtures/schema_upgrade/invalid-duplicate-tool.json": "f1cb6e290c05852109eecbe1648b9265b6a70057",
+      "crates/agentfw/tests/fixtures/schema_upgrade/invalid-nan.json": "98e07f392202c99762f5d56f1e730ac180dda0b2",
+      "crates/agentfw/tests/fixtures/schema_upgrade/invalid-paginated.json": "f6723930d96635acc5961b8e0a0da779c7cf89b3",
+      "crates/agentfw/tests/mcp_schema_upgrade_cli.rs": "3243ee5be152c9d3be2908fbe7eaa903682ba68f",
+      "docs/README.md": "30dbba44c0ea836dd9415648555feb82bfadd98d",
+      "docs/operations/MCP_SCHEMA_UPGRADE_REVIEW.md": "631f02c5c9a85e7f79944489640926ebf2b4bd6f",
+      "scripts/schema-upgrade-demo.py": "0d6e39d16f4e2f3f2646faf9e25ab43aa0c4f8b7",
+      "scripts/schema-upgrade-fixtures.py": "b5c380282d3c66dee6ea933c185bc21578db9d1a",
+      "scripts/schema-upgrade-trace-windows.py": "02801baf4870b20f498e9abda6a892af3617102b"
+    },
+    "changed_files_manifest_sha256": "323e0d923b59a82c8737dc51c21be066f07616d3f0f9435779293a170e5e2c2c",
+    "working_tree_sha256": {
+      ".gitattributes": "f326b98ef748dcc879f0dbac8d915cd0cead4c9d61a4a21a38b2f1aaf0d62e91",
+      "CHANGELOG.md": "b1409c3343d2668d175b32f145d415dd392e87db58f2eab74e70a4cc88007291",
+      "crates/agentfw/src/main.rs": "73af0ecee2a555a7d6c8d2e6e53d83f898f678c6a0181713d447f37ea976c156",
+      "crates/agentfw/src/mcp/mod.rs": "32131d3488af0e23f57360cfc722124d34a2c94ebbc153844888fed4c5b0de7d",
+      "crates/agentfw/src/mcp/profile_author.rs": "7cc2f91e1067e751c99a5d66febd4bd78e64fcc306a548b3bfe415009d92822c",
+      "crates/agentfw/src/mcp/schema_upgrade.rs": "664eb501105eac4625a65e0d5dc0fd2dd121428c6b3153b29d623d15d5905f88",
+      "crates/agentfw/src/mcp/schema_upgrade/examples.rs": "f148e3f74209328b265823557a3506e0a419dedbc96bc182db1a551d6fa00a9e",
+      "crates/agentfw/src/mcp/schema_upgrade/render.rs": "0828eb6cf784e90ceabc5050b241c4a8377a2406b9c50a0dc47998d3362ddb4a",
+      "crates/agentfw/src/mcp/schema_upgrade/tests.rs": "1fee7788ad13a993992fc28c967e2a16846e5ea150bfd6d70b3529d83425e0bc",
+      "crates/agentfw/tests/fixtures/schema_upgrade/MANIFEST.json": "ffa7bad355d2fcc7874fa6c6e579b9e755c664a93b7583b2a3577e3a2132bd83",
+      "crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-control-current.registry.json": "d87b555162420a4e8625682c912065e55c0a0c16fe87b381b3e003554d66e57f",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-control-proposed.registry.json": "8cb5a56b434e4033c1dbb4d669c234fc525eedaee3442779ee0956b6b9a3d74d",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-destination-controls.json": "eb0095c7b71d19694c2af0ad1d53013c107229f883abb68f7830a6d25d26b881",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-keys-reordered.json": "a4d722d9d8f39841450afb42e48b81ccd58894d85ae449fa657c1d6fae79a47b",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-malicious-metadata.json": "6f583e5f10a0cc3af88700d3b2b86062f6b5bea49886d18bfb9fc7ab200048b4",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-metadata-inert.json": "68bb93c7d9e5fbd7b90e2e0d00ecc607f68b72c2baf64bd454a1090077b4bf63",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-nested-array.json": "5b0144b1e25c13bb401ed49ab746c816699602ceb95f1e615a31d10f700d3491",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-proposed-action-only.registry.json": "aebed0b12105afae9224e70c86e1df37dfbb3ee1c7dcca396115fe87f4227ead",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-required-default-type-enum.json": "622913bcc0b319c99aebfd1de0cffc0cbabb99dd831082a6b7d6ee5c7ae4f610",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-result-capability.json": "d9071c727f7ab829d9fb8920a27f72ad63e5adc96be97150bdaa86cb22a6bcaa",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-tools-added-removed.json": "7ae2b92133df99825a45b19ae075083e56245749e9ee25ae95116d439d011c8a",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-tools-reordered.json": "81145944f0a6b5b35e6e9d555d2c0897144ee22008cd6be4578373be71211bc2",
+      "crates/agentfw/tests/fixtures/schema_upgrade/fs-unsupported.json": "357fb3b6307de32f4df9146b640f370fecea0d085f4b0c6b502b6748f58f3836",
+      "crates/agentfw/tests/fixtures/schema_upgrade/git-extreme-bound-before.json": "fa0859610f6639f80fb943e92a56c70d029763480b52a0e3fc2b1887b0eb46b9",
+      "crates/agentfw/tests/fixtures/schema_upgrade/git-extreme-bound.json": "fa0859610f6639f80fb943e92a56c70d029763480b52a0e3fc2b1887b0eb46b9",
+      "crates/agentfw/tests/fixtures/schema_upgrade/git-metadata-inert.json": "f47ddd6b93e05463284b6af87d09389bc4161bbfbd6d6b7d6164ab3243d1da22",
+      "crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+      "crates/agentfw/tests/fixtures/schema_upgrade/git-recursive-ref.json": "5a4dc4156e1a46eb69fd5b64150b00872545e61545a04b54f2bcb4809313fcfe",
+      "crates/agentfw/tests/fixtures/schema_upgrade/git-semantic.json": "9c27adff206eaf6f58f90483c2ef541997976d63bf2daa635b53285ac49c188a",
+      "crates/agentfw/tests/fixtures/schema_upgrade/invalid-deep.json": "47caedc4ba01561e2eba4f185153144151cf00e754c99f222e03e036a5909656",
+      "crates/agentfw/tests/fixtures/schema_upgrade/invalid-duplicate-key.json": "dffd0fe08048156b38b7d7dbbc3cf62e4712ba9ef0891fe55e5351ea294dce19",
+      "crates/agentfw/tests/fixtures/schema_upgrade/invalid-duplicate-tool.json": "3c1570b71e954b63d313aaf625eb33217919abce0243ac5bb1e183cff0e02d71",
+      "crates/agentfw/tests/fixtures/schema_upgrade/invalid-nan.json": "4a99d3f44f114523cfb4523f417d55f8fb0bdbebe7d353db79126993af98a5f7",
+      "crates/agentfw/tests/fixtures/schema_upgrade/invalid-paginated.json": "b565cb5bc4028a4ca9ed57f6440161f022abc81cb0389784d6536925ffd1614a",
+      "crates/agentfw/tests/mcp_schema_upgrade_cli.rs": "5d7c08853910a30eb221ca348bd73766b40559d2a2a6d1bde23b49602a4ce931",
+      "docs/README.md": "7104d32113dca43f3e5b373095be8a829fc820f5cd1916885cc82cf9c53f4ff5",
+      "docs/operations/MCP_SCHEMA_UPGRADE_REVIEW.md": "9094ccac03ae5354cfed5c586391086e4cf863a91ad25441874d659165967f9f",
+      "scripts/schema-upgrade-demo.py": "818215d8a950be89f3eb0111962bdeeb91b213378170521ac660ab7840a8b7a8",
+      "scripts/schema-upgrade-fixtures.py": "66a6774c6751ae8c78ef43f4ce1bf77e7f038b586be7becbaf0cad8d5281f99e",
+      "scripts/schema-upgrade-trace-windows.py": "a632a733af820feb5e1222370fb9ef473936f1404451d3ad145b8a300da8c3c9"
+    },
+    "excluded_from_binding": "docs/operations/evidence/sou-204-schema-upgrade-2026-11-03/ (this evidence; avoids circular self-hash)"
+  },
+  "accepted_dependencies": {
+    "anchored_by": "7f973f0b82480090e3de51111a90f550ea6a0d57",
+    "original_task_base": "b385e7506ab26896637f348e3180e52d1fc6d423",
+    "all_unchanged": true,
+    "upstream_changes_since_original_base": [
+      "crates/agentfw/src/mcp/admission.rs",
+      "crates/agentfw/src/mcp/server_profile.rs",
+      "crates/agentfw/src/native.rs",
+      "scripts/install-sou62-filesystem-profile.py",
+      "scripts/install-sou68-git-profile.py",
+      "scripts/pilot_filesystem_roots.py"
+    ],
+    "files": {
+      "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json": {
+        "integration_baseline_blob": "8a9fef3931bf42bed94c43b2be1567081547d2a7",
+        "working_tree_blob": "8a9fef3931bf42bed94c43b2be1567081547d2a7",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "8a9fef3931bf42bed94c43b2be1567081547d2a7",
+        "upstream_change_since_original_base": false
+      },
+      "profiles/mcp/filesystem-readonly-v1/upstream-identity.json": {
+        "integration_baseline_blob": "517a1344bbef5bf087a3f4a32974573d1bab5e70",
+        "working_tree_blob": "517a1344bbef5bf087a3f4a32974573d1bab5e70",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "517a1344bbef5bf087a3f4a32974573d1bab5e70",
+        "upstream_change_since_original_base": false
+      },
+      "profiles/mcp/filesystem-readonly-v1/upstream-notices/node-v22.22.0-LICENSE": {
+        "integration_baseline_blob": "bed41c4c05b51a3b26600191449664cb5041fffb",
+        "working_tree_blob": "bed41c4c05b51a3b26600191449664cb5041fffb",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "bed41c4c05b51a3b26600191449664cb5041fffb",
+        "upstream_change_since_original_base": false
+      },
+      "profiles/mcp/filesystem-readonly-v1/upstream-notices/servers-a40bc270-LICENSE": {
+        "integration_baseline_blob": "4a93985763241755401a10678395303de4e720ba",
+        "working_tree_blob": "4a93985763241755401a10678395303de4e720ba",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "4a93985763241755401a10678395303de4e720ba",
+        "upstream_change_since_original_base": false
+      },
+      "profiles/mcp/filesystem-readonly-v1/upstream-notices/typescript-sdk-ff07b001-LICENSE": {
+        "integration_baseline_blob": "3d48435454b105021b4f777c11b6b07d8d2ffea3",
+        "working_tree_blob": "3d48435454b105021b4f777c11b6b07d8d2ffea3",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "3d48435454b105021b4f777c11b6b07d8d2ffea3",
+        "upstream_change_since_original_base": false
+      },
+      "profiles/mcp/git-readonly-v1/upstream-tools-list.json": {
+        "integration_baseline_blob": "ec5b3ab4a156de70a65c2c123fbf565375ff49be",
+        "working_tree_blob": "ec5b3ab4a156de70a65c2c123fbf565375ff49be",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "ec5b3ab4a156de70a65c2c123fbf565375ff49be",
+        "upstream_change_since_original_base": false
+      },
+      "profiles/mcp/git-readonly-v1/upstream-identity.json": {
+        "integration_baseline_blob": "c96324390f1fea7f17f5ea19ddd27c9fce3e9289",
+        "working_tree_blob": "c96324390f1fea7f17f5ea19ddd27c9fce3e9289",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "c96324390f1fea7f17f5ea19ddd27c9fce3e9289",
+        "upstream_change_since_original_base": false
+      },
+      "profiles/mcp/git-readonly-v1/upstream-initialize.json": {
+        "integration_baseline_blob": "6743e0984eb3fb3d866a2c8bb91003aca54fde44",
+        "working_tree_blob": "6743e0984eb3fb3d866a2c8bb91003aca54fde44",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "6743e0984eb3fb3d866a2c8bb91003aca54fde44",
+        "upstream_change_since_original_base": false
+      },
+      "profiles/mcp/git-readonly-v1/requirements.lock": {
+        "integration_baseline_blob": "f89b228b69283fb5ddca329612298d31a7df886b",
+        "working_tree_blob": "f89b228b69283fb5ddca329612298d31a7df886b",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "f89b228b69283fb5ddca329612298d31a7df886b",
+        "upstream_change_since_original_base": false
+      },
+      "profiles/mcp/operator-authoring-v1/discovery.json": {
+        "integration_baseline_blob": "f605c0cd32b548c24abba650660f4e03e114737b",
+        "working_tree_blob": "f605c0cd32b548c24abba650660f4e03e114737b",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "f605c0cd32b548c24abba650660f4e03e114737b",
+        "upstream_change_since_original_base": false
+      },
+      "profiles/mcp/operator-authoring-v1/declarations.json": {
+        "integration_baseline_blob": "055dd8adc0e19d3d0b51d20a221328cf89be3094",
+        "working_tree_blob": "055dd8adc0e19d3d0b51d20a221328cf89be3094",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "055dd8adc0e19d3d0b51d20a221328cf89be3094",
+        "upstream_change_since_original_base": false
+      },
+      "profiles/pilot/linux-readonly-v1/manifest.json": {
+        "integration_baseline_blob": "44b0b090c7cdbc2b000cc8a01b7513f76391f9ec",
+        "working_tree_blob": "44b0b090c7cdbc2b000cc8a01b7513f76391f9ec",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "44b0b090c7cdbc2b000cc8a01b7513f76391f9ec",
+        "upstream_change_since_original_base": false
+      },
+      "scripts/install-sou62-filesystem-profile.py": {
+        "integration_baseline_blob": "593c454f78223a6a4ea5045059a0d4eb2fdf167f",
+        "working_tree_blob": "593c454f78223a6a4ea5045059a0d4eb2fdf167f",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "7e1d44ab1df78d3aee5cc23f16db4c438f52c7c2",
+        "upstream_change_since_original_base": true
+      },
+      "scripts/install-sou68-git-profile.py": {
+        "integration_baseline_blob": "68ac85108f2cc5ff98b6e4cc674923d62ff7564f",
+        "working_tree_blob": "68ac85108f2cc5ff98b6e4cc674923d62ff7564f",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "52e67a45e9f562817d14ce33ac9128512513b64d",
+        "upstream_change_since_original_base": true
+      },
+      "scripts/pilot_provider.py": {
+        "integration_baseline_blob": "d46a6402c0273e79de5ab8c010eecc11a2e4045a",
+        "working_tree_blob": "d46a6402c0273e79de5ab8c010eecc11a2e4045a",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "d46a6402c0273e79de5ab8c010eecc11a2e4045a",
+        "upstream_change_since_original_base": false
+      },
+      "scripts/pilot_filesystem_roots.py": {
+        "integration_baseline_blob": "0c2afbe6a8a9e82b59fa4830c3317f921a0376be",
+        "working_tree_blob": "0c2afbe6a8a9e82b59fa4830c3317f921a0376be",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": null,
+        "upstream_change_since_original_base": true
+      },
+      "crates/agentfw/src/mcp/input.rs": {
+        "integration_baseline_blob": "52e5d37668e6113b46e712173609bdce47dc1a7c",
+        "working_tree_blob": "52e5d37668e6113b46e712173609bdce47dc1a7c",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "52e5d37668e6113b46e712173609bdce47dc1a7c",
+        "upstream_change_since_original_base": false
+      },
+      "crates/agentfw/src/mcp/admission.rs": {
+        "integration_baseline_blob": "5e3ee5a47fe53916e057f03cf796078bf4110492",
+        "working_tree_blob": "5e3ee5a47fe53916e057f03cf796078bf4110492",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "6fb6ef131bb2d62db6313b8c3018322ea4495521",
+        "upstream_change_since_original_base": true
+      },
+      "crates/agentfw/src/mcp/server_profile.rs": {
+        "integration_baseline_blob": "89895008e3f5fa9dde79a202f6718b8acbfb1346",
+        "working_tree_blob": "89895008e3f5fa9dde79a202f6718b8acbfb1346",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "e0c9ccb58b2bb2fe4194d7f9175dbdbca742cf78",
+        "upstream_change_since_original_base": true
+      },
+      "crates/agentfw/src/mcp/manifest.rs": {
+        "integration_baseline_blob": "a994716e040eaaee429e66443eb62f85244e3b0f",
+        "working_tree_blob": "a994716e040eaaee429e66443eb62f85244e3b0f",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "a994716e040eaaee429e66443eb62f85244e3b0f",
+        "upstream_change_since_original_base": false
+      },
+      "crates/agentfw/src/native.rs": {
+        "integration_baseline_blob": "4eca10b89681771e136f89fe8ad2e94f48a46b54",
+        "working_tree_blob": "4eca10b89681771e136f89fe8ad2e94f48a46b54",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "37adac6d6ebc8bcd9d590236be8f605830123366",
+        "upstream_change_since_original_base": true
+      },
+      "crates/agentfw/src/config.rs": {
+        "integration_baseline_blob": "143f8d9caae304f74762c86a21f59aba2ad3e2c2",
+        "working_tree_blob": "143f8d9caae304f74762c86a21f59aba2ad3e2c2",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "143f8d9caae304f74762c86a21f59aba2ad3e2c2",
+        "upstream_change_since_original_base": false
+      },
+      "crates/agentfw/Cargo.toml": {
+        "integration_baseline_blob": "bb1a879849e91239689b7d3534934c4d53896062",
+        "working_tree_blob": "bb1a879849e91239689b7d3534934c4d53896062",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "bb1a879849e91239689b7d3534934c4d53896062",
+        "upstream_change_since_original_base": false
+      },
+      "Cargo.toml": {
+        "integration_baseline_blob": "104ca7db7dba5b4ff1c37b13a401c942b4cd3ef5",
+        "working_tree_blob": "104ca7db7dba5b4ff1c37b13a401c942b4cd3ef5",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "104ca7db7dba5b4ff1c37b13a401c942b4cd3ef5",
+        "upstream_change_since_original_base": false
+      },
+      "Cargo.lock": {
+        "integration_baseline_blob": "033c49f9570dba2b90928736e2c67bcb83f71878",
+        "working_tree_blob": "033c49f9570dba2b90928736e2c67bcb83f71878",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "033c49f9570dba2b90928736e2c67bcb83f71878",
+        "upstream_change_since_original_base": false
+      },
+      "rust-toolchain.toml": {
+        "integration_baseline_blob": "246cb22c30a5f6e0e105643c35477995aff1da6f",
+        "working_tree_blob": "246cb22c30a5f6e0e105643c35477995aff1da6f",
+        "unchanged_vs_integration_baseline": true,
+        "original_base_blob": "246cb22c30a5f6e0e105643c35477995aff1da6f",
+        "upstream_change_since_original_base": false
+      }
+    },
+    "reproduced_registry_provenance": [
+      {
+        "fixture": "filesystem-readonly-v1.registry.json",
+        "installer": "scripts/install-sou62-filesystem-profile.py",
+        "parameters": {
+          "filesystem_roots": false
+        },
+        "installer_git_blob": "593c454f78223a6a4ea5045059a0d4eb2fdf167f",
+        "installer_imports": {
+          "scripts/pilot_provider.py": "d46a6402c0273e79de5ab8c010eecc11a2e4045a",
+          "scripts/pilot_filesystem_roots.py": "0c2afbe6a8a9e82b59fa4830c3317f921a0376be"
+        },
+        "installer_and_imports_match_integration_baseline": true,
+        "provenance_status": "reproduced from the accepted installer function; NOT an observed installed operator registry"
+      },
+      {
+        "fixture": "git-readonly-v1.registry.json",
+        "installer": "scripts/install-sou68-git-profile.py",
+        "parameters": {
+          "local_references": false,
+          "file_revisions": false,
+          "shallow_repository": false,
+          "linked_worktree": false
+        },
+        "installer_git_blob": "68ac85108f2cc5ff98b6e4cc674923d62ff7564f",
+        "installer_imports": {
+          "scripts/pilot_provider.py": "d46a6402c0273e79de5ab8c010eecc11a2e4045a",
+          "scripts/install-sou62-filesystem-profile.py": "593c454f78223a6a4ea5045059a0d4eb2fdf167f",
+          "scripts/pilot_filesystem_roots.py": "0c2afbe6a8a9e82b59fa4830c3317f921a0376be"
+        },
+        "installer_and_imports_match_integration_baseline": true,
+        "provenance_status": "reproduced from the accepted installer function; NOT an observed installed operator registry"
+      }
+    ]
+  },
+  "binary": {
+    "path": "target/debug/agentfw.exe",
+    "sha256": "c529715d89f9e97ab4404849b31a08240cb3fcc90f778a8c93da9b2f57d9f0ab"
+  },
+  "isolation": {
+    "HOME_and_USERPROFILE": "fresh empty temporary directory",
+    "cwd": "fresh empty temporary directory",
+    "home_written": false,
+    "cwd_written": false
+  },
+  "protected_files": {
+    "before": {
+      "profiles/mcp": {
+        "exists": true,
+        "files": 30,
+        "sha256": "e991a62268d67b4cd55a0464f3288afc0b9f6be09c885c52b21ff22a4a5e0abc"
+      },
+      "profiles/pilot": {
+        "exists": true,
+        "files": 3,
+        "sha256": "d37a279925c095e497ea2fae1dd44721aca6b51e75c8b4fb02ca64deefbd884a"
+      },
+      "policies/default.yaml": {
+        "exists": true,
+        "sha256": "433d75b576f12e1a0edf71ba935d535e4db39d49c3596dfe0ed98f423d608589"
+      },
+      "firewall.yaml": {
+        "exists": true,
+        "sha256": "1eab8cde500e99c84f463c90bd062fbfce93ab6d695f01bece49004cafa0dedd"
+      },
+      "crates/agentfw/tests/fixtures/schema_upgrade": {
+        "exists": true,
+        "files": 26,
+        "sha256": "232f11ce4e22e716993df3e5f03152c8b757ba85f32c118f8c2c3b5182fd53d5"
+      },
+      "~/.agentfw (real Agent home)": {
+        "exists": false
+      }
+    },
+    "after": {
+      "profiles/mcp": {
+        "exists": true,
+        "files": 30,
+        "sha256": "e991a62268d67b4cd55a0464f3288afc0b9f6be09c885c52b21ff22a4a5e0abc"
+      },
+      "profiles/pilot": {
+        "exists": true,
+        "files": 3,
+        "sha256": "d37a279925c095e497ea2fae1dd44721aca6b51e75c8b4fb02ca64deefbd884a"
+      },
+      "policies/default.yaml": {
+        "exists": true,
+        "sha256": "433d75b576f12e1a0edf71ba935d535e4db39d49c3596dfe0ed98f423d608589"
+      },
+      "firewall.yaml": {
+        "exists": true,
+        "sha256": "1eab8cde500e99c84f463c90bd062fbfce93ab6d695f01bece49004cafa0dedd"
+      },
+      "crates/agentfw/tests/fixtures/schema_upgrade": {
+        "exists": true,
+        "files": 26,
+        "sha256": "232f11ce4e22e716993df3e5f03152c8b757ba85f32c118f8c2c3b5182fd53d5"
+      },
+      "~/.agentfw (real Agent home)": {
+        "exists": false
+      }
+    },
+    "unchanged": true
+  },
+  "scenarios": [
+    {
+      "id": "fs-identical",
+      "label": "accepted filesystem snapshot vs itself",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --out <new dir>",
+      "expect_exit": 0,
+      "expect": {},
+      "exit": 0,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: byte_identical (exit 0); findings 0 (inert 0, review 0, unsupported 0, requalification 0); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "c8ee8786b4261a6977992cadf26d1930376b0b8fa6dd04fbc5718a6cfb354275",
+        "report.json": "0e972f6b311b60e671440c120df19a362751dcceb437bd8842b0f9fceb646593",
+        "report.txt": "5e5d38fe9c6ecc041aa8763001acc29b622b1b653bf5337a144f4d789b95da68",
+        "review-pack.json": "2d1019ff132a1466a2a48ecad03dd9efef9d6ed80cc02330345170f78dd6a69e",
+        "REVIEW_GUIDE.md": "a59d667091e42b7d77292df99c7123fbaeb250af1e3562830478b9c09078d42e"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": true,
+        "classification": "byte_identical",
+        "coverage_complete": false,
+        "declaration_findings": 0,
+        "discovery_identity_changed": false,
+        "exit_code": 0,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 0,
+          "review_required": 0,
+          "total": 0,
+          "unsupported": 0
+        },
+        "new_unaccepted_identities": [],
+        "outcome": "no_drift",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 14,
+        "tools_before": 14,
+        "tools_changed": 0,
+        "tools_removed": 0,
+        "tools_unchanged": 14
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "git-identical",
+      "label": "accepted Git snapshot vs itself",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after profiles/mcp/git-readonly-v1/upstream-tools-list.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --out <new dir>",
+      "expect_exit": 0,
+      "expect": {},
+      "exit": 0,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: byte_identical (exit 0); findings 0 (inert 0, review 0, unsupported 0, requalification 0); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "c8ee8786b4261a6977992cadf26d1930376b0b8fa6dd04fbc5718a6cfb354275",
+        "report.json": "086f65fa487b2f4c16d7873574d0c72796dbe13caf1908771baf1957ec0e981a",
+        "report.txt": "505d15580f3db86be9c2b6439258e93d33e60e90f2797007048b9e5ae91178f6",
+        "review-pack.json": "9d6ca8ec3f92ccb54378db0b8c6ddeebac182d1cff2312ab89354288b8bd19a8",
+        "REVIEW_GUIDE.md": "b285493841c7f370ddb685ca767d85f2c191c3299e0ba30e4a7631f4d992e487"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": true,
+        "classification": "byte_identical",
+        "coverage_complete": false,
+        "declaration_findings": 0,
+        "discovery_identity_changed": false,
+        "exit_code": 0,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 0,
+          "review_required": 0,
+          "total": 0,
+          "unsupported": 0
+        },
+        "new_unaccepted_identities": [],
+        "outcome": "no_drift",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 12,
+        "tools_before": 12,
+        "tools_changed": 0,
+        "tools_removed": 0,
+        "tools_unchanged": 12
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "fs-keys-reordered",
+      "label": "SYNTHETIC: every JSON object's keys reversed; content unchanged",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-keys-reordered.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-keys-reordered.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "exit": 5,
+        "classification": "raw_bytes_differ_identities_equal"
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: raw_bytes_differ_identities_equal (exit 5); findings 0 (inert 0, review 0, unsupported 0, requalification 0); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "c8ee8786b4261a6977992cadf26d1930376b0b8fa6dd04fbc5718a6cfb354275",
+        "report.json": "d50eba24a71f199153de8d49d1b89ee919405f0deb5c9e1f0d1968c0d68987b4",
+        "report.txt": "da2a28c60b510d5fb29922d4b6f06bb7234f9c6f33849e64b9348e9dab6b68cb",
+        "review-pack.json": "3cab9fca293b6858a113a8660939ddd3c9689b89227eca9cb04bab4a0d856de1",
+        "REVIEW_GUIDE.md": "c23ab929b89fb9a98b5c1f533a436d162b826ad5da6c3ebb9bad284571ff7da8"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "raw_bytes_differ_identities_equal",
+        "coverage_complete": false,
+        "declaration_findings": 0,
+        "discovery_identity_changed": false,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 0,
+          "review_required": 0,
+          "total": 0,
+          "unsupported": 0
+        },
+        "new_unaccepted_identities": [],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 14,
+        "tools_before": 14,
+        "tools_changed": 0,
+        "tools_removed": 0,
+        "tools_unchanged": 14
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "fs-tools-reordered",
+      "label": "SYNTHETIC: tools list reversed and object keys reversed",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-tools-reordered.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-tools-reordered.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "exit": 5,
+        "classification": "inert_metadata_only",
+        "kinds": [
+          "tool_order_changed"
+        ]
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: inert_metadata_only (exit 5); findings 1 (inert 1, review 0, unsupported 0, requalification 0); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "14d3c8e01da66cf06100b48931878a64c5da8604aabd6fcb2eb8521a4931b704",
+        "report.json": "f43a87b4486c81371b5e3263ca0b844b0e4b55a6d15279c94d007eee46126828",
+        "report.txt": "880452b6d24624c2b61fe7cd8f16a2341c47f096461c4e1efdcb8c087de640cf",
+        "review-pack.json": "0bbdee776af9cdc9a869f4b66a21252f109ea727c1385914f14e600bd6b24d47",
+        "REVIEW_GUIDE.md": "193412971a008dc6c7c6b9f08eba373fd79504680eac096735ff7ab4dab27d43"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "inert_metadata_only",
+        "coverage_complete": false,
+        "declaration_findings": 0,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 1,
+          "requalification_required": 0,
+          "review_required": 0,
+          "total": 1,
+          "unsupported": 0
+        },
+        "new_unaccepted_identities": [],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": true,
+        "tools_added": 0,
+        "tools_after": 14,
+        "tools_before": 14,
+        "tools_changed": 0,
+        "tools_removed": 0,
+        "tools_unchanged": 14
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "fs-metadata-inert",
+      "label": "SYNTHETIC: descriptions/title wording changed (tool and schema level)",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-metadata-inert.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-metadata-inert.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "exit": 5,
+        "classification": "inert_metadata_only",
+        "kinds": [
+          "tool_metadata_changed",
+          "schema_metadata_changed"
+        ]
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: inert_metadata_only (exit 5); findings 4 (inert 3, review 0, unsupported 0, requalification 1); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "27d96bbd50a7e541b6b0f534195e5388f697b54709b8ecbc177f63d95fb4ae6b",
+        "report.json": "273b3d4e5032a011bdf223c31b0a5dd24906797b08fc831cd6b50923cdb01f1a",
+        "report.txt": "2705c83d912070cd95733604b385b25e95e337db7c33f12121b2a611a966f357",
+        "review-pack.json": "54e2efda8f5897ce0902858115eab9b8b61a89cad47d60f3a8eb2915ff4bd6fb",
+        "REVIEW_GUIDE.md": "e7bfb7e5213f622ebf014574cce5ba360f2a505be132c64e7e6f4baa06d1dc02"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "inert_metadata_only",
+        "coverage_complete": false,
+        "declaration_findings": 1,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 3,
+          "requalification_required": 1,
+          "review_required": 0,
+          "total": 4,
+          "unsupported": 0
+        },
+        "new_unaccepted_identities": [
+          "list_directory",
+          "read_file",
+          "read_text_file"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 14,
+        "tools_before": 14,
+        "tools_changed": 3,
+        "tools_removed": 0,
+        "tools_unchanged": 11
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "fs-malicious-metadata",
+      "label": "SYNTHETIC: injection text, bidi/control characters, spreadsheet formulas and a false read-only hint on write_file",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-malicious-metadata.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-malicious-metadata.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "exit": 5,
+        "classification": "review_required",
+        "kinds": [
+          "tool_metadata_changed",
+          "behavior_hint_changed"
+        ]
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: review_required (exit 5); findings 5 (inert 3, review 2, unsupported 0, requalification 0); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "9c246dba29a136e2582b3fe5d2e725e8898df9e2a6f665a430e0c600154814a1",
+        "report.json": "13bf38e645893287b163aa39bb5d5cd9ff145d7cd90aa2abc7c12f91a22c3e15",
+        "report.txt": "eee695ebd384e47f129c1df6f2abcd28cfb3ab2c54b4a3c068a5435000cda0d7",
+        "review-pack.json": "4ade5b101153a252b5147c47e1cf5ad77a4427b9c5d1bbb566aea8f09691c111",
+        "REVIEW_GUIDE.md": "1104af35f8ba71bc2d1ed648172e4c8dc01c7e348881e58554ba63a94ef46af5"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "review_required",
+        "coverage_complete": false,
+        "declaration_findings": 0,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 3,
+          "requalification_required": 0,
+          "review_required": 2,
+          "total": 5,
+          "unsupported": 0
+        },
+        "new_unaccepted_identities": [
+          "read_text_file",
+          "write_file"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 14,
+        "tools_before": 14,
+        "tools_changed": 2,
+        "tools_removed": 0,
+        "tools_unchanged": 12
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "fs-tools-added-removed",
+      "label": "SYNTHETIC: get_file_info removed; delete_file added with a read-only claim",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-tools-added-removed.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-tools-added-removed.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "exit": 5,
+        "classification": "review_required",
+        "kinds": [
+          "tool_added",
+          "tool_removed"
+        ]
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: review_required (exit 5); findings 4 (inert 0, review 4, unsupported 0, requalification 0); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "ff3786558cec0634ac19e75ef8af19319e89921883c133ce24c7491c8ccfbdbb",
+        "report.json": "ef917b59afc01457af33f3b1f398150a4a0dc206fdc7eba17097612ec497ff62",
+        "report.txt": "bfa5c8df7007d389605b9158a3e8553825c3c878149f928f7afe0aaecc9ab801",
+        "review-pack.json": "cab88b5d913465c47bf721e14a248868c8c8a6a826345119b4e3b8b53060973e",
+        "REVIEW_GUIDE.md": "c6358dbb521f1df4e508461d0f39704d32eb1336faed04ab570028c0d2ff1b4f"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "review_required",
+        "coverage_complete": false,
+        "declaration_findings": 2,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 0,
+          "review_required": 4,
+          "total": 4,
+          "unsupported": 0
+        },
+        "new_unaccepted_identities": [
+          "delete_file"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 1,
+        "tools_after": 14,
+        "tools_before": 14,
+        "tools_changed": 0,
+        "tools_removed": 1,
+        "tools_unchanged": 13
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "fs-required-default-type-enum",
+      "label": "SYNTHETIC: read_text_file path removed; search_files excludePatterns required; sortBy enum size->mtime and default; directory_tree default; read_file head nullable, tail number->string",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-required-default-type-enum.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-required-default-type-enum.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "exit": 5,
+        "classification": "unsupported_present",
+        "kinds": [
+          "required_field_removed",
+          "required_added",
+          "enum_values_added",
+          "enum_values_removed",
+          "default_changed",
+          "nullable_added",
+          "type_changed"
+        ]
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: unsupported_present (exit 5); findings 14 (inert 0, review 8, unsupported 1, requalification 5); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "c5016dd1bb5828b5f7c4807048de9f5d3028f271aef9a7da77fca95638b15dc4",
+        "report.json": "a4e942134362c97c78ee4d73233772aef475e413298947642af6550bd5ebafd9",
+        "report.txt": "d88746e3f05195fb7bd2a8385078f5bd25f9f4a82d1e8e843c18307f9bcee877",
+        "review-pack.json": "3414934577375d2218c3a8a297d44a1f9ec501f083ac46b4e97081662115a5e4",
+        "REVIEW_GUIDE.md": "4804d42d37a249f3198db034703fbfb4bafd80b4aef548850b8b50a7080cb756"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "unsupported_present",
+        "coverage_complete": false,
+        "declaration_findings": 5,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 5,
+          "review_required": 8,
+          "total": 14,
+          "unsupported": 1
+        },
+        "new_unaccepted_identities": [
+          "directory_tree",
+          "list_directory_with_sizes",
+          "read_file",
+          "read_text_file",
+          "search_files"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 14,
+        "tools_before": 14,
+        "tools_changed": 5,
+        "tools_removed": 0,
+        "tools_unchanged": 9
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "fs-nested-array",
+      "label": "SYNTHETIC: edit_file edits[].mode added, oldText maxLength; read_multiple_files paths minItems/maxItems/items.minLength",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-nested-array.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-nested-array.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "exit": 5,
+        "classification": "review_required",
+        "kinds": [
+          "field_added",
+          "constraint_changed"
+        ]
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: review_required (exit 5); findings 7 (inert 0, review 5, unsupported 0, requalification 2); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "48ea4a710bd4b171b1ebfcec922b52dd711caf8dd017bb9648f5a1c2f0944deb",
+        "report.json": "2f1e6fa73c15cb04f8fcb7e7ed4533aeeaf11c3ce1649e93776a637edc83848f",
+        "report.txt": "6e8e4b8e0e33a51cac8395ad141f027201a01a391085c1201c37b4acbd4ea8cb",
+        "review-pack.json": "f9931fb4b1cee152eea85dd0a3e529e9d0627890747e3503459c6bec0c41f96f",
+        "REVIEW_GUIDE.md": "260e81c29d8cefa5746f63ebfce10fa6f82436ccc213d3cff68a9e11a3873506"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "review_required",
+        "coverage_complete": false,
+        "declaration_findings": 2,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 2,
+          "review_required": 5,
+          "total": 7,
+          "unsupported": 0
+        },
+        "new_unaccepted_identities": [
+          "edit_file",
+          "read_multiple_files"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 14,
+        "tools_before": 14,
+        "tools_changed": 2,
+        "tools_removed": 0,
+        "tools_unchanged": 12
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "fs-result-capability",
+      "label": "SYNTHETIC: read_text_file output gains encoding; list_allowed_directories outputSchema removed; read_file execution.taskSupport changed",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-result-capability.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-result-capability.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "exit": 5,
+        "classification": "review_required",
+        "kinds": [
+          "field_added",
+          "result_shape_removed",
+          "capability_changed"
+        ]
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: review_required (exit 5); findings 3 (inert 0, review 3, unsupported 0, requalification 0); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "3ea587d9a52dfbf63c06810aff8b64aed86a7df5c3fc4114a2927edd51cc3bea",
+        "report.json": "94d20eb9b0d46a397163ca29331b00697927c7e21e95ff83e210f0f676ba7a36",
+        "report.txt": "cd581535880f133865cd398ed939b4df9925c1fc2d85963b8c63f938db473154",
+        "review-pack.json": "4b50e776545c916bfcabe5e7e13202b9d6b48af65328d4b98981443c82a8e4ad",
+        "REVIEW_GUIDE.md": "836011e7d9ae2fb801ab74451dabbea27f3d25826e9fca59b6c24a504ba1f641"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "review_required",
+        "coverage_complete": false,
+        "declaration_findings": 0,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 0,
+          "review_required": 3,
+          "total": 3,
+          "unsupported": 0
+        },
+        "new_unaccepted_identities": [
+          "list_allowed_directories",
+          "read_file",
+          "read_text_file"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 14,
+        "tools_before": 14,
+        "tools_changed": 3,
+        "tools_removed": 0,
+        "tools_unchanged": 11
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "fs-destination-controls",
+      "label": "SYNTHETIC: move_file destination string->array; nested options.notify.destination added; list_directory path gains unsupported format",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-destination-controls.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-destination-controls.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "exit": 5,
+        "classification": "unsupported_present",
+        "kinds": [
+          "type_changed",
+          "field_added",
+          "unsupported_construct_changed"
+        ]
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: unsupported_present (exit 5); findings 8 (inert 0, review 4, unsupported 2, requalification 2); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "464f072bc88d26a8117a946292761b3441e2ef57202d8c730a16c92f2cac444c",
+        "report.json": "afaa8387311b4b4d8f0a3be7398ca712c6ca826dc3fe88cdb7233a5739f134ae",
+        "report.txt": "4e9f484eacea411485bce9a5785539fae7a9daa6272fbe1e56c97e835138a14d",
+        "review-pack.json": "570dee357d9e451226c135dd09fd6ad83524e9805ac309f1846c43aaa47c7f3d",
+        "REVIEW_GUIDE.md": "ef586fe49beb7c29b4de353cee9b3dcabb005cc9c13906887914e0f9409584e0"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "unsupported_present",
+        "coverage_complete": false,
+        "declaration_findings": 2,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 2,
+          "review_required": 4,
+          "total": 8,
+          "unsupported": 2
+        },
+        "new_unaccepted_identities": [
+          "list_directory",
+          "move_file"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 14,
+        "tools_before": 14,
+        "tools_changed": 2,
+        "tools_removed": 0,
+        "tools_unchanged": 12
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "fs-unsupported",
+      "label": "SYNTHETIC: format, oneOf, remote $ref, recursive $defs and an unknown tool member",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-unsupported.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --before-label profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC fs-unsupported.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "exit": 5,
+        "classification": "unsupported_present",
+        "kinds": [
+          "unsupported_construct_changed",
+          "unsupported_member_changed"
+        ]
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: unsupported_present (exit 5); findings 12 (inert 0, review 1, unsupported 8, requalification 3); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "45e2e2872a2dda1603bc2ad4cea187afdf9e59dbc4f2f613393450a7d1aedfa3",
+        "report.json": "fb8c4bcffa643bc95777c35bd7369c74fbe4397b6a8d776aff8099fc673f8761",
+        "report.txt": "410add9d4405091bb1ede8735b7d0cf62bee769805d43df5bcd23aa2cc37faba",
+        "review-pack.json": "f101e4ec0e5589393a2293dcbe8c0409da616557e65d8e4abbe7a1d1ad909b05",
+        "REVIEW_GUIDE.md": "bffca6206a481fcf45d2a91121bd6a36066bd4efbeb752a7085ff0985460a48d"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "unsupported_present",
+        "coverage_complete": false,
+        "declaration_findings": 3,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 3,
+          "review_required": 1,
+          "total": 12,
+          "unsupported": 8
+        },
+        "new_unaccepted_identities": [
+          "get_file_info",
+          "list_directory",
+          "read_media_file"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 14,
+        "tools_before": 14,
+        "tools_changed": 3,
+        "tools_removed": 0,
+        "tools_unchanged": 11
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "git-metadata-inert",
+      "label": "SYNTHETIC: git_status description and repo_path title changed",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/git-metadata-inert.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC git-metadata-inert.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "exit": 5,
+        "classification": "inert_metadata_only"
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: inert_metadata_only (exit 5); findings 3 (inert 2, review 0, unsupported 0, requalification 1); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "de1c150b66e3dd593f67d39beea4c5f6f9ad732b7bf78e02ec373a07e5fe284b",
+        "report.json": "e1b2ab5b19054292069dce01288ee89cd73d86112f4a0122a12c59ef77897ba5",
+        "report.txt": "bfd2660b7484c6115df40eb81ddf66d76f2414835f900424b671759833b3d537",
+        "review-pack.json": "9dfa18166a1eea4305f1faca7d6a8d76ab09821ee9dca4c76642e63dfbb8f51c",
+        "REVIEW_GUIDE.md": "1bc22bc0f88d7c4137020230adfe8ca5ced0059e986ada279f21695e65bf56e7"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "inert_metadata_only",
+        "coverage_complete": false,
+        "declaration_findings": 1,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 2,
+          "requalification_required": 1,
+          "review_required": 0,
+          "total": 3,
+          "unsupported": 0
+        },
+        "new_unaccepted_identities": [
+          "git_status"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 12,
+        "tools_before": 12,
+        "tools_changed": 1,
+        "tools_removed": 0,
+        "tools_unchanged": 11
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "git-semantic",
+      "label": "SYNTHETIC: git_log default 10->1000; git_diff context_lines integer->string; git_show revision optional; git_add minItems 0; git_branch enum; git_commit false read-only hint; git_reset removed; git_push added",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/git-semantic.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC git-semantic.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "exit": 5,
+        "classification": "unsupported_present",
+        "kinds": [
+          "default_changed",
+          "type_changed",
+          "required_removed",
+          "constraint_changed",
+          "enum_added",
+          "behavior_hint_changed",
+          "tool_removed",
+          "tool_added"
+        ]
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: unsupported_present (exit 5); findings 17 (inert 0, review 10, unsupported 2, requalification 5); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "84bc59368cf6163c646760674d8a9371cc472f006124ab71a12356d6deb9c3e0",
+        "report.json": "909f7bb75ff4f6f5a821efe2aaccb9b07ccd2e7855681a66101864d49347d8af",
+        "report.txt": "5142ff9873dbe88442401ebe5231a619513bf01741d43629abf1879109c1a409",
+        "review-pack.json": "643faa702504bffb92f84a41f7347e905aef6934d94b2b81f184a3a54aaeee89",
+        "REVIEW_GUIDE.md": "dceba7ee73895a63eb0a4003d9058041e9c4cf6518b29fbfda883dba9dd80c59"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "unsupported_present",
+        "coverage_complete": false,
+        "declaration_findings": 7,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 5,
+          "review_required": 10,
+          "total": 17,
+          "unsupported": 2
+        },
+        "new_unaccepted_identities": [
+          "git_add",
+          "git_branch",
+          "git_commit",
+          "git_diff",
+          "git_log",
+          "git_push",
+          "git_show"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 1,
+        "tools_after": 12,
+        "tools_before": 12,
+        "tools_changed": 6,
+        "tools_removed": 1,
+        "tools_unchanged": 5
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "git-extreme-bound",
+      "label": "SYNTHETIC: git_status repo_path maxLength = u64::MAX",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/git-extreme-bound.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC git-extreme-bound.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "exit": 5,
+        "classification": "unsupported_present",
+        "kinds": [
+          "constraint_changed",
+          "schema_outside_runtime_subset"
+        ]
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: unsupported_present (exit 5); findings 3 (inert 0, review 1, unsupported 1, requalification 1); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "e6dcca58839e221d4aa2517dabbdb3c2a457bdddb51eb0c589f01c9fda34000a",
+        "report.json": "77483616ad5c589be110865bb839b7b39b67c2f142c4adadd250b3974f669db6",
+        "report.txt": "13ba9e1a857d7822a04965556b3b4de2af4a7aa3f2d0dda1a4d6f1321cb7551f",
+        "review-pack.json": "39605e2b54ac00b28f272baa947dffeb1d0bdfd45dc6afd51ff9a7812ab887a3",
+        "REVIEW_GUIDE.md": "01474d51f66d52c3c1ec87b7bc828c8411a905f80591947c73c1b49193296be5"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "unsupported_present",
+        "coverage_complete": false,
+        "declaration_findings": 1,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 1,
+          "review_required": 1,
+          "total": 3,
+          "unsupported": 1
+        },
+        "new_unaccepted_identities": [
+          "git_status"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 12,
+        "tools_before": 12,
+        "tools_changed": 1,
+        "tools_removed": 0,
+        "tools_unchanged": 11
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "git-recursive-ref",
+      "label": "SYNTHETIC: self-recursive $defs/$ref in git_status",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/git-recursive-ref.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC git-recursive-ref.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "exit": 5,
+        "classification": "unsupported_present"
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: unsupported_present (exit 5); findings 6 (inert 1, review 1, unsupported 3, requalification 1); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "0ffcc189c50bcca52fcd6f5867d5d0fbe567be65fa954fbe236a53e72b03d443",
+        "report.json": "e035b887bd44f78072002135b04601dd7b387451aabb61b7639b942178b88c47",
+        "report.txt": "b53eb7911dbb86b5fa8f4108ba81b4b07a745f9374e4808fe4ecb5b7f8b12f73",
+        "review-pack.json": "30d5b921d381061ae7d9642c562e45219d7255293090a72c197501e6f2cf4e52",
+        "REVIEW_GUIDE.md": "2ff75bbf323ad290086423da7c917a20c7235368bc67c0949529ba8b97e486a5"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "unsupported_present",
+        "coverage_complete": false,
+        "declaration_findings": 1,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 1,
+          "requalification_required": 1,
+          "review_required": 1,
+          "total": 6,
+          "unsupported": 3
+        },
+        "new_unaccepted_identities": [
+          "git_status"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 12,
+        "tools_before": 12,
+        "tools_changed": 1,
+        "tools_removed": 0,
+        "tools_unchanged": 11
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "invalid-duplicate-key",
+      "label": "SYNTHETIC: duplicate object member inserted textually",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-duplicate-key.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC invalid-duplicate-key.json --out <new dir>",
+      "expect_exit": 2,
+      "expect": {
+        "exit": 2,
+        "refusal": "duplicate_json_member"
+      },
+      "exit": 2,
+      "reproducible": true,
+      "stdout": "",
+      "stderr": "mcp-schema-upgrade refused: duplicate_json_member: after: strict JSON refused at line 1 column 83",
+      "output_sha256": {},
+      "summary": null,
+      "result": "PASS"
+    },
+    {
+      "id": "invalid-duplicate-tool",
+      "label": "SYNTHETIC: git_status listed twice",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-duplicate-tool.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC invalid-duplicate-tool.json --out <new dir>",
+      "expect_exit": 2,
+      "expect": {
+        "exit": 2,
+        "refusal": "duplicate_tool"
+      },
+      "exit": 2,
+      "reproducible": true,
+      "stdout": "",
+      "stderr": "mcp-schema-upgrade refused: duplicate_tool: after: tools[12] repeats an earlier tool name",
+      "output_sha256": {},
+      "summary": null,
+      "result": "PASS"
+    },
+    {
+      "id": "invalid-nan",
+      "label": "SYNTHETIC: non-JSON constant NaN",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-nan.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC invalid-nan.json --out <new dir>",
+      "expect_exit": 2,
+      "expect": {
+        "exit": 2,
+        "refusal": "malformed_json"
+      },
+      "exit": 2,
+      "reproducible": true,
+      "stdout": "",
+      "stderr": "mcp-schema-upgrade refused: malformed_json: after: strict JSON refused at line 1 column 571",
+      "output_sha256": {},
+      "summary": null,
+      "result": "PASS"
+    },
+    {
+      "id": "invalid-paginated",
+      "label": "SYNTHETIC: result.nextCursor present",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-paginated.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC invalid-paginated.json --out <new dir>",
+      "expect_exit": 2,
+      "expect": {
+        "exit": 2,
+        "refusal": "incomplete_snapshot"
+      },
+      "exit": 2,
+      "reproducible": true,
+      "stdout": "",
+      "stderr": "mcp-schema-upgrade refused: incomplete_snapshot: after: paginated tools/list (nextCursor) is not a complete snapshot",
+      "output_sha256": {},
+      "summary": null,
+      "result": "PASS"
+    },
+    {
+      "id": "invalid-deep",
+      "label": "SYNTHETIC: inputSchema nested 40 objects deep",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/invalid-deep.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --before-label profiles/mcp/git-readonly-v1/upstream-tools-list.json@7f973f0b8248 --after-label SYNTHETIC invalid-deep.json --out <new dir>",
+      "expect_exit": 2,
+      "expect": {
+        "exit": 2,
+        "refusal": "depth_exceeded"
+      },
+      "exit": 2,
+      "reproducible": true,
+      "stdout": "",
+      "stderr": "mcp-schema-upgrade refused: depth_exceeded: after: nesting exceeds depth 32",
+      "output_sha256": {},
+      "summary": null,
+      "result": "PASS"
+    },
+    {
+      "id": "fs-destination-controls-declared",
+      "label": "SYNTHETIC control declarations: declared destination on move_file; proposed draft registry",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/fs-destination-controls.json --registry crates/agentfw/tests/fixtures/schema_upgrade/fs-control-current.registry.json --proposed-registry crates/agentfw/tests/fixtures/schema_upgrade/fs-control-proposed.registry.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {},
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: unsupported_present (exit 5); findings 11 (inert 0, review 7, unsupported 2, requalification 2); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "b74a4c552de80460d74125f7df840d19ad04cba8228b545f39ffbf5bc5114f32",
+        "report.json": "86bce10ac1d980a8b973277e4aedc9c842876c1ca180a31689765625c05e6178",
+        "report.txt": "454697b675014a58360e632b6b55bdddee217b1be815198a3bcd9b1ac4dd299c",
+        "review-pack.json": "9a48030276a6691c6252e77c9e89915eb7f722ee00964f2df4cf1e807106bd33",
+        "REVIEW_GUIDE.md": "a692c73d7c377226ed60f705af019a7dff6947dd0c1a5852a3bb60b615421842"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "unsupported_present",
+        "coverage_complete": false,
+        "declaration_findings": 5,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 2,
+          "review_required": 7,
+          "total": 11,
+          "unsupported": 2
+        },
+        "new_unaccepted_identities": [
+          "list_directory",
+          "move_file"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 14,
+        "tools_before": 14,
+        "tools_changed": 2,
+        "tools_removed": 0,
+        "tools_unchanged": 12
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "operator-authoring-declarations",
+      "label": "accepted SOU-65 owned discovery/declarations vs itself (sw-mcp/operator-declaration/1 binding)",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/operator-authoring-v1/discovery.json --after profiles/mcp/operator-authoring-v1/discovery.json --declarations profiles/mcp/operator-authoring-v1/declarations.json --out <new dir>",
+      "expect_exit": 0,
+      "expect": {},
+      "exit": 0,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: byte_identical (exit 0); findings 0 (inert 0, review 0, unsupported 0, requalification 0); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "c8ee8786b4261a6977992cadf26d1930376b0b8fa6dd04fbc5718a6cfb354275",
+        "report.json": "1fae390cc9eaa61b9a3678d926a11c8362b8e527600189c62cced4ed06d8100a",
+        "report.txt": "2c216bb96133f1aa2c747b9d5890f93ea90eb069349aae748e008c5c87657a18",
+        "review-pack.json": "6a12377c78756029b252e280def4ff8a98da366fce7390648ffa9c84f6be6986",
+        "REVIEW_GUIDE.md": "d75ff5bb36eede46e0b771d900d83736c4afe4e15e0843ea054484c87ee890cd"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": true,
+        "classification": "byte_identical",
+        "coverage_complete": false,
+        "declaration_findings": 0,
+        "discovery_identity_changed": false,
+        "exit_code": 0,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 0,
+          "review_required": 0,
+          "total": 0,
+          "unsupported": 0
+        },
+        "new_unaccepted_identities": [],
+        "outcome": "no_drift",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 1,
+        "tools_before": 1,
+        "tools_changed": 0,
+        "tools_removed": 0,
+        "tools_unchanged": 1
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "declaration-only-drift",
+      "label": "accepted filesystem snapshot vs itself; SYNTHETIC proposed registry changes only an action class",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --before-identity profiles/mcp/filesystem-readonly-v1/upstream-identity.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --proposed-registry crates/agentfw/tests/fixtures/schema_upgrade/fs-proposed-action-only.registry.json --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "classification": "review_required"
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: review_required (exit 5); findings 1 (inert 0, review 1, unsupported 0, requalification 0); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "484228b2d1ea57418e2465ede2f6379fb42c3c6cab8c4dadccbffc2b0c2ad460",
+        "report.json": "c6d1430e3c323521f99a6b64cf8c240d304cc75c5c5753378a276f6be771fc2a",
+        "report.txt": "e8c96004517f4caf1aa08772c9c1c18a180b236ef674c7d658667592d4e47f88",
+        "review-pack.json": "53731cc1a4017e97eb32dd4a45a927a40dd9f8584f36c31778a1513c4572df5c",
+        "REVIEW_GUIDE.md": "85ddbf0a7a7f78e8d474c747a7ea3d6ff017ff31938c7295bdef3420c74fd64c"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": true,
+        "classification": "review_required",
+        "coverage_complete": false,
+        "declaration_findings": 1,
+        "discovery_identity_changed": false,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 0,
+          "review_required": 1,
+          "total": 1,
+          "unsupported": 0
+        },
+        "new_unaccepted_identities": [],
+        "outcome": "review_required",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 14,
+        "tools_before": 14,
+        "tools_changed": 0,
+        "tools_removed": 0,
+        "tools_unchanged": 14
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "declaration-only-control",
+      "label": "accepted filesystem snapshot vs itself; proposed registry identical to the current one",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --after profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json --registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --proposed-registry crates/agentfw/tests/fixtures/schema_upgrade/filesystem-readonly-v1.registry.json --out <new dir>",
+      "expect_exit": 0,
+      "expect": {
+        "classification": "byte_identical"
+      },
+      "exit": 0,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: byte_identical (exit 0); findings 0 (inert 0, review 0, unsupported 0, requalification 0); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "c8ee8786b4261a6977992cadf26d1930376b0b8fa6dd04fbc5718a6cfb354275",
+        "report.json": "61fcb26da757867005c09e45f4a3313f58d3c07995af4cc61df4b075ac1144f9",
+        "report.txt": "b6fcb53379d988481482b53e97904d370637e212dc062c1870f8e270b3b803a8",
+        "review-pack.json": "2d1019ff132a1466a2a48ecad03dd9efef9d6ed80cc02330345170f78dd6a69e",
+        "REVIEW_GUIDE.md": "b595fc696334cf6a7fdf52e0582c8ebdd60fe1f40b23006f12ff57780eefe915"
+      },
+      "summary": {
+        "analysis_mode": "declaration_bound",
+        "analysis_truncated": false,
+        "byte_identical": true,
+        "classification": "byte_identical",
+        "coverage_complete": false,
+        "declaration_findings": 0,
+        "discovery_identity_changed": false,
+        "exit_code": 0,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 0,
+          "review_required": 0,
+          "total": 0,
+          "unsupported": 0
+        },
+        "new_unaccepted_identities": [],
+        "outcome": "no_drift",
+        "semantic_review": "available_for_supported_subset",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 14,
+        "tools_before": 14,
+        "tools_changed": 0,
+        "tools_removed": 0,
+        "tools_unchanged": 14
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "extreme-bound-before",
+      "label": "SYNTHETIC before snapshot with maxLength = u64::MAX vs the accepted Git snapshot (previously an overflow panic)",
+      "command": "agentfw mcp-schema-upgrade --before crates/agentfw/tests/fixtures/schema_upgrade/git-extreme-bound-before.json --after profiles/mcp/git-readonly-v1/upstream-tools-list.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --out <new dir>",
+      "expect_exit": 2,
+      "expect": {
+        "refusal": "declaration_binding_mismatch"
+      },
+      "exit": 2,
+      "reproducible": true,
+      "stdout": "",
+      "stderr": "mcp-schema-upgrade refused: declaration_binding_mismatch: current declarations: registry:tools[0] is bound to a different schema identity",
+      "output_sha256": {},
+      "summary": null,
+      "result": "PASS"
+    },
+    {
+      "id": "extreme-bound-before-snapshot-only",
+      "label": "same SYNTHETIC before snapshot, explicit --snapshot-only (reaches example generation)",
+      "command": "agentfw mcp-schema-upgrade --before crates/agentfw/tests/fixtures/schema_upgrade/git-extreme-bound-before.json --after profiles/mcp/git-readonly-v1/upstream-tools-list.json --snapshot-only --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "classification": "review_required"
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: review_required (exit 5); findings 1 (inert 0, review 1, unsupported 0, requalification 0); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "4b3ed3baf09426bff1930de75a0f9df3941e57427711d3142f77cc7468df5100",
+        "report.json": "6d4c79e69209f7a64701b64985c9810d71134fcf86d67987ac450b1d5c5c07c7",
+        "report.txt": "fcc6fe932615b691103c76a4d3b9cb19f11c907556136224934781d6cac08782",
+        "review-pack.json": "b11e94173994c7ebe3efab779c7419708ab01fdf00b38b8c4fb3cbd773b4993e",
+        "REVIEW_GUIDE.md": "00a5e9a5971435dd2bbae77d79e2b82b43bbc75952ada040aa1394dacf207d53"
+      },
+      "summary": {
+        "analysis_mode": "snapshot_only",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "review_required",
+        "coverage_complete": false,
+        "declaration_findings": 0,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 0,
+          "review_required": 1,
+          "total": 1,
+          "unsupported": 0
+        },
+        "new_unaccepted_identities": [
+          "git_status"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "unavailable_snapshot_only",
+        "tool_order_changed": false,
+        "tools_added": 0,
+        "tools_after": 12,
+        "tools_before": 12,
+        "tools_changed": 1,
+        "tools_removed": 0,
+        "tools_unchanged": 11
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "snapshot-only-git-semantic",
+      "label": "SYNTHETIC Git upgrade compared WITHOUT declarations (explicit --snapshot-only: semantic review unavailable)",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/git-semantic.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --snapshot-only --out <new dir>",
+      "expect_exit": 5,
+      "expect": {
+        "analysis_mode": "snapshot_only"
+      },
+      "exit": 5,
+      "reproducible": true,
+      "stdout": "mcp-schema-upgrade: unsupported_present (exit 5); findings 10 (inert 0, review 8, unsupported 2, requalification 0); coverage_complete=false; nothing was accepted or installed.",
+      "stderr": "",
+      "output_sha256": {
+        "findings.csv": "f81c833642e33d3b8e7d5a8448b0fc396ae2e18496c7e7c51dae78269ee16635",
+        "report.json": "1a277cf16c59a318e6a2569705d48824d7b8cbe6fb693bd869457cd1ebc9cac9",
+        "report.txt": "94c0242ee8219e58057be45e307690bc0052bad02b701547335e2e55b51d43f0",
+        "review-pack.json": "e87ab514b819ba3774f738525bd4119c8a48ea5b69fa66a29763c8f56a0da3d5",
+        "REVIEW_GUIDE.md": "274129fc2a426267b3ac22fd8cf77f23a4ba787b2b206133fe10e2e7aaf83895"
+      },
+      "summary": {
+        "analysis_mode": "snapshot_only",
+        "analysis_truncated": false,
+        "byte_identical": false,
+        "classification": "unsupported_present",
+        "coverage_complete": false,
+        "declaration_findings": 0,
+        "discovery_identity_changed": true,
+        "exit_code": 5,
+        "findings": {
+          "inert_metadata": 0,
+          "requalification_required": 0,
+          "review_required": 8,
+          "total": 10,
+          "unsupported": 2
+        },
+        "new_unaccepted_identities": [
+          "git_add",
+          "git_branch",
+          "git_commit",
+          "git_diff",
+          "git_log",
+          "git_push",
+          "git_show"
+        ],
+        "outcome": "review_required",
+        "semantic_review": "unavailable_snapshot_only",
+        "tool_order_changed": false,
+        "tools_added": 1,
+        "tools_after": 12,
+        "tools_before": 12,
+        "tools_changed": 6,
+        "tools_removed": 1,
+        "tools_unchanged": 5
+      },
+      "result": "PASS"
+    },
+    {
+      "id": "control-missing-declarations",
+      "label": "SYNTHETIC Git upgrade without declarations and without --snapshot-only (refusal)",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after crates/agentfw/tests/fixtures/schema_upgrade/git-semantic.json --out <new dir>",
+      "expect_exit": 2,
+      "expect": {
+        "refusal": "missing_declarations"
+      },
+      "exit": 2,
+      "reproducible": true,
+      "stdout": "",
+      "stderr": "mcp-schema-upgrade refused: missing_declarations: the current operator-owned declarations are required (--registry or --declarations); --snapshot-only compares snapshots without semantic review",
+      "output_sha256": {},
+      "summary": null,
+      "result": "PASS"
+    },
+    {
+      "id": "control-identity-mismatch",
+      "label": "SYNTHETIC before snapshot checked against the accepted Git identity (refusal)",
+      "command": "agentfw mcp-schema-upgrade --before crates/agentfw/tests/fixtures/schema_upgrade/git-metadata-inert.json --after profiles/mcp/git-readonly-v1/upstream-tools-list.json --before-identity profiles/mcp/git-readonly-v1/upstream-identity.json --snapshot-only --out <new dir>",
+      "expect_exit": 2,
+      "expect": {
+        "refusal": "identity_digest_mismatch"
+      },
+      "exit": 2,
+      "reproducible": true,
+      "stdout": "",
+      "stderr": "mcp-schema-upgrade refused: identity_digest_mismatch: before snapshot bytes differ from the pinned upstream-tools-list.json digest",
+      "output_sha256": {},
+      "summary": null,
+      "result": "PASS"
+    },
+    {
+      "id": "control-stale-registry",
+      "label": "accepted Git registry presented against a synthetic before snapshot (refusal)",
+      "command": "agentfw mcp-schema-upgrade --before crates/agentfw/tests/fixtures/schema_upgrade/git-semantic.json --after profiles/mcp/git-readonly-v1/upstream-tools-list.json --registry crates/agentfw/tests/fixtures/schema_upgrade/git-readonly-v1.registry.json --out <new dir>",
+      "expect_exit": 2,
+      "expect": {
+        "refusal": "declaration_binding_mismatch"
+      },
+      "exit": 2,
+      "reproducible": true,
+      "stdout": "",
+      "stderr": "mcp-schema-upgrade refused: declaration_binding_mismatch: current declarations: registry:tools[5] is bound to a different schema identity",
+      "output_sha256": {},
+      "summary": null,
+      "result": "PASS"
+    },
+    {
+      "id": "control-oversized",
+      "label": "SYNTHETIC accepted Git bytes padded past 262144 bytes",
+      "command": "agentfw mcp-schema-upgrade --before profiles/mcp/git-readonly-v1/upstream-tools-list.json --after <temp>/oversized.json --snapshot-only --out <new dir>",
+      "expect_exit": 2,
+      "expect": {
+        "refusal": "input_too_large"
+      },
+      "exit": 2,
+      "reproducible": true,
+      "stdout": "",
+      "stderr": "mcp-schema-upgrade refused: input_too_large: after: exceeds the 262144-byte bound",
+      "output_sha256": {},
+      "summary": null,
+      "result": "PASS"
+    }
+  ],
+  "totals": {
+    "scenarios": 32,
+    "pass": 32,
+    "fail": 0
+  },
+  "not_observed_here": [
+    "network traffic: no packet capture was run; absence of network use rests on code inspection and the source test analyzer_source_has_no_process_network_or_install_path",
+    "child processes: not traced at OS level; same code-inspection basis"
+  ]
+}

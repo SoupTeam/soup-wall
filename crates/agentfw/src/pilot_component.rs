@@ -1226,6 +1226,7 @@ pub fn exec_pilot(home: &Path, args: &[std::ffi::OsString]) -> i32 {
             matches!(
                 *a,
                 "preview"
+                    | "preflight"
                     | "prepare"
                     | "run"
                     | "status"
@@ -1233,8 +1234,13 @@ pub fn exec_pilot(home: &Path, args: &[std::ffi::OsString]) -> i32 {
                     | "provider"
                     | "configuration"
                     | "project"
+                    | "policy-activation"
+                    | "budget-preset"
                     | "worktree-selection"
                     | "filesystem-roots"
+                    | "snapshot"
+                    | "demo"
+                    | "roadmap-support"
                     | "help"
             )
         })

@@ -18,7 +18,16 @@ p.add_argument("--binary",required=True)
 p.add_argument("--template-profile",type=Path,required=True)
 p.add_argument("--output",required=True)
 p.add_argument("--expected-commit",required=True)
+p.add_argument("--sou157-mapped",action="store_true",help="Only the bounded SOU157 mapped corpus consumer, not the historical matrix")
+p.add_argument("--profile-sha256")
+p.add_argument("--binary-sha256")
+p.add_argument("--build-report",type=Path)
 a=p.parse_args()
+if a.sou157_mapped:
+    import importlib.util
+    spec=importlib.util.spec_from_file_location("sou157_git_consumer",ROOT/"scripts/sou157_git_consumer.py")
+    consumer=importlib.util.module_from_spec(spec);spec.loader.exec_module(consumer)
+    raise SystemExit(consumer.main(a))
 if sys.platform != "linux":
     p.error("qualification requires native Linux; no sandbox fallback")
 if not re.fullmatch(r"[0-9a-f]{40}",a.expected_commit):

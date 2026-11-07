@@ -1,5 +1,12 @@
 # SOU-192: Ready CI preflight ordering
 
+SOU-239 narrows the scheduling edges described below after a hosted macOS
+allocation failure suppressed independent component evidence. The three
+preflight jobs remain selected mandatory checks, but unrelated jobs no longer
+wait for all three. See [independent component execution](SOU239_INDEPENDENT_CI.md)
+for the current graph and admission behavior. The historical measurements
+below remain attributed to SOU-192 and are not SOU-239 savings.
+
 The Ready candidate's existing `test` (Linux), `native-macos-resilience`
 (macOS), and `agent-windows-security` (Windows) jobs are the source-specific
 preflight barriers. Their existing commands still compile and execute their

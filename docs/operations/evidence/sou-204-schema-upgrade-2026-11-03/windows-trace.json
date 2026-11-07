@@ -1,0 +1,170 @@
+{
+  "format": "sw-evidence/sou204-windows-trace/1",
+  "instrumentation": "Win32 debugging API from Python ctypes (DEBUG_PROCESS); one-shot int3 breakpoints on ws2_32.dll exports; no administrator rights, installs or host setting changes",
+  "binary_sha256": "c529715d89f9e97ab4404849b31a08240cb3fcc90f778a8c93da9b2f57d9f0ab",
+  "ws2_32_sha256": "3fd679780f07a4bd64671c3b8c271c0c60aac5a3e0039d15129a6e52812373ca",
+  "trapped_functions": [
+    "WSAStartup",
+    "socket",
+    "WSASocketW",
+    "WSASocketA",
+    "connect",
+    "WSAConnect",
+    "WSAConnectByNameW",
+    "getaddrinfo",
+    "GetAddrInfoW",
+    "GetAddrInfoExW",
+    "gethostbyname",
+    "sendto",
+    "WSASendTo",
+    "WSAIoctl"
+  ],
+  "network_provider_dlls_watched": [
+    "dnsapi.dll",
+    "fwpuclnt.dll",
+    "mswsock.dll",
+    "napinsp.dll",
+    "rasadhlp.dll",
+    "webio.dll",
+    "winhttp.dll",
+    "wininet.dll",
+    "wship6.dll",
+    "wshqos.dll"
+  ],
+  "scope_limits": [
+    "observes user-mode Winsock entry points of ws2_32.dll and process creation in the traced tree only",
+    "kernel-level or raw AFD/NtDeviceIoControl networking, other networking APIs (except by DLL load) and traffic of other processes are not observed; no packet capture was possible without elevation",
+    "a statically imported ws2_32.dll is loaded in every run; its load alone is not a network event"
+  ],
+  "home_written": false,
+  "cwd_written": false,
+  "runs": [
+    {
+      "run": "valid-declared-destination",
+      "path": "valid",
+      "expect_exit": 5,
+      "expect_refusal": null,
+      "exit": 5,
+      "processes_created": 1,
+      "child_processes": [],
+      "winsock_calls_observed": {},
+      "breakpoints_armed": 14,
+      "network_provider_dlls_loaded": [],
+      "dll_loads": 13,
+      "stdout_stderr_head": "mcp-schema-upgrade: unsupported_present (exit 5); findings 11 (inert 0, review 7, unsupported 2, requalification 2); coverage_complete=false; nothing was accepted or installed.\n",
+      "result": "PASS"
+    },
+    {
+      "run": "valid-git-semantic",
+      "path": "valid",
+      "expect_exit": 5,
+      "expect_refusal": null,
+      "exit": 5,
+      "processes_created": 1,
+      "child_processes": [],
+      "winsock_calls_observed": {},
+      "breakpoints_armed": 14,
+      "network_provider_dlls_loaded": [],
+      "dll_loads": 13,
+      "stdout_stderr_head": "mcp-schema-upgrade: unsupported_present (exit 5); findings 17 (inert 0, review 10, unsupported 2, requalification 5); coverage_complete=false; nothing was accepted or installed.\n",
+      "result": "PASS"
+    },
+    {
+      "run": "malicious-metadata",
+      "path": "valid",
+      "expect_exit": 5,
+      "expect_refusal": null,
+      "exit": 5,
+      "processes_created": 1,
+      "child_processes": [],
+      "winsock_calls_observed": {},
+      "breakpoints_armed": 14,
+      "network_provider_dlls_loaded": [],
+      "dll_loads": 13,
+      "stdout_stderr_head": "mcp-schema-upgrade: review_required (exit 5); findings 5 (inert 3, review 2, unsupported 0, requalification 0); coverage_complete=false; nothing was accepted or installed.\n",
+      "result": "PASS"
+    },
+    {
+      "run": "refusal-duplicate-key",
+      "path": "refusal",
+      "expect_exit": 2,
+      "expect_refusal": "duplicate_json_member",
+      "exit": 2,
+      "processes_created": 1,
+      "child_processes": [],
+      "winsock_calls_observed": {},
+      "breakpoints_armed": 14,
+      "network_provider_dlls_loaded": [],
+      "dll_loads": 13,
+      "stdout_stderr_head": "mcp-schema-upgrade refused: duplicate_json_member: after: strict JSON refused at line 1 column 83\n",
+      "result": "PASS"
+    },
+    {
+      "run": "refusal-identity-mismatch",
+      "path": "refusal",
+      "expect_exit": 2,
+      "expect_refusal": "identity_digest_mismatch",
+      "exit": 2,
+      "processes_created": 1,
+      "child_processes": [],
+      "winsock_calls_observed": {},
+      "breakpoints_armed": 14,
+      "network_provider_dlls_loaded": [],
+      "dll_loads": 13,
+      "stdout_stderr_head": "mcp-schema-upgrade refused: identity_digest_mismatch: before snapshot bytes differ from the pinned upstream-tools-list.json digest\n",
+      "result": "PASS"
+    },
+    {
+      "run": "refusal-missing-declarations",
+      "path": "refusal",
+      "expect_exit": 2,
+      "expect_refusal": "missing_declarations",
+      "exit": 2,
+      "processes_created": 1,
+      "child_processes": [],
+      "winsock_calls_observed": {},
+      "breakpoints_armed": 14,
+      "network_provider_dlls_loaded": [],
+      "dll_loads": 13,
+      "stdout_stderr_head": "mcp-schema-upgrade refused: missing_declarations: the current operator-owned declarations are required (--registry or --declarations); --snapshot-only compares snapshots without semantic review\n",
+      "result": "PASS"
+    },
+    {
+      "run": "control-python-socket",
+      "path": "positive_control",
+      "exit": 0,
+      "processes_created": 1,
+      "child_processes": [],
+      "winsock_calls_observed": {
+        "WSASocketW": 1,
+        "WSAStartup": 1,
+        "connect": 1
+      },
+      "breakpoints_armed": 14,
+      "network_provider_dlls_loaded": [
+        "mswsock.dll"
+      ],
+      "dll_loads": 22,
+      "result": "PASS"
+    },
+    {
+      "run": "control-python-child-process",
+      "path": "positive_control",
+      "exit": 0,
+      "processes_created": 3,
+      "child_processes": [
+        "python.exe",
+        "conhost.exe"
+      ],
+      "winsock_calls_observed": {},
+      "breakpoints_armed": 28,
+      "network_provider_dlls_loaded": [],
+      "dll_loads": 54,
+      "result": "PASS"
+    }
+  ],
+  "totals": {
+    "pass": 8,
+    "fail": 0
+  }
+}

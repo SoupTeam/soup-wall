@@ -373,7 +373,21 @@ pub(crate) async fn handler(
         // submit or replace any original result/witness bytes.
         let execution = match crate::mcp::verified_git::run(&runtime.profile, &original).await {
             Ok(execution) => execution,
-            Err(_) => return incomplete(&st, &input, &call, &epoch),
+            Err(error) => {
+                if st
+                    .audit
+                    .write_native(&json!({
+                        "event":"native_git_execution_stage_failed",
+                        "call_id":input.call_id,
+                        "stage":crate::mcp::verified_git::failure_stage(&error),
+                        "reason":crate::mcp::verified_git::failure_reason(&error)
+                    }))
+                    .is_err()
+                {
+                    return failure("native_audit_unavailable", StatusCode::CONFLICT);
+                }
+                return incomplete(&st, &input, &call, &epoch);
+            }
         };
         if runtime.unchanged().is_err() {
             return incomplete(&st, &input, &call, &epoch);

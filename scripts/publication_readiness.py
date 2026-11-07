@@ -250,7 +250,7 @@ def frozen_archive(path, expected_sha):
         os.close(descriptor)
 
 
-def tar_binary(stream, binary_name):
+def tar_binary(stream, binary_name, *, pilot=False):
     """Read ordinary tar headers with a shared decompression budget.
 
     PAX/GNU extension records are refused at their fixed 512-byte header, before
@@ -268,6 +268,10 @@ def tar_binary(stream, binary_name):
 
     names = set()
     found = None
+    pilot_rows, small = {}, {}
+    if pilot:
+        import pilot_candidate
+        archive_root = binary_name.rsplit("/", 1)[0] + "/"
     while True:
         header = read(512)
         if header == b"\0" * 512:
@@ -276,7 +280,7 @@ def tar_binary(stream, binary_name):
                 remaining = MAX_ARCHIVE_EXPANSION - total
                 raw = stream.read(min(65536, remaining + 1))
                 if not raw:
-                    return found
+                    return (found, pilot_rows, small) if pilot else found
                 total += len(raw)
                 need(total <= MAX_ARCHIVE_EXPANSION, "candidate_archive_expansion_limit")
                 need(not raw.strip(b"\0"), "candidate_archive_trailer")
@@ -289,23 +293,38 @@ def tar_binary(stream, binary_name):
         names.add(name)
         need(0 <= info.size <= MAX_BINARY and (info.isfile() or info.size == 0),
              "candidate_archive_member_limit")
-        digest = hashlib.sha256() if info.name == binary_name else None
+        relative = info.name[len(archive_root):] if pilot and info.name.startswith(archive_root) else None
+        selected = pilot and relative in (*pilot_candidate.FILES, "agentfw")
+        digest = hashlib.sha256() if info.name == binary_name or selected else None
+        retained = bytearray()
+        retain_limit = (pilot_candidate.MAX_JSON + 512 if selected and relative == pilot_candidate.COMPONENT
+                        else pilot_candidate.MAX_JSON if selected and relative in (pilot_candidate.RECEIPT, pilot_candidate.SOURCE) else 0)
         if digest is not None:
-            need(found is None and info.isfile(), "candidate_binary_inventory")
+            need(info.isfile() and (info.name != binary_name or found is None), "candidate_binary_inventory")
         remaining = info.size
         while remaining:
             block = read(min(65536, remaining))
             if digest is not None:
                 digest.update(block)
+            if retain_limit and len(retained) < retain_limit:
+                retained.extend(block[:retain_limit - len(retained)])
             remaining -= len(block)
         if digest is not None:
-            found = digest.hexdigest()
+            if info.name == binary_name:
+                found = digest.hexdigest()
+            if selected:
+                pilot_rows[relative] = {"sha256": digest.hexdigest(), "size": info.size, "mode": info.mode}
+                if relative in (pilot_candidate.RECEIPT, pilot_candidate.SOURCE):
+                    need(info.size <= pilot_candidate.MAX_JSON, "candidate_pilot_json_limit")
+                    small[relative] = bytes(retained)
+                elif relative == pilot_candidate.COMPONENT:
+                    small["component_manifest"] = pilot_candidate.manifest_prefix(bytes(retained))
         padding = (512 - info.size % 512) % 512
         if padding:
             need(read(padding) == b"\0" * padding, "candidate_archive_padding")
 
 
-def linux_binary(artifacts, manifest_path, manifest_sha, expected_binary):
+def linux_binary(artifacts, manifest_path, manifest_sha, expected_binary, expected_commit=None, expected_launcher=None, expected_tree=None):
     """Bind the actual retained Linux archive binary to the readiness runtime."""
     need(artifacts is not None and manifest_path is not None, "candidate_artifact_bytes_required")
     manifest, actual = read_json(manifest_path, MAX_INDEX)
@@ -324,12 +343,25 @@ def linux_binary(artifacts, manifest_path, manifest_sha, expected_binary):
         # streamed snapshot binds inspection to the same approved archive bytes.
         with frozen_archive(archive_path, matches[0][:64]) as frozen:
             with gzip.GzipFile(fileobj=frozen, mode="rb") as stream:
-                binary = tar_binary(stream, archive_name[:-7] + "/agentfw")
+                binary, rows, small = tar_binary(stream, archive_name[:-7] + "/agentfw", pilot=True)
         need(binary == expected_binary, "candidate_runtime_binary_mismatch")
+        import pilot_candidate
+        custody = pilot_candidate.validate(rows, small, expected_commit, expected_binary)
+        if expected_launcher is not None:
+            need(custody["binaries"]["git_launcher"]["sha256"] == expected_launcher, "candidate_git_launcher_mismatch")
+        if expected_tree is not None:
+            need(custody["source"]["tree"] == expected_tree, "candidate_source_tree_mismatch")
     except Blocked:
         raise
     except (OSError, ValueError, KeyError, TypeError, EOFError, tarfile.TarError, zlib.error):
         raise Blocked("invalid_candidate_archive") from None
+
+
+def evidence_references(index):
+    """Every indexed report and its pinned companions, so evaluation never reads outside the snapshot."""
+    return [{"path": row["path"], "sha256": row["sha256"], "member": None, "member_sha256": None}
+            for descriptor in index["evidence"]
+            for row in (descriptor, *descriptor.get("companions", []))]
 
 
 def roadmap(snapshot, selection, repo, approval):
@@ -344,9 +376,8 @@ def roadmap(snapshot, selection, repo, approval):
         for profile in index["profile_inputs"]:
             need(sha(DOSSIER.git_bytes(repo, commit, profile["path"])) == profile["sha256"],
                  "roadmap_profile_mismatch")
-        for descriptor in index["evidence"]:
-            snapshot.add({"path": descriptor["path"], "sha256": descriptor["sha256"],
-                          "member": None, "member_sha256": None})
+        for ref in evidence_references(index):
+            snapshot.add(ref)
         decisions = SUPPORT.validate_decisions(approval["roadmap_decisions"], commit, index)
         report = SUPPORT.build(index, snapshot.target, commit, decisions)
         required = [row for row in report["criteria"] if row["phase"] != "Phase 7"]
@@ -427,7 +458,7 @@ def verify(index_path, root, repo, candidate_commit, manifest_sha256, approval_p
                 need(row["report"] == entry["file"], "stage_report_binding_mismatch")
                 snapshot.add(row["report"])
             result["stages"] = [{"id": stage, "status": "verified"} for stage in RUNTIME.STAGES]
-            linux_binary(artifacts, manifest_path, manifest_sha256, selection["identities"]["agentfw"])
+            linux_binary(artifacts, manifest_path, manifest_sha256, selection["identities"]["agentfw"], selection["candidate"]["commit"], selection["identities"]["git_launcher"], selection["candidate"]["tree"])
             result["roadmap"] = roadmap(snapshot, selection, Path(repo), approval)
             result["status"] = "admitted"
     except Blocked as exc:

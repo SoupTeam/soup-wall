@@ -544,6 +544,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().canonicalize().unwrap();
         let args = DoctorArgs {
+            lifecycle: false,
+            require_removal_eligible: false,
             pilot: PilotArgs {
                 enabled: true,
                 workspace: Some(root.clone()),

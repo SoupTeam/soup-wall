@@ -133,7 +133,15 @@ jobs:
           cp LICENSE NOTICE README.md "$d/"
           mkdir -p "$d/third-party/kryptering"
           cp vendor/kryptering/LICENSE "$d/third-party/kryptering/"
-          tar -czf "staging/$d.tar.gz" "$d"
+          if [[ "${{ matrix.target }}" == x86_64-unknown-linux-gnu ]]; then
+            python3 -B scripts/linux_candidate.py stage --directory "$d" \
+              --binaries "target/${{ matrix.target }}/release" --expected-commit "${{ needs.verify.outputs.sha }}"
+          fi
+          python3 -B scripts/release_docs.py stage --directory "$d" \
+            --expected-commit "${{ needs.verify.outputs.sha }}" --target "${{ matrix.target }}"
+          tar --format=ustar -czf "staging/$d.tar.gz" "$d"
+          python3 -B scripts/release_docs.py check-archive --archive "staging/$d.tar.gz" \
+            --archive-root "$d" --expected-commit "${{ needs.verify.outputs.sha }}" --target "${{ matrix.target }}"
       - name: Stage (windows)
         if: runner.os == 'Windows'
         shell: bash
@@ -151,7 +159,11 @@ jobs:
           cp LICENSE NOTICE README.md "$d/"
           mkdir -p "$d/third-party/kryptering"
           cp vendor/kryptering/LICENSE "$d/third-party/kryptering/"
+          python -B scripts/release_docs.py stage --directory "$d" \
+            --expected-commit "${{ needs.verify.outputs.sha }}" --target "${{ matrix.target }}"
           7z a -tzip "staging/$d.zip" "$d" > /dev/null
+          python -B scripts/release_docs.py check-archive --archive "staging/$d.zip" \
+            --archive-root "$d" --expected-commit "${{ needs.verify.outputs.sha }}" --target "${{ matrix.target }}"
       - uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.target }}

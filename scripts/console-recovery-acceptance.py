@@ -36,7 +36,7 @@ OBJECTIVE = {
     "recovery_time_objective_start": "valid current archive restore begins after isolated negative controls",
     "recovery_time_objective_end": "both restored Agents acknowledge a higher signed sequence and live hooks match",
     "recovery_point": "complete quiesced snapshot; zero accepted Console writes after snapshot",
-    "deployment_limits": "owned Unix, literal-loopback Console/Agents, one issuer, schema 28",
+    "deployment_limits": "owned Unix, literal-loopback Console/Agents, one issuer, schema 31",
     "excluded": ["remote HTTPS", "fleet reconciliation", "new signing epoch", "exactly-once delivery"],
 }
 
@@ -200,6 +200,7 @@ def source_metadata(args):
         "crates/agentfw/src/handlers.rs", "scripts/console-recovery-acceptance.py",
         "scripts/console_recovery.py", "scripts/console-recovery.py",
         "scripts/fixtures/console_recovery_inventory_v1.json",
+        "crates/proxy/src/tenant_store/operator_audit.rs",
         "scripts/alert_receiver.py", "scripts/keycloak-oidc-acceptance.py",
         "scripts/keycloak-saml-acceptance.py",
     ]
@@ -224,7 +225,7 @@ def source_metadata(args):
                 ["git", "diff", "--binary", "HEAD"], cwd=ROOT)).hexdigest(),
             "runtime_input_sha256": inputs,
             "runtime_inputs_sha256": hashlib.sha256(canonical(inputs).encode()).hexdigest(),
-            "schema_version": 28,
+            "schema_version": json.loads((ROOT / "scripts/fixtures/console_recovery_inventory_v1.json").read_text())["postgres_schema_version"],
             "configuration": "owned loopback, webhook source dispatcher disabled"}
 
 
@@ -249,7 +250,8 @@ class Run:
         self.current_database = None
         self.postgres = None
         self.agents = []
-        self.schema_version = 28
+        self.backup_module = load_module("sou49_console_recovery", ROOT / "scripts/console_recovery.py")
+        self.schema_version = self.backup_module.POSTGRES_SCHEMA_VERSION
 
     def check(self, name, passed, **observations):
         self.checks.append({"name": name, "passed": bool(passed), **observations})
@@ -498,7 +500,7 @@ class Run:
         else:
             self.backup_module.backup_postgres(self.databases["source"], archive, self.recipient,
                 workdir=self.directory, age=self.args.age, source_quiesced=True,
-                psql=self.args.psql, pg_dump=self.args.pg_dump)
+                psql=self.args.psql, pg_dump=self.args.pg_dump, pg_restore=self.args.pg_restore)
         return archive
 
     def restore(self, archive, name):
@@ -645,7 +647,6 @@ class Run:
         self.check("revoked-service-credential-remains-revoked", True)
 
     def run(self, resources):
-        self.backup_module = load_module("sou49_console_recovery", ROOT / "scripts/console_recovery.py")
         self.identity = self.directory / "recovery.agekey"
         output = checked([self.args.age_keygen, "-o", self.identity], environment=child_environment(),
                          cwd=self.directory)

@@ -3,12 +3,14 @@
 from __future__ import annotations
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
 import re
 import stat
 import sys
+import types
 import uuid
 
 if os.name == 'posix':
@@ -87,6 +89,14 @@ def reference(path, profiles, cap=CAP):
         os.close(fd)
 
 
+def budgets():
+    """The sibling preset catalog; loaded lazily so unbudgeted projects never depend on it."""
+    spec = importlib.util.spec_from_file_location('project_budget_presets', Path(__file__).with_name('pilot_budget_presets.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def provider_reference(home, name, version, expected, profiles):
     require(isinstance(version, str) and re.fullmatch(r'[0-9a-f]{32}', version), 'provider_version_required')
     with profiles.Store(home) as store:
@@ -97,6 +107,31 @@ def provider_reference(home, name, version, expected, profiles):
         require(expected is None or bound == expected, 'provider_changed')
         # Credentials remain transient in the accepted provider loader.
         return profile, {'name': name, 'version': version, 'sha256': bound}
+
+
+def strict_record(raw, profiles):
+    # Project catalogs have their own 128 KiB bound, not the provider-secret cap.
+    require(len(raw) <= CAP, 'store_limit')
+    try:
+        value = json.loads(raw, object_pairs_hook=profiles.pairs,
+                           parse_constant=lambda _: require(False, 'store_invalid'))
+    except (ValueError, UnicodeError, RecursionError):
+        raise ValueError('project_store_invalid') from None
+    require(type(value) is dict, 'store_invalid')
+    return value
+
+
+def validate_catalog(raw, profiles):
+    value = strict_record(raw, profiles)
+    require(isinstance(value, dict) and set(value) == {'format', 'records'}
+            and value['format'] == FORMAT and isinstance(value['records'], dict)
+            and len(value['records']) <= 16 and encoded(value) == raw, 'store_invalid')
+    for name, record in value['records'].items():
+        require(NAME.fullmatch(name) and isinstance(record, dict)
+                and set(record) == {'version', 'binding'}
+                and re.fullmatch(r'[0-9a-f]{32}', record['version']), 'record_invalid')
+        validate_binding(record['binding'])
+    return value
 
 
 class Store:
@@ -146,27 +181,21 @@ class Store:
     def __exit__(self, *_):
         self.close()
 
-    def read(self):
+    def read(self, pending=None, allow_empty=False):
         self.check()
         if self.fd is None:
             return {'format': FORMAT, 'records': {}}
-        # Bound enumeration as well as bytes; unknown/interrupted state refuses.
+        # Only explicit import recovery may inspect its exact staged catalog.
+        require(pending is None or re.fullmatch(r'\.import-next-[0-9a-f]{64}', pending), 'recovery_stage_invalid')
+        allowed = {'catalog.json'} if pending is None else {'catalog.json', pending}
         with os.scandir(self.fd) as entries:
             for count, entry in enumerate(entries):
-                require(count == 0 and entry.name == 'catalog.json', 'store_inventory_invalid')
+                require(count < len(allowed) and entry.name in allowed, 'store_inventory_invalid')
         raw = read_at(self.fd, 'catalog.json')
         if raw is None:
-            require(self.new, 'catalog_missing')
+            require(self.new or allow_empty, 'catalog_missing')
             return {'format': FORMAT, 'records': {}}
-        value = self.profiles.strict(raw)
-        require(isinstance(value, dict) and set(value) == {'format', 'records'}
-                and value['format'] == FORMAT and isinstance(value['records'], dict)
-                and len(value['records']) <= 16 and encoded(value) == raw, 'store_invalid')
-        for name, record in value['records'].items():
-            require(NAME.fullmatch(name) and isinstance(record, dict)
-                    and set(record) == {'version', 'binding'}
-                    and re.fullmatch(r'[0-9a-f]{32}', record['version']), 'record_invalid')
-            validate_binding(record['binding'])
+        value = validate_catalog(raw, self.profiles)
         self.check()
         return value
 
@@ -222,7 +251,10 @@ def validate_binding(b):
                 and all(type(root[k]) is int and root[k] >= 0 for k in ('device','inode','uid')), 'binding_invalid')
     for ref in (b['selection'], b['budget']):
         if ref is not None:
-            require(isinstance(ref, dict) and set(ref) == {'path', 'sha256'}
+            # A budget is either an explicit file reference or a digest-bound named preset.
+            named = ref is b['budget'] and isinstance(ref, dict) and set(ref) == {'preset', 'digest'}
+            require(named and NAME.fullmatch(str(ref['preset'])) and HEX.fullmatch(str(ref['digest']))
+                    or isinstance(ref, dict) and set(ref) == {'path', 'sha256'}
                     and Path(ref['path']).is_absolute() and HEX.fullmatch(ref['sha256']), 'binding_invalid')
     require(b['selection'] is not None and isinstance(b['provider'], dict)
             and set(b['provider']) == {'name', 'version', 'sha256'}
@@ -232,6 +264,20 @@ def validate_binding(b):
             and Path(b['state_root']['path']).is_absolute()
             and isinstance(b['state_root']['identity'], list) and len(b['state_root']['identity']) == 3
             and all(type(i) is int and i >= 0 for i in b['state_root']['identity']), 'binding_invalid')
+
+
+def scope_conformance(binding, front):
+    """Report-only: a named project is a conditional operator control, not a scope selection, so a selection outside
+    the frozen v1 scope is labelled and never silently counted as v1."""
+    scope = getattr(front, 'SCOPE', None)
+    if scope is None:
+        return 'unavailable'
+    try:
+        document, _ = front.scope_document()
+        selection = front.PREP.PILOT.strict_json(Path(binding['selection']['path']).read_bytes())
+        return scope.conformance(document, selection, front.scope_kit())['state']
+    except Exception:
+        return 'unavailable'
 
 
 def snapshot(args, front, profiles):
@@ -246,9 +292,14 @@ def snapshot(args, front, profiles):
     root_ids = {k: front.PREP.root_identity(p) for k, p in roots.items()}
     selected_ref = reference(args.selection, profiles)
     _, provider = provider_reference(args.agent_home, args.provider_name, args.provider_version, None, profiles)
+    preset = getattr(args, 'budget_preset', None)
+    require(args.linux_budget is None or preset is None, 'budget_selection_conflict')
     budget = None if args.linux_budget is None else reference(args.linux_budget, profiles, 16384)
     if budget is not None:
         require(digest(runner.budget_input(args.linux_budget)) == budget['sha256'], 'budget_changed')
+    if preset is not None:
+        # Stored by exact digest: a later preset update or removal makes this selection stale.
+        budget = budgets().reference(args.agent_home, preset)
     state = {'path': str(args.state_root), 'identity': directory_identity(args.state_root, profiles)}
     for path in (args.agent_home, args.state_root, args.selection.parent):
         require(all(not Path(path).is_relative_to(root) for root in roots.values()), 'state_overlaps_workspace')
@@ -262,19 +313,29 @@ def snapshot(args, front, profiles):
 def binding_args(binding, home):
     return argparse.Namespace(agent_home=home, selection=Path(binding['selection']['path']),
                               provider_name=binding['provider']['name'], provider_version=binding['provider']['version'],
-                              linux_budget=None if binding['budget'] is None else Path(binding['budget']['path']),
+                              linux_budget=None if binding['budget'] is None or 'path' not in binding['budget']
+                              else Path(binding['budget']['path']),
+                              budget_preset=None if binding['budget'] is None or 'preset' not in binding['budget']
+                              else binding['budget']['preset'],
                               state_root=Path(binding['state_root']['path']))
 
 
 def verify(binding, home, front, profiles):
     validate_binding(binding)
     args = binding_args(binding, home)
+    if binding['budget'] is not None and 'preset' in binding['budget']:
+        # Precise refusal first; the run itself resolves the same preset again.
+        budgets().resolve(home, binding['budget']['preset'], binding['budget']['digest'])
     require(snapshot(args, front, profiles) == binding and snapshot(args, front, profiles) == binding, 'inputs_changed')
 
 
 def main(argv, front):
+    if argv[:1] and argv[0] in ('export', 'import-preview', 'import', 'import-recover'):
+        return front.load('front_door_project_recovery', 'pilot_project_recovery.py').main(argv, front, types.SimpleNamespace(**globals()))
     parser = argparse.ArgumentParser(prog=front.PROG + ' project', description=__doc__)
     commands = parser.add_subparsers(dest='action', required=True)
+    for action in ('export', 'import-preview', 'import', 'import-recover'):
+        commands.add_parser(action, add_help=False, help='private declarative recovery; use '+action+' --help')
     for action in ('inspect', 'check', 'create', 'update', 'remove', 'run'):
         sub = commands.add_parser(action)
         sub.add_argument('--name', required=action != 'inspect')
@@ -285,7 +346,9 @@ def main(argv, front):
             sub.add_argument('--provider-name', required=True)
             sub.add_argument('--provider-version', required=True)
             sub.add_argument('--state-root', type=Path, required=True)
-            sub.add_argument('--linux-budget', type=Path)
+            selected = sub.add_mutually_exclusive_group()
+            selected.add_argument('--linux-budget', type=Path)
+            selected.add_argument('--budget-preset', help='existing named budget preset; stored by exact digest')
         if action == 'run':
             sub.add_argument('--prompt')
             sub.add_argument('--timeout-seconds', type=int, default=180)
@@ -312,6 +375,7 @@ def main(argv, front):
                 report.update(status='configured-not-running', presets=[{'name': n, 'version': r['version'],
                     'digest': digest(encoded(r)), 'provider':{k:r['binding']['provider'][k]for k in ('name','version')},
                     'selection_sha256':r['binding']['selection']['sha256'],
+                    'budget': None if r['binding']['budget'] is None else {k: v for k, v in r['binding']['budget'].items() if k != 'path'},
                     'workspace_binding_sha256':r['binding']['snapshot_sha256']} for n, r in sorted(records.items())])
             elif writing:
                 record = store.write(args.action, args.name, binding, args.expected_version,
@@ -329,6 +393,9 @@ def main(argv, front):
                 verify(record['binding'], args.agent_home, front, profiles)
                 report.update(status='configured-not-running', digest=digest(encoded(record)), version=record['version'],
                               resource_budget='unbudgeted' if record['binding']['budget'] is None else 'selected-not-validated')
+                if record['binding']['budget'] is not None and 'preset' in record['binding']['budget']:
+                    report['budget_preset'] = dict(record['binding']['budget'])
+                report['scope_conformance'] = scope_conformance(record['binding'], front)
                 if args.action == 'run':
                     require(args.apply and args.expected_version == digest(encoded(record)), 'run_confirmation_required')
                     b = record['binding']
@@ -343,7 +410,10 @@ def main(argv, front):
                         # is an installed launch path, not a direct preparation script.
                         words += ['--maintenance-home', str(args.agent_home),
                                   '--maintenance-component-home', str(args.agent_home)]
-                    if b['budget'] is not None:
+                    if b['budget'] is not None and 'preset' in b['budget']:
+                        words += ['--budget-preset', b['budget']['preset'], '--expected-budget-preset-digest',
+                                  b['budget']['digest'], '--budget-preset-home', str(args.agent_home)]
+                    elif b['budget'] is not None:
                         words += ['--linux-budget', b['budget']['path'], '--expected-budget-sha256', b['budget']['sha256']]
                     if args.prompt is not None:
                         words += ['--prompt', args.prompt]
@@ -353,7 +423,8 @@ def main(argv, front):
         return 0
     except Exception as error:
         reason = str(error)
-        report['reason'] = reason if re.fullmatch(r'project_[a-z_]{1,80}', reason) else 'project_input_unavailable'
+        report['reason'] = (reason if re.fullmatch(r'project_[a-z_]{1,80}', reason) or reason in budgets().FAILURES
+                            else 'project_input_unavailable')
         report['action'] = 'Inspect the exact inputs and explicitly update the preset; no automatic retry.'
         print(json.dumps(report, sort_keys=True))
         return 2

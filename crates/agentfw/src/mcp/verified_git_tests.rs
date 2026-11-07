@@ -12,6 +12,7 @@ fn profile() -> ProfileConfig {
         workspace_identity: None,
         linked_worktree: None,
         filesystem_roots: None,
+            workspace_snapshot: None,
         runtime_path: "/owned/python".into(),
         runtime_sha256: "1".repeat(64),
         package_root: "/owned/package".into(),
@@ -107,8 +108,9 @@ async fn file_worker_withholds_after_original_tools_call_write_and_source_restor
     let failure = result
         .err()
         .expect("withdrawn source must never create a Completion");
+    assert_eq!(failure_stage(&failure), "complete");
     assert_eq!(
-        failure.to_string(),
+        failure.root_cause().to_string(),
         "Git file-revision source changed; a new protected session is required"
     );
     assert_eq!(std::fs::read(&reference).unwrap(), original);

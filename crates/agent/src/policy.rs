@@ -199,7 +199,7 @@ pub struct AgentPolicySet {
 }
 
 /// The outcome for one event.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct AgentDecision {
     pub verdict: Verdict,
     pub rule: Option<String>,
@@ -210,7 +210,7 @@ pub struct AgentDecision {
 
 /// Trace captured by the same first-match/floor evaluation that returns the verdict.
 /// Rule ordinals refer to the supplied operator policy or the shipped floor policy.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PolicyTrace {
     pub operator_rule: Option<usize>,
     pub operator_verdict: Verdict,
@@ -218,7 +218,7 @@ pub struct PolicyTrace {
     pub applied_floor: Option<SafetyFloor>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum SafetyFloor {
     ShippedDeny { rule: usize },
     IncompleteProvenance,

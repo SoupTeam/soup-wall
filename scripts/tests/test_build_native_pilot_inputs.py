@@ -271,9 +271,15 @@ class SourceBuildBoundary(unittest.TestCase):
                     self.assertEqual(first[role], repeated[role])
                     self.assertTrue(Path(first[role]).is_absolute())
                 self.assertEqual(first["receipt"], repeated["receipt"])
+                verified = build.verify_existing(ROOT, output, source["commit"])
+                self.assertEqual(verified["status"], "verified-reuse")
+                self.assertEqual(verified["sandbox_tests"], first["sandbox_tests"])
+                self.assertEqual(verified["receipt_sha256"], build.native.digest(first["receipt"]))
                 identity.return_value = {**source, "files_sha256": "f" * 64}
                 with self.assertRaisesRegex(build.Failure, "receipt_identity_changed"):
                     build.run_build(ROOT, output, source["commit"])
+                with self.assertRaisesRegex(build.Failure, "receipt_identity_changed"):
+                    build.verify_existing(ROOT, output, source["commit"])
                 self.assertEqual((output / "current.json").read_bytes(), marker)
                 self.assertEqual(compile_one.call_count, 1)
 
@@ -319,7 +325,28 @@ class SourceBuildBoundary(unittest.TestCase):
                 binary.chmod(0o500)
                 with self.assertRaisesRegex(build.Failure, "binary_digest_or_mode_changed"):
                     build.run_build(ROOT, output, source["commit"])
+                with self.assertRaisesRegex(build.Failure, "binary_digest_or_mode_changed"):
+                    build.verify_existing(ROOT, output, source["commit"])
                 self.assertEqual((output / "current.json").read_bytes(), marker)
+
+    @unittest.skipUnless(os.name == "posix", "owned generations require POSIX modes")
+    def test_verify_existing_refuses_missing_or_partial_selection_without_build(self):
+        build = builder()
+        source, tools = fake_inputs(build)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "build"
+            with patch.object(build, "inventory", return_value={"missing": [], "tools": tools}), \
+                 patch.object(build, "source_identity", return_value=source), \
+                 patch.object(build, "build_generation", side_effect=fake_generation) as compile_one:
+                with self.assertRaisesRegex(build.Failure, "selected_build_missing"):
+                    build.verify_existing(ROOT, output, source["commit"])
+                self.assertEqual(compile_one.call_count, 0)
+                first = build.run_build(ROOT, output, source["commit"])
+                (output / "current.json").unlink()
+                with self.assertRaisesRegex(build.Failure, "selected_build_missing"):
+                    build.verify_existing(ROOT, output, source["commit"])
+                self.assertEqual(compile_one.call_count, 1)
+                self.assertTrue(Path(first["receipt"]).exists())
 
     @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process groups required")
     def test_bounded_build_reaps_descendant_after_leader_exit(self):
@@ -371,6 +398,27 @@ pathlib.Path(sys.argv[1]).write_text(json.dumps({"leader": os.getpid(), "child":
                 with patch.object(build.Path, "lstat", side_effect=PermissionError("denied")):
                     with self.assertRaises(PermissionError):
                         build.target_within_limit(root)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process groups required")
+    def test_explicit_ci_diagnostic_allowance_remains_finite_and_default_is_unchanged(self):
+        build = builder()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "target"
+            target.mkdir(mode=0o700)
+            with patch.object(build.native, "MAX_LOG", 64):
+                command = [sys.executable, "-c", "import sys;sys.stdout.write('x'*96)"]
+                build.bounded_cargo(command, root=root, env={}, target=target,
+                                    log=root / "extended.log", stage="fixture", log_limit=128)
+                self.assertEqual((root / "extended.log").stat().st_size, 96)
+                with self.assertRaisesRegex(build.Failure, "fixture_log_limit"):
+                    build.bounded_cargo(command, root=root, env={}, target=target,
+                                        log=root / "default.log", stage="fixture")
+                self.assertEqual((root / "default.log").stat().st_size, 64)
+                with self.assertRaisesRegex(build.Failure, "bounded_log_limit_required"):
+                    build.bounded_cargo(command, root=root, env={}, target=target,
+                                        log=root / "unbounded.log", stage="fixture", log_limit=257)
+                self.assertFalse((root / "unbounded.log").exists())
 
     @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process groups required")
     def test_bounded_build_refuses_target_quota_overrun(self):

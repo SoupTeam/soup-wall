@@ -1,0 +1,52 @@
+MCP original-tool schema upgrade review (offline, non-authoritative)
+Format: sw-mcp/schema-upgrade-report/1
+
+NOTICE: This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process.
+
+before: file upstream-tools-list.json raw_sha256 d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954 (21676 bytes, 14 tools, mcp/tools-list-response)
+        discovery_sha256 67425ee68375ed484c131989ea3adf3f07a91a04540c100fac0ce61f3ba09c37
+        operator label (untrusted): "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json@7f973f0b8248"
+after : file fs-unsupported.json raw_sha256 357fb3b6307de32f4df9146b640f370fecea0d085f4b0c6b502b6748f58f3836 (22151 bytes, 14 tools, mcp/tools-list-response)
+        discovery_sha256 d6f047598a512be230efde51bbd29a85aa7c894b33a61f1d1da4cb9703263d7b
+        operator label (untrusted): "SYNTHETIC fs-unsupported.json"
+before identity: verified upstream-identity.json raw_sha256 bd2b235f11e4e3ccd31467185b33b26751a626ed23e499ca72392b56dc9849ca (3 referenced files verified)
+current declarations: sw-native/1 filesystem-readonly-v1.registry.json raw_sha256 63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7
+
+Outcome: review_required / unsupported_present (exit 5)
+Snapshots byte-identical: false; declaration findings: 3
+Tools: before 14 after 14; added 0 removed 0 changed 3 unchanged 11
+Findings: 12 (inert metadata 0, review required 1, unsupported 8, declaration requalification 3)
+Coverage complete: false; review-pack records: 12
+New UNACCEPTED tool identities (3): get_file_info, list_directory, read_media_file
+Accepted by this analyzer: nothing.
+
+Findings (tool / pointer / kind / nature):
+  [F-4aeac0f6379c61e4] get_file_info /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720
+      after  (untrusted): 5bc4cf0cf5909e77362736e8bf57eddd99a28715e9d44134a3f019d8bf06a8e8
+  [F-2ae863012c323bb1] get_file_info /inputSchema schema_outside_runtime_subset unsupported -> examples 1
+  [F-863ecfec932afe9f] get_file_info /inputSchema/$defs unsupported_construct_changed unsupported -> examples 1
+      after  (untrusted): {"node":{"properties":{"next":{"$ref":"#/$defs/node"}},"type":"object"}}
+  [F-691510c901d2a8ef] get_file_info /inputSchema/properties/path/$ref unsupported_construct_changed unsupported -> examples 1
+      after  (untrusted): https://schemas.invalid/remote#/path
+  [F-316c8b8fb4023d1b] get_file_info /inputSchema/properties/path/type type_changed review_required -> examples 1
+      before (untrusted): string
+  [F-46100b610fe03edb] list_directory /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720
+      after  (untrusted): 709c184e7e111ab180d6d61d9b72b3ebf135aea15df944d64a80b60be8e2e3c5
+  [F-980ae5b8abca9e82] list_directory /inputSchema schema_outside_runtime_subset unsupported -> examples 1
+  [F-76aeeef60c6be997] list_directory /inputSchema/properties/path/oneOf unsupported_construct_changed unsupported -> examples 1
+      after  (untrusted): [{"type":"string"}]
+  [F-10369bdbff19e7e0] list_directory /x-vendor-extension unsupported_member_changed unsupported -> examples 1
+      after  (untrusted): {"grant":"all"}
+  [F-882da3678e9aa596] read_media_file /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720
+      after  (untrusted): 9144fc34161dcfc0493159e7519eaae535336d4caa22c475b581eb9ea36937f5
+  [F-01fc514f02580a43] read_media_file /inputSchema schema_outside_runtime_subset unsupported -> examples 1
+  [F-044682221e179b64] read_media_file /inputSchema/properties/path/format unsupported_construct_changed unsupported -> examples 1
+      after  (untrusted): uri
+
+Coverage gaps:
+  - {"entries":10,"gap":"unsupported_constructs_present"}
+  - {"gap":"examples_not_constructed","records":9}
+Unsupported constructs reported: 10

@@ -6,7 +6,7 @@ on:
       installed_focus:
         description: Focus one installed qualification; linked/filesystem/configuration also require native_preparation_only
         type: choice
-        options: ['off', linked-worktrees, filesystem-roots, proxy-preflight, configuration-recovery, maintenance]
+        options: ['off', lifecycle-preflight, linux-candidate, linked-worktrees, filesystem-roots, filesystem-links, workspace-snapshot, clean-user, clean-user-processes, clean-user-session, proxy-preflight, configuration-recovery, project-recovery, maintenance, policy-activation, budget-presets, pilot-scope]
         default: 'off'
       project_presets_only:
         description: Focus installed SOU-197 project presets (use with native_preparation_only)
@@ -110,15 +110,225 @@ permissions:
   contents: read
 
 concurrency:
-  group: mcp-real-filesystem-${{ github.event.pull_request.number || github.ref }}
+  group: mcp-real-filesystem-${{ github.event.inputs.installed_focus == 'clean-user' && github.run_id || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   impact:
-    if: github.event.inputs.provider_preflight_only != 'true' && github.event.inputs.installed_focus != 'proxy-preflight' && github.event.inputs.native_result_profile_only != 'true' && github.event.inputs.cache_exchange_only != 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.stability_mode == '' || github.event.inputs.stability_mode == 'off')
+    if: github.event.inputs.installed_focus != 'lifecycle-preflight' && github.event.inputs.installed_focus != 'linux-candidate' && github.event.inputs.installed_focus != 'clean-user-session' && github.event.inputs.installed_focus != 'clean-user-processes' && github.event.inputs.provider_preflight_only != 'true' && github.event.inputs.installed_focus != 'proxy-preflight' && github.event.inputs.native_result_profile_only != 'true' && github.event.inputs.cache_exchange_only != 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.stability_mode == '' || github.event.inputs.stability_mode == 'off')
     uses: ./.github/workflows/ci-impact-plan.yml
     with:
       workflow: mcp-real-filesystem.yml
+  manual-linux-candidate:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'linux-candidate'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      RUSTUP_TOOLCHAIN: '1.99.1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-candidate-1.99.1
+          cache-on-failure: true
+      - name: Check bounded candidate and production-entrypoint changes
+        env:
+          DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import json, os
+          inputs=json.loads(os.environ['DISPATCH_INPUTS'])
+          assert inputs['installed_focus']=='linux-candidate'
+          assert inputs.get('stability_mode','off')=='off'
+          assert all(v in ('false','',False) for k,v in inputs.items() if k not in ('installed_focus','stability_mode'))
+          PY
+          cargo fmt --all -- --check
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_candidate.py
+          python3 -B -m unittest discover -s scripts/tests -p test_release_docs.py
+          python3 -B -m unittest discover -s scripts/tests -p test_publication_readiness.py
+          python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door_component.py
+      - name: Build the exact existing release lane without publishing
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain --untracked-files=all)"
+          cargo build --release --locked --target x86_64-unknown-linux-gnu -p agentfw -p soup-wall-bench -p llm-firewall
+          python3 -B scripts/stage-linux-candidate.py --expected-commit "$GITHUB_SHA" \
+            --binaries target/x86_64-unknown-linux-gnu/release --output "$RUNNER_TEMP/linux-candidate"
+      - name: Prepare declared native dependencies for the installed archive
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ninja-build libcap-dev pkg-config zlib1g-dev strace
+          mkdir -m 700 "$RUNNER_TEMP/candidate-build-tools"
+          python3 -m pip download --disable-pip-version-check --only-binary=:all: --no-deps \
+            --dest "$RUNNER_TEMP/candidate-build-tools" meson==1.9.1
+          printf '%s  %s\n' f824ab770c041a202f532f69e114c971918ed2daff7ea56583d80642564598d0 \
+            "$RUNNER_TEMP/candidate-build-tools/meson-1.9.1-py3-none-any.whl" | sha256sum --check
+          python3 -m pip install --disable-pip-version-check --no-deps --no-index \
+            --target "$RUNNER_TEMP/candidate-build-tools/installed" "$RUNNER_TEMP/candidate-build-tools/meson-1.9.1-py3-none-any.whl"
+          export PATH="$RUNNER_TEMP/candidate-build-tools/installed/bin:$PATH"
+          python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --allow-download \
+            --expected-commit "$GITHUB_SHA" --output "$RUNNER_TEMP/candidate-native" \
+            --meson-pythonpath "$RUNNER_TEMP/candidate-build-tools/installed" > "$RUNNER_TEMP/linux-candidate/native.json"
+          python3 -B - <<'PY' >> "$GITHUB_ENV"
+          import json, os
+          from pathlib import Path
+          value=json.loads((Path(os.environ['RUNNER_TEMP'])/'linux-candidate/native.json').read_bytes())
+          assert value['status']=='prepared-not-qualified'
+          print('CANDIDATE_GIT='+value['git'])
+          print('CANDIDATE_BWRAP='+value['bwrap'])
+          PY
+      - name: Provision only the exact job sandbox executable
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          python3 -B scripts/ci_bwrap_userns.py install --source "$CANDIDATE_BWRAP" \
+            --sha256 "$(sha256sum "$CANDIDATE_BWRAP" | cut -d ' ' -f1)" \
+            --report "$RUNNER_TEMP/linux-candidate/apparmor.json"
+      - name: Exercise extracted installed bytes outside checkout without Cargo or libtest
+        run: |
+          set -euo pipefail
+          python3 -B scripts/qualify-installed-front-door.py --run --pilot-scope-only --allow-download \
+            --candidate-directory "$RUNNER_TEMP/linux-candidate/candidate-home/extracted/soup-wall-v0.0.0-sou236-x86_64-unknown-linux-gnu" \
+            --git "$CANDIDATE_GIT" --bwrap "$SOU111_BWRAP" --component-python /usr/bin/python3.12 \
+            --python /usr/bin/python3.12 --strace /usr/bin/strace --expected-commit "$GITHUB_SHA" \
+            --output "$RUNNER_TEMP/linux-candidate/installed"
+          python3 -B scripts/qualify-sandbox-exercise.py --candidate-directory \
+            "$RUNNER_TEMP/linux-candidate/candidate-home/extracted/soup-wall-v0.0.0-sou236-x86_64-unknown-linux-gnu" \
+            --installed-output "$RUNNER_TEMP/linux-candidate/installed" --output "$RUNNER_TEMP/linux-candidate/exercise"
+      - name: Remove only this job's sandbox permission
+        if: always()
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: python3 -B scripts/ci_bwrap_userns.py cleanup --report "$RUNNER_TEMP/linux-candidate-apparmor-cleanup.json"
+      - name: Retain bounded candidate provenance and failed attempts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-candidate-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/linux-candidate/report.json
+            ${{ runner.temp }}/linux-candidate/native.json
+            ${{ runner.temp }}/linux-candidate/installed/report.json
+            ${{ runner.temp }}/linux-candidate/installed/installed-tools/demo/report.json
+            ${{ runner.temp }}/linux-candidate/installed/installed-tools/support/report.json
+            ${{ runner.temp }}/linux-candidate/installed/installed-tools/support/index.html
+            ${{ runner.temp }}/linux-candidate/exercise/report.json
+            ${{ runner.temp }}/linux-candidate/exercise/*.json
+            ${{ runner.temp }}/linux-candidate/apparmor*.json
+            ${{ runner.temp }}/linux-candidate-apparmor-cleanup.json
+            ${{ runner.temp }}/linux-candidate/staged/pilot-*.json
+          if-no-files-found: warn
+          retention-days: 14
+  manual-sou216-process-probe:
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.installed_focus == 'clean-user-processes' || github.event.inputs.installed_focus == 'clean-user-session')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Observe or quiesce an empty owned CI user session before product execution
+        shell: bash
+        env:
+          DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          QUIESCE_USER_SESSION: ${{ github.event.inputs.installed_focus == 'clean-user-session' }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'CHECK'
+          import json, os
+          values=json.loads(os.environ['DISPATCH_INPUTS'])
+          assert values.get('stability_mode','off')=='off'
+          assert all(v in ('false','',False) for k,v in values.items()
+                     if k not in {'installed_focus','stability_mode'})
+          CHECK
+          args=()
+          if [[ "$QUIESCE_USER_SESSION" == true ]]; then args+=(--quiesce); fi
+          python3 -I -B scripts/ci_pilot_user_session.py "${args[@]}"
+      - name: Retain bounded metadata-only process diagnosis
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou216-processes-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou216-user-session/report.json
+            ${{ runner.temp }}/sou216-user-session/private-provenance.cms
+          if-no-files-found: error
+          retention-days: 7
+  manual-sou225-lifecycle-preflight:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'lifecycle-preflight'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: 1.94.1
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [ordinary, installed]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Check bounded lifecycle and existing installed contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --locked -p agentfw --lib -- -D warnings
+          cargo test --locked -p agentfw --lib pilot_lifecycle_preflight
+          cargo test --locked -p agentfw --lib pilot_component::removal -- --test-threads=1
+          cargo test --locked -p agentfw --lib doctor -- --test-threads=1
+          python3 -B -m unittest scripts.tests.test_pilot_lifecycle_preflight scripts.tests.test_prepare_installed_pilot scripts.tests.test_pilot_front_door scripts.tests.test_pilot_front_door_component
+      - name: Build exact-source Agent and front-door component
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git status --porcelain --untracked-files=all)" = ''
+          cargo build --locked -p agentfw --bin agentfw
+          install -m 0700 target/debug/agentfw "$RUNNER_TEMP/sou225-agentfw"
+          cmp target/debug/agentfw "$RUNNER_TEMP/sou225-agentfw"
+          python3 -B scripts/build-pilot-front-door.py --out "$RUNNER_TEMP/sou225-component.tar"
+      - name: Observe native diagnosis and zero-effect early refusal outside checkout
+        env:
+          SOU225_MODE: ${{ matrix.mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          python3 -B "$GITHUB_WORKSPACE/scripts/verify-sou225-lifecycle-preflight.py" \
+            --agentfw "$RUNNER_TEMP/sou225-agentfw" --component "$RUNNER_TEMP/sou225-component.tar" \
+            --python /usr/bin/python3.12 --mode "$SOU225_MODE" \
+            --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou225-observation"
+      - name: Retain sanitized original outcomes including failures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou225-lifecycle-preflight-${{ matrix.mode }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sou225-observation/report.json
+          if-no-files-found: warn
   sou193-provider-preflight:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.provider_preflight_only == 'true'
     runs-on: ubuntu-24.04
@@ -709,7 +919,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: ${{ github.event.inputs.coordinated_update_only == 'true' && '0' || '1' }}
+          fetch-depth: ${{ (github.event.inputs.coordinated_update_only == 'true' || github.event.inputs.installed_focus == 'clean-user') && '0' || '1' }}
           persist-credentials: ${{ github.event.inputs.coordinated_update_only != 'true' }}
       - name: Validate Git stage-reuse qualification dispatch
         if: github.event.inputs.stage_reuse_only == 'true'
@@ -727,6 +937,22 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Validate focused project recovery dispatch
+        if: github.event.inputs.installed_focus == 'project-recovery'
+        shell: bash
+        env:
+          DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PYCODE'
+          import json, os
+          inputs = json.loads(os.environ['DISPATCH_INPUTS'])
+          assert inputs.get('native_preparation_only') == 'true'
+          assert inputs.get('project_presets_only') == 'true'
+          assert inputs.get('stability_mode', 'off') == 'off'
+          assert all(value in ('', 'false') for key, value in inputs.items()
+                     if key not in {'installed_focus', 'native_preparation_only', 'project_presets_only', 'stability_mode'})
+          PYCODE
       - name: Validate focused configuration recovery dispatch
         if: github.event.inputs.installed_focus == 'configuration-recovery'
         shell: bash
@@ -764,7 +990,7 @@ jobs:
           cargo test --locked -p agentfw --lib linked_worktree -- --test-threads=1
           cargo test --locked -p agentfw --lib native::approval::tests::selected_tests -- --test-threads=1
       - name: Validate focused filesystem root dispatch
-        if: github.event.inputs.installed_focus == 'filesystem-roots'
+        if: (github.event.inputs.installed_focus == 'filesystem-roots' || github.event.inputs.installed_focus == 'filesystem-links' || github.event.inputs.installed_focus == 'workspace-snapshot')
         shell: bash
         env:
           DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
@@ -779,13 +1005,61 @@ jobs:
                      if key not in {'installed_focus', 'native_preparation_only', 'stability_mode'})
           PY
       - name: Verify native filesystem root snapshot contracts
-        if: github.event.inputs.installed_focus == 'filesystem-roots'
+        if: (github.event.inputs.installed_focus == 'filesystem-roots' || github.event.inputs.installed_focus == 'filesystem-links' || github.event.inputs.installed_focus == 'workspace-snapshot')
         shell: bash
         run: |
           cargo test --locked -p agentfw --lib filesystem_roots -- --test-threads=1
+          cargo test --locked -p agentfw --lib filesystem_links -- --test-threads=1
+          cargo test --locked -p agentfw --lib workspace_snapshot -- --test-threads=1
+          python3 -B -m unittest discover -s scripts/tests -p test_workspace_snapshot.py -v
           cargo test --locked -p agentfw --lib native::approval::tests::selected_tests -- --test-threads=1
       - name: Validate focused maintenance dispatch
         if: github.event.inputs.installed_focus == 'maintenance'
+        shell: bash
+        env:
+          DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PYCODE'
+          import json, os
+          inputs = json.loads(os.environ['DISPATCH_INPUTS'])
+          assert inputs.get('native_preparation_only') == 'true'
+          assert inputs.get('stability_mode', 'off') == 'off'
+          assert all(value in ('', 'false') for key, value in inputs.items()
+                     if key not in {'installed_focus', 'native_preparation_only', 'stability_mode'})
+          PYCODE
+      - name: Validate focused policy activation dispatch
+        if: github.event.inputs.installed_focus == 'policy-activation'
+        shell: bash
+        env:
+          DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PYCODE'
+          import json, os
+          inputs = json.loads(os.environ['DISPATCH_INPUTS'])
+          assert inputs.get('native_preparation_only') == 'true'
+          assert inputs.get('stability_mode', 'off') == 'off'
+          assert all(value in ('', 'false') for key, value in inputs.items()
+                     if key not in {'installed_focus', 'native_preparation_only', 'stability_mode'})
+          PYCODE
+      - name: Validate focused budget preset dispatch
+        if: github.event.inputs.installed_focus == 'budget-presets'
+        shell: bash
+        env:
+          DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PYCODE'
+          import json, os
+          inputs = json.loads(os.environ['DISPATCH_INPUTS'])
+          assert inputs.get('native_preparation_only') == 'true'
+          assert inputs.get('stability_mode', 'off') == 'off'
+          assert all(value in ('', 'false') for key, value in inputs.items()
+                     if key not in {'installed_focus', 'native_preparation_only', 'stability_mode'})
+          PYCODE
+      - name: Validate focused pilot scope dispatch
+        if: github.event.inputs.installed_focus == 'pilot-scope'
         shell: bash
         env:
           DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
@@ -811,8 +1085,9 @@ jobs:
           inputs = json.loads(os.environ['DISPATCH_INPUTS'])
           assert inputs.get('native_preparation_only') == 'true'
           assert inputs.get('stability_mode', 'off') == 'off'
+          assert inputs.get('installed_focus', 'off') in {'off', 'project-recovery'}
           assert all(value in ('', 'false') for key, value in inputs.items()
-                     if key not in {'project_presets_only', 'native_preparation_only', 'stability_mode'})
+                     if key not in {'installed_focus', 'project_presets_only', 'native_preparation_only', 'stability_mode'})
           PYCODE
       - name: Validate focused provider CA dispatch
         if: github.event.inputs.provider_ca_only == 'true'
@@ -969,6 +1244,7 @@ jobs:
           cat "$RUNNER_TEMP/sou122-toolchain/native-attestation.json"
           exit "$status"
       - name: Focused preparation boundaries
+        if: github.event.inputs.installed_focus != 'clean-user'
         env:
           PILOT_CLEANUP_PRIVILEGED_FIXTURE: '1'
         run: |
@@ -997,15 +1273,57 @@ jobs:
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: python3 -B scripts/ci_bwrap_userns.py check
-      - name: Build accepted selected runtimes without global installation
+      - name: Pin SOU-216 product candidate independently of the measurement driver
+        if: github.event.inputs.installed_focus == 'clean-user'
+        shell: bash
+        env:
+          DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'CHECK'
+          import json, os
+          values=json.loads(os.environ['DISPATCH_INPUTS'])
+          assert values['native_preparation_only']=='true'
+          assert values.get('stability_mode','off')=='off'
+          assert all(v in ('false','',False) for k,v in values.items()
+                     if k not in {'installed_focus','native_preparation_only','stability_mode'})
+          CHECK
+          python3 -B -m unittest discover -s scripts/tests -p test_clean_user_acceptance.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_ci_pilot_user_session.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door_component.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_maintenance.py -v
+          umask 077
+          runtime="$RUNNER_TEMP/sou216-accepted-source"
+          test ! -e "$runtime"
+          runtime_commit="$(git rev-parse HEAD)"
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$runtime_commit" = "$GITHUB_SHA"
+          git clone --quiet --no-hardlinks --no-checkout "$GITHUB_WORKSPACE" "$runtime"
+          git -C "$runtime" checkout --quiet --detach "$runtime_commit"
+          test "$(git -C "$runtime" rev-parse HEAD)" = "$runtime_commit"
+          test -z "$(git -C "$runtime" status --porcelain)"
+          printf 'SOU216_RUNTIME_SOURCE=%s\n' "$runtime" >> "$GITHUB_ENV"
+      - name: Calibrate owned project import interruption before runtime builds
+        if: github.event.inputs.installed_focus == 'project-recovery'
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v strace >/dev/null
+          python3 -B -m unittest scripts.tests.test_project_recovery_qualification -v
+      - name: Build pinned selected runtimes without global installation
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
           PILOT_CONCURRENT_PREPARATION: ${{ github.event.inputs.preparation_concurrency }}
+          CLEAN_USER_ONLY: ${{ github.event.inputs.installed_focus == 'clean-user' }}
           NATIVE_ONLY: ${{ github.event.inputs.native_preparation_only }}
           STAGE_REUSE_ONLY: ${{ github.event.inputs.stage_reuse_only }}
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "$CLEAN_USER_ONLY" == true ]]; then
+            cd "$SOU216_RUNTIME_SOURCE"
+          fi
           : "${RUNNER_TEMP:?}"
           if [[ "$PILOT_CONCURRENT_PREPARATION" == true && "$NATIVE_ONLY" != true ]]; then
             echo 'Concurrent preparation requires the focused native-only dispatch' >&2
@@ -1353,7 +1671,9 @@ jobs:
           install -m 600 "$verified_bwrap" "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz"
           printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d \
             "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" | sha256sum --check
-          bash scripts/ci-pilot-cleanup.sh
+          if [[ "$CLEAN_USER_ONLY" != true ]]; then
+            bash scripts/ci-pilot-cleanup.sh
+          fi
           source_args=(--output "$RUNNER_TEMP/sou119-agent-build"
             --expected-commit "$(git rev-parse HEAD)")
           capacity_source=()
@@ -1532,7 +1852,7 @@ jobs:
           } > "$asset/namespace-probe.txt" 2>&1
           cat "$asset/namespace-probe.txt"
       - name: Prepare, repeat, and recover from a rejected digest
-        if: github.event.inputs.operator_results_only != 'true'
+        if: github.event.inputs.operator_results_only != 'true' && github.event.inputs.installed_focus != 'clean-user'
         shell: bash
         env:
           CONFIGURATION_RECOVERY_ONLY: ${{ github.event.inputs.installed_focus == 'configuration-recovery' }}
@@ -1619,7 +1939,7 @@ jobs:
           assert rows['first']['selection'] == rows['reused']['selection'] == rows['recovered']['selection']
           PY
       - name: Verify guarded preparation outcomes
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.capacity_only == 'true'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.capacity_only == 'true' && github.event.inputs.installed_focus != 'clean-user'
         shell: bash
         run: |
           set -euo pipefail
@@ -1676,11 +1996,43 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_private_edit_self_test.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_private_edit_qualification.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door_component.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_maintenance.py -v
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
           python3 -B scripts/qualify-private-edit-self-test.py --run \
             --agentfw "$SOU119_AGENTFW" --selection "$selection" --python /usr/bin/python3.12 \
             --output "$RUNNER_TEMP/private-edit-self-test"
-          cargo test --locked -p agentfw --lib self_test::tests
+          /usr/bin/time -f '%e %U %S' -o "$RUNNER_TEMP/private-edit-self-test/verify.time" \
+            python3 -B scripts/build-native-pilot-inputs.py --verify-existing \
+            --output "$RUNNER_TEMP/sou119-agent-build" \
+            --expected-commit "$(git rev-parse HEAD)" \
+            > "$RUNNER_TEMP/private-edit-self-test/verified-source-build.json"
+          python3 -B - <<'PY'
+          import json, os
+          from pathlib import Path
+          asset = Path(os.environ['RUNNER_TEMP'])
+          verified = json.loads((asset / 'private-edit-self-test/verified-source-build.json').read_text())
+          first = json.loads((asset / 'sou111-assets/source-first.json').read_text())
+          assert verified['status'] == 'verified-reuse'
+          assert verified['sandbox_tests'] == first['sandbox_tests'] == os.environ['SOU119_SANDBOX_TESTS']
+          assert verified['receipt'] == first['receipt']
+          PY
+          if [[ "${{ github.event.inputs.private_edit_self_test_only }}" == true ]]; then
+            /usr/bin/time -f '%e %U %S' -o "$RUNNER_TEMP/private-edit-self-test/reused.time" \
+              "$SOU119_SANDBOX_TESTS" self_test::tests | tee "$RUNNER_TEMP/private-edit-self-test/reused.log"
+            mkdir -m 700 "$RUNNER_TEMP/sou217-cold-cargo-home" "$RUNNER_TEMP/sou217-cold-target"
+            CARGO_HOME="$RUNNER_TEMP/sou217-cold-cargo-home" \
+              CARGO_TARGET_DIR="$RUNNER_TEMP/sou217-cold-target" \
+              RUSTUP_TOOLCHAIN=1.94.1 RUSTUP_AUTO_INSTALL=0 \
+              /usr/bin/time -f '%e %U %S' -o "$RUNNER_TEMP/private-edit-self-test/cold.time" \
+              cargo test --locked -p agentfw --lib self_test::tests \
+              2>&1 | tee "$RUNNER_TEMP/private-edit-self-test/cold.log"
+            python3 -B scripts/ci/compare-native-pilot-lib-tests.py \
+              --records "$RUNNER_TEMP/private-edit-self-test" \
+              --expected-commit "$(git rev-parse HEAD)" \
+              > "$RUNNER_TEMP/private-edit-self-test/reuse-comparison.json"
+          else
+            "$SOU119_SANDBOX_TESTS" self_test::tests
+          fi
           cargo clippy --locked -p agentfw --all-targets -- -D warnings
           cargo fmt --all --check
       - name: Qualify installed declarative configuration backup and restore
@@ -1843,7 +2195,7 @@ jobs:
           raise SystemExit(subprocess.call(command))
           PY
       - name: Qualify exact prepared selection through enforcing daemon and original servers
-        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'policy-activation' && github.event.inputs.installed_focus != 'budget-presets' && github.event.inputs.installed_focus != 'pilot-scope' && github.event.inputs.installed_focus != 'clean-user' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'filesystem-links' && github.event.inputs.installed_focus != 'workspace-snapshot' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -1863,7 +2215,7 @@ jobs:
           path.write_text(json.dumps(values, sort_keys=True) + '\n')
           PY
       - name: Run the first-use demo through the prepared original host
-        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'policy-activation' && github.event.inputs.installed_focus != 'budget-presets' && github.event.inputs.installed_focus != 'pilot-scope' && github.event.inputs.installed_focus != 'clean-user' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'filesystem-links' && github.event.inputs.installed_focus != 'workspace-snapshot' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -1873,7 +2225,7 @@ jobs:
             --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
             --strace "$(command -v strace)" --output "$RUNNER_TEMP/sou120-demo"
       - name: Qualify the guided first-use entry point through the original host
-        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'policy-activation' && github.event.inputs.installed_focus != 'budget-presets' && github.event.inputs.installed_focus != 'pilot-scope' && github.event.inputs.installed_focus != 'clean-user' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'filesystem-links' && github.event.inputs.installed_focus != 'workspace-snapshot' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -1889,12 +2241,13 @@ jobs:
             --python "$(command -v python3)" --allow-download \
             2>&1 | tee "$RUNNER_TEMP/front-door.log"
       - name: Qualify the installed guided pilot front door through the original host
-        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && github.event.inputs.prepared_operations_only != 'true' && github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'policy-activation' && github.event.inputs.installed_focus != 'budget-presets' && github.event.inputs.installed_focus != 'pilot-scope' && github.event.inputs.installed_focus != 'clean-user' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'filesystem-links' && github.event.inputs.installed_focus != 'workspace-snapshot' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && github.event.inputs.prepared_operations_only != 'true' && github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
           asset="$RUNNER_TEMP/sou111-assets"
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door_component.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_maintenance.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_provider_profiles.py -v
           cargo test --locked -p agentfw --lib pilot_component
           # The component is built from this checkout and started only as the
@@ -1955,14 +2308,68 @@ jobs:
             ${{ runner.temp }}/installed-linked-worktrees.log
           if-no-files-found: warn
           retention-days: 30
+      - name: Quiesce an empty owned CI user session before pilot execution
+        if: github.event.inputs.installed_focus == 'clean-user'
+        shell: bash
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          python3 -I -B scripts/ci_pilot_user_session.py --quiesce
+      - name: Qualify pinned installed pilot in a clean ordinary-user environment
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'clean-user' && github.event.inputs.native_preparation_only == 'true'
+        shell: bash
+        env:
+          SOU216_CI_USER_SESSION_REPORT: ${{ runner.temp }}/sou216-user-session/report.json
+        run: |
+          set -euo pipefail
+          asset="$RUNNER_TEMP/sou111-assets"
+          receipt="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["receipt"])' "$asset/source-first.json")"
+          python3 -B scripts/qualify-installed-front-door.py --run --clean-user-only \
+            --runtime-source "$SOU216_RUNTIME_SOURCE" --source-build-receipt "$receipt" \
+            --runtime-source-commit "$GITHUB_SHA" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou216-clean-user" \
+            --component-python /usr/bin/python3.12 --strace "$(command -v strace)" \
+            --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
+            --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
+            --sandbox-tests "$SOU119_SANDBOX_TESTS" --node-archive "$asset/node.tar.xz" \
+            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --allow-download \
+            2>&1 | tee "$RUNNER_TEMP/sou216-clean-user.log"
+      - name: Retain private process provenance after the installed-host attempt
+        if: always() && github.event.inputs.installed_focus == 'clean-user'
+        shell: bash
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: python3 -I -B scripts/ci_pilot_user_session.py --after-cleanup
+      - name: Retain original clean-user outcomes including failed and incomplete attempts
+        if: always() && github.event.inputs.installed_focus == 'clean-user'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou216-clean-user-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou216-user-session/report.json
+            ${{ runner.temp }}/sou216-user-session/private-provenance.cms
+            ${{ runner.temp }}/sou216-user-session-after-cleanup/report.json
+            ${{ runner.temp }}/sou216-user-session-after-cleanup/private-provenance.cms
+            ${{ runner.temp }}/sou216-clean-user/report.json
+            ${{ runner.temp }}/sou216-clean-user/*/expected.private.json
+            ${{ runner.temp }}/sou216-clean-user/walkthrough/report.json
+            ${{ runner.temp }}/sou216-clean-user/ask/qualification.json
+            ${{ runner.temp }}/sou216-clean-user.log
+          if-no-files-found: warn
+          retention-days: 30
       - name: Qualify installed filesystem roots through original servers
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'filesystem-roots' && github.event.inputs.native_preparation_only == 'true'
+        if: github.event_name == 'workflow_dispatch' && (github.event.inputs.installed_focus == 'filesystem-roots' || github.event.inputs.installed_focus == 'filesystem-links' || github.event.inputs.installed_focus == 'workspace-snapshot') && github.event.inputs.native_preparation_only == 'true'
         shell: bash
         run: |
           set -euo pipefail
           asset="$RUNNER_TEMP/sou111-assets"
           python3 -B -m unittest discover -s scripts/tests -p test_filesystem_roots.py -v
-          python3 -B scripts/qualify-installed-front-door.py --run --filesystem-roots-only \
+          python3 -B -m unittest discover -s scripts/tests -p test_filesystem_links.py -v
+          focus=--filesystem-roots-only
+          if [ "${{ inputs.installed_focus }}" = workspace-snapshot ]; then focus=--workspace-snapshot-only; elif [ "${{ inputs.installed_focus }}" = filesystem-links ]; then focus=--filesystem-links-only; fi
+          python3 -B scripts/qualify-installed-front-door.py --run "$focus" \
             --output "$RUNNER_TEMP/installed-filesystem-roots" --expected-commit "$(git rev-parse HEAD)" \
             --component-python /usr/bin/python3.12 \
             --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
@@ -1973,10 +2380,10 @@ jobs:
             --python /usr/bin/python3.12 --allow-download \
             2>&1 | tee "$RUNNER_TEMP/installed-filesystem-roots.log"
       - name: Retain bounded installed filesystem root result including failed attempt
-        if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'filesystem-roots'
+        if: always() && github.event_name == 'workflow_dispatch' && (github.event.inputs.installed_focus == 'filesystem-roots' || github.event.inputs.installed_focus == 'filesystem-links' || github.event.inputs.installed_focus == 'workspace-snapshot')
         uses: actions/upload-artifact@v7
         with:
-          name: sou202-installed-filesystem-roots-${{ github.run_id }}-${{ github.run_attempt }}
+          name: installed-${{ inputs.installed_focus }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/installed-filesystem-roots/report.json
             ${{ runner.temp }}/installed-filesystem-roots.log
@@ -2012,6 +2419,128 @@ jobs:
             ${{ runner.temp }}/sou200-maintenance.log
           if-no-files-found: warn
           retention-days: 7
+      - name: Qualify installed policy-candidate activation with original host
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'policy-activation' && github.event.inputs.native_preparation_only == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="$RUNNER_TEMP/sou111-assets"
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_policy_activation.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_maintenance.py -v
+          cargo fmt --all --check
+          cargo test --locked -p agentfw --lib policy_candidate -- --test-threads=1
+          python3 -B scripts/qualify-installed-front-door.py --run --policy-activation-only \
+            --output "$RUNNER_TEMP/sou209-policy-activation" --expected-commit "$(git rev-parse HEAD)" \
+            --component-python /usr/bin/python3.12 \
+            --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
+            --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
+            --sandbox-tests "$SOU119_SANDBOX_TESTS" \
+            --node-archive "$asset/node.tar.xz" \
+            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --allow-download \
+            2>&1 | tee "$RUNNER_TEMP/sou209-policy-activation.log"
+      - name: Retain finite policy activation report including failure
+        if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'policy-activation'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou209-installed-policy-activation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou209-policy-activation/report.json
+            ${{ runner.temp }}/sou209-policy-activation.log
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Qualify installed Linux budget presets with original host
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'budget-presets' && github.event.inputs.native_preparation_only == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="$RUNNER_TEMP/sou111-assets"
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_budget_presets.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_project_presets.py -v
+          cargo fmt --all --check
+          # The disposable service owns delegation for acceptance setup only; the product never creates it.
+          unit="sou79-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" \
+            --property="User=$(id -un)" --property="Group=$(id -gn)" \
+            --property='Delegate=cpu memory pids' \
+            --property=MemoryMax=3G --property=MemorySwapMax=0 \
+            --property=TasksMax=1024 --property=CPUQuota=300% \
+            --property=RuntimeMaxSec=60min --property=KillMode=control-group \
+            --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env "PATH=$PATH" "HOME=$HOME" "TMPDIR=$RUNNER_TEMP" \
+            "SOU115_GIT=$SOU115_GIT" "SOU111_BWRAP=$SOU111_BWRAP" "SOU119_AGENTFW=$SOU119_AGENTFW" \
+            "SOU119_GIT_LAUNCHER=$SOU119_GIT_LAUNCHER" "SOU119_SANDBOX_TESTS=$SOU119_SANDBOX_TESTS" \
+            python3 -B scripts/qualify-installed-front-door.py --run --budget-presets-only \
+            --budget-unit "$unit.service" \
+            --output "$RUNNER_TEMP/sou210-budget-presets" --expected-commit "$(git rev-parse HEAD)" \
+            --component-python /usr/bin/python3.12 \
+            --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
+            --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
+            --sandbox-tests "$SOU119_SANDBOX_TESTS" \
+            --node-archive "$asset/node.tar.xz" \
+            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --allow-download \
+            2>&1 | tee "$RUNNER_TEMP/sou210-budget-presets.log"
+          test ! -d "/sys/fs/cgroup/system.slice/$unit.service"
+      - name: Retain finite budget preset report including failure
+        if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'budget-presets'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou210-installed-budget-presets-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou210-budget-presets/report.json
+            ${{ runner.temp }}/sou210-budget-presets.log
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Qualify the frozen v1 pilot scope through installed commands
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'pilot-scope' && github.event.inputs.native_preparation_only == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="$RUNNER_TEMP/sou111-assets"
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_scope.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door.py -v
+          python3 -B scripts/pilot_scope.py --check
+          # Installed commands select the scope; the standard useful/refused/cancel cases then run under it.
+          python3 -B scripts/qualify-installed-front-door.py --run --pilot-scope-only \
+            --output "$RUNNER_TEMP/sou215-pilot-scope" --expected-commit "$(git rev-parse HEAD)" \
+            --component-python /usr/bin/python3.12 \
+            --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
+            --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
+            --sandbox-tests "$SOU119_SANDBOX_TESTS" \
+            --node-archive "$asset/node.tar.xz" \
+            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --allow-download \
+            2>&1 | tee "$RUNNER_TEMP/sou215-pilot-scope.log"
+          # Reuse the existing installed acceptance command (single-use Ask, daemon loss, refused effects, cleanup)
+          # on the generation that the scope-selected prefix prepared.
+          selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou215-pilot-scope/report.json").read_text())["pilot_scope"]["demo_selection"])')"
+          python3 -B -c 'import json,sys; s=json.load(open(sys.argv[1])); assert s["files"]["policy"]["sha256"] and s["format"]' "$selection"
+          python3 -B scripts/qualify-installed-pilot.py --run --selection "$selection" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou215-installed-pilot" \
+            2>&1 | tee "$RUNNER_TEMP/sou215-installed-pilot.log"
+          # The first-use demo adds the explicit single-use Ask control, timeout and daemon-loss recovery on the same generation.
+          (cd "$HOME" && python3 -B "$GITHUB_WORKSPACE/scripts/pilot-demo.py" --run --selection "$selection" \
+            --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
+            --strace "$(command -v strace)" --output "$RUNNER_TEMP/sou215-pilot-demo") \
+            2>&1 | tee "$RUNNER_TEMP/sou215-pilot-demo.log"
+      - name: Retain finite pilot scope reports including failure
+        if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'pilot-scope'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou215-pilot-scope-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou215-pilot-scope/report.json
+            ${{ runner.temp }}/sou215-pilot-scope.log
+            ${{ runner.temp }}/sou215-pilot-scope/installed-tools/demo/report.json
+            ${{ runner.temp }}/sou215-pilot-scope/installed-tools/support/report.json
+            ${{ runner.temp }}/sou215-pilot-scope/installed-tools/support/index.html
+            ${{ runner.temp }}/sou215-installed-pilot/report.json
+            ${{ runner.temp }}/sou215-installed-pilot.log
+            ${{ runner.temp }}/sou215-pilot-demo/report.json
+            ${{ runner.temp }}/sou215-pilot-demo.log
+          if-no-files-found: warn
+          retention-days: 30
       - name: Qualify installed project presets through two owned projects
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.project_presets_only == 'true' && github.event.inputs.native_preparation_only == 'true'
         shell: bash
@@ -2019,7 +2548,10 @@ jobs:
           set -euo pipefail
           asset="$RUNNER_TEMP/sou111-assets"
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_project_presets.py -v
-          python3 -B scripts/qualify-installed-front-door.py --run --project-presets-only \
+          python3 -B -m unittest scripts.tests.test_pilot_project_recovery scripts.tests.test_pilot_configuration_backup scripts.tests.test_pilot_prerequisite_cache_exchange
+          focus=--project-presets-only
+          if [ "${{ github.event.inputs.installed_focus }}" = project-recovery ]; then focus=--project-recovery-only; fi
+          python3 -B scripts/qualify-installed-front-door.py --run "$focus" \
             --output "$RUNNER_TEMP/installed-project-presets" --expected-commit "$(git rev-parse HEAD)" \
             --component-python /usr/bin/python3.12 \
             --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
@@ -2050,7 +2582,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Qualify terminal Ask inbox through the original Claude host
-        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.operator_results_only != 'true') && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'policy-activation' && github.event.inputs.installed_focus != 'budget-presets' && github.event.inputs.installed_focus != 'pilot-scope' && github.event.inputs.installed_focus != 'clean-user' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'filesystem-links' && github.event.inputs.installed_focus != 'workspace-snapshot' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.operator_results_only != 'true') && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -2064,7 +2596,7 @@ jobs:
             --strace "$(command -v strace)" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou135-inbox"
       - name: Qualify owned prepared-selection launch and failures with the original host
-        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'policy-activation' && github.event.inputs.installed_focus != 'budget-presets' && github.event.inputs.installed_focus != 'pilot-scope' && github.event.inputs.installed_focus != 'clean-user' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'filesystem-links' && github.event.inputs.installed_focus != 'workspace-snapshot' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -2087,7 +2619,7 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
             --output "$RUNNER_TEMP/pilot-storage-qualification"
       - name: Qualify prepared-run audit rotation and failed-store continuation
-        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'policy-activation' && github.event.inputs.installed_focus != 'budget-presets' && github.event.inputs.installed_focus != 'pilot-scope' && github.event.inputs.installed_focus != 'clean-user' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'filesystem-links' && github.event.inputs.installed_focus != 'workspace-snapshot' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -2098,7 +2630,7 @@ jobs:
             --validation-timeout-seconds 120 --audit-retention-only \
             --output "$RUNNER_TEMP/sou132-qualification"
       - name: Qualify reused bounded audit engine restart and fail-safe retention
-        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'policy-activation' && github.event.inputs.installed_focus != 'budget-presets' && github.event.inputs.installed_focus != 'pilot-scope' && github.event.inputs.installed_focus != 'clean-user' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'filesystem-links' && github.event.inputs.installed_focus != 'workspace-snapshot' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.prepared_operations_only != 'true') && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -2118,7 +2650,7 @@ jobs:
           agent="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["files"]["agentfw"]["path"])' "$selection")"
           python3 -B scripts/sou84_owned_acceptance.py --agent "$agent" --output-dir "$RUNNER_TEMP/sou132-retention"
       - name: Targeted existing-project read-only pilot with actual host and independent effects
-        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event_name == 'workflow_dispatch' && (github.event.inputs.existing_project_only == 'true' || github.event.inputs.native_preparation_only == 'true')) && github.event.inputs.private_edit_self_test_only != 'true')
+        if: github.event.inputs.installed_focus != 'maintenance' && github.event.inputs.installed_focus != 'policy-activation' && github.event.inputs.installed_focus != 'budget-presets' && github.event.inputs.installed_focus != 'pilot-scope' && github.event.inputs.installed_focus != 'clean-user' && github.event.inputs.installed_focus != 'filesystem-roots' && github.event.inputs.installed_focus != 'filesystem-links' && github.event.inputs.installed_focus != 'workspace-snapshot' && github.event.inputs.installed_focus != 'linked-worktrees' && github.event.inputs.installed_focus != 'configuration-recovery' && github.event.inputs.project_presets_only != 'true' && github.event.inputs.provider_ca_only != 'true' && ((github.event_name == 'workflow_dispatch' && (github.event.inputs.existing_project_only == 'true' || github.event.inputs.native_preparation_only == 'true')) && github.event.inputs.private_edit_self_test_only != 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -2333,6 +2865,8 @@ jobs:
           path: |
             ${{ runner.temp }}/private-edit-self-test/qualification.json
             ${{ runner.temp }}/private-edit-self-test/run/report.json
+            ${{ runner.temp }}/private-edit-self-test/verified-source-build.json
+            ${{ runner.temp }}/private-edit-self-test/reuse-comparison.json
             ${{ runner.temp }}/sou151-capacity/**
             ${{ runner.temp }}/sou164-update/qualification/qualification.json
             ${{ runner.temp }}/sou164-update/fixtures/inputs.json

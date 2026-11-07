@@ -1724,12 +1724,20 @@ async fn tenant_admin_can_issue_and_revoke_a_proxy_token() {
     assert!(dashboard_html.contains("/rollout/rollback"));
     assert!(!dashboard_html.contains("/* ROLLOUT_PANEL */"));
     assert!(dashboard_html.contains("Agent enrollment and credentials"));
-    assert!(dashboard_html.contains("/credential-rotations"));
+    assert!(dashboard_html.contains("\"credential-rotations\""));
     assert!(!dashboard_html.contains("/* ENROLLMENT_PANEL */"));
+    assert!(dashboard_html.contains("/operator-audit"));
+    assert!(!dashboard_html.contains("/* OPERATOR_AUDIT */"));
     assert!(!dashboard_html.contains("/* FLEET_PANEL */"));
     assert!(dashboard_html.contains("Recorded Agent history"));
     assert!(dashboard_html.contains("sw-agent-incident-snapshot/1"));
     assert!(!dashboard_html.contains("/* AGENT_HISTORY */"));
+    assert!(dashboard_html.contains("Fleet triage"));
+    assert!(dashboard_html.contains("sw-agent-fleet-triage/1"));
+    assert!(!dashboard_html.contains("/* FLEET_TRIAGE */"));
+    assert!(dashboard_html.contains("Agent heartbeat (self-report)"));
+    assert!(dashboard_html.contains("sw-agent-heartbeat-status/1"));
+    assert!(!dashboard_html.contains("/* AGENT_HEARTBEAT */"));
     assert!(!dashboard_html.contains("localStorage"));
     assert!(!dashboard_html.contains("sessionStorage"));
 
@@ -3951,4 +3959,156 @@ async fn admin_roles_enforce_tenant_lifecycle_permissions() {
         .await
         .unwrap();
     assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn operator_audit_uses_decoded_routed_tenant_for_refusals() {
+    let state = tenant_state("http://127.0.0.1:1".into());
+    let store = state.tenant_store.as_ref().unwrap();
+    let tenant = store.create_tenant("Encoded audit scope").unwrap();
+    let viewer = store
+        .create_admin("Audit viewer", AdminRole::Viewer)
+        .unwrap();
+    store.enroll_managed_agent(&tenant.id, "existing").unwrap();
+    let canonical = format!("/admin/v1/tenants/{}", tenant.id);
+    let encoded = format!("/admin/v1/tenants/%74{}", &tenant.id[1..]);
+    let sensitive_target = format!("sw_agent_{}", "S".repeat(43));
+    for (path, body, failed_status) in [
+        (
+            format!("{canonical}/agents"),
+            r#"{"agent_id":"existing"}"#,
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            format!("{encoded}/agents"),
+            r#"{"agent_id":"existing"}"#,
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            format!("{encoded}/agents/%73{}/revoke", &sensitive_target[1..]),
+            "{}",
+            StatusCode::NOT_FOUND,
+        ),
+    ] {
+        for (token, expected) in [
+            ("invalid", StatusCode::UNAUTHORIZED),
+            (viewer.token.as_str(), StatusCode::FORBIDDEN),
+            ("admin-test-token", failed_status),
+        ] {
+            let response = app(state.clone())
+                .oneshot(
+                    Request::post(&path)
+                        .header("content-type", "application/json")
+                        .header("x-llm-firewall-admin-token", format!("Bearer {token}"))
+                        .body(axum::body::Body::from(body))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), expected);
+        }
+    }
+    let response = app(state.clone())
+        .oneshot(
+            Request::post(format!("{encoded}/agents"))
+                .header("content-type", "application/json")
+                .header("x-llm-firewall-admin-token", "Bearer admin-test-token")
+                .body(axum::body::Body::from(r#"{"agent_id":"new-agent"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let page = json_body(
+        app(state.clone())
+            .oneshot(
+                Request::get(format!("{canonical}/operator-audit"))
+                    .header("x-llm-firewall-admin-token", "Bearer admin-test-token")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let events = page["events"].as_array().unwrap();
+    assert_eq!(events.len(), 10);
+    assert!(events.iter().all(|event| event["tenant_id"] == tenant.id));
+    assert!(!page.to_string().contains(&sensitive_target));
+    for (outcome, count) in [("denied", 6), ("failed", 3), ("committed", 1)] {
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| event["outcome"] == outcome)
+                .count(),
+            count
+        );
+    }
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event["operation"] == "agent.revoke")
+            .count(),
+        3
+    );
+    let other = state
+        .tenant_store
+        .as_ref()
+        .unwrap()
+        .create_tenant("Other audit scope")
+        .unwrap();
+    let response = app(state.clone())
+        .oneshot(
+            Request::post(format!("/admin/v1/tenants/%74{}/agents", &other.id[1..]))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let other_page = json_body(
+        app(state.clone())
+            .oneshot(
+                Request::get(format!("/admin/v1/tenants/{}/operator-audit", other.id))
+                    .header("x-llm-firewall-admin-token", "Bearer admin-test-token")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(other_page["events"].as_array().unwrap().len(), 1);
+    assert_eq!(other_page["events"][0]["tenant_id"], other.id);
+    assert_eq!(other_page["events"][0]["target_id"], other.id);
+    for (scope, token, expected) in [
+        ("%FF", "invalid", StatusCode::UNAUTHORIZED),
+        ("%FF", "admin-test-token", StatusCode::BAD_REQUEST),
+        ("%74enant_missing", "invalid", StatusCode::UNAUTHORIZED),
+    ] {
+        let response = app(state.clone())
+            .oneshot(
+                Request::post(format!("/admin/v1/tenants/{scope}/agents"))
+                    .header("content-type", "application/json")
+                    .header("x-llm-firewall-admin-token", format!("Bearer {token}"))
+                    .body(axum::body::Body::from(r#"{"agent_id":"new-agent"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected);
+    }
+    let unchanged = json_body(
+        app(state)
+            .oneshot(
+                Request::get(format!("{canonical}/operator-audit"))
+                    .header("x-llm-firewall-admin-token", "Bearer admin-test-token")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(unchanged["events"], page["events"]);
 }

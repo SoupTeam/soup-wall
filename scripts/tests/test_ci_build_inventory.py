@@ -13,7 +13,8 @@ import ci_build_inventory as INV
 class Inventory(unittest.TestCase):
     def test_selected_pair_and_incompatible_native_pilot_remain_distinct(self):
         report = INV.inventory()
-        self.assertEqual({job["job"] for job in report["selected_candidates"]}, set(INV.CONSUMERS))
+        self.assertEqual({(job["workflow"], job["job"]) for job in report["selected_candidates"]},
+                         {(workflow, job) for workflow, jobs in INV.CONSUMERS.items() for job in jobs})
         native = next(job for job in report["jobs"] if job["workflow"] == "mcp-real-filesystem.yml"
                       and job["job"] == "native-ubuntu-2404")
         self.assertEqual(native["environment_toolchains"], ["1.94.1"])
@@ -49,6 +50,18 @@ class Inventory(unittest.TestCase):
         self.assertTrue(commands[0]["locked"])
         self.assertEqual(commands[0]["package"], "agentfw")
         self.assertIn("-- --nocapture", commands[1]["command"])
+
+    def test_unregistered_and_incompatible_consumers_cannot_join_shared_tuple(self):
+        report = INV.inventory()
+        selected = {(job["workflow"], job["job"]) for job in report["selected_candidates"]}
+        self.assertNotIn(("mcp-windows-create.yml", "native-windows-standard-user"), selected)
+        post = next(job for job in report["selected_candidates"] if job["workflow"] == "mcp-https-post.yml")
+        for change in ("--all-features", "--target aarch64-unknown-linux-gnu", "--release"):
+            bad = copy.deepcopy(post)
+            bad["cargo"][0].update(all_features="--all-features" in change,
+                                   target="aarch64-unknown-linux-gnu" if "--target" in change else "implicit-host",
+                                   profile="release" if "--release" in change else "dev/test")
+            self.assertFalse(INV.compatible_declaration(bad))
 
 
 if __name__ == "__main__":

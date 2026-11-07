@@ -47,6 +47,21 @@ class ConfigurationDispatch(unittest.TestCase):
         ordinary.assert_not_called()
 
 
+class InstalledUpdateDispatch(unittest.TestCase):
+    def test_native_component_home_does_not_hide_update_subcommand(self):
+        # The native entry always prepends this global option. The ordinary
+        # parser's placeholder update command cannot parse dedicated options.
+        for prefix in ([], ["--agent-home", "/private/installed-component"]):
+            with self.subTest(prefix=prefix):
+                helper = mock.Mock(); helper.main.return_value = 7
+                words = ["preview", "--prefix", "/private/coordinator", "--inventory", "/private/candidate.json"]
+                with mock.patch.object(M, "load", return_value=helper) as loading, mock.patch.object(M, "parser", side_effect=AssertionError("installed update entered ordinary parser")) as ordinary:
+                    self.assertEqual(M.main([*prefix, "update", *words]), 7)
+                loading.assert_called_once_with("front_door_update", "pilot_update.py")
+                helper.main.assert_called_once_with(words)
+                ordinary.assert_not_called()
+
+
 @unittest.skipUnless(sys.platform.startswith("linux"), "native toolchain qualification uses Linux")
 class QualificationToolchain(unittest.TestCase):
     def test_private_home_keeps_existing_default_toolchain(self):
@@ -245,6 +260,35 @@ class Run(unittest.TestCase):
         self.assertEqual(argv[:5], ["--run", "--selection", "/private/selection.json", "--expected-commit", COMMIT])
         self.assertEqual(argv[argv.index("--prompt") + 1], "Read notes.")
 
+    def test_named_budget_preset_needs_its_exact_digest_and_travels_with_the_installation_home(self):
+        self.args.agent_home = Path("/private/component")
+        self.args.budget_preset, self.args.budget_preset_digest = "small", "a" * 64
+        code, out, _ = self.run_front_door(
+            "print(json.dumps({'status': 'completed', 'cleanup': 'owned_state_removed', 'argv': sys.argv[1:]}))\n")
+        self.assertEqual(code, 0)
+        argv = json.loads(out)["argv"]
+        self.assertEqual(argv[argv.index("--budget-preset") + 1], "small")
+        self.assertEqual(argv[argv.index("--expected-budget-preset-digest") + 1], "a" * 64)
+        self.assertEqual(argv[argv.index("--budget-preset-home") + 1], "/private/component")
+        self.assertNotIn("--linux-budget", argv)
+        # The installation that owns the maintenance gate also owns the preset catalog.
+        self.args.maintenance_home = Path("/private/owner")
+        _, out, _ = self.run_front_door(
+            "print(json.dumps({'status': 'completed', 'cleanup': 'owned_state_removed', 'argv': sys.argv[1:]}))\n")
+        argv = json.loads(out)["argv"]
+        self.assertEqual(argv[argv.index("--budget-preset-home") + 1], "/private/owner")
+
+    def test_a_name_without_its_digest_or_without_an_installation_never_launches_or_goes_unbudgeted(self):
+        for name, digest, home in (("small", None, Path("/private/component")), (None, "a" * 64, Path("/private/component")),
+                                   ("small", "a" * 64, None)):
+            self.args.budget_preset, self.args.budget_preset_digest, self.args.agent_home = name, digest, home
+            with self.subTest(name=name, digest=digest, home=home), mock.patch.object(M, "verified_state", lambda _: self.state), \
+                    mock.patch.object(M.subprocess, "Popen") as spawn:
+                with self.assertRaises(M.Failure) as caught:
+                    M.run(self.args)
+                self.assertEqual(caught.exception.code, "budget_preset_confirmation_required")
+                spawn.assert_not_called()
+
     def test_exact_nonzero_status_and_operator_hint(self):
         code, out, err = self.run_front_door(
             "print(json.dumps({'status': 'failed', 'reason': 'owned_daemon_not_ready'}))\nsys.exit(1)\n")
@@ -312,6 +356,7 @@ class Run(unittest.TestCase):
         self.assertTrue(args.prefix.is_absolute())
 
 
+@unittest.skipUnless(sys.platform == "linux", "Live process status requires Linux /proc")
 class Status(unittest.TestCase):
     """Status counts only a live run of the requested selection."""
 
@@ -509,7 +554,8 @@ class Prepare(unittest.TestCase):
             selection.parent.mkdir(parents=True, exist_ok=True)
             selection.write_text("{}")
             return 0, {"status": "prepared-not-active", "selection": str(selection)}
-        with mock.patch.object(M, "plan", lambda _: dict(report)), mock.patch.object(M, "child", child), \
+        with mock.patch.object(M.LIFECYCLE, "inspect", return_value={"setup": "satisfied", "removal": "satisfied"}), \
+                mock.patch.object(M, "plan", lambda _: dict(report)), mock.patch.object(M, "child", child), \
                 mock.patch.object(M.PREP, "private_dir", lambda path, create=False: path):
             result = M.prepare(args)
         self.assertEqual(result["status"], "prepared-not-active")

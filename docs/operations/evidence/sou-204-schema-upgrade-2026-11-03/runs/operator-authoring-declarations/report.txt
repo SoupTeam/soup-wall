@@ -1,0 +1,25 @@
+MCP original-tool schema upgrade review (offline, non-authoritative)
+Format: sw-mcp/schema-upgrade-report/1
+
+NOTICE: This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process.
+
+before: file discovery.json raw_sha256 82a8621734d664b7ec948949eb6467e4dff8061c993994de138b3ab86aa55764 (749 bytes, 1 tools, sw-mcp/operator-discovery/1)
+        discovery_sha256 605cbc4776cd1ab1e85ba3ce14ac34d1ec9010c0bada8c1f27bfe742bef0b41a
+after : file discovery.json raw_sha256 82a8621734d664b7ec948949eb6467e4dff8061c993994de138b3ab86aa55764 (749 bytes, 1 tools, sw-mcp/operator-discovery/1)
+        discovery_sha256 605cbc4776cd1ab1e85ba3ce14ac34d1ec9010c0bada8c1f27bfe742bef0b41a
+before identity: NOT VERIFIED (no identity document supplied)
+current declarations: sw-mcp/operator-declaration/1 declarations.json raw_sha256 de304c769a08e64faff87b202ff921eb7e6595c72ac27cf0bb5c8c94eae5e023
+
+Outcome: no_drift / byte_identical (exit 0)
+Snapshots byte-identical: true; declaration findings: 0
+Tools: before 1 after 1; added 0 removed 0 changed 0 unchanged 1
+Findings: 0 (inert metadata 0, review required 0, unsupported 0, declaration requalification 0)
+Coverage complete: false; review-pack records: 0
+New UNACCEPTED tool identities (0): none
+Accepted by this analyzer: nothing.
+
+Findings (tool / pointer / kind / nature):
+
+Coverage gaps:
+  - {"effect":"the before snapshot was not checked against an accepted identity document","gap":"before_identity_not_verified"}
+Unsupported constructs reported: 0

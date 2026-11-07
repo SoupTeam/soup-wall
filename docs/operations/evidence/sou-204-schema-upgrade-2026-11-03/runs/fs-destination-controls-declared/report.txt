@@ -1,0 +1,54 @@
+MCP original-tool schema upgrade review (offline, non-authoritative)
+Format: sw-mcp/schema-upgrade-report/1
+
+NOTICE: This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process.
+
+before: file upstream-tools-list.json raw_sha256 d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954 (21676 bytes, 14 tools, mcp/tools-list-response)
+        discovery_sha256 67425ee68375ed484c131989ea3adf3f07a91a04540c100fac0ce61f3ba09c37
+after : file fs-destination-controls.json raw_sha256 eb0095c7b71d19694c2af0ad1d53013c107229f883abb68f7830a6d25d26b881 (22256 bytes, 14 tools, mcp/tools-list-response)
+        discovery_sha256 2c86a83569d99bc9533f445f0bb9a2793c666107c531a6b849cacbbbabd232f4
+before identity: NOT VERIFIED (no identity document supplied)
+current declarations: sw-native/1 fs-control-current.registry.json raw_sha256 d87b555162420a4e8625682c912065e55c0a0c16fe87b381b3e003554d66e57f
+
+Outcome: review_required / unsupported_present (exit 5)
+Snapshots byte-identical: false; declaration findings: 5
+Tools: before 14 after 14; added 0 removed 0 changed 2 unchanged 12
+Findings: 11 (inert metadata 0, review required 7, unsupported 2, declaration requalification 2)
+Coverage complete: false; review-pack records: 14
+New UNACCEPTED tool identities (2): list_directory, move_file
+Accepted by this analyzer: nothing.
+
+Findings (tool / pointer / kind / nature):
+  [F-d5f2a40308991921] list_directory /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720
+      after  (untrusted): 9144fc34161dcfc0493159e7519eaae535336d4caa22c475b581eb9ea36937f5
+  [F-980ae5b8abca9e82] list_directory /inputSchema schema_outside_runtime_subset unsupported -> examples 1
+  [F-18898467745ad4ae] list_directory /inputSchema/properties/path/format unsupported_construct_changed unsupported -> examples 1
+      after  (untrusted): uri
+  [F-51da202b0cc7cbd0] move_file (tool) declared_action_changed review_required -> examples 1
+      before (untrusted): destructive
+      after  (untrusted): network
+  [F-40163e29ad41d726] move_file (tool) declared_destination_changed review_required -> examples 1
+      before (untrusted): [{"kind":"url_host","optional":false,"pointer":"/destination"}]
+      after  (untrusted): [{"kind":"url_host","optional":false,"pointer":"/destination"},{"kind":"email_domain","optional":true,"pointer":"/options/notify/destination"}]
+  [F-da5272f58b93ca9a] move_file /inputSchema declaration_binding_stale requalification_required -> examples 1
+      before (untrusted): 621218ed9bc38b6cde9c6dc003583fb5778e5076bb28e25634b9070b33264682
+      after  (untrusted): 4d70d1ad5e725802cccc42e2b0e35265a5e5168532bacd9dffeb056134969bc5
+  [F-7d886eca460f07f5] move_file /inputSchema/properties/destination declared_selector_target_changed review_required -> examples 2
+      before (untrusted): {"type":"string"}
+      after  (untrusted): {"items":{"type":"string"},"minItems":1,"type":"array"}
+  [F-fa6bc6c3b6009710] move_file /inputSchema/properties/destination/items items_changed review_required -> examples 1
+      after  (untrusted): {"type":"string"}
+  [F-60c19a6fe84ec92b] move_file /inputSchema/properties/destination/minItems constraint_changed review_required -> examples 1
+      after  (untrusted): 1
+  [F-3415499b70708bb0] move_file /inputSchema/properties/destination/type type_changed review_required -> examples 2
+      before (untrusted): string
+      after  (untrusted): array
+  [F-18cd62d51502c59f] move_file /inputSchema/properties/options field_added review_required -> examples 2
+      after  (untrusted): {"additionalProperties":false,"properties":{"notify":{"additionalProperties":false,"properties":{"destination":{"type":"string"}},"type":"object"}},"type":"object"}
+
+Coverage gaps:
+  - {"effect":"the before snapshot was not checked against an accepted identity document","gap":"before_identity_not_verified"}
+  - {"entries":5,"gap":"unsupported_constructs_present"}
+  - {"gap":"examples_not_constructed","records":2}
+Unsupported constructs reported: 5
