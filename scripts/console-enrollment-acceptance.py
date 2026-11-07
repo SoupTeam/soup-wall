@@ -424,7 +424,14 @@ def main():
 
                 # 4. Ambiguous rotation: committed, response lost; confirmed only by
                 #    the identical request.
+                loss_consumed = False
+
                 def lose(route):
+                    nonlocal loss_consumed
+                    if route.request.method != "POST" or loss_consumed:
+                        route.continue_()
+                        return
+                    loss_consumed = True
                     loss_probe["started"] = True
                     try:
                         response = route.fetch()
@@ -479,17 +486,22 @@ def main():
 
                 page.on("requestfailed", failed_rotation)
 
-                page.route("**/agents/edge-1/credential-rotations", lose, times=1)
-                before = len(posts)
-                page.get_by_role("button", name="Rotate credential for edge-1").click()
-                confirm("edge-1")
-                status("Confirm with the same request")
-                check("ambiguous-rotation-shows-no-credential", not page.locator("#enroll-secret").is_visible())
-                page.get_by_role("button", name="Confirm with the same request").click()
-                status("this exact request was already committed")
-                third = secret()
-                check("ambiguous-rotation-two-identical-posts-one-change",
-                      len(posts) - before == 2 and api("GET", base)[1][0]["credential_generation"] == 3)
+                # Keep interception stable until reconciliation and explicit
+                # confirmation finish; consume only one injected response loss.
+                page.route("**/agents/edge-1/credential-rotations", lose)
+                try:
+                    before = len(posts)
+                    page.get_by_role("button", name="Rotate credential for edge-1").click()
+                    confirm("edge-1")
+                    status("Confirm with the same request")
+                    check("ambiguous-rotation-shows-no-credential", not page.locator("#enroll-secret").is_visible())
+                    page.get_by_role("button", name="Confirm with the same request").click()
+                    status("this exact request was already committed")
+                    third = secret()
+                    check("ambiguous-rotation-two-identical-posts-one-change",
+                          len(posts) - before == 2 and api("GET", base)[1][0]["credential_generation"] == 3)
+                finally:
+                    page.unroute("**/agents/edge-1/credential-rotations", lose)
                 check("second-credential-refused", set(agent_auth(second).values()) == {401})
                 install(third)
                 dismiss("confirmed-rotation")
