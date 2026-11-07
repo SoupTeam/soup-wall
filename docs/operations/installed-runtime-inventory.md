@@ -6,6 +6,10 @@ file, tools-list text or package count cannot establish an installed graph.
 The source must be the exact clean selected commit. No installation or dependency
 update occurs during inventory generation.
 
+The [private runtime clearance decisions](private-runtime-clearance.md) identify
+the repaired dependency pins and the exact remaining license, advisory and native
+review decisions.
+
 Git profile preparation uses the finite `wheels.lock.json` manifest, tied to the
 existing hashed requirements. Explicit downloads use a bounded standard-library
 HTTPS reader for those exact files; pip always installs from a verified local
