@@ -33,8 +33,8 @@ import wsl_preflight
 import pilot_lifecycle_preflight as lifecycle_preflight
 from pilot_provider import utility_environment
 MAX_JSON = 65536
-NODE_ARCHIVE_SHA256 = "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37"
-NODE_URL = "https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz"
+NODE_ARCHIVE_SHA256 = "1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce"
+NODE_URL = "https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz"
 
 
 def load(name, filename):
@@ -201,7 +201,7 @@ def bind_profile_workspace(directory, identity):
 def extract_node(archive, destination):
     """Extract the pinned Node distribution without tar-owned modes or links escaping it."""
     bounded_file(archive, 128 * 1024 * 1024, digest=NODE_ARCHIVE_SHA256)
-    prefix = "node-v22.22.0-linux-x64"
+    prefix = "node-v22.23.4-linux-x64"
     with tarfile.open(archive, "r:xz") as bundle:
         members = bundle.getmembers()
         require(len(members) <= 30000 and sum(m.size for m in members) <= 1024**3,

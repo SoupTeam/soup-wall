@@ -84,11 +84,12 @@ class SelectionTests(unittest.TestCase):
 
     def test_modified_preset_dependency_refused(self):
         original = PILOT.sha
-        def tampered(path):
-            return "0" * 64 if Path(path).name == "rule_baseline.py" else original(path)
-        with patch.object(PILOT, "sha", side_effect=tampered):
-            with self.assertRaisesRegex(ValueError, "dependency changed"):
-                self.prepare()
+        for changed in ("rule_baseline.py", "upstream-identity.json"):
+            def tampered(path):
+                return "0" * 64 if Path(path).name == changed else original(path)
+            with self.subTest(changed=changed), patch.object(PILOT, "sha", side_effect=tampered):
+                with self.assertRaisesRegex(ValueError, "dependency changed"):
+                    self.prepare()
 
     def test_platform_failure_does_not_create_selection(self):
         with patch.object(PILOT.platform, "system", return_value="Windows"):

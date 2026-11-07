@@ -565,8 +565,8 @@ mod tests {
         .unwrap();
         let files = manifest["files"].as_object().unwrap();
         let runtime_files = files.keys().filter(|path| runtime_asset(path)).count();
-        assert_eq!(files.len(), 4079);
-        assert_eq!(runtime_files, 2439);
+        assert_eq!(files.len(), 4082);
+        assert_eq!(runtime_files, 2442);
         let mut directories = std::collections::BTreeSet::new();
         for path in files
             .keys()

@@ -44,6 +44,10 @@ profiles/mcp/filesystem-readonly-v1/upstream-notices/** -text whitespace=-space-
 # SOU-68 original Git discovery and wheel lock are bound by raw-byte digests.
 profiles/mcp/git-readonly-v1/** -text whitespace=cr-at-eol
 profiles/mcp/git-readonly-v1/upstream-notices/** -text whitespace=-space-before-tab
+# Preserve the exact upstream libX11 notice, including its trailing blank line.
+profiles/mcp/git-readonly-v1/upstream-notices/python-3.11.18/LICENSE.libX11.txt -text whitespace=-space-before-tab,-blank-at-eof
+# Keep the exact upstream contributor attribution, including its trailing space.
+profiles/mcp/git-readonly-v1/upstream-notices/runtime-licenses/pygments-2.21.0-AUTHORS -text whitespace=-space-before-tab,-blank-at-eol
 rule_baseline/runtime/** text eol=lf
 
 # SOU-81: the classifier sources are packaged by raw-byte SHA-256; a Windows checkout with
@@ -110,3 +114,8 @@ docs/operations/evidence/sou-204-schema-upgrade-2026-11-03/** -text
 
 # SOU-228 sanitized fixtures are bound by raw-byte SHA-256 in provenance.json: keep LF on every platform.
 scripts/tests/fixtures/sou228/** text eol=lf
+
+# Runtime compliance copies use reviewed upstream byte identities.
+profiles/mcp/runtime-compliance-v1/** -text
+# Preserve the upstream LGPL text's original final blank line.
+profiles/mcp/runtime-compliance-v1/LGPL-3.0.txt -text whitespace=-blank-at-eof

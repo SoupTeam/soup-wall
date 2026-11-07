@@ -76,7 +76,7 @@ python3 -B scripts/prepare-installed-pilot.py \
   --output "$HOME/private-pilot-preparation" --expected-commit "$commit" \
   --agentfw "$agentfw" --git-launcher "$git_launcher" \
   --sandbox-tests "$sandbox_tests" \
-  --node-archive /absolute/node-v22.22.0-linux-x64.tar.xz \
+  --node-archive /absolute/node-v22.23.4-linux-x64.tar.xz \
   --bwrap "$bwrap_path" --git "$git_path" \
   --claude /absolute/claude --python /absolute/python3 \
   --filesystem-classifier "$PWD/rule_baseline/rule_baseline.py" \

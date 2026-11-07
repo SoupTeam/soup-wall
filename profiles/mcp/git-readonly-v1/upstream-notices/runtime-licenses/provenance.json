@@ -1,0 +1,1766 @@
+{
+  "format": "sw-python-runtime-license-provenance/1",
+  "purpose": "Exact factual attribution for observed Python components. Existing license policy remains authoritative; this file contains no approvals or waivers.",
+  "components": [
+    {
+      "ecosystem": "PyPI",
+      "name": "gitdb",
+      "version": "4.0.12",
+      "origin": {
+        "kind": "installed_distribution",
+        "owner": null,
+        "path": "gitdb-4.0.12.dist-info"
+      },
+      "original_declared_license": "BSD License",
+      "original_license_declarations": {
+        "License-Expression": [],
+        "License": [
+          "BSD License"
+        ],
+        "License-File": [
+          "LICENSE",
+          "AUTHORS"
+        ],
+        "Classifier": [
+          "Development Status :: 5 - Production/Stable",
+          "Environment :: Console",
+          "Intended Audience :: Developers",
+          "License :: OSI Approved :: BSD License",
+          "Operating System :: OS Independent",
+          "Operating System :: POSIX",
+          "Operating System :: Microsoft :: Windows",
+          "Operating System :: MacOS :: MacOS X",
+          "Programming Language :: Python",
+          "Programming Language :: Python :: 3",
+          "Programming Language :: Python :: 3.7",
+          "Programming Language :: Python :: 3.8",
+          "Programming Language :: Python :: 3.9",
+          "Programming Language :: Python :: 3.10",
+          "Programming Language :: Python :: 3.11",
+          "Programming Language :: Python :: 3.12",
+          "Programming Language :: Python :: 3.13",
+          "Programming Language :: Python :: 3 :: Only"
+        ]
+      },
+      "observed_identity_files": {
+        "gitdb-4.0.12.dist-info/METADATA": "9670d2dc866039d6b7c91f52cd81c7f224cd7467f7685c7c29e6c4691d1bf3d9"
+      },
+      "installed_notices": {
+        "gitdb-4.0.12.dist-info/LICENSE": "efd29f596a08e8857e68e7694a50bcda72839792da7c3f041bcbff5f18009239"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/gitdb/4.0.12/json",
+        "archive_url": "https://files.pythonhosted.org/packages/a0/61/5c78b91c3143ed5c14207f463aecfc8f9dbb5092fb2869baf37c273b2705/gitdb-4.0.12-py3-none-any.whl",
+        "archive_sha256": "67073e15955400952c6565cc3e707c554a4eea2e428946f7a4c162fab9bd9bcf",
+        "metadata_member": "gitdb-4.0.12.dist-info/METADATA",
+        "metadata_sha256": "9670d2dc866039d6b7c91f52cd81c7f224cd7467f7685c7c29e6c4691d1bf3d9",
+        "declarations": {
+          "License-Expression": [],
+          "License": [
+            "BSD License"
+          ],
+          "License-File": [
+            "LICENSE",
+            "AUTHORS"
+          ]
+        },
+        "license_classifiers": [
+          "License :: OSI Approved :: BSD License"
+        ],
+        "notices": [
+          {
+            "member": "gitdb-4.0.12.dist-info/AUTHORS",
+            "sha256": "6949a6bae28626b183ccde62f9d0c86e3d3447520e3dc1536435b39e113066e3",
+            "bytes": 66
+          },
+          {
+            "member": "gitdb-4.0.12.dist-info/LICENSE",
+            "sha256": "efd29f596a08e8857e68e7694a50bcda72839792da7c3f041bcbff5f18009239",
+            "bytes": 1984
+          }
+        ],
+        "wheel_record_sha256": "17eaf5b24d998b6b75ca720ee7989a623026364e1fb4150b0b91922782da700d",
+        "wheel_record_gpl_fixture_paths": []
+      },
+      "evidenced_spdx_expression": "BSD-3-Clause",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files.",
+        "Retain the applicable BSD redistribution conditions and disclaimer; preserve the non-endorsement condition for BSD-3-Clause."
+      ],
+      "supplemental_notices": [
+        {
+          "path": "upstream-notices/runtime-licenses/gitdb-4.0.12-AUTHORS",
+          "sha256": "6949a6bae28626b183ccde62f9d0c86e3d3447520e3dc1536435b39e113066e3",
+          "source_member": "gitdb-4.0.12.dist-info/AUTHORS"
+        }
+      ]
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "autocommand",
+      "version": "2.2.2",
+      "origin": {
+        "kind": "vendored_distribution",
+        "owner": "setuptools",
+        "path": "setuptools/_vendor/autocommand-2.2.2.dist-info"
+      },
+      "original_declared_license": "LGPLv3",
+      "original_license_declarations": {
+        "License-Expression": [],
+        "License": [
+          "LGPLv3"
+        ],
+        "License-File": [
+          "LICENSE"
+        ],
+        "Classifier": [
+          "Development Status :: 6 - Mature",
+          "Intended Audience :: Developers",
+          "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
+          "Programming Language :: Python",
+          "Programming Language :: Python :: 3",
+          "Programming Language :: Python :: 3 :: Only",
+          "Topic :: Software Development",
+          "Topic :: Software Development :: Libraries",
+          "Topic :: Software Development :: Libraries :: Python Modules"
+        ]
+      },
+      "observed_identity_files": {
+        "setuptools/_vendor/autocommand-2.2.2.dist-info/METADATA": "3800d9b91dceea2065a6ed6279383362e97ac38b8e56b9343f404ee531860099",
+        "setuptools/_vendor/autocommand-2.2.2.dist-info/RECORD": "2bee6072cbcec6390c57107c8dfcb0422918a98ecdb5a2cc362187f13d42e96f"
+      },
+      "installed_notices": {
+        "setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE": "ade78d04982d69972d444a8e14a94f87a2334dd3855cc80348ea8e240aa0df2d"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/autocommand/2.2.2/json",
+        "archive_url": "https://files.pythonhosted.org/packages/b5/62/05203c39d21aa3171454a6c5391ea3b582a97bfb1bc1adad25628331a1cd/autocommand-2.2.2-py3-none-any.whl",
+        "archive_sha256": "710afe251075e038e19e815e25f8155cabe02196cfb545b2185e0d9c8b2b0459",
+        "metadata_member": "autocommand-2.2.2.dist-info/METADATA",
+        "metadata_sha256": "3800d9b91dceea2065a6ed6279383362e97ac38b8e56b9343f404ee531860099",
+        "declarations": {
+          "License-Expression": [],
+          "License": [
+            "LGPLv3"
+          ],
+          "License-File": [
+            "LICENSE"
+          ]
+        },
+        "license_classifiers": [
+          "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)"
+        ],
+        "header_member": "autocommand/__init__.py",
+        "header_file_sha256": "ce4a39467be896f6fe5178c2c7fd80acf4c6056c142b9418e0b21020a611ec0b",
+        "notices": [
+          {
+            "member": "autocommand-2.2.2.dist-info/LICENSE",
+            "sha256": "ade78d04982d69972d444a8e14a94f87a2334dd3855cc80348ea8e240aa0df2d",
+            "bytes": 7634
+          }
+        ],
+        "expression_evidence": "Source header explicitly says version 3 or (at your option) any later version."
+      },
+      "evidenced_spdx_expression": "LGPL-3.0-or-later",
+      "interpretation_evidence": "Source header explicitly says version 3 or (at your option) any later version.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files.",
+        "A separate policy disposition is required; this factual attribution does not authorize redistribution or waive source, modification, relinking, or other applicable license conditions."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "setuptools",
+        "version": "84.2.0",
+        "identity_files": {
+          "setuptools-84.2.0.dist-info/METADATA": "2983f7c6baba274b63380e453f38ec0f6114a8683697d64b09759a4ffbe361d2"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "backports.tarfile",
+      "version": "1.2.0",
+      "origin": {
+        "kind": "vendored_distribution",
+        "owner": "setuptools",
+        "path": "setuptools/_vendor/backports.tarfile-1.2.0.dist-info"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": {
+        "License-Expression": [],
+        "License": [],
+        "License-File": [
+          "LICENSE"
+        ],
+        "Classifier": [
+          "Development Status :: 5 - Production/Stable",
+          "Intended Audience :: Developers",
+          "License :: OSI Approved :: MIT License",
+          "Programming Language :: Python :: 3",
+          "Programming Language :: Python :: 3 :: Only"
+        ]
+      },
+      "observed_identity_files": {
+        "setuptools/_vendor/backports.tarfile-1.2.0.dist-info/METADATA": "8215c54ead77d9dc5a108a25c6bdc72b5999aa6f62c9499a440359412afa5a51",
+        "setuptools/_vendor/backports.tarfile-1.2.0.dist-info/RECORD": "0f69db719b54220d6a4adff8bfb04ac98affea3dc8b54054a1a787a17567f4d1"
+      },
+      "installed_notices": {
+        "setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/backports.tarfile/1.2.0/json",
+        "archive_url": "https://files.pythonhosted.org/packages/b9/fa/123043af240e49752f1c4bd24da5053b6bd00cad78c2be53c0d1e8b975bc/backports.tarfile-1.2.0-py3-none-any.whl",
+        "archive_sha256": "77e284d754527b01fb1e6fa8a1afe577858ebe4e9dad8919e34c862cb399bc34",
+        "metadata_member": "backports.tarfile-1.2.0.dist-info/METADATA",
+        "metadata_sha256": "8215c54ead77d9dc5a108a25c6bdc72b5999aa6f62c9499a440359412afa5a51",
+        "declarations": {
+          "License-Expression": [],
+          "License": [],
+          "License-File": [
+            "LICENSE"
+          ]
+        },
+        "license_classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "notices": [
+          {
+            "member": "backports.tarfile-1.2.0.dist-info/LICENSE",
+            "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+            "bytes": 1023
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "MIT",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "setuptools",
+        "version": "84.2.0",
+        "identity_files": {
+          "setuptools-84.2.0.dist-info/METADATA": "2983f7c6baba274b63380e453f38ec0f6114a8683697d64b09759a4ffbe361d2"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "jaraco.text",
+      "version": "4.0.0",
+      "origin": {
+        "kind": "vendored_distribution",
+        "owner": "setuptools",
+        "path": "setuptools/_vendor/jaraco.text-4.0.0.dist-info"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": {
+        "License-Expression": [],
+        "License": [],
+        "License-File": [
+          "LICENSE"
+        ],
+        "Classifier": [
+          "Development Status :: 5 - Production/Stable",
+          "Intended Audience :: Developers",
+          "License :: OSI Approved :: MIT License",
+          "Programming Language :: Python :: 3",
+          "Programming Language :: Python :: 3 :: Only"
+        ]
+      },
+      "observed_identity_files": {
+        "setuptools/_vendor/jaraco.text-4.0.0.dist-info/METADATA": "5c2fd09012c954f139b10624978d5335a654c34014cd06f6f466ca683dbc9c56",
+        "setuptools/_vendor/jaraco.text-4.0.0.dist-info/RECORD": "63b936c308d0fcbe1390e824567cc007536c32a849adb02278e95f1d4c736c31"
+      },
+      "installed_notices": {
+        "setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/jaraco.text/4.0.0/json",
+        "archive_url": "https://files.pythonhosted.org/packages/2f/29/350039bde32fbd7000e2fb81e1c4e42a857b5e77bcbaf6267c806c70ab9a/jaraco.text-4.0.0-py3-none-any.whl",
+        "archive_sha256": "08de508939b5e681b14cdac2f1f73036cd97f6f8d7b25e96b8911a9a428ca0d1",
+        "metadata_member": "jaraco.text-4.0.0.dist-info/METADATA",
+        "metadata_sha256": "5c2fd09012c954f139b10624978d5335a654c34014cd06f6f466ca683dbc9c56",
+        "declarations": {
+          "License-Expression": [],
+          "License": [],
+          "License-File": [
+            "LICENSE"
+          ]
+        },
+        "license_classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "notices": [
+          {
+            "member": "jaraco.text-4.0.0.dist-info/LICENSE",
+            "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+            "bytes": 1023
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "MIT",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "setuptools",
+        "version": "84.2.0",
+        "identity_files": {
+          "setuptools-84.2.0.dist-info/METADATA": "2983f7c6baba274b63380e453f38ec0f6114a8683697d64b09759a4ffbe361d2"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "origin": {
+        "kind": "installed_distribution",
+        "owner": null,
+        "path": "typing_extensions-4.16.0.dist-info"
+      },
+      "original_declared_license": "PSF-2.0",
+      "original_license_declarations": {
+        "License-Expression": [
+          "PSF-2.0"
+        ],
+        "License": [],
+        "License-File": [
+          "LICENSE"
+        ],
+        "Classifier": [
+          "Development Status :: 5 - Production/Stable",
+          "Environment :: Console",
+          "Intended Audience :: Developers",
+          "Operating System :: OS Independent",
+          "Programming Language :: Python :: 3",
+          "Programming Language :: Python :: 3 :: Only",
+          "Programming Language :: Python :: 3.9",
+          "Programming Language :: Python :: 3.10",
+          "Programming Language :: Python :: 3.11",
+          "Programming Language :: Python :: 3.12",
+          "Programming Language :: Python :: 3.13",
+          "Programming Language :: Python :: 3.14",
+          "Programming Language :: Python :: 3.15",
+          "Topic :: Software Development"
+        ]
+      },
+      "observed_identity_files": {
+        "typing_extensions-4.16.0.dist-info/METADATA": "b05084ca1d50879865178d9fff9fabeab61bdfb1f361bfbde95421ffc8f9be46"
+      },
+      "installed_notices": {
+        "typing_extensions-4.16.0.dist-info/licenses/LICENSE": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/typing_extensions/4.16.0/json",
+        "archive_url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+        "archive_sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+        "metadata_member": "typing_extensions-4.16.0.dist-info/METADATA",
+        "metadata_sha256": "b05084ca1d50879865178d9fff9fabeab61bdfb1f361bfbde95421ffc8f9be46",
+        "declarations": {
+          "License-Expression": [
+            "PSF-2.0"
+          ],
+          "License": [],
+          "License-File": [
+            "LICENSE"
+          ]
+        },
+        "license_classifiers": [],
+        "notices": [
+          {
+            "member": "typing_extensions-4.16.0.dist-info/licenses/LICENSE",
+            "sha256": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf",
+            "bytes": 13936
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "PSF-2.0",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files.",
+        "A separate policy disposition is required; this factual attribution does not authorize redistribution or waive source, modification, relinking, or other applicable license conditions."
+      ],
+      "supplemental_notices": []
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "cachecontrol",
+      "version": "0.14.4",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/cachecontrol"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/cachecontrol/LICENSE.txt": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/cachecontrol/0.14.4/json",
+        "archive_url": "https://files.pythonhosted.org/packages/ef/79/c45f2d53efe6ada1110cf6f9fca095e4ff47a0454444aefdde6ac4789179/cachecontrol-0.14.4-py3-none-any.whl",
+        "archive_sha256": "b7ac014ff72ee199b5f8af1de29d60239954f223e948196fa3d84adaffc71d2b",
+        "metadata_member": "cachecontrol-0.14.4.dist-info/METADATA",
+        "metadata_sha256": "a3b797a601ffe3505ce4b0c635363ccf26a9959f2490e902f841a4b5996b5cc4",
+        "declarations": {
+          "License-Expression": [
+            "Apache-2.0"
+          ],
+          "License": [],
+          "License-File": [
+            "LICENSE.txt"
+          ]
+        },
+        "license_classifiers": [],
+        "notices": [
+          {
+            "member": "cachecontrol-0.14.4.dist-info/licenses/LICENSE.txt",
+            "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b",
+            "bytes": 558
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/cachecontrol/LICENSE.txt",
+            "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt",
+            "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "Apache-2.0",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files.",
+        "Retain applicable original NOTICE attribution and license terms, and identify modifications when redistributing modified material."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "certifi",
+      "version": "2026.10.23",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/certifi"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/certifi/LICENSE": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/certifi/LICENSE": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/certifi/2026.10.23/json",
+        "archive_url": "https://files.pythonhosted.org/packages/32/d1/a3652fe2c19134d0d15922177821d863cbd7e842d53a21bbe7e8e3a1b5ac/certifi-2026.10.23-py3-none-any.whl",
+        "archive_sha256": "e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1",
+        "metadata_member": "certifi-2026.10.23.dist-info/METADATA",
+        "metadata_sha256": "e463e38f7fe7da36a11e6d3fecc5dfa5b97be8c8022620400750d79ae7d842bc",
+        "declarations": {
+          "License-Expression": [],
+          "License": [
+            "MPL-2.0"
+          ],
+          "License-File": [
+            "LICENSE"
+          ]
+        },
+        "license_classifiers": [
+          "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)"
+        ],
+        "notices": [
+          {
+            "member": "certifi-2026.10.23.dist-info/licenses/LICENSE",
+            "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7",
+            "bytes": 989
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/certifi/LICENSE",
+            "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/certifi/LICENSE",
+            "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "MPL-2.0",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files.",
+        "A separate policy disposition is required; this factual attribution does not authorize redistribution or waive source, modification, relinking, or other applicable license conditions."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "distlib",
+      "version": "0.4.4",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/distlib"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/distlib/LICENSE.txt": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/distlib/0.4.4/json",
+        "archive_url": "https://files.pythonhosted.org/packages/c1/2b/238f02a4927fa2e27aa995371d240a468b52e42eae44a678434aff736b38/distlib-0.4.4-py2.py3-none-any.whl",
+        "archive_sha256": "cf09d55b1e85a89576b036aeb71550bfd68320f3f21761ca329eadadad918638",
+        "metadata_member": "distlib-0.4.4.dist-info/METADATA",
+        "metadata_sha256": "356a995bbbe66bab0b00cb720e8024e4230d4987c210dde0145b6e4637da78e8",
+        "declarations": {
+          "License-Expression": [],
+          "License": [
+            "PSF-2.0"
+          ],
+          "License-File": [
+            "LICENSE.txt"
+          ]
+        },
+        "license_classifiers": [
+          "License :: OSI Approved :: Python Software Foundation License"
+        ],
+        "notices": [
+          {
+            "member": "distlib-0.4.4.dist-info/licenses/LICENSE.txt",
+            "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d",
+            "bytes": 14531
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/distlib/LICENSE.txt",
+            "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt",
+            "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "PSF-2.0",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files.",
+        "A separate policy disposition is required; this factual attribution does not authorize redistribution or waive source, modification, relinking, or other applicable license conditions."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "distro",
+      "version": "1.9.0",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/distro"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/distro/LICENSE": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/distro/LICENSE": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/distro/1.9.0/json",
+        "archive_url": "https://files.pythonhosted.org/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl",
+        "archive_sha256": "7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2",
+        "metadata_member": "distro-1.9.0.dist-info/METADATA",
+        "metadata_sha256": "31632ab2de5591131091b3397bdcdf797718579d85a75186f06839dd0c09e81d",
+        "declarations": {
+          "License-Expression": [],
+          "License": [
+            "Apache License, Version 2.0"
+          ],
+          "License-File": [
+            "LICENSE"
+          ]
+        },
+        "license_classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "notices": [
+          {
+            "member": "distro-1.9.0.dist-info/LICENSE",
+            "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14",
+            "bytes": 11325
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/distro/LICENSE",
+            "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/distro/LICENSE",
+            "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "Apache-2.0",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files.",
+        "Retain applicable original NOTICE attribution and license terms, and identify modifications when redistributing modified material."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "idna",
+      "version": "3.20",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/idna"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/idna/LICENSE.md": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/idna/3.20/json",
+        "archive_url": "https://files.pythonhosted.org/packages/58/a2/bb081bab032533a855d44de1d56f8e8426114ff1ba5d1f07a438a0a654f8/idna-3.20-py3-none-any.whl",
+        "archive_sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c",
+        "metadata_member": "idna-3.20.dist-info/METADATA",
+        "metadata_sha256": "dbd8c14c1e4ca1e0c9824a6dbc7cbbf78884f38eb52d91148cd3025f671e4b85",
+        "declarations": {
+          "License-Expression": [
+            "BSD-3-Clause"
+          ],
+          "License": [],
+          "License-File": [
+            "LICENSE.md"
+          ]
+        },
+        "license_classifiers": [],
+        "notices": [
+          {
+            "member": "idna-3.20.dist-info/licenses/LICENSE.md",
+            "sha256": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04",
+            "bytes": 1541
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/idna/LICENSE.md",
+            "sha256": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/idna/LICENSE.md",
+            "sha256": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "BSD-3-Clause",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files.",
+        "Retain the applicable BSD redistribution conditions and disclaimer; preserve the non-endorsement condition for BSD-3-Clause."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "msgpack",
+      "version": "1.2.4",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/msgpack"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/msgpack/COPYING": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/msgpack/COPYING": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/msgpack/1.2.4/json",
+        "archive_url": "https://files.pythonhosted.org/packages/a3/d0/68889d2fcead0e81470cf28346a0fce80c451a3e7df9d74b0837f517027e/msgpack-1.2.4-cp310-cp310-macosx_10_9_x86_64.whl",
+        "archive_sha256": "2a4e141a9c91d1502cf98f9ca9f87af222c7857e2bfa49c1d81343157c38a28e",
+        "metadata_member": "msgpack-1.2.4.dist-info/METADATA",
+        "metadata_sha256": "40c51f2c740b8ff4707b6745cb872cf1bb9a577032ffe30969761038a4e5e563",
+        "declarations": {
+          "License-Expression": [
+            "Apache-2.0"
+          ],
+          "License": [],
+          "License-File": [
+            "COPYING"
+          ]
+        },
+        "license_classifiers": [],
+        "notices": [
+          {
+            "member": "msgpack-1.2.4.dist-info/licenses/COPYING",
+            "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427",
+            "bytes": 614
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/msgpack/COPYING",
+            "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/msgpack/COPYING",
+            "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "Apache-2.0",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files.",
+        "Retain applicable original NOTICE attribution and license terms, and identify modifications when redistributing modified material."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "packaging",
+      "version": "26.3",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/packaging"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/packaging/LICENSE": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+        "pip/_vendor/packaging/LICENSE.APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+        "pip/_vendor/packaging/LICENSE.BSD": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/packaging/LICENSE": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/packaging/26.3/json",
+        "archive_url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
+        "archive_sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+        "metadata_member": "packaging-26.3.dist-info/METADATA",
+        "metadata_sha256": "70fdb89fc4d4a9a043bf7372b8972bcc883fddff34ab55e9cf80d73875384763",
+        "declarations": {
+          "License-Expression": [
+            "Apache-2.0 OR BSD-2-Clause"
+          ],
+          "License": [],
+          "License-File": [
+            "LICENSE",
+            "LICENSE.APACHE",
+            "LICENSE.BSD"
+          ]
+        },
+        "license_classifiers": [],
+        "notices": [
+          {
+            "member": "packaging-26.3.dist-info/licenses/LICENSE",
+            "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+            "bytes": 197
+          },
+          {
+            "member": "packaging-26.3.dist-info/licenses/LICENSE.APACHE",
+            "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+            "bytes": 10174
+          },
+          {
+            "member": "packaging-26.3.dist-info/licenses/LICENSE.BSD",
+            "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5",
+            "bytes": 1344
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/packaging/LICENSE",
+            "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+          },
+          {
+            "member": "pip/_vendor/packaging/LICENSE.APACHE",
+            "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+          },
+          {
+            "member": "pip/_vendor/packaging/LICENSE.BSD",
+            "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/packaging/LICENSE",
+            "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.APACHE",
+            "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/packaging/LICENSE.BSD",
+            "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "Apache-2.0 OR BSD-2-Clause",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files.",
+        "Retain applicable original NOTICE attribution and license terms, and identify modifications when redistributing modified material.",
+        "Retain the applicable BSD redistribution conditions and disclaimer; preserve the non-endorsement condition for BSD-3-Clause."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "platformdirs",
+      "version": "4.12.4",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/platformdirs"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/platformdirs/LICENSE": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/platformdirs/4.12.4/json",
+        "archive_url": "https://files.pythonhosted.org/packages/f4/ba/223e00b885e960edd5d4b4d178c88acce019bd5b83786093681b8c393492/platformdirs-4.12.4-py3-none-any.whl",
+        "archive_sha256": "78bfb9db2a8471ed7eebe3c3c932da413911042994e699b384fbb4493fa872d7",
+        "metadata_member": "platformdirs-4.12.4.dist-info/METADATA",
+        "metadata_sha256": "2418b715af2d19c99d62ebf721c2e02075f20479ac9c0557a06e119fdbe14a3f",
+        "declarations": {
+          "License-Expression": [
+            "MIT"
+          ],
+          "License": [],
+          "License-File": [
+            "LICENSE"
+          ]
+        },
+        "license_classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "notices": [
+          {
+            "member": "platformdirs-4.12.4.dist-info/licenses/LICENSE",
+            "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6",
+            "bytes": 1089
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/platformdirs/LICENSE",
+            "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/platformdirs/LICENSE",
+            "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "MIT",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "pygments",
+      "version": "2.21.0",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/pygments"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/pygments/LICENSE": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/pygments/LICENSE": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/pygments/2.21.0/json",
+        "archive_url": "https://files.pythonhosted.org/packages/71/46/17f022dd3e953bf20a04a028a21ec746d942f8d2af30fa0f124fa0e6a684/pygments-2.21.0-py3-none-any.whl",
+        "archive_sha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9",
+        "metadata_member": "pygments-2.21.0.dist-info/METADATA",
+        "metadata_sha256": "1dde075570136774c706bf0009183a793fe0ee262e4a5590cc6eff8453eedd43",
+        "declarations": {
+          "License-Expression": [
+            "BSD-2-Clause"
+          ],
+          "License": [],
+          "License-File": [
+            "AUTHORS",
+            "LICENSE"
+          ]
+        },
+        "license_classifiers": [],
+        "notices": [
+          {
+            "member": "pygments-2.21.0.dist-info/licenses/AUTHORS",
+            "sha256": "71a83872ad82f57be692cf827e048e2cd51d45169cfa1ea3f28706d97a872c0f",
+            "bytes": 11048
+          },
+          {
+            "member": "pygments-2.21.0.dist-info/licenses/LICENSE",
+            "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17",
+            "bytes": 1331
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/pygments/LICENSE",
+            "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/pygments/LICENSE",
+            "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "BSD-2-Clause",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files.",
+        "Retain the applicable BSD redistribution conditions and disclaimer; preserve the non-endorsement condition for BSD-3-Clause."
+      ],
+      "supplemental_notices": [
+        {
+          "path": "upstream-notices/runtime-licenses/pygments-2.21.0-AUTHORS",
+          "sha256": "71a83872ad82f57be692cf827e048e2cd51d45169cfa1ea3f28706d97a872c0f",
+          "source_member": "pygments-2.21.0.dist-info/licenses/AUTHORS"
+        }
+      ],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "pyproject-hooks",
+      "version": "1.3.3",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/pyproject_hooks"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/pyproject_hooks/LICENSE": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/pyproject-hooks/1.3.3/json",
+        "archive_url": "https://files.pythonhosted.org/packages/85/11/044d1ae1b4ec0d7af88ee5bc91e081be1022533032b906a7bdabdbb60977/pyproject_hooks-1.3.3-py3-none-any.whl",
+        "archive_sha256": "5fc53fdac9f7bd63fbcdc868fb5f90b4784d78a53a3d3388cd738b807441a20b",
+        "metadata_member": "pyproject_hooks-1.3.3.dist-info/METADATA",
+        "metadata_sha256": "844e375bb28dcbe42a0502fbd9428d9ba4669db25028ee7a7afaa8dd7ada2e00",
+        "declarations": {
+          "License-Expression": [
+            "MIT"
+          ],
+          "License": [],
+          "License-File": [
+            "LICENSE"
+          ]
+        },
+        "license_classifiers": [],
+        "notices": [
+          {
+            "member": "pyproject_hooks-1.3.3.dist-info/licenses/LICENSE",
+            "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154",
+            "bytes": 1081
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/pyproject_hooks/LICENSE",
+            "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/pyproject_hooks/LICENSE",
+            "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "MIT",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "requests",
+      "version": "2.34.2",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/requests"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/requests/LICENSE": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/requests/LICENSE": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/requests/2.34.2/json",
+        "archive_url": "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl",
+        "archive_sha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0",
+        "metadata_member": "requests-2.34.2.dist-info/METADATA",
+        "metadata_sha256": "8c384ba3e979480faae2859d3c5e6c1276dd2c3616e322e124d52c8cfc556f27",
+        "declarations": {
+          "License-Expression": [],
+          "License": [
+            "Apache-2.0"
+          ],
+          "License-File": [
+            "LICENSE",
+            "NOTICE"
+          ]
+        },
+        "license_classifiers": [
+          "License :: OSI Approved :: Apache Software License"
+        ],
+        "notices": [
+          {
+            "member": "requests-2.34.2.dist-info/licenses/LICENSE",
+            "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
+            "bytes": 10142
+          },
+          {
+            "member": "requests-2.34.2.dist-info/licenses/NOTICE",
+            "sha256": "f5110972dedad2b4e9d314518daf3b7d72d6e02e499acd802181de6f74571dcc",
+            "bytes": 38
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/requests/LICENSE",
+            "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/requests/LICENSE",
+            "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "Apache-2.0",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files.",
+        "Retain applicable original NOTICE attribution and license terms, and identify modifications when redistributing modified material."
+      ],
+      "supplemental_notices": [
+        {
+          "path": "upstream-notices/runtime-licenses/requests-2.34.2-NOTICE",
+          "sha256": "f5110972dedad2b4e9d314518daf3b7d72d6e02e499acd802181de6f74571dcc",
+          "source_member": "requests-2.34.2.dist-info/licenses/NOTICE"
+        }
+      ],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "resolvelib",
+      "version": "1.2.1",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/resolvelib"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/resolvelib/LICENSE": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/resolvelib/1.2.1/json",
+        "archive_url": "https://files.pythonhosted.org/packages/e2/23/c941a0d0353681ca138489983c4309e0f5095dfd902e1357004f2357ddf2/resolvelib-1.2.1-py3-none-any.whl",
+        "archive_sha256": "fb06b66c8da04172d9e72a21d7d06186d8919e32ae5ab5cdf5b9d920be805ac2",
+        "metadata_member": "resolvelib-1.2.1.dist-info/METADATA",
+        "metadata_sha256": "7cd9798f05f86072f220f701d9ed3d38530f97de6d6d1d41b4c7aed4513d4700",
+        "declarations": {
+          "License-Expression": [],
+          "License": [
+            "ISC License"
+          ],
+          "License-File": [
+            "LICENSE"
+          ]
+        },
+        "license_classifiers": [
+          "License :: OSI Approved :: ISC License (ISCL)"
+        ],
+        "notices": [
+          {
+            "member": "resolvelib-1.2.1.dist-info/licenses/LICENSE",
+            "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d",
+            "bytes": 751
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/resolvelib/LICENSE",
+            "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/resolvelib/LICENSE",
+            "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "ISC",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "rich",
+      "version": "15.0.0",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/rich"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/rich/LICENSE": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/rich/LICENSE": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/rich/15.0.0/json",
+        "archive_url": "https://files.pythonhosted.org/packages/82/3b/64d4899d73f91ba49a8c18a8ff3f0ea8f1c1d75481760df8c68ef5235bf5/rich-15.0.0-py3-none-any.whl",
+        "archive_sha256": "33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb",
+        "metadata_member": "rich-15.0.0.dist-info/METADATA",
+        "metadata_sha256": "fad34fc603fac4481bf81f8dd629492fc302c0ec31909c86644751512afb2e3b",
+        "declarations": {
+          "License-Expression": [],
+          "License": [
+            "MIT"
+          ],
+          "License-File": [
+            "LICENSE"
+          ]
+        },
+        "license_classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "notices": [
+          {
+            "member": "rich-15.0.0.dist-info/licenses/LICENSE",
+            "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15",
+            "bytes": 1056
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/rich/LICENSE",
+            "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/rich/LICENSE",
+            "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "MIT",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "setuptools",
+      "version": "70.3.0",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/pkg_resources"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/pkg_resources/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/setuptools/70.3.0/json",
+        "archive_url": "https://files.pythonhosted.org/packages/ef/15/88e46eb9387e905704b69849618e699dc2f54407d8953cc4ec4b8b46528d/setuptools-70.3.0-py3-none-any.whl",
+        "archive_sha256": "fe384da74336c398e0d956d1cae0669bc02eed936cdb1d49b57de1990dc11ffc",
+        "metadata_member": "setuptools-70.3.0.dist-info/METADATA",
+        "metadata_sha256": "8790dab0c716bd2b073e43d81e393cd6b643cbfbd5af53ea33257fe520994343",
+        "declarations": {
+          "License-Expression": [],
+          "License": [],
+          "License-File": [
+            "LICENSE"
+          ]
+        },
+        "license_classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "notices": [
+          {
+            "member": "setuptools-70.3.0.dist-info/LICENSE",
+            "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741",
+            "bytes": 1023
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/pkg_resources/LICENSE",
+            "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/pkg_resources/LICENSE",
+            "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "MIT",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "tomli",
+      "version": "2.3.2",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/tomli"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/tomli/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/tomli/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/tomli/2.3.2/json",
+        "archive_url": "https://files.pythonhosted.org/packages/f3/0b/fd5145e97d1442aaeacc344c7dce93897a2cbd09593a939cb0c2ebea99f2/tomli-2.3.2-py3-none-any.whl",
+        "archive_sha256": "d29fba4bd126060fc106865d5703e8380d62b23e43d6318633637c99b413f76c",
+        "metadata_member": "tomli-2.3.2.dist-info/METADATA",
+        "metadata_sha256": "4afa2231c3052a084dd03cf87bab6a7a4e32829880e77ba0954a405ee0f4560d",
+        "declarations": {
+          "License-Expression": [
+            "MIT"
+          ],
+          "License": [],
+          "License-File": [
+            "LICENSE"
+          ]
+        },
+        "license_classifiers": [],
+        "notices": [
+          {
+            "member": "tomli-2.3.2.dist-info/licenses/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+            "bytes": 1072
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/tomli/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/tomli/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "MIT",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "tomli-w",
+      "version": "1.2.0",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/tomli_w"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/tomli_w/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/tomli-w/1.2.0/json",
+        "archive_url": "https://files.pythonhosted.org/packages/c7/18/c86eb8e0202e32dd3df50d43d7ff9854f8e0603945ff398974c1d91ac1ef/tomli_w-1.2.0-py3-none-any.whl",
+        "archive_sha256": "188306098d013b691fcadc011abd66727d3c414c571bb01b1a174ba8c983cf90",
+        "metadata_member": "tomli_w-1.2.0.dist-info/METADATA",
+        "metadata_sha256": "66e81ac2e41775b5ebddcfbb9f4ae77158e4c5739fd52d231e14f2fffda9c8de",
+        "declarations": {
+          "License-Expression": [],
+          "License": [],
+          "License-File": []
+        },
+        "license_classifiers": [
+          "License :: OSI Approved :: MIT License"
+        ],
+        "notices": [
+          {
+            "member": "tomli_w-1.2.0.dist-info/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe",
+            "bytes": 1072
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/tomli_w/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/tomli_w/LICENSE",
+            "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "MIT",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "truststore",
+      "version": "0.10.5",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/truststore"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/truststore/LICENSE": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/truststore/LICENSE": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/truststore/0.10.5/json",
+        "archive_url": "https://files.pythonhosted.org/packages/51/e9/3a7820be2bb0fe53b6bc9c3be26d3d1158004e4c3ab953aa6840b955b1e9/truststore-0.10.5-py3-none-any.whl",
+        "archive_sha256": "9aaaedaefaf06d8b206278cf8b5012bc897f485a874503501e12d776df78951c",
+        "metadata_member": "truststore-0.10.5.dist-info/METADATA",
+        "metadata_sha256": "1fd496f290853214e630d96f7163d2dd916f84ebe634b58aa827d6853e8f8610",
+        "declarations": {
+          "License-Expression": [
+            "MIT"
+          ],
+          "License": [],
+          "License-File": [
+            "LICENSE"
+          ]
+        },
+        "license_classifiers": [],
+        "notices": [
+          {
+            "member": "truststore-0.10.5.dist-info/licenses/LICENSE",
+            "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca",
+            "bytes": 1086
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/truststore/LICENSE",
+            "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/truststore/LICENSE",
+            "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "MIT",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    },
+    {
+      "ecosystem": "PyPI",
+      "name": "urllib3",
+      "version": "2.8.0",
+      "origin": {
+        "kind": "vendored_manifest",
+        "owner": "pip",
+        "path": "pip/_vendor/urllib3"
+      },
+      "original_declared_license": null,
+      "original_license_declarations": null,
+      "observed_identity_files": {
+        "pip/_vendor/vendor.txt": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+      },
+      "installed_notices": {
+        "pip/_vendor/urllib3/LICENSE.txt": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686",
+        "pip-26.3.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686"
+      },
+      "source": {
+        "json_url": "https://pypi.org/pypi/urllib3/2.8.0/json",
+        "archive_url": "https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl",
+        "archive_sha256": "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3",
+        "metadata_member": "urllib3-2.8.0.dist-info/METADATA",
+        "metadata_sha256": "10898c620e8007c030e07fa5622b68358a43010025dfbd78a1cb797699de2bb4",
+        "declarations": {
+          "License-Expression": [
+            "MIT"
+          ],
+          "License": [],
+          "License-File": [
+            "LICENSE.txt"
+          ]
+        },
+        "license_classifiers": [],
+        "notices": [
+          {
+            "member": "urllib3-2.8.0.dist-info/licenses/LICENSE.txt",
+            "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686",
+            "bytes": 1093
+          }
+        ],
+        "pip_wheel_notices": [
+          {
+            "member": "pip/_vendor/urllib3/LICENSE.txt",
+            "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686"
+          },
+          {
+            "member": "pip-26.3.dist-info/licenses/src/pip/_vendor/urllib3/LICENSE.txt",
+            "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686"
+          }
+        ]
+      },
+      "evidenced_spdx_expression": "MIT",
+      "interpretation_evidence": "Exact official wheel metadata and original license text; no inference from a generic legacy label alone.",
+      "obligations": [
+        "Retain the original license and copyright text and all listed attribution files."
+      ],
+      "supplemental_notices": [],
+      "parent_distribution": {
+        "name": "pip",
+        "version": "26.3",
+        "identity_files": {
+          "pip-26.3.dist-info/METADATA": "ad63a8564cd158c8de9e6a912e92776b4abc56cfa2d8286ef4c35bfb9cb9e439"
+        },
+        "source_archive": {
+          "url": "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl",
+          "sha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+          "vendor_manifest_member": "pip/_vendor/vendor.txt",
+          "vendor_manifest_sha256": "11885a895536bbc3dbf956f493d775fab0ba0bcde182b8d2549f2cbd2ed9fd76"
+        }
+      }
+    }
+  ]
+}

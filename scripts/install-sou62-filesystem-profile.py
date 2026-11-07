@@ -27,8 +27,8 @@ from pilot_provider import utility_environment
 import pilot_filesystem_roots as FS_ROOTS
 ASSETS = ROOT / "profiles/mcp/filesystem-readonly-v1"
 FORMAT = "sw-mcp/filesystem-readonly/1"
-NODE_VERSION = "v22.22.0"
-NODE_SHA256 = "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31"
+NODE_VERSION = "v22.23.4"
+NODE_SHA256 = "94efd062ed066c1a0b332e18249859c905e920eeada5df55d24c99b919629a90"
 MUTATORS = {"write_file": "side_effecting", "edit_file": "side_effecting",
             "create_directory": "side_effecting", "move_file": "destructive"}
 
@@ -117,7 +117,7 @@ def install(destination, workspace, node, bwrap, npm, *, npm_cache=None, offline
     if not workspace.is_dir() or workspace == Path("/"):
         raise ValueError("a reviewed read-only workspace directory is required")
     if sha(node) != NODE_SHA256:
-        raise ValueError("Node binary differs from the pinned official Linux x64 v22.22.0 runtime")
+        raise ValueError("Node binary differs from the pinned official Linux x64 v22.23.4 runtime")
     if subprocess.check_output([str(node), "--version"], text=True, timeout=10, env=utility_environment()).strip() != NODE_VERSION:
         raise ValueError("Node version mismatch")
     if "--ro-bind-fd" not in subprocess.check_output([str(bwrap), "--help"], text=True, timeout=10, env=utility_environment()):
@@ -180,8 +180,8 @@ def install(destination, workspace, node, bwrap, npm, *, npm_cache=None, offline
         "package_lock_sha256": sha(package / "package-lock.json"),
         "server_package": "@modelcontextprotocol/server-filesystem@2026.8.31",
         "node_version": NODE_VERSION, "upstream_notices": notices,
-        "node_archive_url": "https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz",
-        "node_archive_sha256": "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37",
+        "node_archive_url": "https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz",
+        "node_archive_sha256": "1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce",
         "bwrap_version": subprocess.check_output([str(bwrap), "--version"], text=True, timeout=10, env=utility_environment()).strip()})
     return {"status": "installed", "directory": str(destination), "profile": str(destination / "profile.json"),
             "registry": str(destination / "registry.json"), "policy": str(destination / "policy.yaml"),
@@ -199,7 +199,7 @@ def main():
     args = parser.parse_args()
     if not args.run:
         print(json.dumps({"status": "plan", "executed": False, "profile": FORMAT,
-                          "requires": "Linux x86-64, exact official Node v22.22.0, pinned bubblewrap --ro-bind-fd, npm, fresh destination"}))
+                          "requires": "Linux x86-64, exact official Node v22.23.4, pinned bubblewrap --ro-bind-fd, npm, fresh destination"}))
         return 0
     try:
         print(json.dumps(install(args.destination, args.workspace, args.node, args.bwrap, args.npm)))

@@ -150,7 +150,7 @@ owned resource cleanup.
 
 For candidate acceptance, use a clean exact checkout on disposable Linux x86-64,
 Python 3.12, cgroup v2 with systemd delegation, working unprivileged namespaces,
-and the reviewed Node `22.22.0`, bubblewrap `0.13.1` and Git `2.51.2` assets.
+and the reviewed Node `22.23.4`, bubblewrap `0.13.1` and Git `2.51.2` assets.
 The workflow contains their archive hashes and builds both exact candidate
 executables with `cargo build --locked -p agentfw --bins`. The original Git
 server installer uses its committed hash-locked Python dependencies. Replace the
@@ -169,7 +169,7 @@ sudo systemd-run --quiet --wait --pipe --collect --unit="$sou86_unit" \
   --working-directory="$PWD" /usr/bin/env "PATH=$PATH" \
   python3 -B scripts/verify-sou86-crash-supervision.py --run --mode acceptance \
   --agentfw "$PWD/target/debug/agentfw" \
-  --node /absolute/node-v22.22.0/bin/node --npm /absolute/node-v22.22.0/bin/npm \
+  --node /absolute/node-v22.23.4/bin/node --npm /absolute/node-v22.23.4/bin/npm \
   --bwrap /absolute/bubblewrap-0.13.1/bwrap \
   --git "$sou86_git" --git-sha256 "$(sha256sum "$sou86_git" | cut -d' ' -f1)" \
   --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \

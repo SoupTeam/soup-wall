@@ -69,7 +69,7 @@ All runtime inputs are explicit; nothing is chosen from `PATH`.
 | --- | --- |
 | `--git PATH --bwrap PATH` | built by the native step into `PREFIX/native` (needs `--git-archive`/`--bwrap-archive` or `--allow-download`) |
 | `--agentfw --git-launcher --sandbox-tests` | built from this commit by the Agent step into `PREFIX/agent` (exact Rust 1.94.1, installed in advance; never auto-installed) |
-| `--node-archive TAR_XZ` or `--node --npm` | pinned Node 22.22.0 archive downloaded with `--allow-download` and digest-checked |
+| `--node-archive TAR_XZ` or `--node --npm` | pinned Node 22.23.4 archive downloaded with `--allow-download` and digest-checked |
 | `--claude PATH` | locked Claude Code 2.1.251 installed with `npm ci --ignore-scripts`, using only npm from the pinned Node archive this command verified (needs `--allow-download`) |
 | `--python PATH` | the interpreter that runs `pilot.py`, resolved and recorded |
 | `--python-archive --npm-cache --wheelhouse` | offline inputs; otherwise `--allow-download` |
