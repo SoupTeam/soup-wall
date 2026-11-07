@@ -15,7 +15,8 @@ use serde_json::json;
 use super::server_profile::ProfileConfig;
 
 pub const FORMAT: &str = "sw-mcp/sealed-original-closure/1";
-// The locked original FS archive contains 4077 regular files (24,320,025 bytes).
+// The pinned locked FS closure contains 4109 regular files (25,017,373 bytes).
+// Generated npm metadata is verified separately against the shipped lock.
 // This opt-in contract has its own bounds; legacy owner/transport limits remain.
 pub const MAX_ENTRIES: usize = 8192;
 pub const MAX_BYTES: u64 = 256 * 1024 * 1024;
@@ -535,6 +536,106 @@ mod linux {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        fn check_original_fixture(root: &Path, expected: &serde_json::Value) -> anyhow::Result<()> {
+            let mut tree = BTreeMap::new();
+            let mut records = BTreeMap::new();
+            let mut bytes = 0;
+            walk(
+                &opened(root, true)?,
+                Path::new(""),
+                &mut tree,
+                &mut records,
+                &mut bytes,
+                0,
+            )?;
+            for (path, entry) in &tree {
+                if matches!(entry, Entry::Link(_)) {
+                    resolve_link(&tree, path)?;
+                }
+            }
+            verify_original(&tree, &records, expected)
+        }
+
+        #[test]
+        fn exact_original_guard_rejects_changed_missing_extra_and_retargeted_inputs() {
+            let fixture = tempfile::tempdir().unwrap();
+            let root = fixture.path();
+            std::fs::create_dir_all(root.join("node_modules/p")).unwrap();
+            std::fs::create_dir(root.join("node_modules/.bin")).unwrap();
+            let source = root.join("node_modules/p/index.js");
+            std::fs::write(root.join("package.json"), b"original metadata").unwrap();
+            std::fs::write(&source, b"original script").unwrap();
+            let link = root.join("node_modules/.bin/p");
+            std::os::unix::fs::symlink("../p/index.js", &link).unwrap();
+            let expected = serde_json::json!({
+                "files": {
+                    "package.json": format!("{:x}", Sha256::digest(b"original metadata")),
+                    "node_modules/p/index.js": format!("{:x}", Sha256::digest(b"original script"))
+                },
+                "bin_links": {"node_modules/.bin/p": "../p/index.js"}
+            });
+            check_original_fixture(root, &expected).unwrap();
+
+            std::fs::write(&source, b"changed script").unwrap();
+            assert_eq!(
+                check_original_fixture(root, &expected)
+                    .unwrap_err()
+                    .to_string(),
+                "verified_execution_not_original"
+            );
+            std::fs::write(&source, b"original script").unwrap();
+
+            let metadata_source = root.join("package.json");
+            std::fs::remove_file(&metadata_source).unwrap();
+            assert_eq!(
+                check_original_fixture(root, &expected)
+                    .unwrap_err()
+                    .to_string(),
+                "verified_execution_not_original"
+            );
+            std::fs::write(metadata_source, b"original metadata").unwrap();
+
+            let extra = root.join("unexpected.js");
+            std::fs::write(&extra, b"extra script").unwrap();
+            assert_eq!(
+                check_original_fixture(root, &expected)
+                    .unwrap_err()
+                    .to_string(),
+                "verified_execution_extra_input"
+            );
+            std::fs::remove_file(extra).unwrap();
+
+            std::fs::remove_file(&link).unwrap();
+            std::os::unix::fs::symlink("../../package.json", &link).unwrap();
+            assert_eq!(
+                check_original_fixture(root, &expected)
+                    .unwrap_err()
+                    .to_string(),
+                "verified_execution_not_original"
+            );
+            std::fs::remove_file(&link).unwrap();
+            std::os::unix::fs::symlink("../p/index.js", &link).unwrap();
+
+            let metadata = root.join("node_modules/.package-lock.json");
+            std::fs::write(&metadata, b"{}").unwrap();
+            assert_eq!(
+                check_original_fixture(root, &expected)
+                    .unwrap_err()
+                    .to_string(),
+                "verified_execution_metadata_invalid"
+            );
+            std::fs::write(&metadata, vec![b'x'; 131073]).unwrap();
+            assert_eq!(
+                check_original_fixture(root, &expected)
+                    .unwrap_err()
+                    .to_string(),
+                "verified_execution_metadata_limit"
+            );
+            std::fs::remove_file(metadata).unwrap();
+            check_original_fixture(root, &expected).unwrap();
+        }
+
         #[test]
         fn sealed_images_reject_write_and_have_independent_offsets() {
             let mut source = tempfile::tempfile().unwrap();
@@ -557,6 +658,35 @@ mod linux {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn original_manifest_metadata_matches_shipped_package_inputs() {
+        use sha2::{Digest, Sha256};
+        let manifest: serde_json::Value = serde_json::from_slice(include_bytes!(
+            "../../../../profiles/mcp/filesystem-readonly-v1/original-closure-files.json"
+        ))
+        .unwrap();
+        for (name, bytes) in [
+            (
+                "package.json",
+                include_bytes!("../../../../profiles/mcp/filesystem-readonly-v1/package.json")
+                    .as_slice(),
+            ),
+            (
+                "package-lock.json",
+                include_bytes!("../../../../profiles/mcp/filesystem-readonly-v1/package-lock.json")
+                    .as_slice(),
+            ),
+        ] {
+            let actual = format!("{:x}", Sha256::digest(bytes));
+            assert_eq!(
+                manifest["files"][name].as_str(),
+                Some(actual.as_str()),
+                "{name}"
+            );
+        }
+    }
+
     #[test]
     fn complete_original_runtime_image_fits_the_pinned_bubblewrap_argument_limit() {
         let manifest: serde_json::Value = serde_json::from_slice(include_bytes!(
@@ -565,8 +695,8 @@ mod tests {
         .unwrap();
         let files = manifest["files"].as_object().unwrap();
         let runtime_files = files.keys().filter(|path| runtime_asset(path)).count();
-        assert_eq!(files.len(), 4082);
-        assert_eq!(runtime_files, 2442);
+        assert_eq!(files.len(), 4109);
+        assert_eq!(runtime_files, 2461);
         let mut directories = std::collections::BTreeSet::new();
         for path in files
             .keys()
