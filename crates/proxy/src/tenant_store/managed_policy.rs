@@ -49,6 +49,14 @@ pub struct ManagedDeployment {
     pub status: String,
     pub issued_at_unix: i64,
     pub applied_at_unix: Option<i64>,
+    /// SOU-241: Console receipt time of the first authenticated rejection of
+    /// this exact candidate, when one is recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rejected_at_unix: Option<i64>,
+    /// SOU-241: allowlisted reason code (`sw-agent-rejection-reason/1`);
+    /// absent when the Agent did not report one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rejection_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -417,6 +425,8 @@ pub(super) fn schema(db: &rusqlite::Connection) -> Result<()> {
         );",
     )
     .context("cannot prepare managed policy tables")?;
+    db.execute_batch(super::managed_rejection::SQLITE_SCHEMA)
+        .context("cannot prepare managed rejection table")?;
     db.execute_batch(super::managed_idempotency::SQLITE_KEYS_SCHEMA)
         .context("cannot prepare managed deployment idempotency table")
 }
@@ -839,6 +849,8 @@ impl TenantStore {
             status: "issued".into(),
             issued_at_unix: issued,
             applied_at_unix: None,
+            rejected_at_unix: None,
+            rejection_code: None,
         })
     }
     fn require_managed_credential(
@@ -927,7 +939,19 @@ impl TenantStore {
         bearer: &str,
         report: &AppliedReport,
     ) -> Result<bool> {
-        self.acknowledge_managed_bundle_inner(tenant, agent, Some(bearer), report)
+        self.acknowledge_managed_bundle_inner(tenant, agent, Some(bearer), report, None)
+    }
+    /// SOU-241: the authenticated acknowledgement with an optional finite
+    /// rejection reason; the first authenticated rejection is retained.
+    pub fn acknowledge_authorized_managed_bundle_with_reason(
+        &self,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
+        report: &AppliedReport,
+        reason: Option<&super::managed_rejection::RejectionReport>,
+    ) -> Result<bool> {
+        self.acknowledge_managed_bundle_inner(tenant, agent, Some(bearer), report, reason)
     }
     pub fn acknowledge_managed_bundle(
         &self,
@@ -935,7 +959,7 @@ impl TenantStore {
         agent: &str,
         report: &AppliedReport,
     ) -> Result<bool> {
-        self.acknowledge_managed_bundle_inner(tenant, agent, None, report)
+        self.acknowledge_managed_bundle_inner(tenant, agent, None, report, None)
     }
     fn acknowledge_managed_bundle_inner(
         &self,
@@ -943,11 +967,14 @@ impl TenantStore {
         agent: &str,
         credential: Option<&str>,
         report: &AppliedReport,
+        reason: Option<&super::managed_rejection::RejectionReport>,
     ) -> Result<bool> {
         ensure!(
             report.status == "applied" || report.status == "rejected",
             "invalid acknowledgement"
         );
+        super::managed_rejection::check(&report.status, reason)?;
+        let (reason_version, reason_code) = super::managed_rejection::parts(reason);
         let mut db = self.connection()?;
         schema(&db)?;
         let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
@@ -979,6 +1006,15 @@ impl TenantStore {
             ],
         )?;
         if changed == 1 {
+            if report.status == "rejected" {
+                // The first authenticated rejection of this exact candidate,
+                // timed by the Console. Later repeats never replace it.
+                tx.execute(
+                    "INSERT INTO managed_agent_rejections(tenant_id,agent_id,deployment_sequence,revision,policy_sha256,reason_version,reason_code,received_at_unix)
+                     VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+                    params![tenant, agent, seq, report.revision, report.policy_sha256, reason_version, reason_code, now_unix()],
+                )?;
+            }
             tx.commit()?;
             drop(db);
             // Groups can advance only after the exact authenticated ACK
@@ -1003,8 +1039,22 @@ impl TenantStore {
                 |r| r.get(0),
             )
             .optional()?;
+        // A repeated rejection must carry the same reason as the first; a
+        // record from before reasons existed accepts any repeat as before.
+        let same_reason = if repeated.is_some() && report.status == "rejected" {
+            tx.query_row(
+                "SELECT reason_version,reason_code FROM managed_agent_rejections
+                 WHERE tenant_id=?1 AND agent_id=?2 AND deployment_sequence=?3",
+                params![tenant, agent, seq],
+                |r| Ok((r.get::<_, Option<i64>>(0)?, r.get::<_, Option<String>>(1)?)),
+            )
+            .optional()?
+            .is_none_or(|stored| stored == (reason_version, reason_code))
+        } else {
+            true
+        };
         tx.commit()?;
-        Ok(repeated.is_some())
+        Ok(repeated.is_some() && same_reason)
     }
     pub fn list_managed_deployments(
         &self,
@@ -1015,10 +1065,14 @@ impl TenantStore {
         schema(&db)?;
         ensure!(exact_id(tenant) && exact_id(agent), "invalid identity");
         let mut stmt = db.prepare(
-            "SELECT deployment_sequence,revision,policy_sha256,action,status,
-                    issued_at_unix,applied_at_unix
-             FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2
-             ORDER BY deployment_sequence DESC LIMIT 50",
+            "SELECT d.deployment_sequence,d.revision,d.policy_sha256,d.action,d.status,
+                    d.issued_at_unix,d.applied_at_unix,j.received_at_unix,j.reason_code
+             FROM managed_agent_deployments d
+             LEFT JOIN managed_agent_rejections j ON j.tenant_id=d.tenant_id
+               AND j.agent_id=d.agent_id AND j.deployment_sequence=d.deployment_sequence
+               AND j.revision=d.revision AND j.policy_sha256=d.policy_sha256 AND d.status='rejected'
+             WHERE d.tenant_id=?1 AND d.agent_id=?2
+             ORDER BY d.deployment_sequence DESC LIMIT 50",
         )?;
         let rows = stmt.query_map(params![tenant, agent], |r| {
             let sequence: i64 = r.get(0)?;
@@ -1032,6 +1086,8 @@ impl TenantStore {
                 status: r.get(4)?,
                 issued_at_unix: r.get(5)?,
                 applied_at_unix: r.get(6)?,
+                rejected_at_unix: r.get(7)?,
+                rejection_code: r.get(8)?,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -2813,7 +2869,7 @@ impl TenantStore {
         };
         for agent in plan.pilot_agents.iter().chain(plan.standard_agents.iter()) {
             let read_deployment = |sequence: Option<u64>| -> Result<Option<ManagedDeployment>> {
-                Ok(db.query_row("SELECT deployment_sequence,revision,policy_sha256,action,status,issued_at_unix,applied_at_unix FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2 AND (?3 IS NULL OR deployment_sequence=?3) ORDER BY deployment_sequence DESC LIMIT 1", params![tenant,agent,sequence.map(|s|s as i64)], |row| Ok(ManagedDeployment { tenant_id:tenant.into(),agent_id:agent.clone(),deployment_sequence:row.get::<_,i64>(0)? as u64,revision:row.get(1)?,policy_sha256:row.get(2)?,action:row.get(3)?,status:row.get(4)?,issued_at_unix:row.get(5)?,applied_at_unix:row.get(6)? })).optional()?)
+                Ok(db.query_row("SELECT deployment_sequence,revision,policy_sha256,action,status,issued_at_unix,applied_at_unix FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2 AND (?3 IS NULL OR deployment_sequence=?3) ORDER BY deployment_sequence DESC LIMIT 1", params![tenant,agent,sequence.map(|s|s as i64)], |row| Ok(ManagedDeployment { tenant_id:tenant.into(),agent_id:agent.clone(),deployment_sequence:row.get::<_,i64>(0)? as u64,revision:row.get(1)?,policy_sha256:row.get(2)?,action:row.get(3)?,status:row.get(4)?,issued_at_unix:row.get(5)?,applied_at_unix:row.get(6)?,rejected_at_unix:None,rejection_code:None })).optional()?)
             };
             let latest = read_deployment(None)?;
             let expected = plan

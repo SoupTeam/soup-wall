@@ -10,7 +10,7 @@ operator acceptance are required. No customer or default database is used by the
 
 The [versioned inventory](../../scripts/fixtures/console_recovery_inventory_v1.json)
 binds format 1 to accepted schema source `4f428e4b983111e5b2480e40d658628e3d198fe7`.
-PostgreSQL requires exactly migrations 1 through 31. SQLite has no native migration
+PostgreSQL requires exactly migrations 1 through 32. SQLite has no native migration
 version; the inventory binds its native table/column layouts, indexes, triggers and
 expected PRAGMA versions, including lazily created managed Agent tables when present.
 Unknown schemas require an explicit compatibility review, including future fleet tables.
@@ -23,8 +23,12 @@ not have it. Its rows are never archived or restored. After a restore and the
 checks below, run `llm-firewall migrate` against the target to recreate it empty;
 until then heartbeat status reads `unavailable`, never fresh.
 
-A pre-31 SQLite source can still be inventoried with no operator history.
-Archives bind the inventory used to create them. For a schema-30 archive,
+A pre-31 SQLite source can still be inventoried with no operator history, and a
+pre-32 one with no `managed_agent_rejections` table (Agent rejection reasons,
+see [Agent policy rejections](AGENT_POLICY_REJECTIONS.md)); the table is created on
+first use and its rows (reason code and Console receipt time only) are archived
+and restored like other managed Agent state.
+Archives bind the inventory used to create them. For a schema-30 or 31 archive,
 use the matching reviewed recovery tool and a separate target, then run the
 normal Console migration on that restored target. Recovery itself performs
 no schema upgrade or reconciliation.

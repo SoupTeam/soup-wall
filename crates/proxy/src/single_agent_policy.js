@@ -36,7 +36,11 @@ const singlePolicy = (() => {
     revisions.forEach(r => { const o = make("option", `${r.revision} · ${r.approved ? "approved" : "unapproved"}`); o.value = r.revision; $("single-revision").append(o); });
     $("single-revision").value = revisions.some(r => r.revision === chosen) ? chosen : "";
     $("single-document").textContent = document ? `Revision: ${document.revision}\nServer SHA-256: ${document.policy_sha256}\nApproved: ${document.approved}\n\n${document.policy_yaml}` : "Select a revision to review its exact server YAML and digest.";
-    $("single-deployments").textContent = deployments.length ? deployments.map(d => `Sequence ${d.deployment_sequence} · ${d.action} · ${d.status}\nRevision ${d.revision} · SHA-256 ${d.policy_sha256}\nIssued ${d.issued_at_unix} · applied acknowledgement ${d.applied_at_unix ?? "not recorded"}`).join("\n\n") : "No recorded issuance.";
+    // SOU-241: a rejected candidate is shown apart from the active policy,
+    // with fixed text for its reason and a safe next step.
+    const rejected = d => { if (d.status !== "rejected") return ""; const w = agentRejection.describe(d.rejection_code);
+      return `\nRejected candidate (never active; the Agent kept its previous policy): ${w.label}\nReceived by Console ${d.rejected_at_unix ?? "not recorded"} · next step: ${w.next}`; };
+    $("single-deployments").textContent = deployments.length ? deployments.map(d => `Sequence ${d.deployment_sequence} · ${d.action} · ${d.status}\nRevision ${d.revision} · SHA-256 ${d.policy_sha256}\nIssued ${d.issued_at_unix} · applied acknowledgement ${d.applied_at_unix ?? "not recorded"}${rejected(d)}`).join("\n\n") : "No recorded issuance.";
     controls();
   }
   function fail(error, stamp) {
@@ -63,7 +67,8 @@ const singlePolicy = (() => {
         inventory.push(selected);
       }
       if (!Array.isArray(revs) || revs.length > 50 || revs.some(r => !identity(r) || typeof r.approved !== "boolean" || !/^[a-f0-9]{64}$/.test(r.policy_sha256))) throw new Error("Revision identity mismatch");
-      if (!Array.isArray(deps) || deps.some(d => !identity(d) || typeof d.revision !== "string" || !/^[a-f0-9]{64}$/.test(d.policy_sha256) || !["activate", "rollback"].includes(d.action) || (d.status === "applied" && !Number.isSafeInteger(d.applied_at_unix)) || !Number.isSafeInteger(d.deployment_sequence) || d.deployment_sequence < 1 || !["issued", "delivered", "applied", "rejected"].includes(d.status)) || new Set(deps.map(d => d.deployment_sequence)).size !== deps.length) throw new Error("Deployment identity mismatch");
+      if (!Array.isArray(deps) || deps.some(d => !identity(d) || typeof d.revision !== "string" || !/^[a-f0-9]{64}$/.test(d.policy_sha256) || !["activate", "rollback"].includes(d.action) || (d.status === "applied" && !Number.isSafeInteger(d.applied_at_unix)) || !Number.isSafeInteger(d.deployment_sequence) || d.deployment_sequence < 1 || !["issued", "delivered", "applied", "rejected"].includes(d.status)
+        || (d.rejected_at_unix != null && (d.status !== "rejected" || !Number.isSafeInteger(d.rejected_at_unix))) || (d.rejection_code != null && (d.status !== "rejected" || typeof d.rejection_code !== "string" || !/^[a-z_]{1,48}$/.test(d.rejection_code)))) || new Set(deps.map(d => d.deployment_sequence)).size !== deps.length) throw new Error("Deployment identity mismatch");
       agents = inventory; revisions = revs; deployments = deps;
       next = revs.length === 50 ? revs[49].revision : ""; locked = false;
       const revoked = inventory.find(a => a.agent_id === agent).revoked_at_unix;

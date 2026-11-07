@@ -424,7 +424,14 @@ def main():
 
                 # 4. Ambiguous rotation: committed, response lost; confirmed only by
                 #    the identical request.
+                loss_consumed = False
+
                 def lose(route):
+                    nonlocal loss_consumed
+                    if route.request.method != "POST" or loss_consumed:
+                        route.continue_()
+                        return
+                    loss_consumed = True
                     loss_probe["started"] = True
                     try:
                         response = route.fetch()
@@ -438,6 +445,40 @@ def main():
                         route.abort("failed")
                         loss_probe["abort_requested"] = True
 
+                # Phase-scoped public metadata only. Never retain request URLs,
+                # headers, response bodies or exception messages.
+                reconciliation_probe = loss_probe.setdefault("reconciliation_get", {
+                    "request_seen": False, "response_seen": False, "finished": False,
+                    "network_failed": False, "metadata_callback_error": False,
+                })
+
+                def observe_reconciliation(event, value):
+                    try:
+                        request = value.request if event == "response" else value
+                        if not (loss_probe.get("started") and request.method == "GET"
+                                and request.url == console + base + "/enrollment?agent_id=edge-1"):
+                            return
+                        if event == "request":
+                            reconciliation_probe["request_seen"] = True
+                        elif event == "response":
+                            reconciliation_probe.update(response_seen=True, status=value.status)
+                        elif event == "requestfinished":
+                            reconciliation_probe["finished"] = True
+                        else:
+                            known = {"net::ERR_FAILED", "net::ERR_ABORTED", "net::ERR_CONNECTION_RESET",
+                                     "net::ERR_CONNECTION_CLOSED", "net::ERR_TIMED_OUT"}
+                            reconciliation_probe.update(network_failed=True,
+                                network_failure=request.failure if request.failure in known else "other")
+                    except Exception:
+                        reconciliation_probe["metadata_callback_error"] = True
+
+                rotation_observers = [
+                    (event, lambda value, event=event: observe_reconciliation(event, value))
+                    for event in ("request", "response", "requestfailed", "requestfinished")
+                ]
+                for event, observer in rotation_observers:
+                    page.on(event, observer)
+
                 def failed_rotation(request):
                     if request.method == "POST" and request.url.endswith("/credential-rotations"):
                         known = {"net::ERR_FAILED", "net::ERR_ABORTED", "net::ERR_CONNECTION_RESET", "net::ERR_CONNECTION_CLOSED"}
@@ -445,23 +486,32 @@ def main():
 
                 page.on("requestfailed", failed_rotation)
 
-                page.route("**/agents/edge-1/credential-rotations", lose, times=1)
-                before = len(posts)
-                page.get_by_role("button", name="Rotate credential for edge-1").click()
-                confirm("edge-1")
-                status("Confirm with the same request")
-                check("ambiguous-rotation-shows-no-credential", not page.locator("#enroll-secret").is_visible())
-                page.get_by_role("button", name="Confirm with the same request").click()
-                status("this exact request was already committed")
-                third = secret()
-                check("ambiguous-rotation-two-identical-posts-one-change",
-                      len(posts) - before == 2 and api("GET", base)[1][0]["credential_generation"] == 3)
+                # Keep interception stable until reconciliation and explicit
+                # confirmation finish; consume only one injected response loss.
+                page.route("**/agents/edge-1/credential-rotations", lose)
+                try:
+                    before = len(posts)
+                    page.get_by_role("button", name="Rotate credential for edge-1").click()
+                    confirm("edge-1")
+                    status("Confirm with the same request")
+                    check("ambiguous-rotation-shows-no-credential", not page.locator("#enroll-secret").is_visible())
+                    page.get_by_role("button", name="Confirm with the same request").click()
+                    status("this exact request was already committed")
+                    third = secret()
+                    check("ambiguous-rotation-two-identical-posts-one-change",
+                          len(posts) - before == 2 and api("GET", base)[1][0]["credential_generation"] == 3)
+                finally:
+                    page.unroute("**/agents/edge-1/credential-rotations", lose)
                 check("second-credential-refused", set(agent_auth(second).values()) == {401})
                 install(third)
                 dismiss("confirmed-rotation")
                 deploy("r3")
                 D.wait_for("r3 applied", lambda: applied("r3", 3), timeout=120)
                 shot("rotated")
+                for event, observer in rotation_observers:
+                    page.remove_listener(event, observer)
+                reconciliation_probe["observers_detached"] = True
+                report["rotation_loss_probe"] = json.loads(json.dumps(loss_probe))
                 loss_probe.clear()
 
                 # Lose the real 201 one-time enrollment response. The exact
@@ -697,6 +747,8 @@ def main():
     except Exception as error:
         message = str(error)
         if loss_probe:
+            if "reconciliation_get" in loss_probe:
+                report["rotation_loss_probe"] = json.loads(json.dumps(loss_probe))
             # Finite phase/status codes only: never headers, URLs, tokens or bodies.
             message = "rotation_loss_probe=" + json.dumps(loss_probe, sort_keys=True) + "; " + message
         for value in private:

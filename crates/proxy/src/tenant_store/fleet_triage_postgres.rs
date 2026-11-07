@@ -22,6 +22,8 @@ fn record(r: &Row, i: usize) -> Option<DeploymentRecord> {
         reported_applied_at_unix: r.get(i + 6),
         delivered_at_unix: None,
         rejected_at_unix: None,
+        rejection_code: None,
+        rejection_reason_version: None,
     })
 }
 fn row(r: &Row) -> RawRow {

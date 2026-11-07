@@ -355,6 +355,8 @@ fn sqlite_record(r: &rusqlite::Row<'_>, i: usize) -> rusqlite::Result<Option<Dep
         reported_applied_at_unix: r.get(i + 6)?,
         delivered_at_unix: None,
         rejected_at_unix: None,
+        rejection_code: None,
+        rejection_reason_version: None,
     }))
 }
 fn sqlite_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<RawRow> {

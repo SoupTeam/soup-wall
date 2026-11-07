@@ -1,5 +1,5 @@
 {
-  "accepted_source": "SOU-234 operator audit schema 31 on accepted main 8003fac2d271156e2229c8c15c6eddb98ee2da8e",
+  "accepted_source": "SOU-234 operator audit schema 31 plus SOU-241 Agent rejection reasons schema 32 on accepted main d7567b93 (successor of 8003fac2d271156e2229c8c15c6eddb98ee2da8e)",
   "excluded_operator_material": [
     "Agent trust/keyring and accepted-sequence files",
     "Console signing seeds",
@@ -33,6 +33,7 @@
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"agent_id","not_null":true,"position":2,"table_name":"managed_agent_deployment_keys"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"agent_id","not_null":true,"position":2,"table_name":"managed_agent_deployments"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"agent_id","not_null":true,"position":2,"table_name":"managed_agent_enrollments"},
+      {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"agent_id","not_null":true,"position":2,"table_name":"managed_agent_rejections"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"agent_id","not_null":true,"position":2,"table_name":"managed_agent_revisions"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"agent_id","not_null":true,"position":3,"table_name":"managed_agent_group_members"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"allowed_models_json","not_null":true,"position":2,"table_name":"tenant_model_policies"},
@@ -125,6 +126,7 @@
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"phase","not_null":true,"position":7,"table_name":"managed_group_rollouts"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"pilot_agents_json","not_null":true,"position":8,"table_name":"managed_group_rollouts"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"policy_sha256","not_null":true,"position":5,"table_name":"managed_agent_deployments"},
+      {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"policy_sha256","not_null":true,"position":5,"table_name":"managed_agent_rejections"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"policy_sha256","not_null":true,"position":5,"table_name":"managed_agent_revisions"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"policy_sha256","not_null":true,"position":5,"table_name":"managed_group_revisions"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"policy_sha256","not_null":true,"position":5,"table_name":"managed_group_rollouts"},
@@ -142,6 +144,7 @@
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"provider_model","not_null":false,"position":8,"table_name":"usage_events"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"provider_response_id","not_null":false,"position":4,"table_name":"usage_events"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"provider_response_id","not_null":true,"position":7,"table_name":"usage_reconciliation_observations"},
+      {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"reason_code","not_null":false,"position":7,"table_name":"managed_agent_rejections"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"recipient_label","not_null":true,"position":5,"table_name":"workspace_invitations"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"redirect_uri","not_null":true,"position":4,"table_name":"organization_oidc_connections"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"request_binding","not_null":true,"position":7,"table_name":"saml_authorization_states"},
@@ -151,6 +154,7 @@
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"revision","not_null":true,"position":3,"table_name":"managed_agent_revisions"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"revision","not_null":true,"position":3,"table_name":"managed_group_revisions"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"revision","not_null":true,"position":4,"table_name":"managed_agent_deployments"},
+      {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"revision","not_null":true,"position":4,"table_name":"managed_agent_rejections"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"revision","not_null":true,"position":4,"table_name":"managed_group_rollouts"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"role","not_null":true,"position":3,"table_name":"workspace_memberships"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"role","not_null":true,"position":4,"table_name":"control_plane_admins"},
@@ -181,6 +185,7 @@
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"tenant_id","not_null":true,"position":1,"table_name":"managed_agent_enrollments"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"tenant_id","not_null":true,"position":1,"table_name":"managed_agent_group_members"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"tenant_id","not_null":true,"position":1,"table_name":"managed_agent_groups"},
+      {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"tenant_id","not_null":true,"position":1,"table_name":"managed_agent_rejections"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"tenant_id","not_null":true,"position":1,"table_name":"managed_agent_revisions"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"tenant_id","not_null":true,"position":1,"table_name":"managed_group_revisions"},
       {"attgenerated":"","attidentity":"","collation":"pg_catalog.default","data_type":"text","default_expr":null,"name":"tenant_id","not_null":true,"position":1,"table_name":"managed_group_rollouts"},
@@ -283,6 +288,7 @@
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"deleted_event_count","not_null":true,"position":12,"table_name":"usage_retention_runs"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"delivered_at_unix","not_null":false,"position":9,"table_name":"tenant_webhook_deliveries"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"deployment_sequence","not_null":true,"position":3,"table_name":"managed_agent_deployments"},
+      {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"deployment_sequence","not_null":true,"position":3,"table_name":"managed_agent_rejections"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"deployment_sequence","not_null":true,"position":6,"table_name":"managed_agent_deployment_keys"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"eligible_cost_usd_micros","not_null":true,"position":11,"table_name":"usage_retention_runs"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"eligible_event_count","not_null":true,"position":7,"table_name":"usage_retention_runs"},
@@ -311,7 +317,9 @@
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"protected_reconciliation_event_count","not_null":true,"position":8,"table_name":"usage_retention_runs"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"rate_limit_requests_per_window","not_null":false,"position":2,"table_name":"tenant_limits"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"rate_limit_window_seconds","not_null":false,"position":3,"table_name":"tenant_limits"},
+      {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"reason_version","not_null":false,"position":6,"table_name":"managed_agent_rejections"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"received_at_unix","not_null":true,"position":3,"table_name":"operator_audit_events"},
+      {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"received_at_unix","not_null":true,"position":8,"table_name":"managed_agent_rejections"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"request_limit","not_null":false,"position":2,"table_name":"usage_quota_policies"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"revoked_at_unix","not_null":false,"position":11,"table_name":"workspace_invitations"},
       {"attgenerated":"","attidentity":"","collation":null,"data_type":"bigint","default_expr":null,"name":"revoked_at_unix","not_null":false,"position":5,"table_name":"managed_agent_enrollments"},
@@ -406,6 +414,9 @@
       {"contype":"c","definition":"CHECK (((output_tokens IS NULL) OR (output_tokens >= 0)))","name":"usage_events_output_tokens_check","table_name":"usage_events"},
       {"contype":"c","definition":"CHECK (((output_tokens IS NULL) OR (output_tokens >= 0)))","name":"usage_reconciliation_observations_output_tokens_check","table_name":"usage_reconciliation_observations"},
       {"contype":"c","definition":"CHECK (((output_usd_micros_per_million IS NULL) OR (output_usd_micros_per_million >= 0)))","name":"usage_events_output_usd_micros_per_million_check","table_name":"usage_events"},
+      {"contype":"c","definition":"CHECK (((reason_code IS NULL) OR ((length(reason_code) >= 1) AND (length(reason_code) <= 48))))","name":"managed_agent_rejections_reason_code_check","table_name":"managed_agent_rejections"},
+      {"contype":"c","definition":"CHECK (((reason_version IS NULL) = (reason_code IS NULL)))","name":"managed_agent_rejections_check","table_name":"managed_agent_rejections"},
+      {"contype":"c","definition":"CHECK (((reason_version IS NULL) OR (reason_version = 1)))","name":"managed_agent_rejections_reason_version_check","table_name":"managed_agent_rejections"},
       {"contype":"c","definition":"CHECK (((request_limit IS NOT NULL) OR (token_limit IS NOT NULL) OR (cost_usd_micros_limit IS NOT NULL)))","name":"usage_quota_policies_check","table_name":"usage_quota_policies"},
       {"contype":"c","definition":"CHECK (((request_limit IS NULL) OR (request_limit > 0)))","name":"usage_quota_policies_request_limit_check","table_name":"usage_quota_policies"},
       {"contype":"c","definition":"CHECK (((retention_days >= 30) AND (retention_days <= 3650)))","name":"usage_retention_policies_retention_days_check","table_name":"usage_retention_policies"},
@@ -511,6 +522,7 @@
       {"contype":"f","definition":"FOREIGN KEY (tenant_id, agent_id) REFERENCES public.managed_agent_enrollments(tenant_id, agent_id) ON DELETE CASCADE","name":"managed_agent_group_members_tenant_id_agent_id_fkey","table_name":"managed_agent_group_members"},
       {"contype":"f","definition":"FOREIGN KEY (tenant_id, agent_id) REFERENCES public.managed_agent_enrollments(tenant_id, agent_id)","name":"managed_agent_revisions_tenant_id_agent_id_fkey","table_name":"managed_agent_revisions"},
       {"contype":"f","definition":"FOREIGN KEY (tenant_id, agent_id, deployment_sequence) REFERENCES public.managed_agent_deployments(tenant_id, agent_id, deployment_sequence)","name":"managed_agent_deployment_keys_tenant_id_agent_id_deploymen_fkey","table_name":"managed_agent_deployment_keys"},
+      {"contype":"f","definition":"FOREIGN KEY (tenant_id, agent_id, deployment_sequence) REFERENCES public.managed_agent_deployments(tenant_id, agent_id, deployment_sequence)","name":"managed_agent_rejections_tenant_id_agent_id_deployment_seq_fkey","table_name":"managed_agent_rejections"},
       {"contype":"f","definition":"FOREIGN KEY (tenant_id, agent_id, revision) REFERENCES public.managed_agent_revisions(tenant_id, agent_id, revision)","name":"managed_agent_deployments_tenant_id_agent_id_revision_fkey","table_name":"managed_agent_deployments"},
       {"contype":"f","definition":"FOREIGN KEY (tenant_id, group_id) REFERENCES public.managed_agent_groups(tenant_id, group_id) ON DELETE CASCADE","name":"managed_agent_group_members_tenant_id_group_id_fkey","table_name":"managed_agent_group_members"},
       {"contype":"f","definition":"FOREIGN KEY (tenant_id, group_id) REFERENCES public.managed_agent_groups(tenant_id, group_id) ON DELETE CASCADE","name":"managed_group_revisions_tenant_id_group_id_fkey","table_name":"managed_group_revisions"},
@@ -567,6 +579,7 @@
       {"contype":"p","definition":"PRIMARY KEY (tenant_id)","name":"usage_retention_policies_pkey","table_name":"usage_retention_policies"},
       {"contype":"p","definition":"PRIMARY KEY (tenant_id, agent_id)","name":"managed_agent_enrollments_pkey","table_name":"managed_agent_enrollments"},
       {"contype":"p","definition":"PRIMARY KEY (tenant_id, agent_id, deployment_sequence)","name":"managed_agent_deployments_pkey","table_name":"managed_agent_deployments"},
+      {"contype":"p","definition":"PRIMARY KEY (tenant_id, agent_id, deployment_sequence)","name":"managed_agent_rejections_pkey","table_name":"managed_agent_rejections"},
       {"contype":"p","definition":"PRIMARY KEY (tenant_id, agent_id, idempotency_key)","name":"managed_agent_deployment_keys_pkey","table_name":"managed_agent_deployment_keys"},
       {"contype":"p","definition":"PRIMARY KEY (tenant_id, agent_id, revision)","name":"managed_agent_revisions_pkey","table_name":"managed_agent_revisions"},
       {"contype":"p","definition":"PRIMARY KEY (tenant_id, group_id)","name":"managed_agent_groups_pkey","table_name":"managed_agent_groups"},
@@ -658,6 +671,7 @@
       {"definition":"CREATE UNIQUE INDEX managed_agent_enrollments_token_hash_key ON public.managed_agent_enrollments USING btree (token_hash)","name":"managed_agent_enrollments_token_hash_key"},
       {"definition":"CREATE UNIQUE INDEX managed_agent_group_members_pkey ON public.managed_agent_group_members USING btree (tenant_id, group_id, agent_id)","name":"managed_agent_group_members_pkey"},
       {"definition":"CREATE UNIQUE INDEX managed_agent_groups_pkey ON public.managed_agent_groups USING btree (tenant_id, group_id)","name":"managed_agent_groups_pkey"},
+      {"definition":"CREATE UNIQUE INDEX managed_agent_rejections_pkey ON public.managed_agent_rejections USING btree (tenant_id, agent_id, deployment_sequence)","name":"managed_agent_rejections_pkey"},
       {"definition":"CREATE UNIQUE INDEX managed_agent_revisions_pkey ON public.managed_agent_revisions USING btree (tenant_id, agent_id, revision)","name":"managed_agent_revisions_pkey"},
       {"definition":"CREATE UNIQUE INDEX managed_group_revisions_pkey ON public.managed_group_revisions USING btree (tenant_id, group_id, revision)","name":"managed_group_revisions_pkey"},
       {"definition":"CREATE UNIQUE INDEX managed_group_rollouts_pkey ON public.managed_group_rollouts USING btree (tenant_id, group_id, rollout_id)","name":"managed_group_rollouts_pkey"},
@@ -742,6 +756,7 @@
       {"name":"managed_agent_enrollments","relforcerowsecurity":false,"relkind":"r","relpersistence":"p","relreplident":"d","relrowsecurity":false},
       {"name":"managed_agent_group_members","relforcerowsecurity":false,"relkind":"r","relpersistence":"p","relreplident":"d","relrowsecurity":false},
       {"name":"managed_agent_groups","relforcerowsecurity":false,"relkind":"r","relpersistence":"p","relreplident":"d","relrowsecurity":false},
+      {"name":"managed_agent_rejections","relforcerowsecurity":false,"relkind":"r","relpersistence":"p","relreplident":"d","relrowsecurity":false},
       {"name":"managed_agent_revisions","relforcerowsecurity":false,"relkind":"r","relpersistence":"p","relreplident":"d","relrowsecurity":false},
       {"name":"managed_group_revisions","relforcerowsecurity":false,"relkind":"r","relpersistence":"p","relreplident":"d","relrowsecurity":false},
       {"name":"managed_group_rollouts","relforcerowsecurity":false,"relkind":"r","relpersistence":"p","relreplident":"d","relrowsecurity":false},
@@ -801,6 +816,7 @@
       {"base":"-","element":"-","name":"managed_agent_enrollments","typcategory":"C","typnotnull":false,"typtype":"c"},
       {"base":"-","element":"-","name":"managed_agent_group_members","typcategory":"C","typnotnull":false,"typtype":"c"},
       {"base":"-","element":"-","name":"managed_agent_groups","typcategory":"C","typnotnull":false,"typtype":"c"},
+      {"base":"-","element":"-","name":"managed_agent_rejections","typcategory":"C","typnotnull":false,"typtype":"c"},
       {"base":"-","element":"-","name":"managed_agent_revisions","typcategory":"C","typnotnull":false,"typtype":"c"},
       {"base":"-","element":"-","name":"managed_group_revisions","typcategory":"C","typnotnull":false,"typtype":"c"},
       {"base":"-","element":"-","name":"managed_group_rollouts","typcategory":"C","typnotnull":false,"typtype":"c"},
@@ -852,6 +868,7 @@
       {"base":"-","element":"public.managed_agent_enrollments","name":"_managed_agent_enrollments","typcategory":"A","typnotnull":false,"typtype":"b"},
       {"base":"-","element":"public.managed_agent_group_members","name":"_managed_agent_group_members","typcategory":"A","typnotnull":false,"typtype":"b"},
       {"base":"-","element":"public.managed_agent_groups","name":"_managed_agent_groups","typcategory":"A","typnotnull":false,"typtype":"b"},
+      {"base":"-","element":"public.managed_agent_rejections","name":"_managed_agent_rejections","typcategory":"A","typnotnull":false,"typtype":"b"},
       {"base":"-","element":"public.managed_agent_revisions","name":"_managed_agent_revisions","typcategory":"A","typnotnull":false,"typtype":"b"},
       {"base":"-","element":"public.managed_group_revisions","name":"_managed_group_revisions","typcategory":"A","typnotnull":false,"typtype":"b"},
       {"base":"-","element":"public.managed_group_rollouts","name":"_managed_group_rollouts","typcategory":"A","typnotnull":false,"typtype":"b"},
@@ -899,7 +916,7 @@
     ],
     "views": []
   },
-  "postgres_schema_version": 31,
+  "postgres_schema_version": 32,
   "postgres_sequences": [
     "managed_group_rollouts_plan_sequence_seq",
     "operator_audit_events_id_seq",
@@ -968,6 +985,16 @@
       "created_at_unix": "BIGINT",
       "group_id": "TEXT",
       "name": "TEXT",
+      "tenant_id": "TEXT"
+    },
+    "managed_agent_rejections": {
+      "agent_id": "TEXT",
+      "deployment_sequence": "BIGINT",
+      "policy_sha256": "TEXT",
+      "reason_code": "TEXT",
+      "reason_version": "BIGINT",
+      "received_at_unix": "BIGINT",
+      "revision": "TEXT",
       "tenant_id": "TEXT"
     },
     "managed_agent_revisions": {
@@ -1427,6 +1454,11 @@
       "table": "managed_agent_groups",
       "type": "table"
     },
+    "managed_agent_rejections": {
+      "ddl_sha256": "8e3e75a172b3540b1bad2292dbc50001f19c210f64189ac79acdae3b2e6560eb",
+      "table": "managed_agent_rejections",
+      "type": "table"
+    },
     "managed_agent_revisions": {
       "ddl_sha256": "f7c3452b3c4ae165ef274971a5c734020dda0fb77f0f1b473c128006da373a2d",
       "table": "managed_agent_revisions",
@@ -1878,7 +1910,8 @@
     "managed_group_rollouts",
     "managed_agent_deployment_keys",
     "managed_group_start_confirmations",
-    "operator_audit_events"
+    "operator_audit_events",
+    "managed_agent_rejections"
   ],
   "sqlite_schema_contract": "accepted-console-with-operator-audit-v2",
   "sqlite_tables": {
@@ -1934,6 +1967,16 @@
       "created_at_unix": "INTEGER",
       "group_id": "TEXT",
       "name": "TEXT",
+      "tenant_id": "TEXT"
+    },
+    "managed_agent_rejections": {
+      "agent_id": "TEXT",
+      "deployment_sequence": "INTEGER",
+      "policy_sha256": "TEXT",
+      "reason_code": "TEXT",
+      "reason_version": "INTEGER",
+      "received_at_unix": "INTEGER",
+      "revision": "TEXT",
       "tenant_id": "TEXT"
     },
     "managed_agent_revisions": {

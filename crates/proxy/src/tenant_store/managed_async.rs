@@ -285,6 +285,27 @@ impl TenantStore {
             None => self.acknowledge_authorized_managed_bundle(tenant, agent, bearer, report),
         }
     }
+    /// SOU-241: as above with an optional finite rejection reason.
+    pub async fn acknowledge_authorized_managed_bundle_with_reason_async(
+        &self,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
+        report: &AppliedReport,
+        reason: Option<&super::managed_rejection::RejectionReport>,
+    ) -> anyhow::Result<bool> {
+        match &self.postgres {
+            Some(pg) => {
+                pg.acknowledge_authorized_managed_bundle_with_reason(
+                    tenant, agent, bearer, report, reason,
+                )
+                .await
+            }
+            None => self.acknowledge_authorized_managed_bundle_with_reason(
+                tenant, agent, bearer, report, reason,
+            ),
+        }
+    }
     pub async fn deliver_managed_bundle_async(
         &self,
         tenant: &str,

@@ -15,8 +15,8 @@ use serde_json::json;
 use crate::handlers::Shared;
 use crate::managed_credential::CredentialSource;
 use crate::managed_policy::{
-    parse_bounded, parse_keyring, read_keyring_file, verify_candidate, PinnedIssuerKey,
-    SignedAgentPolicy, VerifiedAgentPolicy, MAX_BUNDLE_BYTES,
+    parse_bounded, parse_keyring, read_keyring_file, rejection_code, verify_candidate,
+    PinnedIssuerKey, SignedAgentPolicy, VerifiedAgentPolicy, MAX_BUNDLE_BYTES,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,6 +50,14 @@ impl std::fmt::Display for NativeBoundaryBusy {
     }
 }
 impl std::error::Error for NativeBoundaryBusy {}
+
+/// `sw-agent-rejection-reason/1`, mirrored by the Console allowlist.
+const REJECTION_REASON_VERSION: i64 = 1;
+/// Activation failures after successful verification: a stale sequence keeps
+/// its own code; anything else (persist, guard, approvals) is generic.
+fn activation_rejection_code(error: &anyhow::Error) -> &'static str {
+    rejection_code(error).unwrap_or("activation_failed")
+}
 
 fn now() -> i64 {
     SystemTime::now()
@@ -532,7 +540,10 @@ impl ManagedSync {
             .as_ref()
             .is_some_and(|a| a.deployment_sequence >= verified.deployment_sequence)
         {
-            anyhow::bail!("stale managed revision");
+            return Err(crate::managed_policy::rejected(
+                "sequence_stale",
+                "stale managed revision",
+            ));
         }
         // Explicitly invalidate old pending local approvals. Removing any
         // unexpected entry fails closed before writing or activating.
@@ -592,28 +603,49 @@ impl ManagedSync {
 
     /// A negative assertion is separate from applied and never claims that the
     /// running policy changed. Console validates identity + exact sequence/hash.
+    /// SOU-241: the body carries one finite reason code. An older Console
+    /// refuses the unknown field (422, or 400); the Agent then retries once with
+    /// the legacy body so the rejection is still recorded (without a code).
     async fn report_rejection(
         &self,
         client: &reqwest::Client,
         bundle: &SignedAgentPolicy,
         token: &str,
+        code: &'static str,
     ) {
-        let result = client
-            .post(match self.endpoint("agent/v1/policy/ack") {
-                Ok(url) => url,
-                Err(_) => return,
-            })
+        let Ok(url) = self.endpoint("agent/v1/policy/ack") else {
+            return;
+        };
+        let legacy = json!({
+            "deployment_sequence": bundle.deployment_sequence,
+            "revision": bundle.revision,
+            "policy_sha256": bundle.policy_sha256,
+            "status": "rejected"
+        });
+        let mut body = legacy.clone();
+        body["rejection"] = json!({"version": REJECTION_REASON_VERSION, "code": code});
+        let result = match client
+            .post(url.clone())
             .bearer_auth(token)
-            .json(&json!({
-                "deployment_sequence": bundle.deployment_sequence,
-                "revision": bundle.revision,
-                "policy_sha256": bundle.policy_sha256,
-                "status": "rejected"
-            }))
+            .json(&body)
             .send()
-            .await;
+            .await
+        {
+            Ok(r)
+                if r.status() == reqwest::StatusCode::BAD_REQUEST
+                    || r.status() == reqwest::StatusCode::UNPROCESSABLE_ENTITY =>
+            {
+                client
+                    .post(url)
+                    .bearer_auth(token)
+                    .json(&legacy)
+                    .send()
+                    .await
+            }
+            other => other,
+        };
         if let Err(error) = result {
-            tracing::warn!(error=%error, "unable to report rejected managed bundle");
+            tracing::warn!(error=%error, code, "unable to report rejected managed bundle");
         }
     }
 
@@ -676,7 +708,8 @@ impl ManagedSync {
                     error = %error,
                     "cannot load trusted keyring during candidate verification; reporting rejection"
                 );
-                self.report_rejection(client, &bundle, &token).await;
+                self.report_rejection(client, &bundle, &token, "keyring_unavailable")
+                    .await;
                 return Err(error);
             }
         };
@@ -684,7 +717,8 @@ impl ManagedSync {
             match verify_candidate(&bundle, &keys, &self.tenant, &self.agent, last, now()) {
                 Ok(verified) => verified,
                 Err(error) => {
-                    self.report_rejection(client, &bundle, &token).await;
+                    let code = rejection_code(&error).unwrap_or("bundle_malformed");
+                    self.report_rejection(client, &bundle, &token, code).await;
                     return Err(error);
                 }
             };
@@ -693,7 +727,8 @@ impl ManagedSync {
             if error.is::<NativeBoundaryBusy>() {
                 return Err(error);
             }
-            self.report_rejection(client, &bundle, &token).await;
+            let code = activation_rejection_code(&error);
+            self.report_rejection(client, &bundle, &token, code).await;
             return Err(error);
         }
         self.acknowledge(client, state, &token).await
