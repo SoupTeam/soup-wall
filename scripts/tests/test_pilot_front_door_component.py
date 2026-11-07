@@ -14,6 +14,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -111,15 +112,32 @@ class Format(unittest.TestCase):
         self.assertEqual(IDENTITY.installed_from_bytes(IDENTITY.record(SOURCE)), SOURCE)
 
     def test_complete_notice_capacity_remains_bounded(self):
+        update = load("component_update", "scripts/pilot_update.py")
+        with patch.object(update, "checked_file", return_value=self.archive):
+            self.assertEqual(update.component({}, SOURCE), hashlib.sha256(self.manifest).hexdigest())
         files = BUILDER.contents()
         self.assertLessEqual(len(files) + 1, BUILDER.MAX_FILES)
         for index in range(BUILDER.MAX_FILES - len(files) - 1):
             files[f"notices/{index:03}.txt"] = b"notice\n"
-        _, manifest = BUILDER.assemble(files, SOURCE)
+        archive, manifest = BUILDER.assemble(files, SOURCE)
         self.assertEqual(len(json.loads(manifest)["files"]), BUILDER.MAX_FILES)
+        with patch.object(update, "checked_file", return_value=archive):
+            self.assertEqual(update.component({}, SOURCE), hashlib.sha256(manifest).hexdigest())
         files["notices/extra.txt"] = b"notice\n"
         with self.assertRaisesRegex(SystemExit, "too many component files"):
             BUILDER.assemble(files, SOURCE)
+        files[IDENTITY.FILE] = IDENTITY.record(SOURCE)
+        value = json.loads(manifest)
+        value["files"] = [{"mode": "0400", "path": name,
+                           "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+                          for name, data in sorted(files.items())]
+        raw = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+        oversized = BUILDER.tar_member("manifest.json", raw)
+        oversized += b"".join(BUILDER.tar_member(name, data) for name, data in sorted(files.items()))
+        oversized += b"\0" * 1024
+        with patch.object(update, "checked_file", return_value=oversized):
+            with self.assertRaisesRegex(ValueError, "unsupported_component"):
+                update.component({}, SOURCE)
 
 
 class InstalledIdentity(unittest.TestCase):
