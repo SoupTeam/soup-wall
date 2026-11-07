@@ -308,16 +308,16 @@ pub(super) fn status(
     }
 }
 
-const SQLITE_TABLE: &str = "CREATE TEMP TABLE IF NOT EXISTS agent_heartbeats (
+pub(super) const SQLITE_TABLE: &str = "CREATE TEMP TABLE IF NOT EXISTS agent_heartbeats (
     tenant_id TEXT NOT NULL, agent_id TEXT NOT NULL,
     credential_generation INTEGER NOT NULL, instance_id TEXT NOT NULL,
     registration_id TEXT NOT NULL, last_sequence INTEGER NOT NULL,
     registered_at_unix INTEGER NOT NULL, received_at_unix INTEGER,
     policy_sequence INTEGER, policy_revision TEXT, policy_sha256 TEXT,
     PRIMARY KEY(tenant_id, agent_id))";
-const ROW_COLUMNS: &str = "credential_generation,instance_id,registration_id,last_sequence,registered_at_unix,received_at_unix,policy_sequence,policy_revision,policy_sha256";
+pub(super) const ROW_COLUMNS: &str = "credential_generation,instance_id,registration_id,last_sequence,registered_at_unix,received_at_unix,policy_sequence,policy_revision,policy_sha256";
 
-fn sqlite_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
+pub(super) fn sqlite_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
     let seq: Option<i64> = r.get(6)?;
     Ok(Row {
         generation: r.get(0)?,

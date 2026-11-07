@@ -124,7 +124,7 @@ jobs:
           git restore .
           git rev-parse HEAD > target/fleet-evidence/source.txt
       - name: Fleet storage and authorization regressions
-        run: cargo test --locked -p llm-firewall --test fleet_projection --test fleet_triage --test agent_heartbeat --test managed_rejection_reasons
+        run: cargo test --locked -p llm-firewall --test fleet_projection --test fleet_triage --test agent_heartbeat --test managed_rejection_reasons --test managed_stale_recovery
       - name: Build real Console and Agent
         run: cargo build --locked -p llm-firewall -p agentfw
       - name: Prepare isolated browser driver
@@ -172,6 +172,8 @@ jobs:
           exit $status
       - name: Agent heartbeat status browser regressions
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_heartbeat_browser.py -v'
+      - name: Stale-restore recovery panel browser regressions
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_stale_recovery_browser.py -v'
       - name: Opt-in Agent heartbeat with real Agents
         shell: bash
         run: |
@@ -219,6 +221,17 @@ jobs:
               --backend "$backend" --output "$RUNNER_TEMP/rejection" || status=1
           done
           cp -r "$RUNNER_TEMP/rejection" target/fleet-evidence/rejection
+          exit $status
+      - name: Stale-restore recovery with a real Agent on both backends
+        shell: bash
+        run: |
+          set +e
+          status=0
+          for backend in sqlite postgres; do
+            "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-stale-restore-acceptance.py --no-build \
+              --backend "$backend" --output "$RUNNER_TEMP/stale-restore" || status=1
+          done
+          cp -r "$RUNNER_TEMP/stale-restore" target/fleet-evidence/stale-restore
           exit $status
       - name: Browser rollout to one pilot and two real Agents over HTTPS
         shell: bash
