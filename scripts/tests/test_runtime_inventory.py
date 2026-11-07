@@ -431,7 +431,7 @@ class RuntimeInventoryTests(unittest.TestCase):
                     self.assertEqual(row["parent_distribution"]["name"], row["origin"]["owner"])
                 supplemental.extend(item["path"] for item in row["supplemental_notices"])
             self.assertEqual({Path(path).name for path in supplemental},
-                             {"gitdb-4.0.12-AUTHORS", "pygments-2.20.0-AUTHORS", "requests-2.34.2-NOTICE"})
+                         {"gitdb-4.0.12-AUTHORS", "pygments-2.21.0-AUTHORS", "requests-2.34.2-NOTICE"})
 
     def vendor_fixture(self, root, *, name="urllib3", version="1.0", owner="pip", metadata=False):
         site = root / "python-package/python/lib/python3.11/site-packages"
