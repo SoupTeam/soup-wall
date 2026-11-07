@@ -438,6 +438,40 @@ def main():
                         route.abort("failed")
                         loss_probe["abort_requested"] = True
 
+                # Phase-scoped public metadata only. Never retain request URLs,
+                # headers, response bodies or exception messages.
+                reconciliation_probe = loss_probe.setdefault("reconciliation_get", {
+                    "request_seen": False, "response_seen": False, "finished": False,
+                    "network_failed": False, "metadata_callback_error": False,
+                })
+
+                def observe_reconciliation(event, value):
+                    try:
+                        request = value.request if event == "response" else value
+                        if not (loss_probe.get("started") and request.method == "GET"
+                                and request.url == console + base + "/enrollment?agent_id=edge-1"):
+                            return
+                        if event == "request":
+                            reconciliation_probe["request_seen"] = True
+                        elif event == "response":
+                            reconciliation_probe.update(response_seen=True, status=value.status)
+                        elif event == "requestfinished":
+                            reconciliation_probe["finished"] = True
+                        else:
+                            known = {"net::ERR_FAILED", "net::ERR_ABORTED", "net::ERR_CONNECTION_RESET",
+                                     "net::ERR_CONNECTION_CLOSED", "net::ERR_TIMED_OUT"}
+                            reconciliation_probe.update(network_failed=True,
+                                network_failure=request.failure if request.failure in known else "other")
+                    except Exception:
+                        reconciliation_probe["metadata_callback_error"] = True
+
+                rotation_observers = [
+                    (event, lambda value, event=event: observe_reconciliation(event, value))
+                    for event in ("request", "response", "requestfailed", "requestfinished")
+                ]
+                for event, observer in rotation_observers:
+                    page.on(event, observer)
+
                 def failed_rotation(request):
                     if request.method == "POST" and request.url.endswith("/credential-rotations"):
                         known = {"net::ERR_FAILED", "net::ERR_ABORTED", "net::ERR_CONNECTION_RESET", "net::ERR_CONNECTION_CLOSED"}
@@ -462,6 +496,10 @@ def main():
                 deploy("r3")
                 D.wait_for("r3 applied", lambda: applied("r3", 3), timeout=120)
                 shot("rotated")
+                for event, observer in rotation_observers:
+                    page.remove_listener(event, observer)
+                reconciliation_probe["observers_detached"] = True
+                report["rotation_loss_probe"] = json.loads(json.dumps(loss_probe))
                 loss_probe.clear()
 
                 # Lose the real 201 one-time enrollment response. The exact
@@ -697,6 +735,8 @@ def main():
     except Exception as error:
         message = str(error)
         if loss_probe:
+            if "reconciliation_get" in loss_probe:
+                report["rotation_loss_probe"] = json.loads(json.dumps(loss_probe))
             # Finite phase/status codes only: never headers, URLs, tokens or bodies.
             message = "rotation_loss_probe=" + json.dumps(loss_probe, sort_keys=True) + "; " + message
         for value in private:
