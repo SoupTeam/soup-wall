@@ -75,6 +75,42 @@ pub fn build_firewall(cfg: &Config) -> anyhow::Result<Firewall> {
     Ok(fw)
 }
 
+// EPHEMERAL RUNNER DIAGNOSTIC ONLY. No request identity, headers or body logged.
+async fn review_selected_enrollment(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use std::sync::{
+        atomic::{AtomicU64, Ordering},
+        OnceLock,
+    };
+    use std::time::Instant;
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    static START: OnceLock<Instant> = OnceLock::new();
+    if request.method() != axum::http::Method::GET
+        || !request.uri().path().ends_with("/agents/enrollment")
+        || request.uri().query() != Some("agent_id=edge-1")
+    {
+        return next.run(request).await;
+    }
+    let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    if sequence >= 64 {
+        return next.run(request).await;
+    }
+    let start = START.get_or_init(Instant::now);
+    eprintln!(
+        "REVIEW_ENROLLMENT arrival {sequence} {}",
+        start.elapsed().as_millis()
+    );
+    let response = next.run(request).await;
+    eprintln!(
+        "REVIEW_ENROLLMENT completion {sequence} {} {}",
+        start.elapsed().as_millis(),
+        response.status().as_u16()
+    );
+    response
+}
+
 /// The axum router.
 pub fn app(state: Shared) -> Router {
     let max_body_bytes = state.config.max_body_bytes;
@@ -597,6 +633,7 @@ pub fn app(state: Shared) -> Router {
     };
     router
         .layer(DefaultBodyLimit::max(max_body_bytes))
+        .layer(middleware::from_fn(review_selected_enrollment))
         .with_state(state)
 }
 

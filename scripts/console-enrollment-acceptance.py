@@ -124,7 +124,14 @@ def main():
               "source_tree": subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=ROOT, text=True).strip(),
               "source_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT)),
               "scope": "one disposable private Linux deployment; synthetic tenants and Agent IDs; "
-                       "not production, multi-host or runtime attestation"}
+                       "not production, multi-host or runtime attestation",
+              "diagnostic_observer": {
+                  "scope": "ephemeral runner observation; not public-source qualification",
+                  "baseline_head": "ea670e69e192d342202f7992cc3fb54a67606666",
+                  "modified_console_and_driver": True,
+                  "binary_sha256": {p.name: sha(p.read_bytes()) for p in (console_binary, agent_binary)},
+                  "driver_sha256": sha(Path(__file__).read_bytes()),
+              }}
 
     def check(name, condition):
         checks[name] = bool(condition)
@@ -424,11 +431,37 @@ def main():
 
                 # 4. Ambiguous rotation: committed, response lost; confirmed only by
                 #    the identical request.
+                review_probe_started = time.monotonic()
+                loss_probe["review_server_log_start_bytes"] = (temp / "console.log").stat().st_size
+
+                def review_offset_ms():
+                    return min(120_000, max(0, round((time.monotonic() - review_probe_started) * 1000)))
+
+                def review_server_snapshot(end):
+                    try:
+                        with (temp / "console.log").open("rb") as stream:
+                            stream.seek(loss_probe["review_server_log_start_bytes"])
+                            raw = stream.read(min(32_769, end - stream.tell()))
+                        events = []
+                        for line in raw[:32_768].decode("ascii", errors="replace").splitlines():
+                            match = re.fullmatch(
+                                r"REVIEW_ENROLLMENT (arrival|completion) ([0-9]+) ([0-9]+)(?: ([0-9]+))?", line)
+                            if match and len(events) < 128:
+                                event, sequence, offset, status = match.groups()
+                                events.append({"event": event, "sequence": int(sequence),
+                                               "server_offset_ms": int(offset),
+                                               "status": int(status) if status else None})
+                        return {"events": events, "truncated": len(raw) > 32_768, "read_failed": False}
+                    except OSError:
+                        return {"events": [], "truncated": False, "read_failed": True}
+
                 def lose(route):
+                    loss_probe["review_route_enter_ms"] = review_offset_ms()
                     loss_probe["started"] = True
                     try:
                         response = route.fetch()
                         loss_probe["downstream_status"] = response.status
+                        loss_probe["review_post_fetched_ms"] = review_offset_ms()
                         assert response.status == 200, "Loss probe did not receive a committed rotation response"
                     except Exception as error:
                         loss_probe["fetch_error_type"] = type(error).__name__[:60]
@@ -437,6 +470,7 @@ def main():
                         # Even a failed probe must release the paused browser request.
                         route.abort("failed")
                         loss_probe["abort_requested"] = True
+                        loss_probe["review_abort_returned_ms"] = review_offset_ms()
 
                 # Phase-scoped public metadata only. Never retain request URLs,
                 # headers, response bodies or exception messages.
@@ -451,6 +485,7 @@ def main():
                         if not (loss_probe.get("started") and request.method == "GET"
                                 and request.url == console + base + "/enrollment?agent_id=edge-1"):
                             return
+                        reconciliation_probe["review_" + event + "_ms"] = review_offset_ms()
                         if event == "request":
                             reconciliation_probe["request_seen"] = True
                         elif event == "response":
@@ -483,7 +518,20 @@ def main():
                 before = len(posts)
                 page.get_by_role("button", name="Rotate credential for edge-1").click()
                 confirm("edge-1")
-                status("Confirm with the same request")
+                review_assertion_passed = False
+                try:
+                    status("Confirm with the same request")
+                    review_assertion_passed = True
+                finally:
+                    review_end = (temp / "console.log").stat().st_size
+                    report["review_before_browser_cleanup"] = {
+                        "offset_ms": review_offset_ms(),
+                        "assertion_passed": review_assertion_passed,
+                        "page_closed": page.is_closed(),
+                        "server_log_end_bytes": review_end,
+                        "reconciliation_get": dict(reconciliation_probe),
+                        "server_observation": review_server_snapshot(review_end),
+                    }
                 check("ambiguous-rotation-shows-no-credential", not page.locator("#enroll-secret").is_visible())
                 page.get_by_role("button", name="Confirm with the same request").click()
                 status("this exact request was already committed")
