@@ -191,6 +191,23 @@ and [unsafe-libyaml maintenance notice](https://rustsec.org/advisories/RUSTSEC-2
 
 ## Native review and final qualification
 
+### Unresolved upstream Node security notice
+
+On 3 November 2026, the Node.js project announced HIGH-severity security
+updates affecting the 22.x, 24.x and 26.x release lines, scheduled for
+11 November. The selected Node 22.23.4 predates that release. The
+[official announcement](https://nodejs.org/en/blog/vulnerability/november-2026-security-releases)
+does not yet disclose the affected code or a patched release. Do not infer
+non-applicability or invent a CVE from the preannouncement.
+
+The current private candidate therefore retains an explicit unresolved native
+security finding. Package-license decisions, the setuptools subset review,
+maintenance-warning dispositions and trusted setup-input admission cannot
+remove it. A new verified upstream release and a freshly prepared, scanned and
+qualified selection are required before claiming a cleared complete runtime.
+Earlier successful functional runs remain historical execution evidence.
+
+
 The selected Git, bubblewrap, Node and Python binaries, their bundled libraries,
 host Python and selected system ELF libraries require a current native review.
 The checkpoint retains the earlier source/notice observations and unresolved

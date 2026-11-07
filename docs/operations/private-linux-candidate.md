@@ -5,7 +5,9 @@ from a clean commit. It does not qualify a release, promote an artifact, or
 provide byte-for-byte compiler reproducibility. Original packaging and inventory
 work remains in the branch's retained history (PRs #185 and #239).
 
-Use the existing native pilot prerequisites and Rust 1.94.1 build contract.
+Use the existing native pilot prerequisites and the repository-pinned Rust
+1.99.1 build contract in `rust-toolchain.toml`. Historical evidence keeps its
+original toolchain and source identities.
 Supply the reviewed bubblewrap 0.13.1 binary and its previously recorded digest;
 there is no ambient PATH sandbox fallback. Python 3.11 or newer, glibc and ELF
 inspection tools remain explicit host requirements. The classifier uses only
