@@ -515,7 +515,14 @@ def main():
                 for name, observer in cdp_observers:
                     cdp_session.on(name, observer)
 
+                loss_consumed = False
+
                 def lose(route):
+                    nonlocal loss_consumed
+                    if route.request.method != "POST" or loss_consumed:
+                        route.continue_()
+                        return
+                    loss_consumed = True
                     cdp_probe["post_route_enter_ms"] = cdp_offset()
                     loss_probe["started"] = True
                     try:
@@ -573,33 +580,36 @@ def main():
 
                 page.on("requestfailed", failed_rotation)
 
-                page.route("**/agents/edge-1/credential-rotations", lose, times=1)
-                before = len(posts)
-                page.get_by_role("button", name="Rotate credential for edge-1").click()
-                confirm("edge-1")
-                cdp_assertion_passed = False
+                page.route("**/agents/edge-1/credential-rotations", lose)
                 try:
-                    status("Confirm with the same request")
-                    cdp_assertion_passed = True
+                    before = len(posts)
+                    page.get_by_role("button", name="Rotate credential for edge-1").click()
+                    confirm("edge-1")
+                    cdp_assertion_passed = False
+                    try:
+                        status("Confirm with the same request")
+                        cdp_assertion_passed = True
+                    finally:
+                        cdp_probe["before_browser_cleanup"] = {
+                            "callback_ms": cdp_offset(), "assertion_passed": cdp_assertion_passed,
+                            "page_closed": page.is_closed(),
+                            "public_reconciliation": dict(reconciliation_probe),
+                            "events": json.loads(json.dumps(cdp_probe["events"])),
+                        }
+                        cdp_clock["snapshot"] = True
+                        cdp_probe["stopped_after_success"] = cdp_assertion_passed
+                        if cdp_assertion_passed:
+                            cdp_clock["active"] = False
+                            for name, observer in cdp_observers:
+                                cdp_session.remove_listener(name, observer)
+                    check("ambiguous-rotation-shows-no-credential", not page.locator("#enroll-secret").is_visible())
+                    page.get_by_role("button", name="Confirm with the same request").click()
+                    status("this exact request was already committed")
+                    third = secret()
+                    check("ambiguous-rotation-two-identical-posts-one-change",
+                          len(posts) - before == 2 and api("GET", base)[1][0]["credential_generation"] == 3)
                 finally:
-                    cdp_probe["before_browser_cleanup"] = {
-                        "callback_ms": cdp_offset(), "assertion_passed": cdp_assertion_passed,
-                        "page_closed": page.is_closed(),
-                        "public_reconciliation": dict(reconciliation_probe),
-                        "events": json.loads(json.dumps(cdp_probe["events"])),
-                    }
-                    cdp_clock["snapshot"] = True
-                    cdp_probe["stopped_after_success"] = cdp_assertion_passed
-                    if cdp_assertion_passed:
-                        cdp_clock["active"] = False
-                        for name, observer in cdp_observers:
-                            cdp_session.remove_listener(name, observer)
-                check("ambiguous-rotation-shows-no-credential", not page.locator("#enroll-secret").is_visible())
-                page.get_by_role("button", name="Confirm with the same request").click()
-                status("this exact request was already committed")
-                third = secret()
-                check("ambiguous-rotation-two-identical-posts-one-change",
-                      len(posts) - before == 2 and api("GET", base)[1][0]["credential_generation"] == 3)
+                    page.unroute("**/agents/edge-1/credential-rotations", lose)
                 check("second-credential-refused", set(agent_auth(second).values()) == {401})
                 install(third)
                 dismiss("confirmed-rotation")
