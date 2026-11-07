@@ -293,16 +293,22 @@ mod tests {
         // Isolate the process-global settings from connection tests running in parallel.
         const CHILD: &str = "SOU_HEARTBEAT_ENV_TEST_CHILD";
         if std::env::var_os(CHILD).is_none() {
-            let status = std::process::Command::new(std::env::current_exe().unwrap())
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
                 .args([
                     "--exact",
                     "managed_heartbeat::tests::opt_in_and_interval_are_explicit_and_bounded",
                     "--nocapture",
                 ])
                 .env(CHILD, "1")
-                .status()
+                .output()
                 .unwrap();
-            assert!(status.success(), "heartbeat environment child failed");
+            assert!(
+                output.status.success(),
+                "heartbeat environment child failed: {}\nstdout: {}\nstderr: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout[..output.stdout.len().min(4096)]),
+                String::from_utf8_lossy(&output.stderr[..output.stderr.len().min(4096)])
+            );
             return;
         }
         std::env::remove_var("SOUP_MANAGED_AGENT_HEARTBEAT");
