@@ -120,6 +120,52 @@ Each installed inventory row retains its notice paths and SHA-256 values.
 Maintainer decisions must name the exact package/version/origin and notice
 identities, permitted distribution scope, required conditions and reviewer.
 
+### Concrete package disposition conditions
+
+The eight permissive package rows (the six exact BlueOak rows and the two
+PSF rows) can be accepted under a scoped decision when their complete original
+notices accompany the material. BlueOak permits broad copyright and patent use
+with downstream notice delivery. PSF permits use, modification and distribution
+with retained license/copyright notices, a summary of modifications when made,
+and no implied endorsement. These rights follow the
+[BlueOak license](https://blueoakcouncil.org/license/1.0.0) and
+[PSF terms](https://docs.python.org/3/license.html); project acceptance remains a
+separate exact-version decision. No global SPDX allowlist is expanded.
+
+The original filesystem server retains the exact upstream
+[MIT/Apache transition notice](https://github.com/modelcontextprotocol/servers/blob/a40bc270fb5ece62673f8a1196f57116d885c5eb/LICENSE).
+The package is not represented as wholly available under an MIT-or-Apache
+choice. Preserve both applicable software license texts, upstream attribution
+and the source revision; give the supplied README/documentation its
+[CC-BY-4.0 attribution and license link](https://creativecommons.org/licenses/by/4.0/).
+The source-bound compliance instructions identify the unchanged upstream material
+and the distributor's dependency/integration changes.
+
+Both distinct certifi versions can be retained with their exact installed
+source/PEM files, notices and source-availability instructions.
+[MPL 2.0 sections 3.1–3.4](https://www.mozilla.org/en-US/MPL/2.0/) govern those
+covered files and permit a separately licensed larger work. A package label
+or retained license alone does not satisfy executable-form source obligations.
+
+The actual setuptools-vendored autocommand 2.2.2 retains six editable Python
+source files. Its upstream license is LGPLv3-or-later; the supplied wheel's
+LGPL text must be accompanied by the full GPLv3 text and the corresponding
+recipient notices/rights. The
+[LGPL terms](https://www.gnu.org/licenses/lgpl-3.0.html) require a suitable
+modified-library or recombination route for a combined application.
+The compliance copier retains the containing editable application/vendor source
+and documents its Python source path. Source editing/development does not
+inherit the production selection's qualification. Original digest checks remain
+enforced for that qualified selection.
+
+The [scoped review-input procedure](installed-runtime-inventory.md#scoped-maintainer-review-input)
+requires actual copied material and exact hashes before admitting these
+conditions. A private external pilot is still a distribution; native-component
+source and notice obligations and current security findings remain separate.
+Internal organizational use does not imply public source publication, as
+explained by the [GNU project](https://www.gnu.org/licenses/gpl-faq.en.html).
+No blanket full-runtime clearance or additional commercial rights are asserted.
+
 ## Remaining advisory decisions
 
 | Observation | Material and boundary | Required disposition |

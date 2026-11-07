@@ -22,6 +22,7 @@ import sys
 import tempfile
 import time
 import tomllib
+import runtime_reviews
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_OUTPUT_BYTES = 10 * 1024 * 1024
@@ -557,7 +558,9 @@ def installed_graphs(generation, graphs):
         if not files:
             files = original_server_notices(generation, metadata)
         notices.append({"ecosystem": "npm", "name": metadata["name"], "version": metadata["version"],
-                        "license": metadata.get("license"), "files": {str(p): sha(p) for p in files}})
+                        "license": metadata.get("license"), "files": {str(p): sha(p) for p in files},
+                        "origin": {"kind": "installed_package", "owner": None, "path": relative},
+                        "identity_files": {str(directory / "package.json"): sha(directory / "package.json")}})
     site = Path(git["packageRoot"]) / "python/lib/python3.11/site-packages"
     expected = {next(iter(values))[0]: values for values in graphs.values()}
     require(npm_graph == expected["npm"], "installed_npm_graph_mismatch")
@@ -596,7 +599,58 @@ def installed_graphs(generation, graphs):
 
 
 
-def verify_native_reviews(path, selection, generation):
+
+def native_libraries(selection, generation, preparation):
+    """Union profile libraries with every selected native executable closure."""
+    libraries = {}
+    for kind in ("filesystem", "git"):
+        profile = read_json(generation / (kind + "-profile/profile.json"))
+        for item in profile["libraries"]:
+            require(item["path"] not in libraries or libraries[item["path"]] == item["sha256"],
+                    "native_library_identity_conflict")
+            libraries[item["path"]] = item["sha256"]
+    git_profile = read_json(generation / "git-profile/profile.json")
+    selected = {role: selection["files"][role] for role in preparation.PILOT.EXECUTABLE_ROLES}
+    selected["git_python"] = {"path": git_profile["runtimePath"], "sha256": git_profile["runtimeSha256"]}
+    executables = []
+    for role, item in selected.items():
+        require(sha(item["path"]) == item["sha256"], "native_selected_binary_changed")
+        with Path(item["path"]).open("rb") as stream:
+            magic = stream.read(4)
+            if role == "npm" and magic != b"\x7fELF":
+                # The pinned npm CLI is JavaScript, run by the separately
+                # selected Node interpreter. Other script interpreters fail.
+                stream.seek(0)
+                require(stream.readline(128).strip() == b"#!/usr/bin/env node",
+                        "native_selected_script_interpreter")
+                continue
+            require(magic == b"\x7fELF", "native_selected_elf_required")
+        executables.append(Path(item["path"]))
+    # Reuse the installer's finite missing-library/path/count checks. Packaged
+    # Python libraries remain covered by its verified package tree/native review.
+    for item in preparation.GIT.dependencies(executables, Path(git_profile["packageRoot"])):
+        require(item["path"] not in libraries or libraries[item["path"]] == item["sha256"],
+                "native_library_identity_conflict")
+        libraries[item["path"]] = item["sha256"]
+    for item in selected.values():
+        require(sha(item["path"]) == item["sha256"], "native_selected_binary_changed")
+    return libraries
+
+
+def verify_native_libraries(data, selection, generation, preparation):
+    libraries = native_libraries(selection, generation, preparation)
+    supplied = data.get("system_libraries", {})
+    require(set(supplied) == set(libraries), "system_library_review_coverage")
+    for path, digest in libraries.items():
+        item = supplied[path]
+        require(item.get("sha256") == digest and sha(path) == digest and item.get("license")
+                and item.get("sources") and item.get("notices")
+                and all(sha(p) == value for p, value in item["notices"].items()),
+                "system_library_review_incomplete")
+    return libraries
+
+
+def verify_native_reviews(path, selection, generation, *, preparation):
     """Explicit reviewer evidence for components outside package-manager scans."""
     require(path is not None, "native_reviews_required")
     data = read_json(path)
@@ -625,17 +679,7 @@ def verify_native_reviews(path, selection, generation):
         require(checked.tzinfo is not None and checked <= datetime.now(timezone.utc), "native_review_timestamp")
         require(review.get("notices") and all(sha(p) == digest for p, digest in review["notices"].items()),
                 "native_notice_mismatch")
-    libraries = {}
-    for kind in ("filesystem", "git"):
-        profile = read_json(generation / (kind + "-profile/profile.json"))
-        libraries.update({item["path"]: item["sha256"] for item in profile["libraries"]})
-    supplied = data.get("system_libraries", {})
-    require(set(supplied) == set(libraries), "system_library_review_coverage")
-    for path, digest in libraries.items():
-        item = supplied[path]
-        require(item.get("sha256") == digest and sha(path) == digest and item.get("license")
-                and item.get("sources") and item.get("notices")
-                and all(sha(p) == value for p, value in item["notices"].items()), "system_library_review_incomplete")
+    verify_native_libraries(data, selection, generation, preparation)
     return data
 
 
@@ -644,6 +688,8 @@ def main(argv=None):
     parser.add_argument("--selection", "--receipt", dest="selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--native-reviews", type=Path)
+    parser.add_argument("--runtime-reviews", type=Path,
+                        help="explicit exact-material maintainer dispositions and compliance bundle; default blocks")
     parser.add_argument("--rustsec-db", type=Path,
                         help="explicit pre-fetched RustSec database; audit uses --no-fetch")
     parser.add_argument("--rustsec-commit", help="full expected commit of the explicit official RustSec checkout")
@@ -668,6 +714,7 @@ def main(argv=None):
         report["packages"] = {path: sorted(values) for path, values in graphs.items()}
         report["cargo_lock_components"] = tomllib.loads((ROOT / "Cargo.lock").read_text())["package"]
         report["notices"], python_graph, license_errors = installed_graphs(args.selection.parent, graphs)
+        report["license_errors"] = license_errors
         report["errors"].extend(license_errors)
         report["python_graphs"] = {
             kind: sorted({python_identity(row["name"], row["version"]) for row in report["notices"]
@@ -684,10 +731,16 @@ def main(argv=None):
         graphs[str(scan_requirements.resolve())] = python_graph
         report["scan_input_sha256"] = {path: sha(path) for path in graphs}
         report["packages"] = {path: sorted(values) for path, values in graphs.items()}
+        report["scan_input_labels"] = {
+            path: ("installed-python" if path == str(scan_requirements.resolve())
+                   else (Path(path).relative_to(ROOT).as_posix() if Path(path).is_relative_to(ROOT)
+                         else Path(path).name)) for path in graphs}
+        # Test fixtures may use external artificial locks; real prepared inputs
+        # are rooted in this exact clean source.
         try:
             if args.native_reviews is not None:
                 report["native_reviews_input"] = {"sha256": sha(args.native_reviews), "data": read_json(args.native_reviews)}
-            report["native_reviews"] = verify_native_reviews(args.native_reviews, selection, args.selection.parent)
+            report["native_reviews"] = verify_native_reviews(args.native_reviews, selection, args.selection.parent, preparation=prep)
         except (OSError, ValueError, KeyError, TypeError) as error:
             report["errors"].append("native_reviews:" + str(error))
         # Keep scanner invocation and its complete bounded raw result, including
@@ -709,13 +762,16 @@ def main(argv=None):
                     *["--lockfile=" + ("requirements.txt:" if path.endswith("requirements.txt") else "") + path
                       for path in graphs]],
         }
+        review_findings = []
         for name, command in commands.items():
             result = run_cmd(command)
             report["checks"][name] = result
             if name == "rust_licenses" and license_path.exists():
                 report["rust_license_report"] = read_json(license_path)
             if result["status"] != "passed":
-                report["errors"].append(name + "_failed_or_incomplete")
+                if not (args.runtime_reviews is not None and name in {"osv", "cargo_audit"}
+                        and result["status"] == "failed" and result.get("exit_code") == 1):
+                    report["errors"].append(name + "_failed_or_incomplete")
                 if name not in {"osv", "cargo_audit"} or result.get("exit_code") not in {0, 1}:
                     continue
             try:
@@ -723,20 +779,64 @@ def main(argv=None):
                     observation = osv_observation(json.loads(result["stdout"], object_pairs_hook=pairs), graphs)
                     report["osv_coverage"] = observation["coverage"]
                     report["findings"] = observation["findings"]
-                    require(not observation["findings"], "unresolved_osv_findings")
+                    review_findings.extend(runtime_reviews.osv_findings(
+                        observation["findings"], ROOT, scan_requirements))
+                    if args.runtime_reviews is None:
+                        require(not observation["findings"], "unresolved_osv_findings")
                 elif name == "cargo_audit":
                     data = json.loads(result["stdout"], object_pairs_hook=pairs)
                     report["cargo_audit_report"] = data
-                    verify_cargo_audit(data)
+                    if args.runtime_reviews is None:
+                        verify_cargo_audit(data)
+                    else:
+                        maintenance = runtime_reviews.cargo_findings(data)
+                        report["cargo_maintenance_findings"] = maintenance
+                        review_findings.extend(maintenance)
             except (ValueError, TypeError, KeyError) as error:
                 report["errors"].append(name + ":" + str(error))
         license_temp.cleanup()
+        # Preserve policy results and scanner findings. A supplied review can
+        # discharge only these exact license-review errors, never missing
+        # notices, provenance failures, unknown warnings or scan failures.
+        report["runtime_reviews_expected_binding"] = runtime_reviews.context(report)
+        if args.runtime_reviews is not None:
+            try:
+                require(not args.runtime_reviews.is_symlink(), "runtime_reviews_symlink")
+                review_input_sha = sha(args.runtime_reviews)
+                data = read_json(args.runtime_reviews)
+                review = runtime_reviews.Review(data, args.runtime_reviews, report,
+                                               args.expected_commit, args.selection.parent)
+                review.licenses(report["notices"])
+                review.advisories(review_findings)
+                require(all(name in report["checks"] and
+                    report["checks"][name].get("exit_code") in {0, 1}
+                    for name in ("osv", "cargo_audit")) and
+                    "osv_coverage" in report and "cargo_maintenance_findings" in report,
+                    "runtime_review_scanner_coverage_incomplete")
+                report["runtime_reviews"] = review.finish()
+                report["runtime_reviews_input_sha256"] = review_input_sha
+                report["errors"] = [error for error in report["errors"]
+                    if not error.startswith("runtime_license_review_required:")]
+                require(sha(args.runtime_reviews) == review_input_sha, "runtime_reviews_changed")
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                report["errors"].append("runtime_reviews:" + str(error))
         require(before == {path: sha(path) for path in before}, "lockfiles_changed_during_scan")
         require(report["scan_input_sha256"] == {path: sha(path) for path in graphs}, "scan_inputs_changed")
         if args.rustsec_db is not None:
             require(report["rustsec_database"] == rustsec_identity(args.rustsec_db, args.rustsec_commit),
                     "rustsec_database_changed_during_scan")
         prep.verify_generation(args.selection.parent, args.expected_commit, probe_native=False)
+        if args.native_reviews is not None and "native_reviews" in report:
+            require(sha(args.native_reviews) == report["native_reviews_input"]["sha256"],
+                    "native_reviews_changed")
+            verify_native_reviews(args.native_reviews, selection, args.selection.parent, preparation=prep)
+        if "runtime_reviews" in report:
+            require(sha(args.runtime_reviews) == report["runtime_reviews_input_sha256"], "runtime_reviews_changed")
+            checked = runtime_reviews.Review(read_json(args.runtime_reviews), args.runtime_reviews, report,
+                                            args.expected_commit, args.selection.parent)
+            checked.licenses(report["notices"])
+            checked.advisories(review_findings)
+            checked.finish()
         if not report["errors"]:
             report["status"] = "checks_passed"
     except Exception as error:

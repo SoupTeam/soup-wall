@@ -114,3 +114,8 @@ docs/operations/evidence/sou-204-schema-upgrade-2026-11-03/** -text
 
 # SOU-228 sanitized fixtures are bound by raw-byte SHA-256 in provenance.json: keep LF on every platform.
 scripts/tests/fixtures/sou228/** text eol=lf
+
+# Runtime compliance copies use reviewed upstream byte identities.
+profiles/mcp/runtime-compliance-v1/** -text
+# Preserve the upstream LGPL text's original final blank line.
+profiles/mcp/runtime-compliance-v1/LGPL-3.0.txt -text whitespace=-blank-at-eof

@@ -38,8 +38,8 @@ Nested distributions cannot satisfy missing top-level wheels. Extra unrelated
 top-level distributions remain blocking. It inventories
 license metadata and hashes existing notice files for every installed package.
 Missing declarations or notice text remain incomplete unless an exact, verified
-attribution record supplies the missing factual evidence. Legal approval still
-comes only from the existing license policy.
+attribution record supplies the missing factual evidence. The existing license policy remains the default. An optional, exact-material
+maintainer disposition may admit a reviewed row under the conditions below.
 
 The selected Git interpreter's stripped archive omits native dependency notices
 provided in the matching full Python standalone archive. The profile ships those
@@ -100,7 +100,7 @@ the raw value, including null. Only a fully matched record can supply
 `attribution.status: "notice_verified"` describes factual attribution separately
 from `policy_disposition_required` and the existing policy result. Verified
 autocommand LGPL, certifi MPL, and typing_extensions/distlib PSF evidence still
-requires policy disposition. No license allowlist or acceptance threshold changes.
+requires policy disposition. The global SPDX allowlist remains unchanged.
 
 Exact original gitdb AUTHORS, Pygments AUTHORS, and Requests NOTICE texts are
 retained as supplemental assets in the same runtime notice directory. A mapping
@@ -140,6 +140,8 @@ when the scanner exits nonzero. Reachability is not inferred from a version matc
 
 The invocation follows the [OSV source scanning interface](https://github.com/google/osv-scanner/blob/main/docs/scan-source.md).
 All unresolved findings, including informational findings, remain blocking.
+Explicit exact-material dispositions may resolve the supported cases described below;
+the original observations remain in the report.
 Missing scanners, timeouts, malformed JSON, empty coverage and failed exits cannot
 become a successful inventory. Source, selection and scan inputs are rechecked
 after scanning. Reports use new private files and never replace earlier attempts.
@@ -182,3 +184,82 @@ proof of exploitability, or a promise that no vulnerabilities exist.
 ```bash
 python3 -B -m unittest discover -s scripts/tests -p 'test_runtime_inventory.py' -v
 ```
+
+
+## Scoped maintainer review input
+
+`--runtime-reviews /private/compliance/runtime-reviews.json` is an optional
+project-maintainer decision input. Its format is `sw-pilot-runtime-reviews/1`.
+Omitting it retains the default blocking behavior. A review is an explicit
+AI-assisted project-maintainer disposition under delegated authority; it is not
+a claim that a human lawyer reviewed the material or that upstream granted
+additional rights. Treat the supplied file as a trusted maintainer input, not
+as a self-authenticating approval from a runtime supplier.
+
+The input binds the exact clean expected source identity, selection SHA-256,
+selected executable identities, lock digests, complete observed package graph,
+installed origin/metadata/notice material and scan-input digests. Package
+decisions bind the complete row digest and exact effective license expression.
+Original declarations, attribution, policy results and
+`policy_disposition_required` remain unchanged in the report. A separate
+`runtime_reviews` result records the scoped disposition and its conditions.
+
+Each condition names real files beneath the review file's directory and their
+SHA-256 values. Symlinks, unsafe paths, missing/changed files, unknown fields,
+duplicate or unused decisions/conditions, stale source/selection/material and
+new uncovered findings fail. The copied notice digests must cover all notices
+of the reviewed component. Source conditions also bind the original selected
+files inside the prepared generation and byte-identical supplied source copies.
+MPL requires notices, exact covered source and source instructions. LGPL
+additionally requires a documented replacement/recombination route and recipient
+modification/debugging rights. PSF requires the original historical notices and
+a modification statement. The MCP transition requires its software notices and
+documentation attribution. BlueOak requires its notice text or license link.
+
+Build a fresh compliance directory from an existing incomplete inventory:
+
+```bash
+python3 scripts/build-runtime-compliance.py \
+  --selection /private/prepared/generations/example/selection.json \
+  --expected-commit <full-clean-source-commit> \
+  --inventory /private/evidence/current-runtime-inventory.json \
+  --output /private/compliance/new-attempt
+```
+
+The copier re-verifies the generation and observed notices. It preserves all
+installed package notices, supplies full GPLv3/LGPLv3/MPL2 license texts and
+source/recipient instructions, and copies the exact certifi source/PEM trees
+and the containing setuptools application/vendor source for autocommand.
+The output contains a hash inventory and a proposal with `UNREVIEWED` decisions.
+Copying files does not approve them. Review the concrete material, choose the
+permitted `internal` or `private-handoff` scope, record the delegated decision,
+and add the exact advisory evidence before supplying the completed JSON.
+The proposal cannot pass the verifier unchanged.
+
+Every observed OSV finding requires its exact scanner/package/source identity,
+advisory ID, complete aliases and canonical advisory-record digest. Demonstrably
+absent affected code may receive `not_applicable`; exact Cargo unmaintained
+notices may receive `accepted_maintenance_risk`. Cargo vulnerabilities, unsound
+or unknown warnings, missing scanners, malformed/incomplete graph reports and
+other failed exits remain blocking. Exit 1 from a completely parsed findings
+report is retained as an observed scanner failure and may be discharged only by
+complete supported dispositions. There is no generic vulnerability-risk or
+native-risk override.
+
+The compliance directory must accompany each permitted private handoff; an NDA
+must not remove upstream source/modification/redistribution rights. Native Git,
+Python and system-library corresponding-source conditions remain a separate
+gate. A successful package disposition cannot clear a native security finding,
+certify pilot readiness, publish an artifact or approve a release. Re-verify
+all source, selection, scan inputs and compliance files after scanning; keep
+earlier attempts and their original findings.
+
+
+Native system-library review covers the union of both installed profiles and
+every selected ELF executable, including the Agent/helper/test launchers,
+bubblewrap and the host Python. The selected Git profile interpreter is probed
+separately; its packaged libraries remain in its verified tree. The pinned npm
+JavaScript uses the selected Node interpreter. Reuse the installer's bounded
+dependency reader, refuse unknown script interpreters, and recheck selected
+binary and library hashes around probes and after scanning. A profile-only
+review cannot omit a dependency used by another selected executable.
