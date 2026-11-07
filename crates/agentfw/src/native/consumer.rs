@@ -272,6 +272,63 @@ mod lifecycle_tests {
     #[ignore = "re-executed by connected_quarantine_reader with launcher identity"]
     async fn connected_quarantine_reader_child() {
         assert_eq!(std::env::args().nth(1).as_deref(), Some("pilot-launch"));
+        // Drop the actual in-flight delivery future, not an error returned by it.
+        // The observer survives to prove recipient closure independently.
+        for after_prefix in [false, true] {
+            use tokio::io::AsyncReadExt;
+            let mut child = child();
+            let captured = execution::tests::reader_capture(&child.0);
+            let st = &captured.st;
+            assert_eq!(
+                register(st, &captured.registration).await,
+                StatusCode::NO_CONTENT
+            );
+            let grant =
+                analysis_purpose::grant_for_retained(st, &captured.registration, &captured.id);
+            let pending = analysis_purpose::consume(st, &grant).unwrap();
+            child.0.kill().unwrap();
+            child.0.wait().unwrap();
+            let before = st
+                .native
+                .as_ref()
+                .unwrap()
+                .quarantine
+                .lock()
+                .unwrap()
+                .retained(&captured.id)
+                .unwrap();
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            let mut delivery = Box::pin(pending.deliver_to_reader(
+                st,
+                crate::sandbox::fixture_reader::ReadMode::Pause {
+                    after_prefix,
+                    signal: Some(tx),
+                },
+            ));
+            let (pid, mut observer) = tokio::select! {
+                ready = tokio::time::timeout(std::time::Duration::from_secs(10), rx) => ready.unwrap().unwrap(),
+                result = &mut delivery => panic!("delivery ended before cancellation point: {result:?}"),
+            };
+            assert!(std::path::Path::new(&format!("/proc/{pid}")).exists());
+            drop(delivery);
+            assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+            let mut tail = Vec::new();
+            tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                (&mut observer).take(1).read_to_end(&mut tail),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert!(
+                tail.is_empty(),
+                "cancelled delivery must not return an acknowledgement"
+            );
+            assert!(analysis_purpose::consume(st, &grant).is_err());
+            let q = st.native.as_ref().unwrap().quarantine.lock().unwrap();
+            assert_eq!(q.reader_was_reserved(&captured.id), after_prefix);
+            assert_eq!(q.retained(&captured.id).unwrap(), before);
+        }
         // Actual consumed OriginalResult capture connects to signed-purpose
         // withdrawal and the independently confined reader. The MCP source
         // runtime/admission and operator mint remain explicit test fixtures.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Public-fixture-only recipient witness. This entire module is cfg(test).
-//! No quarantine payload, operator grant, model, or production endpoint enters it.
+//! Only public test custody enters it; no model or production endpoint uses it.
 use anyhow::{ensure, Result};
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
@@ -18,6 +18,11 @@ pub(crate) enum ReadMode {
     PartialAck,
     OversizedAck,
     TruncatedSource,
+    /// Deterministic external cancellation point, never a production option.
+    Pause {
+        after_prefix: bool,
+        signal: Option<tokio::sync::oneshot::Sender<(u32, tokio::net::UnixStream)>>,
+    },
 }
 
 // Bubblewrap supplies PWD even with --clearenv. Accept only its fixed sandbox
@@ -451,7 +456,7 @@ mod linux {
     /// The original custody deadline bounds setup, reservation and delivery.
     pub(crate) async fn read_retained(
         deadline: Instant,
-        mode: ReadMode,
+        mut mode: ReadMode,
         reserve: impl FnOnce() -> Result<Vec<u8>>,
     ) -> Result<()> {
         ensure!(Instant::now() < deadline, "reader deadline");
@@ -464,6 +469,13 @@ mod linux {
         let parent_namespaces = namespace_ids()?;
         let (socket, child_socket) = UnixStream::pair()?;
         socket.set_nonblocking(true)?;
+        // Independent read observer survives cancellation of the delivery future.
+        // It is CLOEXEC and is never inherited by the reader.
+        let mut observer = if matches!(mode, ReadMode::Pause { .. }) {
+            Some(tokio::net::UnixStream::from_std(socket.try_clone()?)?)
+        } else {
+            None
+        };
         let mut socket = tokio::net::UnixStream::from_std(socket)?;
         let mut command = command(
             match mode {
@@ -489,6 +501,18 @@ mod linux {
                 );
             }
             ensure!(!process.exited()?, "recipient exited");
+            if let ReadMode::Pause {
+                after_prefix: false,
+                signal,
+            } = &mut mode
+            {
+                signal
+                    .take()
+                    .context("missing pause signal")?
+                    .send((pid, observer.take().context("missing observer")?))
+                    .map_err(|_| anyhow::anyhow!("pause observer gone"))?;
+                std::future::pending::<()>().await;
+            }
             let bytes = reserve()?;
             let mut ticket = Ticket::new(&bytes, deadline)?;
             ticket.reserve(&{ ticket.generation }, &bytes)?;
@@ -497,12 +521,33 @@ mod linux {
                 .write_all(&(bytes.len() as u64).to_be_bytes())
                 .await?;
             socket
-                .write_all(if matches!(mode, ReadMode::TruncatedSource) {
-                    &bytes[..bytes.len() / 2]
-                } else {
-                    &bytes
-                })
+                .write_all(
+                    if matches!(
+                        mode,
+                        ReadMode::TruncatedSource
+                            | ReadMode::Pause {
+                                after_prefix: true,
+                                ..
+                            }
+                    ) {
+                        &bytes[..bytes.len() / 2]
+                    } else {
+                        &bytes
+                    },
+                )
                 .await?;
+            if let ReadMode::Pause {
+                after_prefix: true,
+                signal,
+            } = &mut mode
+            {
+                signal
+                    .take()
+                    .context("missing pause signal")?
+                    .send((pid, observer.take().context("missing observer")?))
+                    .map_err(|_| anyhow::anyhow!("pause observer gone"))?;
+                std::future::pending::<()>().await;
+            }
             socket.shutdown().await?;
             let mut ack = Vec::new();
             (&mut socket)

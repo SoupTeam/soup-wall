@@ -722,3 +722,34 @@ cargo clippy --locked -p agentfw --all-targets -- -D warnings
 
 Keep Draft/In Progress pending that review and the remaining useful-receiver and
 six-case outcomes. No full/native matrix or new model run is requested.
+
+### External cancellation follow-up - November 7
+
+[Review 5812164775](https://github.com/SoupTeam/soup-wall/pull/346#pullrequestreview-5812164775)
+accepted the connected test transport at `ae32ce78`. The TL corrected the expiry
+control to use the captured original `Call.expires` (120 seconds did not expire
+a 300-second call), and the observation-only proc scanner's ESRCH disappearance
+race. Both TL changes are incorporated; original failed attempts remain failures.
+All eight connected cases and eight standalone kernel cases passed independently,
+along with purpose8, quarantine2, execution18, cleanup2 and waitability1 controls.
+General at 18:29 confirmed green CI/CodeQL and requested continued interruption
+and useful-receiver work.
+
+Two new Linux cancellation controls drop the actual pending delivery future,
+rather than injecting an error into its normal return path. A private oneshot
+signals only after verified confined readiness, either before reservation or
+after writing half the source. A separate CLOEXEC socket observer survives that
+drop. The controls require the reader supervisor alive before cancellation,
+absent after the existing owned-process Drop guard, bounded observer EOF with no
+acknowledgement, purpose replay refusal, the exact expected reservation state
+and unchanged retained bytes/findings/taint. No production lifecycle or signalling
+implementation is replaced. Setup failure cannot satisfy the pause-point check.
+
+These are new **unexecuted locally Linux controls**, not a claim that abrupt
+daemon death has been validated. Their parent is the existing
+`connected_quarantine_reader`; the prior eight connected cases still execute.
+Windows portable reader/quarantine checks and strict all-targets Clippy are the
+local boundary. Request independent exact-source Linux execution of the existing
+commands above, particularly `connected_quarantine_reader`, before accepting
+cancellation behavior. Whole-daemon crash, useful source-bound semantic output,
+production policy-transition semantics and all six original outcomes remain open.
