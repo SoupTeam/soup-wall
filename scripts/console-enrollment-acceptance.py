@@ -440,20 +440,32 @@ def main():
                 def review_server_snapshot(end):
                     try:
                         with (temp / "console.log").open("rb") as stream:
-                            stream.seek(loss_probe["review_server_log_start_bytes"])
-                            raw = stream.read(min(32_769, end - stream.tell()))
-                        events = []
+                            start = loss_probe["review_server_log_start_bytes"]
+                            stream.seek(start)
+                            raw = stream.read(max(0, min(32_769, end - start)))
+                        events, parse_failed = [], end < start
                         for line in raw[:32_768].decode("ascii", errors="replace").splitlines():
+                            if not line.startswith("REVIEW_ENROLLMENT"):
+                                continue
                             match = re.fullmatch(
-                                r"REVIEW_ENROLLMENT (arrival|completion) ([0-9]+) ([0-9]+)(?: ([0-9]+))?", line)
-                            if match and len(events) < 128:
-                                event, sequence, offset, status = match.groups()
-                                events.append({"event": event, "sequence": int(sequence),
-                                               "server_offset_ms": int(offset),
-                                               "status": int(status) if status else None})
-                        return {"events": events, "truncated": len(raw) > 32_768, "read_failed": False}
+                                r"REVIEW_ENROLLMENT (arrival|completion) ([0-9]{1,2}) ([0-9]{1,9})(?: ([0-9]{3}))?", line)
+                            if not match:
+                                parse_failed = True
+                                continue
+                            event, sequence, offset, status = match.groups()
+                            sequence, offset = int(sequence), int(offset)
+                            status = int(status) if status else None
+                            if (len(events) >= 128 or sequence >= 64 or offset > 2_400_000
+                                    or (event == "completion" and (status is None or not 100 <= status <= 599))
+                                    or (event == "arrival" and status is not None)):
+                                parse_failed = True
+                                continue
+                            events.append({"event": event, "sequence": sequence,
+                                           "server_offset_ms": offset, "status": status})
+                        return {"events": events, "truncated": len(raw) > 32_768,
+                                "read_failed": False, "parse_failed": parse_failed}
                     except OSError:
-                        return {"events": [], "truncated": False, "read_failed": True}
+                        return {"events": [], "truncated": False, "read_failed": True, "parse_failed": False}
 
                 def lose(route):
                     loss_probe["review_route_enter_ms"] = review_offset_ms()
