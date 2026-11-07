@@ -290,7 +290,21 @@ mod tests {
 
     #[test]
     fn opt_in_and_interval_are_explicit_and_bounded() {
-        // Environment is process-global; keep all cases in one test.
+        // Isolate the process-global settings from connection tests running in parallel.
+        const CHILD: &str = "SOU_HEARTBEAT_ENV_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "managed_heartbeat::tests::opt_in_and_interval_are_explicit_and_bounded",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .status()
+                .unwrap();
+            assert!(status.success(), "heartbeat environment child failed");
+            return;
+        }
         std::env::remove_var("SOUP_MANAGED_AGENT_HEARTBEAT");
         assert!(!requested().unwrap());
         for (value, expected) in [
