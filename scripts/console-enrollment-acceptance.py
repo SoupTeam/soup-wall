@@ -424,11 +424,104 @@ def main():
 
                 # 4. Ambiguous rotation: committed, response lost; confirmed only by
                 #    the identical request.
+                cdp_epoch = time.monotonic()
+                cdp_probe = report["cdp_reconciliation_diagnostic"] = {
+                    "scope": "ephemeral driver observer, not public-source acceptance",
+                    "baseline_head": "ea670e69e192d342202f7992cc3fb54a67606666",
+                    "console_rust_unmodified": True,
+                    "binary_sha256": {p.name: sha(p.read_bytes()) for p in (console_binary, agent_binary)},
+                    "callback_error": False, "overflow": False, "events": [],
+                }
+                cdp_requests, cdp_pending = {}, {}
+                cdp_clock = {"browser_zero": None, "snapshot": False, "active": True}
+
+                def cdp_offset():
+                    return min(120_000, max(0, round((time.monotonic() - cdp_epoch) * 1000)))
+
+                def cdp_append(request_id, row):
+                    if len(cdp_probe["events"]) >= 64:
+                        cdp_probe["overflow"] = True
+                    else:
+                        cdp_probe["events"].append({**cdp_requests[request_id], **row})
+
+                def observe_cdp(event, data):
+                    try:
+                        if not cdp_clock["active"]:
+                            return
+                        request_id = data.get("requestId")
+                        if not isinstance(request_id, str) or len(request_id) > 80:
+                            cdp_probe["callback_error"] = True
+                            return
+                        if event == "request":
+                            request = data.get("request", {})
+                            if request.get("method") == "GET" and request.get("url") == console + base + "/enrollment?agent_id=edge-1":
+                                category = "reconciliation_get" if loss_probe.get("started") else "preflight_get"
+                            elif request.get("method") == "POST" and request.get("url") == console + base + "/edge-1/credential-rotations":
+                                category = "rotation_post"
+                            else:
+                                return
+                            if len(cdp_requests) >= 16:
+                                cdp_probe["overflow"] = True
+                                return
+                            cdp_requests[request_id] = {"request": len(cdp_requests), "class": category}
+                        elif request_id not in cdp_requests and event not in ("request_extra", "response_extra"):
+                            return
+                        row = {"event": event, "callback_ms": cdp_offset(), "after_snapshot": cdp_clock["snapshot"]}
+                        stamp = data.get("timestamp")
+                        if isinstance(stamp, (int, float)) and stamp >= 0:
+                            if cdp_clock["browser_zero"] is None:
+                                cdp_clock["browser_zero"] = stamp
+                            row["browser_ms"] = min(120_000, max(0, round((stamp - cdp_clock["browser_zero"]) * 1000)))
+                        if event in ("response", "response_extra"):
+                            status = data.get("response", {}).get("status") if event == "response" else data.get("statusCode")
+                            if isinstance(status, int) and 100 <= status <= 599:
+                                row["status"] = status
+                            else:
+                                cdp_probe["callback_error"] = True
+                            row["has_extra_info"] = bool(data.get("hasExtraInfo"))
+                        if event == "failed":
+                            known = {"net::ERR_FAILED", "net::ERR_ABORTED", "net::ERR_TIMED_OUT",
+                                     "net::ERR_CONNECTION_RESET", "net::ERR_CONNECTION_CLOSED"}
+                            row.update(canceled=bool(data.get("canceled")),
+                                       failure=data.get("errorText") if data.get("errorText") in known else "other",
+                                       inspector_blocked=data.get("blockedReason") == "inspector")
+                        if request_id in cdp_requests:
+                            cdp_append(request_id, row)
+                            if event == "request":
+                                for extra in cdp_pending.pop(request_id, []):
+                                    cdp_append(request_id, extra)
+                        elif len(cdp_pending) < 32:
+                            pending = cdp_pending.setdefault(request_id, [])
+                            if len(pending) < 2:
+                                pending.append(row)
+                            else:
+                                cdp_probe["overflow"] = True
+                        else:
+                            cdp_probe["overflow"] = True
+                    except Exception:
+                        cdp_probe["callback_error"] = True
+
+                cdp_session = context.new_cdp_session(page)
+                cdp_session.send("Network.enable")
+                cdp_observers = [
+                    (name, lambda data, event=event: observe_cdp(event, data))
+                    for name, event in (("Network.requestWillBeSent", "request"),
+                                        ("Network.requestWillBeSentExtraInfo", "request_extra"),
+                                        ("Network.responseReceived", "response"),
+                                        ("Network.responseReceivedExtraInfo", "response_extra"),
+                                        ("Network.loadingFinished", "finished"),
+                                        ("Network.loadingFailed", "failed"))
+                ]
+                for name, observer in cdp_observers:
+                    cdp_session.on(name, observer)
+
                 def lose(route):
+                    cdp_probe["post_route_enter_ms"] = cdp_offset()
                     loss_probe["started"] = True
                     try:
                         response = route.fetch()
                         loss_probe["downstream_status"] = response.status
+                        cdp_probe["post_fetched_ms"] = cdp_offset()
                         assert response.status == 200, "Loss probe did not receive a committed rotation response"
                     except Exception as error:
                         loss_probe["fetch_error_type"] = type(error).__name__[:60]
@@ -437,6 +530,7 @@ def main():
                         # Even a failed probe must release the paused browser request.
                         route.abort("failed")
                         loss_probe["abort_requested"] = True
+                        cdp_probe["post_abort_returned_ms"] = cdp_offset()
 
                 # Phase-scoped public metadata only. Never retain request URLs,
                 # headers, response bodies or exception messages.
@@ -483,7 +577,23 @@ def main():
                 before = len(posts)
                 page.get_by_role("button", name="Rotate credential for edge-1").click()
                 confirm("edge-1")
-                status("Confirm with the same request")
+                cdp_assertion_passed = False
+                try:
+                    status("Confirm with the same request")
+                    cdp_assertion_passed = True
+                finally:
+                    cdp_probe["before_browser_cleanup"] = {
+                        "callback_ms": cdp_offset(), "assertion_passed": cdp_assertion_passed,
+                        "page_closed": page.is_closed(),
+                        "public_reconciliation": dict(reconciliation_probe),
+                        "events": json.loads(json.dumps(cdp_probe["events"])),
+                    }
+                    cdp_clock["snapshot"] = True
+                    cdp_probe["stopped_after_success"] = cdp_assertion_passed
+                    if cdp_assertion_passed:
+                        cdp_clock["active"] = False
+                        for name, observer in cdp_observers:
+                            cdp_session.remove_listener(name, observer)
                 check("ambiguous-rotation-shows-no-credential", not page.locator("#enroll-secret").is_visible())
                 page.get_by_role("button", name="Confirm with the same request").click()
                 status("this exact request was already committed")
