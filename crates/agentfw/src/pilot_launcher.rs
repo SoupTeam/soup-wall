@@ -1206,7 +1206,12 @@ fn host_group_has_children(group: u32) -> Result<bool> {
         );
         let stat = match fs::read_to_string(entry.path().join("stat")) {
             Ok(stat) => stat,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error)
+                if error.kind() == std::io::ErrorKind::NotFound
+                    || error.raw_os_error() == Some(libc::ESRCH) =>
+            {
+                continue;
+            }
             Err(error) => return Err(error).context("owned host cleanup observation unavailable"),
         };
         let (_, fields) = stat

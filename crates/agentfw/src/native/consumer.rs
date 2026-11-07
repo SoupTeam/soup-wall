@@ -313,8 +313,14 @@ mod lifecycle_tests {
                         ),
                     );
             }
+            let native = st.native.as_ref().unwrap();
+            assert!(native.monotonic_now() < captured.original_deadline);
             if mode == "expired" {
-                st.native.as_ref().unwrap().advance_test_time_ms(120_000);
+                let remaining = captured
+                    .original_deadline
+                    .saturating_duration_since(native.monotonic_now());
+                native.advance_test_time_ms(remaining.as_millis() as u64 + 1);
+                assert!(native.monotonic_now() > captured.original_deadline);
             }
             let before = st
                 .native
