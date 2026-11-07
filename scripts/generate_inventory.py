@@ -739,7 +739,7 @@ def main(argv=None):
         # are rooted in this exact clean source.
         try:
             if args.native_reviews is not None:
-                report["native_reviews_input"] = {"sha256": sha(args.native_reviews), "data": read_json(args.native_reviews)}
+                report["native_reviews_input"] = {"sha256": runtime_reviews.file_sha(args.native_reviews), "data": read_json(args.native_reviews)}
             report["native_reviews"] = verify_native_reviews(args.native_reviews, selection, args.selection.parent, preparation=prep)
         except (OSError, ValueError, KeyError, TypeError) as error:
             report["errors"].append("native_reviews:" + str(error))
@@ -802,7 +802,7 @@ def main(argv=None):
         if args.runtime_reviews is not None:
             try:
                 require(not args.runtime_reviews.is_symlink(), "runtime_reviews_symlink")
-                review_input_sha = sha(args.runtime_reviews)
+                review_input_sha = runtime_reviews.file_sha(args.runtime_reviews)
                 data = read_json(args.runtime_reviews)
                 review = runtime_reviews.Review(data, args.runtime_reviews, report,
                                                args.expected_commit, args.selection.parent)
@@ -817,7 +817,7 @@ def main(argv=None):
                 report["runtime_reviews_input_sha256"] = review_input_sha
                 report["errors"] = [error for error in report["errors"]
                     if not error.startswith("runtime_license_review_required:")]
-                require(sha(args.runtime_reviews) == review_input_sha, "runtime_reviews_changed")
+                require(runtime_reviews.file_sha(args.runtime_reviews) == review_input_sha, "runtime_reviews_changed")
             except (OSError, ValueError, KeyError, TypeError) as error:
                 report["errors"].append("runtime_reviews:" + str(error))
         require(before == {path: sha(path) for path in before}, "lockfiles_changed_during_scan")
@@ -827,11 +827,11 @@ def main(argv=None):
                     "rustsec_database_changed_during_scan")
         prep.verify_generation(args.selection.parent, args.expected_commit, probe_native=False)
         if args.native_reviews is not None and "native_reviews" in report:
-            require(sha(args.native_reviews) == report["native_reviews_input"]["sha256"],
+            require(runtime_reviews.file_sha(args.native_reviews) == report["native_reviews_input"]["sha256"],
                     "native_reviews_changed")
             verify_native_reviews(args.native_reviews, selection, args.selection.parent, preparation=prep)
         if "runtime_reviews" in report:
-            require(sha(args.runtime_reviews) == report["runtime_reviews_input_sha256"], "runtime_reviews_changed")
+            require(runtime_reviews.file_sha(args.runtime_reviews) == report["runtime_reviews_input_sha256"], "runtime_reviews_changed")
             checked = runtime_reviews.Review(read_json(args.runtime_reviews), args.runtime_reviews, report,
                                             args.expected_commit, args.selection.parent)
             checked.licenses(report["notices"])

@@ -59,7 +59,11 @@ python3 -B -m unittest discover -s scripts/tests -p 'test_candidate_*.py' -v
 
 Native installed success, scanner completeness and final source admission are
 separate evidence. Final independent review, Ready qualification and merge belong
-to the maintainer. Keep the implementation PR in Draft until those gates finish.
+to the maintainer. Source corrections may be reviewed and merged after the normal Ready CI,
+CodeQL, approval and exact-candidate admission requirements pass. A source
+merge does not admit the complete installed runtime. Keep its full candidate
+and release task open, retain unresolved native findings and the nonzero
+inventory result, and refuse a qualified handoff until all runtime gates finish.
 
 See [installed runtime inventory](installed-runtime-inventory.md) for the complete
 two-server dependency and advisory scope.

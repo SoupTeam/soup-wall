@@ -215,8 +215,15 @@ distribution-advisory dispositions. The responsible reviewer supplies the
 exact-binary, version, source, notice and system-library assertions required by
 `--native-reviews` in the [inventory procedure](installed-runtime-inventory.md).
 
-After dependency, license and native-review decisions are admitted, the team
-lead owns qualification of the current reviewed source, Ready CI, CodeQL,
-candidate admission and integration. Keep earlier failed and successful
-observations attributed to the source, selected binaries and archive that
-produced them.
+The team lead owns qualification of the current reviewed source through the
+normal Ready CI, CodeQL, approval and exact-candidate admission requirements.
+Reviewed dependency, inventory and compliance source corrections can follow
+that code-delivery path while the complete runtime remains unqualified.
+
+A qualified private candidate or release additionally requires admitted
+license/advisory conditions, complete native review and current-source runtime
+acceptance. Keep the full candidate task open and the inventory nonzero while
+any of those holds remains, including the unresolved Node notice above.
+Merging source corrections does not authorize packaging or distribution of a
+cleared runtime. Keep every failed and successful observation attributed to its
+actual source, selected binaries and archive.
