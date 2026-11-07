@@ -579,7 +579,64 @@
         "errors": 13,
         "reason": "Unix candidate fixture modes are not represented by the Windows filesystem; candidate_binary_digest_or_mode_mismatch is retained. Linux Draft CI must execute the complete suite."
       },
-      "qualification_limit": "Earlier native runs retain c8350ab4/73834147 source identities; current-main integration has not received final native acceptance."
+      "qualification_limit": "Earlier native runs retain c8350ab4/73834147 source identities; current-main integration has not received final native acceptance.",
+      "component_verification_source": "12681d98b557aeb21ec5c954f29e235efd25ee74",
+      "component_capacity": {
+        "actual_payload_files": 142,
+        "maximum_payload_files": 160,
+        "producer_native_installer_update_consumer": "aligned",
+        "archive_bytes": 33554432,
+        "manifest_bytes": 65536,
+        "file_bytes": 1048576,
+        "other_validation": "unchanged"
+      },
+      "linux_controls": {
+        "component": {
+          "passed": 8,
+          "skipped": 0
+        },
+        "update": {
+          "passed": 34,
+          "skipped": 1,
+          "skip_reason": "separately supplied native Agent binary required"
+        },
+        "release_archive": {
+          "passed": 22,
+          "skipped": 0
+        },
+        "rust_format": "passed",
+        "source_after": "clean"
+      },
+      "focused_native_parser": {
+        "status": "passed",
+        "scope": "Verbatim production manifest/archive parser compiled with the current Cargo build dependency identities; controlled structural fixtures, not full Agent lifecycle.",
+        "old_complete_142": "refused",
+        "selected_complete_142": "accepted",
+        "selected_160": "accepted",
+        "selected_161": "refused",
+        "changed_payload": "refused"
+      },
+      "full_agent_unit_build": {
+        "status": "passed-with-agent-test-debug-symbols-disabled",
+        "command": "cargo --config profile.test.package.agentfw.debug=0 test --locked --offline -j1 -p agentfw --lib pilot_component::tests",
+        "initial_attempt": "2 GiB WSL instance became unresponsive; terminated only the task-owned distribution.",
+        "retry": "3 GiB retry reached the 360-second compiler budget; preserved as incomplete.",
+        "reduced_debug_retry": "Passed at exact clean source 12681d98 in 3m58s. Only Agent test-package debug symbols were disabled; assertions, production profile and validation remain unchanged.",
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0,
+        "filtered_out": 1217
+      },
+      "draft_ci": {
+        "source": "12681d98b557aeb21ec5c954f29e235efd25ee74",
+        "run_id": 42354134281,
+        "status": "passed",
+        "scope": "Draft fast checks only; full Ready qualification deferred."
+      },
+      "windows_focused_controls_at_bfa64c81": {
+        "passed": 91,
+        "skipped": 4
+      }
     }
   }
 }

@@ -47,6 +47,25 @@ release documentation contract for the changed documents already in its explicit
 bundle. This integration does not extend the recorded native execution claims
 to a new source commit. Final current-source native qualification remains open.
 
+The complete installed helper and mandatory notice closure contains 142 files.
+The component producer, native installer and update validator now use a bounded
+capacity of 160 payload files. The 32 MiB archive, 64 KiB manifest and 1 MiB file
+limits, path validation, file hashes, source identities and private file modes
+remain enforced. Boundary controls cover acceptance of 160 files and refusal of
+161, including the update consumer.
+
+At integrated source `12681d98`, all eight component controls and all 22 release
+archive controls pass on Linux. Update controls pass 34 cases and skip one
+requiring the separately supplied native Agent binary. A focused native build
+of the verbatim production manifest/archive parser reproduces the old refusal
+of the complete 142-file component. The repaired parser accepts 142 and 160,
+rejects 161, and refuses a changed payload. This structural fixture does not
+exercise the full installed Agent lifecycle. The first complete Agent unit-test
+build exceeded the local resource/time budget. The subsequent build, disabling
+debug symbols only for the Agent test package, passes all seven selected Rust
+component tests, including lifecycle, tampering, rollback, removal and the new
+count boundary. Test assertions and the production build profile remain intact.
+
 - Fresh official RustSec and OSV scans cover exactly 443 Cargo, 102 npm and 63
   unique Python identities. All 23 attribution mappings pass without notice or
   metadata mismatches. The Rust license gate passes. Twelve runtime license
