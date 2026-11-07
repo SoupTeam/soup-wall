@@ -109,6 +109,8 @@ struct Run {
     files: Vec<FileIdentity>,
 }
 
+pub(crate) mod consumer;
+
 pub struct RunGuard {
     dir: PathBuf,
     run: Run,

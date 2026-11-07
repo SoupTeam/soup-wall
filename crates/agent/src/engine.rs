@@ -290,6 +290,11 @@ impl AgentFirewall {
         self.taint.provenance_snapshot()
     }
 
+    /// Preserve only the source session and shared host in a private checkpoint.
+    pub fn provenance_snapshot_for(&self, sessions: &[&str]) -> crate::taint::ProvenanceSnapshot {
+        self.taint.provenance_snapshot_for(sessions)
+    }
+
     pub fn restore_provenance_snapshot(
         &mut self,
         snapshot: crate::taint::ProvenanceSnapshot,
