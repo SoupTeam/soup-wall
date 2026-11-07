@@ -268,6 +268,35 @@ pub fn read_keyring_file(path: &Path) -> Result<Vec<u8>> {
 /// expiry and monotonic sequence BEFORE interpreting the untrusted policy.
 /// Caller must durably advance last_accepted_sequence only after successful
 /// in-process activation; downloading/verifying is not an applied ack.
+/// SOU-241: the finite reason an Agent reports for rejecting a candidate,
+/// attached at the exact failure boundary (`sw-agent-rejection-reason/1`
+/// allowlist, mirrored by the Console). The human message stays local.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rejection(pub &'static str);
+impl std::fmt::Display for Rejection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0)
+    }
+}
+impl std::error::Error for Rejection {}
+pub fn rejected(code: &'static str, message: &'static str) -> anyhow::Error {
+    anyhow::Error::new(Rejection(code)).context(message)
+}
+fn reject(condition: bool, code: &'static str, message: &'static str) -> Result<()> {
+    if condition {
+        Ok(())
+    } else {
+        Err(rejected(code, message))
+    }
+}
+/// The reason code attached anywhere in an error chain, if any.
+pub fn rejection_code(error: &anyhow::Error) -> Option<&'static str> {
+    error
+        .chain()
+        .find_map(|cause| cause.downcast_ref::<Rejection>())
+        .map(|r| r.0)
+}
+
 pub fn verify_candidate(
     bundle: &SignedAgentPolicy,
     keys: &[PinnedIssuerKey],
@@ -276,74 +305,96 @@ pub fn verify_candidate(
     last_accepted_sequence: u64,
     now_unix: i64,
 ) -> Result<VerifiedAgentPolicy> {
-    ensure!(
+    reject(
         bundle.schema_version == SCHEMA_VERSION,
-        "unsupported policy schema"
-    );
-    ensure!(
+        "schema_unsupported",
+        "unsupported policy schema",
+    )?;
+    reject(
         !expected_tenant.is_empty() && !expected_agent.is_empty(),
-        "missing pinned audience"
-    );
-    ensure!(
+        "audience_mismatch",
+        "missing pinned audience",
+    )?;
+    reject(
         bundle.tenant_id == expected_tenant && bundle.agent_id == expected_agent,
-        "wrong policy audience"
-    );
-    ensure!(
+        "audience_mismatch",
+        "wrong policy audience",
+    )?;
+    reject(
         !bundle.revision.is_empty() && bundle.revision.len() <= 128,
-        "invalid policy revision"
-    );
-    ensure!(
+        "bundle_malformed",
+        "invalid policy revision",
+    )?;
+    reject(
         bundle.deployment_sequence > last_accepted_sequence,
-        "replayed or stale policy deployment"
-    );
-    ensure!(
+        "sequence_stale",
+        "replayed or stale policy deployment",
+    )?;
+    reject(
         bundle.issued_at_unix <= now_unix.saturating_add(60),
-        "policy bundle issued in future"
-    );
-    ensure!(now_unix < bundle.expires_at_unix, "expired policy bundle");
-    let lifetime = bundle
-        .expires_at_unix
-        .checked_sub(bundle.issued_at_unix)
-        .context("invalid policy lifetime")?;
-    ensure!(
-        lifetime > 0 && lifetime <= MAX_TTL_SECS,
-        "invalid policy lifetime"
-    );
-    ensure!(
+        "issued_in_future",
+        "policy bundle issued in future",
+    )?;
+    reject(
+        now_unix < bundle.expires_at_unix,
+        "bundle_expired",
+        "expired policy bundle",
+    )?;
+    let lifetime = bundle.expires_at_unix.checked_sub(bundle.issued_at_unix);
+    reject(
+        lifetime.is_some_and(|l| l > 0 && l <= MAX_TTL_SECS),
+        "lifetime_invalid",
+        "invalid policy lifetime",
+    )?;
+    reject(
         !bundle.policy_yaml.is_empty() && bundle.policy_yaml.len() <= MAX_POLICY_BYTES,
-        "invalid Agent policy size"
-    );
-    ensure!(
+        "policy_too_large",
+        "invalid Agent policy size",
+    )?;
+    reject(
         bundle.issuer_key_id.len() <= 128 && !bundle.issuer_key_id.is_empty(),
-        "invalid issuer key id"
-    );
-    ensure!(
+        "bundle_malformed",
+        "invalid issuer key id",
+    )?;
+    reject(
         bundle.tenant_id.len() <= 128 && bundle.agent_id.len() <= 128,
-        "policy audience too long"
-    );
+        "bundle_malformed",
+        "policy audience too long",
+    )?;
 
     // A key supplied *inside* the signed envelope is never trusted. Trust roots
     // come from the Agent's local independently provisioned key list.
-    let key = keys
-        .iter()
-        .find(|key| key.key_id == bundle.issuer_key_id)
-        .context("unknown issuer signing key")?;
-    ensure!(!key.revoked, "revoked issuer signing key");
+    let Some(key) = keys.iter().find(|key| key.key_id == bundle.issuer_key_id) else {
+        return Err(rejected("issuer_key_unknown", "unknown issuer signing key"));
+    };
+    reject(
+        !key.revoked,
+        "issuer_key_revoked",
+        "revoked issuer signing key",
+    )?;
     let actual_digest = hex_lower(&Sha256::digest(bundle.policy_yaml.as_bytes()));
-    ensure!(
+    reject(
         bundle.policy_sha256 == actual_digest,
-        "Agent policy digest mismatch"
-    );
+        "digest_mismatch",
+        "Agent policy digest mismatch",
+    )?;
 
-    let signature = decode_fixed_hex::<64>(&bundle.signature_hex)?;
+    let signature = decode_fixed_hex::<64>(&bundle.signature_hex)
+        .map_err(|_| rejected("signature_invalid", "invalid Agent policy signature"))?;
+    let transcript = bundle
+        .signing_transcript()
+        .map_err(|_| rejected("bundle_malformed", "invalid policy signing transcript"))?;
     UnparsedPublicKey::new(&ED25519, key.public_key)
-        .verify(&bundle.signing_transcript()?, &signature)
-        .map_err(|_| anyhow::anyhow!("invalid Agent policy signature"))?;
+        .verify(&transcript, &signature)
+        .map_err(|_| rejected("signature_invalid", "invalid Agent policy signature"))?;
 
     // The parser rejects unknown security fields and escalation defaults. Do
     // NOT map Gateway tenant model policies into this independent payload.
-    let policy =
-        AgentPolicySet::from_yaml(&bundle.policy_yaml).context("invalid AgentPolicySet YAML")?;
+    let policy = AgentPolicySet::from_yaml(&bundle.policy_yaml).map_err(|error| {
+        rejected("policy_invalid", "invalid AgentPolicySet YAML")
+            .context(error.to_string())
+            .context("invalid AgentPolicySet YAML")
+    })?;
     Ok(VerifiedAgentPolicy {
         revision: bundle.revision.clone(),
         deployment_sequence: bundle.deployment_sequence,
@@ -500,6 +551,77 @@ mod tests {
         bundle.policy_sha256 = hex_lower(&Sha256::digest(bundle.policy_yaml.as_bytes()));
         bundle.signature_hex = hex_lower(pair.sign(&bundle.signing_transcript().unwrap()).as_ref());
         assert!(verify(&bundle, &key, 0).is_err());
+    }
+
+    /// SOU-241: every rejection carries the finite code of its boundary,
+    /// while the existing local message stays the top-level error text.
+    #[test]
+    fn rejection_codes_come_from_the_failure_boundary() {
+        let pair = Ed25519KeyPair::from_seed_unchecked(&[7u8; 32]).unwrap();
+        let resign = |b: &mut SignedAgentPolicy| {
+            b.policy_sha256 = hex_lower(&Sha256::digest(b.policy_yaml.as_bytes()));
+            b.signature_hex = hex_lower(pair.sign(&b.signing_transcript().unwrap()).as_ref());
+        };
+        let code = |b: &SignedAgentPolicy, k: &PinnedIssuerKey, seq: u64, now: i64| {
+            let e = verify_candidate(b, std::slice::from_ref(k), "tenant-1", "agent-1", seq, now)
+                .unwrap_err();
+            (rejection_code(&e), e.to_string())
+        };
+        let (bundle, key) = fixture();
+        assert_eq!(
+            code(&bundle, &key, 0, 2000),
+            (Some("bundle_expired"), "expired policy bundle".into())
+        );
+        assert_eq!(code(&bundle, &key, 0, 900).0, Some("issued_in_future"));
+        assert_eq!(
+            code(&bundle, &key, 1, 1500),
+            (
+                Some("sequence_stale"),
+                "replayed or stale policy deployment".into()
+            )
+        );
+        let mut other = key.clone();
+        other.key_id = "other".into();
+        assert_eq!(code(&bundle, &other, 0, 1500).0, Some("issuer_key_unknown"));
+        let mut revoked = key.clone();
+        revoked.revoked = true;
+        assert_eq!(
+            code(&bundle, &revoked, 0, 1500).0,
+            Some("issuer_key_revoked")
+        );
+        let mut b = bundle.clone();
+        b.signature_hex = "00".repeat(64);
+        assert_eq!(code(&b, &key, 0, 1500).0, Some("signature_invalid"));
+        b.signature_hex = "zz".into();
+        assert_eq!(code(&b, &key, 0, 1500).0, Some("signature_invalid"));
+        let mut b = bundle.clone();
+        b.policy_yaml = "default: allow\n".into();
+        assert_eq!(code(&b, &key, 0, 1500).0, Some("digest_mismatch"));
+        let mut b = bundle.clone();
+        b.tenant_id = "tenant-2".into();
+        assert_eq!(code(&b, &key, 0, 1500).0, Some("audience_mismatch"));
+        let mut b = bundle.clone();
+        b.schema_version = 9;
+        assert_eq!(code(&b, &key, 0, 1500).0, Some("schema_unsupported"));
+        let mut b = bundle.clone();
+        b.expires_at_unix = 1_000_000;
+        assert_eq!(code(&b, &key, 0, 1500).0, Some("lifetime_invalid"));
+        let mut b = bundle.clone();
+        b.revision = String::new();
+        assert_eq!(code(&b, &key, 0, 1500).0, Some("bundle_malformed"));
+        let mut b = bundle.clone();
+        b.policy_yaml = "default: escalate\n".into();
+        resign(&mut b);
+        let (c, message) = code(&b, &key, 0, 1500);
+        assert_eq!(
+            (c, message.as_str()),
+            (Some("policy_invalid"), "invalid AgentPolicySet YAML")
+        );
+        let mut b = bundle.clone();
+        b.policy_yaml = "x".repeat(MAX_POLICY_BYTES + 1);
+        resign(&mut b);
+        assert_eq!(code(&b, &key, 0, 1500).0, Some("policy_too_large"));
+        assert_eq!(rejection_code(&anyhow::anyhow!("other")), None);
     }
 
     #[test]

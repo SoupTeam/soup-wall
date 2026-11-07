@@ -524,20 +524,41 @@ pub async fn fetch_policy(State(state): State<Shared>, headers: HeaderMap) -> Re
 /// Agent MUST call this only after inspecting its own active runtime policy.
 /// Token possession is a bounded Agent assertion, not a cryptographic quote
 /// from trusted hardware. Console validates exact current sequence/revision/hash.
+/// The acknowledgement body: the accepted four fields plus, since SOU-241,
+/// an optional versioned finite rejection reason. Unknown fields refuse.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AckBody {
+    pub deployment_sequence: u64,
+    pub revision: String,
+    pub policy_sha256: String,
+    pub status: String,
+    #[serde(default)]
+    pub rejection: Option<crate::tenant_store::managed_rejection::RejectionReport>,
+}
+
 pub async fn acknowledge_policy(
     State(state): State<Shared>,
     headers: HeaderMap,
-    Json(report): Json<AppliedReport>,
+    Json(body): Json<AckBody>,
 ) -> Response {
     let Some((db, who, bearer)) = principal(&state, &headers).await else {
         return failure(StatusCode::UNAUTHORIZED, "Agent authentication required");
     };
+    let report = AppliedReport {
+        deployment_sequence: body.deployment_sequence,
+        revision: body.revision,
+        policy_sha256: body.policy_sha256,
+        status: body.status,
+    };
+    let reason = body.rejection;
     match tokio::task::spawn(async move {
-        db.acknowledge_authorized_managed_bundle_async(
+        db.acknowledge_authorized_managed_bundle_with_reason_async(
             &who.tenant_id,
             &who.agent_id,
             &bearer,
             &report,
+            reason.as_ref(),
         )
         .await
     })

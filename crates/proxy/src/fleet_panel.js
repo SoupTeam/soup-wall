@@ -80,14 +80,20 @@ const fleet = (() => {
       root.append(ageNode("p",a.last_reported_applied?.reported_applied_at_unix,"note"));
       root.append(make("p","Current liveness: unknown · Active protection: unknown · Registry identity: unknown. An acknowledgement records a past report, not a heartbeat.","note"));
       if(a.latest_issued && ["issued","delivered"].includes(a.latest_issued.recorded_state))root.append(make("p","Latest deployment is pending: no matching applied acknowledgement recorded.","outcome-other"));
-      if(a.latest_issued?.recorded_state==="rejected")root.append(make("p","Latest deployment was rejected. Any older applied identity remains historical.","outcome-block"));
+      if(a.latest_issued?.recorded_state==="rejected"){
+        // SOU-241: the reason comes from the matching page record; only fixed text is shown.
+        const r=data.deployments.find(d=>d.sequence===a.latest_issued.sequence&&d.policy_sha256===a.latest_issued.policy_sha256&&d.recorded_state==="rejected");
+        const why=r?agentRejection.describe(r.rejection_code):null;
+        root.append(make("p",`Latest deployment was rejected${why?`: ${why.label}. Next step: ${why.next}`:"."} The rejected candidate never became active; any older applied identity remains historical.`,"outcome-block"));
+      }
       if(!data.deployments.length)root.append(make("p","No deployment history on this page.","empty"));
       else {
         const wrap=make("div",undefined,"table-wrap"),table=make("table"),thead=make("thead"),hr=make("tr");
-        ["Sequence / revision","Digest","Recorded state","Issued","Reported applied"].forEach(x=>hr.append(make("th",x)));thead.append(hr);table.append(thead);
-        const body=make("tbody");data.deployments.forEach(d=>{const row=make("tr");row.append(make("td",`#${d.sequence} · ${d.revision}`),make("td",d.policy_sha256),make("td",d.recorded_state),make("td",when(d.issued_at_unix)),make("td",when(d.reported_applied_at_unix)));body.append(row);});table.append(body);wrap.append(table);root.append(wrap);
+        ["Sequence / revision","Digest","Recorded state","Issued","Reported applied","Rejection"].forEach(x=>hr.append(make("th",x)));thead.append(hr);table.append(thead);
+        const rejection=d=>d.recorded_state!=="rejected"?"":(w=>`${w.label} · received ${when(d.rejected_at_unix)}`)(agentRejection.describe(d.rejection_code));
+        const body=make("tbody");data.deployments.forEach(d=>{const row=make("tr");row.append(make("td",`#${d.sequence} · ${d.revision}`),make("td",d.policy_sha256),make("td",d.recorded_state),make("td",when(d.issued_at_unix)),make("td",when(d.reported_applied_at_unix)),make("td",rejection(d)));body.append(row);});table.append(body);wrap.append(table);root.append(wrap);
       }
-      root.append(make("p","Delivery and rejection timestamps are not recorded by the existing store. Pages are separate snapshots; refresh starts from the newest records.","note"));
+      root.append(make("p","Delivery timestamps are not recorded. A rejection shows the Console receipt time when recorded. Pages are separate snapshots; refresh starts from the newest records.","note"));
       historyNext=data.next_before_sequence;$("fleet-history-next").disabled=historyNext==null;
     }catch(e){if(generation===epoch && requestId===detailRequest && id===tenant && e.name!=="AbortError")root.replaceChildren(make("p","Unable to load Agent history. Select the Agent again to retry.","outcome-block"));}
   }

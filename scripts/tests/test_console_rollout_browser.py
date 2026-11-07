@@ -34,6 +34,7 @@ PLAN = {"tenant_id": TENANT, "group_id": "fleet", "rollout_id": "ro_1", "revisio
 
 def page_html():
     return ((SRC / "admin_dashboard.html").read_text(encoding="utf-8")
+            .replace("/* AGENT_REJECTION_REASONS */", (SRC / "agent_rejection_reasons.js").read_text(encoding="utf-8"))
             .replace("/* FLEET_PANEL */", (SRC / "fleet_panel.js").read_text(encoding="utf-8"))
             .replace("/* ROLLOUT_PANEL */", (SRC / "rollout_panel.js").read_text(encoding="utf-8"))
             .replace("/* SINGLE_AGENT_POLICY */", (SRC / "single_agent_policy.js").read_text(encoding="utf-8"))

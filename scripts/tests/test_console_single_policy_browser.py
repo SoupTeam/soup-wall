@@ -265,6 +265,34 @@ class SinglePolicyBrowserTests(unittest.TestCase):
         self.assertTrue(self.page.locator("#single-deploy").is_disabled())
 
 
+    def test_rejected_candidate_shows_reason_apart_from_applied(self):
+        """SOU-241: fixed reason text and next step; applied stays separate."""
+        self.open()
+        self.issuances += [
+            {"revision": "r1", "policy_sha256": DIGEST, "deployment_sequence": 1, "action": "activate", "status": "applied", "issued_at_unix": 1, "applied_at_unix": 2},
+            {"revision": "r1", "policy_sha256": DIGEST, "deployment_sequence": 2, "action": "activate", "status": "rejected", "issued_at_unix": 3, "applied_at_unix": None,
+             "rejected_at_unix": 4, "rejection_code": "issuer_key_unknown"},
+            {"revision": "r1", "policy_sha256": DIGEST, "deployment_sequence": 3, "action": "activate", "status": "rejected", "issued_at_unix": 5, "applied_at_unix": None}]
+        self.page.locator("#single-refresh").click()
+        self.page.wait_for_function("document.getElementById('single-deployments').textContent.includes('Rejected candidate')")
+        text = self.page.locator("#single-deployments").text_content()
+        blocks = {b.split(" · ")[0]: b for b in text.split("\n\n")}
+        self.assertIn("issuer key the Agent does not trust", blocks["Sequence 2"])
+        self.assertIn("Received by Console 4", blocks["Sequence 2"])
+        self.assertIn("next step: Deploy again with a trusted Console signing key", blocks["Sequence 2"])
+        self.assertIn("did not report a reason", blocks["Sequence 3"])
+        self.assertIn("Received by Console not recorded", blocks["Sequence 3"])
+        self.assertNotIn("Rejected candidate", blocks["Sequence 1"])
+        # A reason on a non-rejected record or with free text fails closed.
+        self.issuances[0]["rejection_code"] = "bundle_expired"
+        self.page.locator("#single-refresh").click()
+        self.page.wait_for_function("document.getElementById('single-policy-status').textContent.includes('Unresolved')")
+        self.issuances[0].pop("rejection_code")
+        self.issuances[1]["rejection_code"] = "Key <unknown>"
+        self.page.locator("#single-refresh").click()
+        self.page.wait_for_function("document.getElementById('single-policy-status').textContent.includes('Unresolved')")
+        self.assertEqual(self.callback_errors, [])
+
 def load_tests(loader, tests, pattern):
     return loader.loadTestsFromTestCase(SinglePolicyBrowserTests)
 

@@ -89,9 +89,17 @@ pub struct DeploymentRecord {
     pub recorded_state: String,
     pub issued_at_unix: i64,
     pub reported_applied_at_unix: Option<i64>,
-    // Existing storage does not record these event timestamps.
+    // Existing storage does not record a delivery timestamp.
     pub delivered_at_unix: Option<i64>,
+    /// SOU-241: Console receipt time of the first authenticated rejection
+    /// (history pages only; `None` before reasons were recorded).
     pub rejected_at_unix: Option<i64>,
+    /// Finite reason code from the versioned allowlist, `None` when the
+    /// Agent reported none (an older Agent) or the record predates it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rejection_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rejection_reason_version: Option<i64>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FleetAgent {
@@ -159,7 +167,22 @@ pub(super) fn summary_sql(with_deployments: bool, detail: bool) -> String {
     };
     format!("SELECT e.tenant_id,e.agent_id,e.created_at_unix,e.revoked_at_unix,{cols} FROM managed_agent_enrollments e {join} WHERE e.tenant_id=$1 AND {filter} {delivery} {limit}")
 }
-pub(super) const HISTORY_SQL: &str = "SELECT deployment_sequence,revision,policy_sha256,action,status,issued_at_unix,applied_at_unix FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 AND ($3::BIGINT IS NULL OR deployment_sequence<$3) ORDER BY deployment_sequence DESC LIMIT $4";
+pub(super) const HISTORY_SQL: &str = "SELECT deployment_sequence,revision,policy_sha256,action,status,issued_at_unix,applied_at_unix,NULL,NULL,NULL FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 AND ($3::BIGINT IS NULL OR deployment_sequence<$3) ORDER BY deployment_sequence DESC LIMIT $4";
+/// History with the recorded rejection of the exact candidate (SOU-241).
+pub(super) const HISTORY_WITH_REJECTIONS_SQL: &str = "SELECT d.deployment_sequence,d.revision,d.policy_sha256,d.action,d.status,d.issued_at_unix,d.applied_at_unix,
+    j.received_at_unix,j.reason_version,j.reason_code
+    FROM managed_agent_deployments d LEFT JOIN managed_agent_rejections j
+      ON j.tenant_id=d.tenant_id AND j.agent_id=d.agent_id AND j.deployment_sequence=d.deployment_sequence
+     AND j.revision=d.revision AND j.policy_sha256=d.policy_sha256 AND d.status='rejected'
+    WHERE d.tenant_id=$1 AND d.agent_id=$2 AND ($3::BIGINT IS NULL OR d.deployment_sequence<$3)
+    ORDER BY d.deployment_sequence DESC LIMIT $4";
+fn sqlite_history(r: &rusqlite::Row<'_>) -> rusqlite::Result<DeploymentRecord> {
+    let mut d = sqlite_record(r, 0)?.expect("deployment sequence is non-null");
+    d.rejected_at_unix = r.get(7)?;
+    d.rejection_reason_version = r.get(8)?;
+    d.rejection_code = r.get(9)?;
+    Ok(d)
+}
 fn sqlite_record(r: &rusqlite::Row<'_>, i: usize) -> rusqlite::Result<Option<DeploymentRecord>> {
     let Some(sequence) = r.get::<_, Option<i64>>(i)? else {
         return Ok(None);
@@ -174,6 +197,8 @@ fn sqlite_record(r: &rusqlite::Row<'_>, i: usize) -> rusqlite::Result<Option<Dep
         reported_applied_at_unix: r.get(i + 6)?,
         delivered_at_unix: None,
         rejected_at_unix: None,
+        rejection_code: None,
+        rejection_reason_version: None,
     }))
 }
 fn sqlite_agent(r: &rusqlite::Row<'_>) -> rusqlite::Result<FleetAgent> {
@@ -321,12 +346,17 @@ impl TenantStore {
         };
         let mut history = vec![];
         if has_history {
-            let sql = HISTORY_SQL.replace("$3::BIGINT", "$3");
+            let base = if table_exists(&tx, "managed_agent_rejections")? {
+                HISTORY_WITH_REJECTIONS_SQL
+            } else {
+                HISTORY_SQL
+            };
+            let sql = base.replace("$3::BIGINT", "$3");
             let mut stmt = tx.prepare(&sql)?;
             history = stmt
                 .query_map(
                     params![tenant, agent, q.before_sequence, i64::from(q.limit) + 1],
-                    |r| sqlite_record(r, 0).map(Option::unwrap),
+                    sqlite_history,
                 )?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
         }
