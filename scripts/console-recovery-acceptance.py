@@ -36,7 +36,7 @@ OBJECTIVE = {
     "recovery_time_objective_start": "valid current archive restore begins after isolated negative controls",
     "recovery_time_objective_end": "both restored Agents acknowledge a higher signed sequence and live hooks match",
     "recovery_point": "complete quiesced snapshot; zero accepted Console writes after snapshot",
-    "deployment_limits": "owned Unix, literal-loopback Console/Agents, one issuer, schema 31",
+    "deployment_limits": "owned Unix, literal-loopback Console/Agents, one issuer, schema 32",
     "excluded": ["remote HTTPS", "fleet reconciliation", "new signing epoch", "exactly-once delivery"],
 }
 

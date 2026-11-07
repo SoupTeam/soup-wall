@@ -8,7 +8,7 @@ const agentHistory = (() => {
   // Finite bounds for one history build. Reaching any of them leaves the
   // history marked partial; it never extends a bound on its own.
   const BOUNDS = Object.freeze({ page_records: 50, max_pages: 8, max_page_bytes: 262144, max_total_bytes: 1048576, page_timeout_ms: 15000, max_build_ms: 60000 });
-  const ID = /^[A-Za-z0-9._-]{1,128}$/, DIGEST = /^[0-9a-f]{64}$/, SEQ = /^[1-9][0-9]{0,15}$/;
+  const ID = /^[A-Za-z0-9._-]{1,128}$/, REASON = /^[a-z_]{1,48}$/, DIGEST = /^[0-9a-f]{64}$/, SEQ = /^[1-9][0-9]{0,15}$/;
   const STATES = ["issued", "delivered", "applied", "rejected"], ACTIONS = ["activate", "rollback"];
   // Text that must never appear in an export, even as a synthetic value.
   const FORBIDDEN = [/sw_agent_[A-Za-z0-9_-]{8,}/, /bearer\s+\S/i, /\beyJ[A-Za-z0-9_-]{8,}/, /(^|[\s"'])(\/home\/|\/Users\/|\/root\/|\/tmp\/|[A-Za-z]:\\)/, /-----BEGIN/, /policy_yaml|bundle_json|token_hash|signature_hex|authorization/i];
@@ -25,17 +25,26 @@ const agentHistory = (() => {
   function record(d) {
     if (!d || typeof d !== "object") return null;
     const r = { sequence: d.sequence, revision: d.revision, policy_sha256: d.policy_sha256, action: d.action, recorded_state: d.recorded_state,
-      issued_at_unix: int(d.issued_at_unix), reported_applied_at_unix: d.reported_applied_at_unix == null ? null : int(d.reported_applied_at_unix) };
+      issued_at_unix: int(d.issued_at_unix), reported_applied_at_unix: d.reported_applied_at_unix == null ? null : int(d.reported_applied_at_unix),
+      rejected_at_unix: d.rejected_at_unix == null ? null : int(d.rejected_at_unix), rejection_code: d.rejection_code ?? null };
     if (typeof r.sequence !== "string" || !SEQ.test(r.sequence) || typeof r.revision !== "string" || !ID.test(r.revision)
       || typeof r.policy_sha256 !== "string" || !DIGEST.test(r.policy_sha256) || !ACTIONS.includes(r.action)
       || !STATES.includes(r.recorded_state) || r.issued_at_unix == null || (d.reported_applied_at_unix != null && r.reported_applied_at_unix == null)) return null;
+    // SOU-241: a rejection time and reason belong only to a rejected record;
+    // the reason is a short token (unknown tokens render as fixed text).
+    if ((d.rejected_at_unix != null && r.rejected_at_unix == null) || (r.rejection_code != null && (typeof r.rejection_code !== "string" || !REASON.test(r.rejection_code)))
+      || (r.recorded_state !== "rejected" && (r.rejected_at_unix != null || r.rejection_code != null))) return null;
     // Only exact integers: a 16-digit value above 2^53 would round.
     r.seq = Number(r.sequence);
     if (!Number.isSafeInteger(r.seq)) return null;
     return r;
   }
   const sameOrNull = (a, b) => (a == null && b == null) || (a != null && b != null && same(a, b));
-  const same = (a, b) => ["sequence", "revision", "policy_sha256", "action", "recorded_state", "issued_at_unix", "reported_applied_at_unix"].every(k => a[k] === b[k]);
+  // Summaries (latest issued / last applied) carry no rejection detail, so
+  // they are compared on the base identity; page records on every field.
+  const BASE = ["sequence", "revision", "policy_sha256", "action", "recorded_state", "issued_at_unix", "reported_applied_at_unix"];
+  const FIELDS = [...BASE, "rejected_at_unix", "rejection_code"];
+  const same = (a, b) => BASE.every(k => a[k] === b[k]), sameRecord = (a, b) => FIELDS.every(k => a[k] === b[k]);
   function contradiction(code, detail, sequence = null) {
     if (!state.contradictions.some(c => c.code === code && c.sequence === sequence)) state.contradictions.push({ code, sequence, detail });
   }
@@ -59,7 +68,7 @@ const agentHistory = (() => {
       if (!r) { page.malformed++; state.malformed++; continue; }
       if (before != null && r.seq >= before) page.overlapping++;
       const old = state.records.get(r.seq);
-      if (old) { if (!same(old, r)) contradiction("conflicting_duplicate", `Two reads returned different content for deployment #${r.seq}.`, r.sequence); continue; }
+      if (old) { if (!sameRecord(old, r)) contradiction("conflicting_duplicate", `Two reads returned different content for deployment #${r.seq}.`, r.sequence); continue; }
       state.records.set(r.seq, r); page.records++;
     }
     if (page.malformed) reason("malformed_records", "Records with an unexpected shape were dropped.");
@@ -102,7 +111,11 @@ const agentHistory = (() => {
       else reason("older_records_not_loaded", "Older records exist beyond the loaded pages.");
     }
     reason("credential_rotations_not_recorded", "The Console keeps no dated record of credential rotations; only enrollment and revocation times are known.");
-    reason("fetch_and_rejection_times_not_recorded", "Fetch and rejection are recorded as states without timestamps.");
+    // SOU-241: the Console records its receipt time for a rejection; older
+    // rejections recorded before that have no time.
+    if (seqs.some(n => state.records.get(n).recorded_state === "rejected" && state.records.get(n).rejected_at_unix == null))
+      reason("fetch_and_rejection_times_not_recorded", "Fetch is recorded as a state without a timestamp, and some rejections were recorded before rejection times were kept.");
+    else reason("fetch_times_not_recorded", "Fetch is recorded as a state without a timestamp.");
     const ev = (id, kind, at, r, note, extra = {}) => out.events.push({ event_id: `${state.tenant}/${state.agent}/${id}`, kind, at_unix: at, time_recorded: at != null,
       sequence: r?.sequence ?? null, revision: r?.revision ?? null, policy_sha256: r?.policy_sha256 ?? null, action: r?.action ?? null, note, ...extra, _anchor: r ? r.issued_at_unix : at });
     ev("enrollment/enrolled", "enrolled", s.enrolled, null, "Agent enrolled; first credential issued.");
@@ -121,7 +134,13 @@ const agentHistory = (() => {
       ev(`deployment/${n}/issued`, "issued", r.issued_at_unix, r, `${r.action === "rollback" ? "Rollback" : "Activation"} issued.`);
       if (r.recorded_state === "delivered") ev(`deployment/${n}/fetched`, "fetched", null, r, "Fetched by the Agent; time not recorded.");
       if (r.recorded_state === "applied") ev(`deployment/${n}/applied`, "applied", r.reported_applied_at_unix, r, "Agent reported applied (historical report, not current protection).");
-      if (r.recorded_state === "rejected") ev(`deployment/${n}/rejected`, "rejected", null, r, "Agent reported rejected; time not recorded.");
+      if (r.recorded_state === "rejected") {
+        const why = agentRejection.describe(r.rejection_code);
+        if (r.rejected_at_unix != null && r.rejected_at_unix < r.issued_at_unix) contradiction("rejected_before_issued", `Deployment #${n} reports rejected before it was issued.`, r.sequence);
+        ev(`deployment/${n}/rejected`, "rejected", r.rejected_at_unix, r,
+          `${why.label}. Rejected candidate only: the Agent kept its previous policy. Next step: ${why.next}${r.rejected_at_unix == null ? " Time not recorded." : ""}`,
+          { rejection_code: why.code, rejection_category: why.category, next_step: why.next });
+      }
       if (["issued", "delivered"].includes(r.recorded_state)) {
         const id = `deployment/${n}/${latest ? "pending" : "superseded"}`;
         ev(id, latest ? "pending" : "superseded", null, r, latest ? "No acknowledgement recorded yet." : "Superseded by a newer deployment without any acknowledgement.");
@@ -143,7 +162,7 @@ const agentHistory = (() => {
     const ranges = []; for (const n of seqs) { const last = ranges[ranges.length - 1]; if (last && last[1] === n - 1) last[1] = n; else ranges.push([n, n]); }
     out.coverage = { expected_deployments: expected, loaded_deployments: seqs.length, loaded_sequence_ranges: ranges, missing_sequence_ranges: missing,
       pages: state.pages.map(p => ({ ...p })), malformed_records_dropped: state.malformed, bounds: { ...BOUNDS } };
-    const blocking = out.reasons.filter(r => !["credential_rotations_not_recorded", "fetch_and_rejection_times_not_recorded"].includes(r.code));
+    const blocking = out.reasons.filter(r => !["credential_rotations_not_recorded", "fetch_and_rejection_times_not_recorded", "fetch_times_not_recorded"].includes(r.code));
     out.status = state.contradictions.length ? "contradictory" : blocking.length ? "incomplete" : "complete_records";
     return out;
   }
@@ -152,7 +171,8 @@ const agentHistory = (() => {
   // more before it may leave the page.
   function snapshot() {
     const a = analyse(), s = state.summary;
-    const pick = r => r ? { sequence: r.sequence, revision: r.revision, policy_sha256: r.policy_sha256, action: r.action, recorded_state: r.recorded_state, issued_at_unix: r.issued_at_unix, reported_applied_at_unix: r.reported_applied_at_unix } : null;
+    const pick = r => r ? { sequence: r.sequence, revision: r.revision, policy_sha256: r.policy_sha256, action: r.action, recorded_state: r.recorded_state, issued_at_unix: r.issued_at_unix, reported_applied_at_unix: r.reported_applied_at_unix,
+      ...(r.recorded_state === "rejected" ? { rejected_at_unix: r.rejected_at_unix, rejection_code: agentRejection.describe(r.rejection_code).code } : {}) } : null;
     const times = a.events.map(e => e.at_unix).filter(v => v != null);
     const value = {
       contract_version: SNAPSHOT,

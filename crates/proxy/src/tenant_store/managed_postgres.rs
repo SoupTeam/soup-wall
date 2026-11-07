@@ -49,6 +49,8 @@ fn deployment(row: Row) -> Result<ManagedDeployment> {
         status: row.get(6),
         issued_at_unix: row.get(7),
         applied_at_unix: row.get(8),
+        rejected_at_unix: None,
+        rejection_code: None,
     })
 }
 
@@ -305,6 +307,35 @@ impl PostgresTenantStore {
             .await?
             .get(0);
         ensure!(audit_exists, "operator audit migration table is missing");
+        // SOU-241: first authenticated rejection per candidate, with reason.
+        let rejection_version = super::super::managed_rejection::SCHEMA_VERSION;
+        if self
+            .bounded(tx.query_opt(
+                "SELECT version FROM llm_firewall_schema_migrations WHERE version=$1",
+                &[&rejection_version],
+            ))
+            .await?
+            .is_none()
+        {
+            self.bounded(tx.batch_execute(super::super::managed_rejection::POSTGRES_SCHEMA))
+                .await?;
+            self.bounded(tx.execute(
+                "INSERT INTO llm_firewall_schema_migrations(version,applied_at_unix) VALUES($1,$2)",
+                &[&rejection_version, &now_unix()],
+            ))
+            .await?;
+        }
+        let rejections_exist: bool = self
+            .bounded(tx.query_one(
+                "SELECT to_regclass('public.managed_agent_rejections') IS NOT NULL",
+                &[],
+            ))
+            .await?
+            .get(0);
+        ensure!(
+            rejections_exist,
+            "managed rejection migration table is missing"
+        );
         self.bounded(tx.commit()).await?;
         Ok(())
     }
@@ -887,7 +918,18 @@ impl PostgresTenantStore {
         bearer: &str,
         report: &AppliedReport,
     ) -> Result<bool> {
-        self.acknowledge_managed_bundle_inner(tenant, agent, Some(bearer), report)
+        self.acknowledge_managed_bundle_inner(tenant, agent, Some(bearer), report, None)
+            .await
+    }
+    pub(in crate::tenant_store) async fn acknowledge_authorized_managed_bundle_with_reason(
+        &self,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
+        report: &AppliedReport,
+        reason: Option<&super::super::managed_rejection::RejectionReport>,
+    ) -> Result<bool> {
+        self.acknowledge_managed_bundle_inner(tenant, agent, Some(bearer), report, reason)
             .await
     }
     pub(in crate::tenant_store) async fn acknowledge_managed_bundle(
@@ -896,7 +938,7 @@ impl PostgresTenantStore {
         agent: &str,
         report: &AppliedReport,
     ) -> Result<bool> {
-        self.acknowledge_managed_bundle_inner(tenant, agent, None, report)
+        self.acknowledge_managed_bundle_inner(tenant, agent, None, report, None)
             .await
     }
     async fn acknowledge_managed_bundle_inner(
@@ -905,11 +947,14 @@ impl PostgresTenantStore {
         agent: &str,
         credential: Option<&str>,
         report: &AppliedReport,
+        reason: Option<&super::super::managed_rejection::RejectionReport>,
     ) -> Result<bool> {
         ensure!(
             report.status == "applied" || report.status == "rejected",
             "invalid acknowledgement"
         );
+        super::super::managed_rejection::check(&report.status, reason)?;
+        let (reason_version, reason_code) = super::super::managed_rejection::parts(reason);
         let seq: i64 = report.deployment_sequence.try_into()?;
         let mut client = self.checkout().await?;
         let tx = self.bounded(client.transaction()).await?;
@@ -928,10 +973,34 @@ impl PostgresTenantStore {
         }
         let current: String = row.get(3);
         if current == "applied" || current == "rejected" {
-            return Ok(current == report.status);
+            if current != report.status {
+                return Ok(false);
+            }
+            if current == "applied" {
+                return Ok(true);
+            }
+            // A repeated rejection must carry the first reason; a record from
+            // before reasons existed accepts any repeat as before.
+            let stored = self
+                .bounded(tx.query_opt(
+                    "SELECT reason_version,reason_code FROM managed_agent_rejections WHERE tenant_id=$1 AND agent_id=$2 AND deployment_sequence=$3",
+                    &[&tenant, &agent, &seq],
+                ))
+                .await?;
+            return Ok(stored.is_none_or(|r| {
+                (r.get::<_, Option<i64>>(0), r.get::<_, Option<String>>(1))
+                    == (reason_version, reason_code.clone())
+            }));
         }
         let applied = (report.status == "applied").then(now_unix);
         self.bounded(tx.execute("UPDATE managed_agent_deployments SET status=$4,applied_at_unix=$5 WHERE tenant_id=$1 AND agent_id=$2 AND deployment_sequence=$3", &[&tenant,&agent,&seq,&report.status,&applied])).await?;
+        if report.status == "rejected" {
+            self.bounded(tx.execute(
+                "INSERT INTO managed_agent_rejections(tenant_id,agent_id,deployment_sequence,revision,policy_sha256,reason_version,reason_code,received_at_unix) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+                &[&tenant, &agent, &seq, &report.revision, &report.policy_sha256, &reason_version, &reason_code, &now_unix()],
+            ))
+            .await?;
+        }
         self.bounded(tx.commit()).await?;
         drop(client);
         // Preserve accepted group gate progression after the exact authorized ACK,
@@ -948,7 +1017,16 @@ impl PostgresTenantStore {
     ) -> Result<Vec<ManagedDeployment>> {
         ensure!(exact_id(tenant) && exact_id(agent), "invalid identity");
         let client = self.checkout().await?;
-        self.bounded(client.query("SELECT tenant_id,agent_id,deployment_sequence,revision,policy_sha256,action,status,issued_at_unix,applied_at_unix FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id=$2 ORDER BY deployment_sequence DESC LIMIT 50", &[&tenant,&agent])).await?.into_iter().map(deployment).collect()
+        let rows = self.bounded(client.query("SELECT d.tenant_id,d.agent_id,d.deployment_sequence,d.revision,d.policy_sha256,d.action,d.status,d.issued_at_unix,d.applied_at_unix,j.received_at_unix,j.reason_code FROM managed_agent_deployments d LEFT JOIN managed_agent_rejections j ON j.tenant_id=d.tenant_id AND j.agent_id=d.agent_id AND j.deployment_sequence=d.deployment_sequence AND j.revision=d.revision AND j.policy_sha256=d.policy_sha256 AND d.status='rejected' WHERE d.tenant_id=$1 AND d.agent_id=$2 ORDER BY d.deployment_sequence DESC LIMIT 50", &[&tenant,&agent])).await?;
+        rows.into_iter()
+            .map(|row| {
+                let (at, code) = (row.get(9), row.get(10));
+                let mut d = deployment(row)?;
+                d.rejected_at_unix = at;
+                d.rejection_code = code;
+                Ok(d)
+            })
+            .collect()
     }
 
     pub(in crate::tenant_store) async fn create_managed_group(

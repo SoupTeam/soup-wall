@@ -124,7 +124,7 @@ jobs:
           git restore .
           git rev-parse HEAD > target/fleet-evidence/source.txt
       - name: Fleet storage and authorization regressions
-        run: cargo test --locked -p llm-firewall --test fleet_projection --test fleet_triage --test agent_heartbeat
+        run: cargo test --locked -p llm-firewall --test fleet_projection --test fleet_triage --test agent_heartbeat --test managed_rejection_reasons
       - name: Build real Console and Agent
         run: cargo build --locked -p llm-firewall -p agentfw
       - name: Prepare isolated browser driver
@@ -208,6 +208,17 @@ jobs:
               --backend "$backend" --output "$RUNNER_TEMP/history" || status=1
           done
           cp -r "$RUNNER_TEMP/history" target/fleet-evidence/history
+          exit $status
+      - name: Agent policy rejection reasons with a real Agent on both backends
+        shell: bash
+        run: |
+          set +e
+          status=0
+          for backend in sqlite postgres; do
+            "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-agent-rejection-acceptance.py --no-build \
+              --backend "$backend" --output "$RUNNER_TEMP/rejection" || status=1
+          done
+          cp -r "$RUNNER_TEMP/rejection" target/fleet-evidence/rejection
           exit $status
       - name: Browser rollout to one pilot and two real Agents over HTTPS
         shell: bash
