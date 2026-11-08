@@ -21,8 +21,16 @@ pub(crate) enum ReadMode {
     /// Deterministic external cancellation point, never a production option.
     Pause {
         after_prefix: bool,
-        signal: Option<tokio::sync::oneshot::Sender<(u32, tokio::net::UnixStream)>>,
+        with_descendant: bool,
+        signal: Option<tokio::sync::oneshot::Sender<PausedReader>>,
     },
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) struct PausedReader {
+    pub pid: u32,
+    pub observer: tokio::net::UnixStream,
+    pub canary: std::path::PathBuf,
 }
 
 // Bubblewrap supplies PWD even with --clearenv. Accept only its fixed sandbox
@@ -389,7 +397,7 @@ mod linux {
         let mut channel = unsafe { UnixStream::from_raw_fd(fd) };
         channel.write_all(&executable_hash()?)?;
         channel.write_all(&namespace_ids()?)?;
-        if mode == "hang" {
+        if matches!(mode.as_str(), "hang" | "descendant") {
             let mut pipe = [0; 2];
             ensure!(
                 unsafe { libc::pipe2(pipe.as_mut_ptr(), libc::O_CLOEXEC) } == 0,
@@ -424,8 +432,10 @@ mod linux {
             }
             ensure!(received == 1 && escaped == [1], "setsid descendant missing");
             channel.write_all(b"forked")?;
-            loop {
-                std::thread::sleep(Duration::from_secs(1));
+            if mode == "hang" {
+                loop {
+                    std::thread::sleep(Duration::from_secs(1));
+                }
             }
         }
         let mut header = [0; 40];
@@ -481,6 +491,10 @@ mod linux {
             match mode {
                 ReadMode::PartialAck => "partial",
                 ReadMode::OversizedAck => "oversized",
+                ReadMode::Pause {
+                    with_descendant: true,
+                    ..
+                } => "descendant",
                 _ => "normal",
             },
             outside.to_str().context("canary path")?,
@@ -501,15 +515,31 @@ mod linux {
                 );
             }
             ensure!(!process.exited()?, "recipient exited");
+            if matches!(
+                mode,
+                ReadMode::Pause {
+                    with_descendant: true,
+                    ..
+                }
+            ) {
+                let mut forked = [0; 6];
+                socket.read_exact(&mut forked).await?;
+                ensure!(&forked == b"forked", "descendant not started");
+            }
             if let ReadMode::Pause {
                 after_prefix: false,
                 signal,
+                ..
             } = &mut mode
             {
                 signal
                     .take()
                     .context("missing pause signal")?
-                    .send((pid, observer.take().context("missing observer")?))
+                    .send(PausedReader {
+                        pid,
+                        observer: observer.take().context("missing observer")?,
+                        canary: outside.clone(),
+                    })
                     .map_err(|_| anyhow::anyhow!("pause observer gone"))?;
                 std::future::pending::<()>().await;
             }
@@ -539,12 +569,17 @@ mod linux {
             if let ReadMode::Pause {
                 after_prefix: true,
                 signal,
+                ..
             } = &mut mode
             {
                 signal
                     .take()
                     .context("missing pause signal")?
-                    .send((pid, observer.take().context("missing observer")?))
+                    .send(PausedReader {
+                        pid,
+                        observer: observer.take().context("missing observer")?,
+                        canary: outside.clone(),
+                    })
                     .map_err(|_| anyhow::anyhow!("pause observer gone"))?;
                 std::future::pending::<()>().await;
             }

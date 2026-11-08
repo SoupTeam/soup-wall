@@ -753,3 +753,60 @@ local boundary. Request independent exact-source Linux execution of the existing
 commands above, particularly `connected_quarantine_reader`, before accepting
 cancellation behavior. Whole-daemon crash, useful source-bound semantic output,
 production policy-transition semantics and all six original outcomes remain open.
+
+### Abrupt owner-process death witness - November 8
+
+[Review 5812515160](https://github.com/SoupTeam/soup-wall/pull/346#pullrequestreview-5812515160)
+accepted `dc2fd897` on Linux/WSL2 with the two actual future-cancellation points,
+the prior eight connected cases and eight standalone kernel cases. General at
+13:55 confirmed cancellation acceptance and requested crash cleanup next.
+
+The new `quarantine_reader_daemon_crash` parent starts a separate test process
+owning the actual daemon custody/withdrawal/delivery components. That process
+captures the public response, consumes the purpose, kills/reaps the original
+source, and enters real confined delivery. It pauses after verified readiness
+before reservation, or after reservation/header/half-source. In both cases the
+reader must first create a real `setsid` descendant retaining the channel.
+Before announcing readiness, the owner checks purpose replay refusal, the exact
+reservation state and equality of the complete original retained record.
+
+An inherited, private test-control datagram passes an observation duplicate of
+the actual reader socket to the outside parent with `SCM_RIGHTS`. The receiver
+bounds the packet, accepts one CLOEXEC descriptor and owns received descriptors
+before validation so malformed packets do not leak them. This observer does not
+forward through the process being killed. The existing reader descriptor check
+also ensures the test-control socket never reaches the sandbox.
+
+The outside parent verifies live ancestry and pins the supervisor and all
+observed descendants with pidfds before sending SIGKILL to its held owner Child.
+Successful SIGKILL wait status, bounded empty channel EOF, death of every pinned
+process and an unchanged host canary are required **before** any failure-only
+pidfd cleanup. The test cannot pass because Drop or normal stop cleaned up the
+owner: SIGKILL bypasses them. An unexpected early exit or failed readiness is a
+failure. Fresh daemon state must reject the old sealed registration and purpose.
+The outside parent owns the temporary root, so crash artifacts can still be
+cleaned without relying on killed-process destructors.
+
+Scope: this qualifies two component process-loss points once independently run;
+it is not the installed daemon/original MCP server, a startup-race proof, durable
+quarantine recovery, or semantic usefulness. Custody is verified before death;
+no claim is made that in-memory retained bytes survive SIGKILL. Existing
+bubblewrap `--die-with-parent` and production signalling remain unchanged.
+
+Local Windows: three portable reader tests and two quarantine tests passed;
+strict agentfw all-targets Clippy passed. The new Linux-only module has **not**
+been compiled or executed locally. Independent exact-source checks requested:
+
+```sh
+cargo test --locked -p agentfw --lib native::consumer::crash_witness::quarantine_reader_daemon_crash -- --exact --test-threads=1
+cargo test --locked -p agentfw --lib connected_quarantine_reader -- --test-threads=1
+cargo test --locked -p agentfw --lib sandbox::fixture_reader -- --test-threads=1
+cargo clippy --locked -p agentfw --all-targets -- -D warnings
+```
+
+The first command must actually execute both SIGKILL points; the ignored helper
+is re-executed by its parent, not counted as a skipped qualification. No full or
+native matrix/model rerun is requested. Useful source-bound semantic output,
+its separately reviewed provider/egress boundary, production policy-transition
+semantics and all six original benign/malicious outcomes remain open. Keep
+Draft/In Progress and the original corpus labels/denominators.

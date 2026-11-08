@@ -6,6 +6,9 @@ use crate::pilot_approval::consumer::Registration;
 pub const ENDPOINT: &str = "/native/held-consumer/v1";
 const LIMIT: usize = 32;
 
+#[cfg(all(test, target_os = "linux"))]
+mod crash_witness;
+
 // Small replay custody is separate from the 32 live process slots. Expired
 // registrations cannot pass verify(), so their tombstones can be reclaimed.
 fn reclaim_disposed(sessions: &mut Sessions, now: u64) {
@@ -302,10 +305,13 @@ mod lifecycle_tests {
                 st,
                 crate::sandbox::fixture_reader::ReadMode::Pause {
                     after_prefix,
+                    with_descendant: false,
                     signal: Some(tx),
                 },
             ));
-            let (pid, mut observer) = tokio::select! {
+            let crate::sandbox::fixture_reader::PausedReader {
+                pid, mut observer, ..
+            } = tokio::select! {
                 ready = tokio::time::timeout(std::time::Duration::from_secs(10), rx) => ready.unwrap().unwrap(),
                 result = &mut delivery => panic!("delivery ended before cancellation point: {result:?}"),
             };
