@@ -94,7 +94,7 @@ impl ReaderSource {
             .len();
         let source_len = usize::try_from(self.binding.response_bytes)
             .map_err(|_| "analysis_reader_source_bytes")?;
-        if source_len > 262_144 {
+        if source_len > crate::sandbox::fixture_reader::analysis::SOURCE_LIMIT {
             return Err("analysis_reader_source_bytes");
         }
         let charge = record_len
@@ -116,7 +116,15 @@ impl ReaderSource {
             bytes: quarantine.analysis_bytes.clone(),
             charge,
         };
-        let bytes = self.reserve_bounded(quarantine, instance, policy, now, 262_144)?;
+        let bytes = self.reserve_bounded(
+            quarantine,
+            instance,
+            policy,
+            now,
+            crate::sandbox::fixture_reader::analysis::SOURCE_LIMIT,
+        )?;
+        crate::sandbox::fixture_reader::analysis::validate_mcp_source(&bytes)
+            .map_err(|_| "analysis_reader_source_channels")?;
         Ok(AnalysisSource {
             bytes,
             selector: self,
@@ -487,7 +495,10 @@ mod tests {
     use super::*;
 
     fn analysis_record(q: &mut Quarantine, id: &str, length: usize) -> ReaderSource {
-        let content = "x".repeat(length);
+        let content = String::from_utf8(crate::sandbox::fixture_reader::analysis::boundary_source(
+            length,
+        ))
+        .unwrap();
         let binding:analysis_purpose::Binding=serde_json::from_value(json!({
             "quarantine_id":id,"response_sha256":hash(content.as_bytes()),"response_bytes":length,
             "native_instance":"instance","host_generation":"host","consumer_identity":"consumer",
@@ -550,7 +561,7 @@ mod tests {
             legacy.reserve(&mut q, "instance", "policy", Instant::now()),
             Err("analysis_reader_source_bytes")
         );
-        let large = analysis_record(&mut q, "large", 262_145);
+        let large = analysis_record(&mut q, "large", 589_825);
         assert!(matches!(
             large.reserve_analysis(&mut q, "instance", "policy", Instant::now()),
             Err("analysis_reader_source_bytes")
@@ -590,6 +601,97 @@ mod tests {
             0
         );
         assert!(q.records.values().all(|r| !r.bytes.is_empty()));
+    }
+
+    #[test]
+    fn analysis_large_actual_custody_serial_budget_concurrency_refusal_and_reclaim() {
+        let records = [
+            super::super::execution::tests::analysis_custody_fixture(include_str!(
+                "../../../../eval/sou123/payloads/g12-a.txt"
+            )),
+            super::super::execution::tests::analysis_custody_fixture(include_str!(
+                "../../../../eval/sou123/payloads/f12-a.txt"
+            )),
+        ];
+        let prepare = |q: &mut Quarantine, id: &str, value: &Value| {
+            let content = value["content"].as_str().unwrap();
+            let binding:analysis_purpose::Binding=serde_json::from_value(json!({
+                "quarantine_id":id,"response_sha256":hash(content.as_bytes()),"response_bytes":content.len(),
+                "native_instance":"instance","host_generation":"host","consumer_identity":"consumer",
+                "consumer_lifecycle":"generation","session_epoch":"epoch","source_grant_digest":hash(b"grant"),
+                "invocation_binding":hash(b"call"),"policy_generation":"policy"
+            })).unwrap();
+            q.records.insert(
+                id.into(),
+                Record {
+                    epoch: "epoch".into(),
+                    expires: Instant::now() + Duration::from_secs(30),
+                    bytes: serde_json::to_vec(value).unwrap(),
+                    terminal: false,
+                    reader_reserved: false,
+                },
+            );
+            let source = q.reader_source(binding).unwrap();
+            q.spend(id);
+            source
+        };
+        // Same shared budget contains BOTH full records. One large lease fits,
+        // the second concurrent lease must refuse; no retry of its spent source.
+        let mut q = Quarantine::default();
+        let first = prepare(&mut q, "first", &records[0]);
+        let second = prepare(&mut q, "second", &records[1]);
+        let held = first
+            .reserve_analysis(&mut q, "instance", "policy", Instant::now())
+            .unwrap();
+        let charge = q.analysis_bytes.load(std::sync::atomic::Ordering::Acquire);
+        assert!(matches!(
+            second.reserve_analysis(&mut q, "instance", "policy", Instant::now()),
+            Err("analysis_quarantine_capacity")
+        ));
+        assert_eq!(
+            q.analysis_bytes.load(std::sync::atomic::Ordering::Acquire),
+            charge
+        );
+        assert_eq!(
+            held.recheck(&q, "instance", "policy", Instant::now())
+                .unwrap(),
+            serde_json::to_vec(&records[0]).unwrap()
+        );
+        drop(held);
+        assert_eq!(
+            q.analysis_bytes.load(std::sync::atomic::Ordering::Acquire),
+            0
+        );
+        // Independent fresh serial attempts each fit. This is not replaying the
+        // failed attempt, nor claiming simultaneous admission of large sources.
+        let edge = super::super::execution::tests::analysis_custody_frame_fixture(
+            &crate::sandbox::fixture_reader::analysis::boundary_source(589_824),
+        );
+        for record in records.into_iter().chain([edge]) {
+            let mut serial = Quarantine::default();
+            let source = prepare(&mut serial, "serial", &record);
+            let held = source
+                .reserve_analysis(&mut serial, "instance", "policy", Instant::now())
+                .unwrap();
+            let used: usize = serial.records.values().map(|r| r.bytes.len()).sum();
+            assert!(
+                used + serial
+                    .analysis_bytes
+                    .load(std::sync::atomic::Ordering::Acquire)
+                    <= MAX_BYTES
+            );
+            drop(held);
+            assert_eq!(
+                serial
+                    .analysis_bytes
+                    .load(std::sync::atomic::Ordering::Acquire),
+                0
+            );
+            assert_eq!(
+                serial.records["serial"].bytes,
+                serde_json::to_vec(&record).unwrap()
+            );
+        }
     }
 
     #[test]

@@ -36,6 +36,20 @@ pub(in crate::native) fn analysis_capture(
     finish_reader_capture(child, analysis_env(text))
 }
 
+#[cfg(target_os = "linux")]
+pub(in crate::native) fn analysis_capture_frame(
+    child: &std::process::Child,
+    frame: &[u8],
+) -> ReaderCapture {
+    finish_reader_capture(child, analysis_env_frame(frame))
+}
+
+fn analysis_env_frame(frame: &[u8]) -> Env {
+    let mut env = analysis_env("fixture response follows");
+    env.response["content"] = json!(std::str::from_utf8(frame).unwrap());
+    env
+}
+
 fn analysis_env(text: &str) -> Env {
     // Fixed FS component invocation, not the original Git/FS pilot. Preserve the
     // whole returned MCP envelope; do not strip it to fit the analysis profile.
@@ -49,8 +63,35 @@ fn analysis_env(text: &str) -> Env {
     )
 }
 
+/// Real refused capture bytes for portable capacity accounting, not runtime proof.
+pub(in crate::native) fn analysis_custody_fixture(text: &str) -> Value {
+    analysis_custody_env(analysis_env(text))
+}
+
+pub(in crate::native) fn analysis_custody_frame_fixture(frame: &[u8]) -> Value {
+    analysis_custody_env(analysis_env_frame(frame))
+}
+
+fn analysis_custody_env(env: Env) -> Value {
+    purpose_fixture_grant(&env);
+    let reply = env.finish(Some(env.source())).unwrap();
+    assert!(!reply.release);
+    let record = env
+        .st
+        .native
+        .as_ref()
+        .unwrap()
+        .quarantine
+        .lock()
+        .unwrap()
+        .retained(reply.quarantine_id.as_ref().unwrap())
+        .unwrap()
+        .0;
+    record
+}
+
 #[test]
-fn analysis_fixture_capture_keeps_six_originals_and_envelope_size_gap() {
+fn analysis_fixture_capture_keeps_six_originals_and_full_envelope_limits() {
     for text in [
         include_str!("../../../../../eval/sou123/payloads/g05-a.txt"),
         include_str!("../../../../../eval/sou123/payloads/g06-b.txt"),
@@ -77,7 +118,36 @@ fn analysis_fixture_capture_keeps_six_originals_and_envelope_size_gap() {
         let full = record["content"].as_str().unwrap();
         let frame: Value = serde_json::from_str(full).unwrap();
         assert_eq!(frame["result"]["content"][0]["text"], text);
-        assert_eq!(full.len() > 262_144, text.len() == 262_144);
+        assert_eq!(frame["result"]["structuredContent"]["content"], text);
+        assert!(full.len() <= crate::sandbox::fixture_reader::analysis::SOURCE_LIMIT);
+        crate::sandbox::fixture_reader::analysis::validate_mcp_source(full.as_bytes()).unwrap();
+    }
+}
+
+#[test]
+fn analysis_fixture_capture_exact_new_frame_edge_and_one_over() {
+    for length in [589_824, 589_825] {
+        let frame = crate::sandbox::fixture_reader::analysis::boundary_source(length);
+        let env = analysis_env_frame(&frame);
+        purpose_fixture_grant(&env);
+        let reply = env.finish(Some(env.source())).unwrap();
+        assert!(!reply.release);
+        let record = env
+            .st
+            .native
+            .as_ref()
+            .unwrap()
+            .quarantine
+            .lock()
+            .unwrap()
+            .retained(reply.quarantine_id.as_ref().unwrap())
+            .unwrap()
+            .0;
+        assert_eq!(record["content"].as_str().unwrap().as_bytes(), frame);
+        assert_eq!(
+            crate::sandbox::fixture_reader::analysis::validate_mcp_source(&frame).is_ok(),
+            length == 589_824
+        );
     }
 }
 

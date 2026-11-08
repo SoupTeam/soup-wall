@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use crate::mcp::admission::Strict;
 
 const FRAME_LIMIT: usize = 4096;
-const SOURCE_LIMIT: usize = 262_144;
+const SOURCE_LIMIT: usize = crate::sandbox::fixture_reader::analysis::SOURCE_LIMIT;
 const SUMMARY_LIMIT: usize = 2048;
 const CITATION_LIMIT: usize = 8;
 const EXCERPT_LIMIT: u64 = 256;
@@ -216,6 +216,17 @@ mod tests {
                 decode(&source[..source.len() - 1], &bytes).err(),
                 Some(Rejection::Binding)
             );
+        }
+    }
+
+    #[test]
+    fn proposed_result_contract_full_mcp_frame_new_boundary_and_one_over() {
+        for size in [530_442, 530_510, SOURCE_LIMIT, SOURCE_LIMIT + 1] {
+            let bytes = crate::sandbox::fixture_reader::analysis::boundary_source(size);
+            let source = std::str::from_utf8(&bytes).unwrap();
+            let wire =
+                serde_json::to_vec(&response(source, source.len() - 64, source.len())).unwrap();
+            assert_eq!(decode(source, &wire).is_ok(), size <= SOURCE_LIMIT);
         }
     }
 

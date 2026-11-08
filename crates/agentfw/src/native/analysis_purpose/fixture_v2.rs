@@ -126,6 +126,25 @@ pub(in crate::native) fn shorten_fixture(
 }
 
 #[cfg(target_os = "linux")]
+pub(in crate::native) fn old_profile_fixture(
+    st: &crate::handlers::Shared,
+    grant: &FixtureGrant,
+) -> FixtureGrant {
+    let mut old = grant.clone();
+    old.request.profile_sha256 = analysis::hash(b"sw-analysis-fixture/1;source=262144;chunk=4096;frame=4096;summary=2048;citations=8x256;provider=none");
+    old.signature = URL_SAFE_NO_PAD.encode(
+        signature(
+            &derive_key(&st.native.as_ref().unwrap().token),
+            &old,
+            DOMAIN,
+        )
+        .finalize()
+        .into_bytes(),
+    );
+    old
+}
+
+#[cfg(target_os = "linux")]
 pub(in crate::native) struct PendingAnalysis {
     registration: crate::pilot_approval::consumer::Registration,
     grant: FixtureGrant,
@@ -437,6 +456,19 @@ fn analysis_v2_fixture_binds_profile_source_question_nonce_and_mac_domain() {
         assert_eq!(
             verify_fixture(&key, &valid, &binding, &analysis::hash(b"exe"), now),
             Err("analysis_v2_time")
+        );
+    }
+    // Authentic old-profile MAC with matching source binding still fails.
+    for length in [6, 530_442] {
+        let mut old = valid.clone();
+        old.binding.response_bytes = length;
+        old.request.source_bytes = length;
+        old.request.profile_sha256 = analysis::hash(b"sw-analysis-fixture/1;source=262144;chunk=4096;frame=4096;summary=2048;citations=8x256;provider=none");
+        old.signature =
+            URL_SAFE_NO_PAD.encode(signature(&key, &old, DOMAIN).finalize().into_bytes());
+        assert_eq!(
+            verify_fixture(&key, &old, &old.binding, &analysis::hash(b"exe"), 20),
+            Err("analysis_v2_binding")
         );
     }
     // Correctly signed but unauthorized question/profile still fails constants.

@@ -1148,3 +1148,87 @@ controls. Original-server installed-daemon crash qualification, authenticated
 production purpose-v2 issuance, provider/model/disclosure/egress approval and
 actual semantic usefulness remain open. No 48/3 denominator, 24-attack acceptance,
 corpus label, policy/signature or six-refusal count is changed by this increment.
+
+
+### Full-envelope fixture-profile amendment - November 9
+
+Independent [review 5819223109](https://github.com/SoupTeam/soup-wall/pull/346#pullrequestreview-5819223109)
+accepted the connected increment at `18889d44`: all seven narrow Linux/WSL2 test
+selectors, real bubblewrap 0.9.0, Rust 1.99.1, strict Clippy and fmt passed.
+The reviewer independently measured both complete large filesystem envelopes
+and their custody/copy charges. This accepts the preceding bounded connection,
+not semantic correction or the larger transfer implemented here.
+
+The same review and General at 00:10 approved this next **test-only** amendment:
+`sw-analysis-fixture/2` binds a **589824-byte full MCP JSON source ceiling** and
+**262144-byte decoded text-channel ceiling** into the existing fixture-purpose-v2
+MAC. Chunks stay <=4096, terminal result <=4096, decoded summary <=2048 and
+citations <=8 of 1..256 bytes. The generic request cap, native 1048576-byte result
+cap, legacy 4096-byte reader cap and shared 8 MiB/32-record capacity are unchanged.
+The earlier 262144 full-source profile and the two explicit refusals above are
+historical evidence at `18889d44`; no attempt or failed result has been relabelled.
+
+A single constant now controls the amended fixture request, reader, reservation
+and result decoder full-source size. A new closed public-fixture MCP input check
+requires both `content` and `structuredContent`, counts aggregate decoded bytes
+across all content text blocks, and separately bounds the structured text. It
+rejects missing/extra/wrong-shape fields and duplicate keys. The input check runs
+before transfer and after full child receipt, without rewriting original bytes.
+This intentionally narrow successful-result fixture grammar is not a new general
+MCP parser or production endpoint. The pure result decoder still validates an
+opaque expected source; its connected caller supplies the fully checked source.
+
+Authentically signed **old profile** grants are refused even with matching source
+bindings and a valid v2 MAC. Portable controls cover small and enlarged source
+claims; the connected Linux parent also requires refusal before spend for an
+old-profile grant over the new boundary frame. No grant lifetime or source
+reservation is renewed to obtain the larger profile.
+
+The connected six-case loop now requires a successful private object for all
+six complete generated filesystem responses, including unchanged g12-a/f12-a
+at **530442/530510 bytes**. It checks both channel texts, complete source
+hash/length, original full custody and the exact tail citation. These are the
+frozen source texts in the fixed filesystem component, not original Git/FS-server
+execution or model usefulness. Each object is dropped before the next case.
+A separate synthetic frame uses JSON escaping to exercise exactly **589824**
+bytes while each decoded channel remains <=262144; **589825** is refused before
+purpose spend. The synthetic frame never replaces a frozen corpus original.
+
+Memory controls use newly captured actual custody for both large originals.
+With both records retained in one quarantine, one large lease fits and a second
+concurrent lease explicitly refuses. Failed admission adds no charge; dropping
+the live lease reclaims it while retaining unchanged records. Fresh separate
+serial attempts for each original and the exact new-boundary frame fit under
+the same unchanged 8 MiB budget. This is byte/copy accounting, not RSS or
+simultaneous-large-throughput qualification, and it does not retry a failed
+consumed attempt. Existing smaller concurrent-copy controls remain.
+
+New/extended regressions cover new-boundary and boundary+1 at protocol,
+reservation, actual capture and result decoding; complete-source corruption,
+truncation, wrong order/size and extra bytes; invalid UTF-8; missing/duplicate
+channels, aggregate and structured text overflow even below the full-frame cap;
+and old-profile grant refusal. Previous live-state, cleanup, cancellation and
+SIGKILL controls remain in the connected parent selectors.
+
+Local Windows validation: `analysis_` passed 18 tests and
+`proposed_result_contract` passed 10; strict all-targets Clippy passed. New Linux
+changes are **not compiled or executed locally**. The previous head's successful
+Linux review is not evidence for this amended head. Request one independent
+exact-head run of the bounded controls:
+
+```sh
+cargo test --locked -p agentfw --lib analysis_
+cargo test --locked -p agentfw --lib proposed_result_contract
+cargo test --locked -p agentfw --lib native::quarantine
+cargo test --locked -p agentfw --lib sandbox::fixture_reader
+cargo clippy --locked -p agentfw --all-targets -- -D warnings
+cargo fmt --all -- --check
+```
+
+`analysis_` includes the connected six-case parent and output-SIGKILL parent on
+Linux, plus the portable complete-frame/budget controls. No missing-sandbox skip
+is accepted. No full/native matrix, model experiment or new provider use was run.
+All six semantic refusals remain unresolved; this amendment addresses the
+complete-input transport obstacle only. Keep Draft / In Progress, unchanged
+original 48/3 denominators and 24-attack acceptance, and separate future
+provider/model/disclosure/transport authorization from fixture acceptance.
