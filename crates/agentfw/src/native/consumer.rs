@@ -9,6 +9,10 @@ const LIMIT: usize = 32;
 #[cfg(all(test, target_os = "linux"))]
 mod crash_witness;
 
+// Executable design only: no endpoint, grant, worker or release path calls this.
+#[cfg(test)]
+mod result_contract;
+
 // Small replay custody is separate from the 32 live process slots. Expired
 // registrations cannot pass verify(), so their tombstones can be reclaimed.
 fn reclaim_disposed(sessions: &mut Sessions, now: u64) {

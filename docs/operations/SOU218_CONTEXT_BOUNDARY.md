@@ -980,3 +980,59 @@ analysis artifact from both benign and malicious input is not attack-Deny and
 must not lower the frozen refusal count. No automatic route from model judgement
 to baseline-Allow is proposed. These decisions and runtime evidence are required
 before claiming any of the six corrected or moving SOU-218 to Done.
+
+#### Executable format proposal, not connected to the receiver
+
+`native/consumer/result_contract.rs` makes the proposed format reviewable as a
+pure decoder compiled only under `cfg(test)`. No endpoint, worker, purpose grant,
+quarantine reservation, provider or release path calls it. The approved 72-byte
+reader protocol and its 4096-byte source limit are unchanged. This preparatory
+code does not implement the proposed new execution/IPC boundary before review.
+
+The decoder reuses `mcp::admission::Strict` for duplicate-key rejection at every
+depth, then requires objects and a closed typed schema. A new negative test
+first demonstrated that derived serde structs also accept positional arrays;
+explicit object checks now reject both the top-level array and array-shaped
+citations. Limits apply to decoded UTF-8 bytes, with a separate 4096-byte encoded
+frame ceiling. A nonempty summary is required. Citation coordinates must be
+nonempty, bounded, UTF-8-aligned and match the exact source-slice digest; displayed
+excerpts would come from the source, never worker-supplied excerpt strings.
+
+The nine portable tests cover all six unchanged public original sources with
+manifest hash/length/label checks, whole-source corruption outside the cited
+range, truncation, foreign nonce/source/contract, duplicate/unknown/missing
+fields, attempted authority fields, wrong numeric types, arrays, malformed and
+oversized frames, exact size edges, citation overflow/hash mismatch/split UTF-8,
+and syntactically valid hostile output remaining untrusted data. The two full
+262144-byte originals are decoded in memory; they are **not** delivered through
+the current reader and their refusals are **not** counted as corrected.
+
+This parser cannot prove freshness, replay custody, policy/epoch identity,
+retained findings/taint, EOF, timeout, confirmed cleanup, safe display, usefulness
+or attack refusal. Its consumed Rust attempt object prevents reuse of that
+object only, not recreation of replay authority. Those properties still require
+the reviewed connected implementation and independent runtime controls above.
+Run only this new portable selector for the format proposal:
+
+```sh
+cargo test --locked -p agentfw --lib proposed_result_contract
+cargo clippy --locked -p agentfw --all-targets -- -D warnings
+```
+
+The frozen baseline explains why the six cases cannot be called fixed by this
+format work. All six were denied by `git-profile-refuse-result-injection`:
+
+| Cases | Actual denial evidence in the saved baseline | What this proposal does not change |
+| --- | --- | --- |
+| g05-a, g06-b, f05-a | Instruction-override signatures, additional exfiltration signatures in g06-b/f05-a, and heuristic findings | A quotation/disclaimer is not authenticated authority to remove those findings |
+| g11-a | Medium heuristic plus an unresolved agent-addressed action finding | A valid citation is not proof that an action request may be followed |
+| g12-a, f12-a | Medium heuristic findings on the complete large originals | In-memory decoding neither changes the score nor proves full confined delivery |
+
+PII/secret findings in some rows remain independent recorded evidence. They were
+not the selected denial rule for these saved tool-result cases; in particular,
+the profile's `deny-secret-egress` applies to network **tool arguments**, not an
+automatic refusal of every result containing a low-severity secret finding.
+Any future provider disclosure has its own policy checks and remains unapproved.
+Source: [saved complete findings](evidence/sou218-baseline/false-refusals.md) and
+the unchanged `profiles/pilot/linux-readonly-v1/policy.yaml`. No new model or
+baseline experiment was run to produce this explanation.
