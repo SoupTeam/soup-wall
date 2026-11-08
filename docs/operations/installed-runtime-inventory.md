@@ -231,6 +231,11 @@ installed package notices, supplies full GPLv3/LGPLv3/MPL2 license texts and
 source/recipient instructions, and copies the exact certifi source/PEM trees
 and the containing setuptools application/vendor source for autocommand.
 The output contains a hash inventory and a proposal with `UNREVIEWED` decisions.
+The proposal also enumerates every retained OSV finding and supported Cargo
+maintenance record with its scanner, package, source, advisory aliases and full
+advisory digest. Those rows remain `UNREVIEWED`, with empty evidence references
+and rationale; the maintainer must supply both before admission. Cargo
+vulnerabilities or unsupported warnings cannot become maintenance proposals.
 Copying files does not approve them. Review the concrete material, choose the
 permitted `internal` or `private-handoff` scope, record the delegated decision,
 and add the exact advisory evidence before supplying the completed JSON.
@@ -253,6 +258,9 @@ gate. A successful package disposition cannot clear a native security finding,
 certify pilot readiness, publish an artifact or approve a release. Re-verify
 all source, selection, scan inputs and compliance files after scanning; keep
 earlier attempts and their original findings.
+
+The [runtime admission handoff](runtime-admission-handoff.md) lists the
+author-side evidence, remaining upstream block and the final reviewer steps.
 
 
 Native system-library review covers the union of both installed profiles and

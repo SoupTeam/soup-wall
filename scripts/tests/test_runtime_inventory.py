@@ -3,6 +3,7 @@ import copy
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -578,7 +579,7 @@ class RuntimeInventoryTests(unittest.TestCase):
                 self.assertIn(("PyPI", "urllib3", "1.0"), graph)
                 self.assertEqual(len([error for error in errors if "urllib3" in error]), 1)
 
-    def test_main_scans_union_and_rechecks_selected_tree_contract(self):
+    def main_scan_fixture(self, native_error=None):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             self.installed_fixture(root)
@@ -610,7 +611,7 @@ class RuntimeInventoryTests(unittest.TestCase):
             with patch.object(inventory.importlib.util, "spec_from_file_location", return_value=spec), \
                     patch.object(inventory.importlib.util, "module_from_spec", return_value=prep), \
                     patch.object(inventory, "lock_graphs", return_value=copy.deepcopy(graphs)), \
-                    patch.object(inventory, "verify_native_reviews", return_value={}), \
+                    patch.object(inventory, "verify_native_reviews", return_value={}, side_effect=native_error), \
                     patch.object(inventory, "run_cmd", side_effect=scan):
                 self.assertEqual(inventory.main(["--selection", str(selection), "--expected-commit", "a" * 40,
                                                  "--output", str(output)]), 1)
@@ -621,6 +622,20 @@ class RuntimeInventoryTests(unittest.TestCase):
             self.assertNotIn(["PyPI", "setuptools", "70.3.0"], report["python_graphs"]["top_level"])
             self.assertIn("setuptools==70.3.0", (root / "fresh-report-installed-requirements.txt").read_text())
             self.assertIn("osv_coverage", report)
+            return report
+
+    def test_main_scans_union_and_rechecks_selected_tree_contract(self):
+        self.main_scan_fixture()
+
+    def test_native_process_failure_retains_scans_and_refuses_clearance(self):
+        for error in (subprocess.TimeoutExpired(["python", "--version"], 5),
+                      subprocess.CalledProcessError(1, ["python", "--version"]),
+                      AttributeError("invalid native review component field")):
+            with self.subTest(error=type(error).__name__):
+                report = self.main_scan_fixture(error)
+                self.assertEqual(report["status"], "incomplete")
+                self.assertTrue(any(row.startswith("native_reviews:") for row in report["errors"]))
+                self.assertEqual(set(report["checks"]), {"cargo_audit", "rust_licenses", "osv"})
 
 
 if __name__ == "__main__":

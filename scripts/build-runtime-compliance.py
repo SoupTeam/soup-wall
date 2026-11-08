@@ -72,6 +72,27 @@ class Bundle:
         return copies, installed
 
 
+def advisory_proposals(report):
+    findings = []
+    for row in report.get("findings", []):
+        require(row["source"] in report["scan_input_labels"], "unmapped_advisory_source")
+        findings.append({"scanner": "osv", "package": row["package"],
+            "source": report["scan_input_labels"][row["source"]], "advisory": row["advisory"]})
+    if "cargo_audit_report" in report:
+        # Only the existing supported maintenance records are proposal inputs.
+        # Vulnerabilities and unknown warnings still require separate repair.
+        findings.extend(reviews.cargo_findings(report["cargo_audit_report"]))
+    result, seen = [], set()
+    for finding in findings:
+        identity = reviews.finding_identity(finding)
+        key = reviews.digest(identity)
+        require(key not in seen, "duplicate_advisory")
+        seen.add(key)
+        result.append({"finding": identity, "disposition": "UNREVIEWED",
+                       "requirements": [], "rationale": ""})
+    return result
+
+
 def build(report, generation, output):
     require(not output.exists() and output.parent.is_dir() and
             not output.parent.is_symlink(), "fresh_output_required")
@@ -157,7 +178,7 @@ def build(report, generation, output):
             "profiles": ["filesystem-readonly-v1", "git-readonly-v1"], "distribution": "private-handoff",
             "constraints": ["Supply this complete compliance bundle.",
                 "Native license/security and source qualification remain separate gates."]},
-        "requirements": requirements, "licenses": licenses, "advisories": []}
+        "requirements": requirements, "licenses": licenses, "advisories": advisory_proposals(report)}
     receipt = {"format": "sw-runtime-compliance-files/1", "source": report["source"],
         "selection_sha256": report["selection_sha256"], "files": bundle.files,
         "bytes": bundle.total, "scope": "Package notices and identified Python source; no native clearance asserted."}
