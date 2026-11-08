@@ -3,7 +3,8 @@
 //!
 //! This is a pure decoder, not a receiver or authorization implementation. It
 //! cannot establish live custody, expiry, policy, cleanup or semantic usefulness.
-//! No transport, provider, display, grant or production caller is connected.
+//! Used by the test-only confined v2 receiver. No provider, display or production
+//! caller is connected; decoded text remains untrusted.
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -36,13 +37,13 @@ struct WireCitation {
 }
 
 // Intentionally no Serialize/Debug or conversion into a tool/policy response.
-struct UntrustedAnalysis<'a> {
-    summary: String,
-    excerpts: Vec<&'a str>,
+pub(in crate::native) struct UntrustedAnalysis<'a> {
+    pub(in crate::native) summary: String,
+    pub(in crate::native) excerpts: Vec<&'a str>,
 }
 
 #[derive(Debug, PartialEq)]
-enum Rejection {
+pub(in crate::native) enum Rejection {
     Frame,
     Schema,
     Binding,
@@ -57,13 +58,16 @@ fn digest(bytes: &[u8]) -> String {
 /// Expected correlation is supplied by the test controller, never from output.
 /// Affine ownership prevents a second decode through THIS instance only. A real
 /// receiver still needs authenticated, replay-protected live attempt custody.
-struct ProposedAttempt<'a> {
-    nonce: &'a str,
-    source: &'a str,
+pub(in crate::native) struct ProposedAttempt<'a> {
+    pub(in crate::native) nonce: &'a str,
+    pub(in crate::native) source: &'a str,
 }
 
 impl<'a> ProposedAttempt<'a> {
-    fn decode(self, bytes: &[u8]) -> Result<UntrustedAnalysis<'a>, Rejection> {
+    pub(in crate::native) fn decode(
+        self,
+        bytes: &[u8],
+    ) -> Result<UntrustedAnalysis<'a>, Rejection> {
         if bytes.is_empty() || bytes.len() > FRAME_LIMIT {
             return Err(Rejection::Frame);
         }

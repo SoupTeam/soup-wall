@@ -9,9 +9,13 @@ const LIMIT: usize = 32;
 #[cfg(all(test, target_os = "linux"))]
 mod crash_witness;
 
-// Executable design only: no endpoint, grant, worker or release path calls this.
+#[cfg(all(test, target_os = "linux"))]
+mod analysis_witness;
+
+// Test-only result decoder, connected only to the confined fixture v2 receiver.
+// No production endpoint, grant issuer or ordinary tool release calls it.
 #[cfg(test)]
-mod result_contract;
+pub(in crate::native) mod result_contract;
 
 // Small replay custody is separate from the 32 live process slots. Expired
 // registrations cannot pass verify(), so their tombstones can be reclaimed.

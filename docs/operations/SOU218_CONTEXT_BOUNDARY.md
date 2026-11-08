@@ -981,10 +981,10 @@ must not lower the frozen refusal count. No automatic route from model judgement
 to baseline-Allow is proposed. These decisions and runtime evidence are required
 before claiming any of the six corrected or moving SOU-218 to Done.
 
-#### Executable format proposal, not connected to the receiver
+#### Executable format proposal at 3df82340 (now connected in fixture-only increment)
 
 `native/consumer/result_contract.rs` makes the proposed format reviewable as a
-pure decoder compiled only under `cfg(test)`. No endpoint, worker, purpose grant,
+pure decoder compiled only under `cfg(test)`. At that checkpoint no endpoint, worker, purpose grant,
 quarantine reservation, provider or release path calls it. The approved 72-byte
 reader protocol and its 4096-byte source limit are unchanged. This preparatory
 code does not implement the proposed new execution/IPC boundary before review.
@@ -1036,3 +1036,115 @@ Any future provider disclosure has its own policy checks and remains unapproved.
 Source: [saved complete findings](evidence/sou218-baseline/false-refusals.md) and
 the unchanged `profiles/pilot/linux-readonly-v1/policy.yaml`. No new model or
 baseline experiment was run to produce this explanation.
+
+
+### Connected no-provider fixture receiver - November 8
+
+The fixture contract was approved in independent review 5818326475 and General
+at 20:13. This increment connects the decoder to the **existing** confined reader
+launcher under `cfg(test)` only. It does not expose a production issuer, endpoint,
+MCP/hook response, model, provider, network destination or action authorization.
+The result is scripted byte-count/tail-citation transport evidence, not semantic
+analysis or a correction of the six refusals. Draft / In Progress remains correct.
+
+`analysis_purpose/fixture_v2.rs` constructs a test-only purpose with a separate
+v2 MAC domain. It binds the original custody/call/policy/epoch/instance and exact
+consumer, nonce, fixed controller question, executable hash, fixture profile and
+output contract. No v1 permission is interpreted as v2. The existing atomic
+withdrawal and source-disposal logic is shared without changing v1 semantics.
+After live source registration is verified, one purpose is spent and both source
+authorities are withdrawn. Data reservation occurs only after actual confined
+recipient readiness and confirmed source disposal. Failures never renew the
+original deadline, restore authority or retry a transfer.
+
+The separate profile accepts a complete original MCP frame of at most **262144
+bytes**, ordered chunks of at most **4096 bytes**, and one terminal encoded JSON
+result of at most **4096 bytes**. The child checks complete length/hash/UTF-8 and
+EOF before constructing any result. The existing 4096-byte reader source cap and
+72-byte acknowledgement path remain separate. Bounded framing and all writes,
+reads, expiry and cleanup use one original deadline. No source truncation or
+stream-prefix analysis is allowed.
+
+Retained custody, serialized/decoded copies and input/output buffers share the
+existing 8 MiB/32-record capacity: the test profile reserves an additional
+`4 * serialized_record_bytes + 3 * source_bytes + 65536` byte charge before
+copying. Its affine lease remains held by the private review object and is
+released on cancellation/error/drop. This is a conservative byte/copy budget,
+not an allocator-level RSS measurement; the existing child AS/CPU/FD limits also
+remain in force. Concurrent reservations and subsequent quarantine capture
+include active charges instead of granting each attempt a fresh 8 MiB allowance.
+
+A `PrivateReview` can be constructed only after terminal frame + EOF, actual
+recipient stop/reap/disappearance, and a final locked check of live identity,
+purpose spend/expiry, current policy, complete retained record digest (including
+findings/taint/provenance), original epoch/deadline and source disposal. It holds
+the unchanged full custody beside explicitly untrusted summary and source-derived
+citations. It has no serialization, Debug, tool-response or command conversion.
+A syntactically valid hostile summary remains untrusted data. There is no display
+or persistent artifact access path; later access/expiry enforcement is not
+qualified by this component.
+
+#### Full-envelope capacity finding
+
+The existing filesystem response profile requires **both** `content` and
+`structuredContent`. A single-channel replacement failed the actual admission
+shape check during development; the fixture now preserves both channels exactly.
+It does not remove either copy to fit the new limit. The six frozen payloads
+remain unchanged inside the fixed filesystem component's generated complete
+MCP response (not their original Git/FS server execution):
+
+| Public source | Text bytes | Complete fixture MCP frame bytes | Expected profile handling |
+| --- | ---: | ---: | --- |
+| g05-a | 589 | 1344 | Full confined fixture attempt |
+| g06-b | 652 | 1484 | Full confined fixture attempt |
+| f05-a | 1375 | 3022 | Full confined fixture attempt |
+| g11-a | 600 | 1366 | Full confined fixture attempt |
+| g12-a | 262144 | 530442 | Explicit over-size refusal before spend/transfer |
+| f12-a | 262144 | 530510 | Explicit over-size refusal before spend/transfer |
+
+The two large full frames need a separately reviewed capacity/profile decision;
+256 KiB of text is not 256 KiB of complete MCP custody. The proposed profile limit
+has **not** been increased. A distinct synthetic full frame of exactly 262144
+bytes tests the transport edge; it is not substituted for either corpus original.
+
+#### Narrow validation and independent Linux request
+
+Portable controls cover the v2 MAC/bindings, full/chunk boundary/UTF-8 parsing,
+copy-budget admission/reclaim, final custody mutations and six actual refused
+MCP captures. The nine existing closed-result decoder tests still cover all
+frozen originals and hostile structurally valid data. Locally, the first
+single-channel capture failed `native_mcp_result_shape`; restoring the actual
+required structured channel made the new regression pass.
+
+Required Linux controls are `connected_analysis_fixture` (normal/hostile output,
+forged/foreign/replay binding, invalid citation, short/extra/oversized/no-EOF
+output, truncated input, live/unconfirmed source, restart, the six original
+payloads, exact full-frame boundary, changed taint/epoch/policy/expiry/identity
+at publication, and actual cancellation after half-output), and
+`analysis_output_daemon_crash` (SIGKILL of the owning process while half-output is
+pending, pinned real reader + setsid-descendant exit, external empty EOF, canary
+and fresh-state old-authority refusal). They do not skip missing isolation.
+No private review object exists at either half-output interruption point.
+
+Local environment is Windows; **new Linux code has not been compiled or run
+here**. Independent Linux/WSL2 compilation and runtime acceptance are required.
+Because the launcher/withdrawal helpers are shared, include their narrow prior
+controls once for regression, not a new full/native/model matrix:
+
+```sh
+cargo test --locked -p agentfw --lib analysis_
+cargo test --locked -p agentfw --lib proposed_result_contract
+cargo test --locked -p agentfw --lib native::execution::tests
+cargo test --locked -p agentfw --lib native::quarantine
+cargo test --locked -p agentfw --lib connected_quarantine_reader
+cargo test --locked -p agentfw --lib quarantine_reader_daemon_crash
+cargo test --locked -p agentfw --lib sandbox::fixture_reader
+cargo clippy --locked -p agentfw --all-targets -- -D warnings
+cargo fmt --all -- --check
+```
+
+The `analysis_` selector includes both new Linux parent witnesses and portable
+controls. Original-server installed-daemon crash qualification, authenticated
+production purpose-v2 issuance, provider/model/disclosure/egress approval and
+actual semantic usefulness remain open. No 48/3 denominator, 24-attack acceptance,
+corpus label, policy/signature or six-refusal count is changed by this increment.

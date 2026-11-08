@@ -9,6 +9,9 @@ pub const CONTRACT: &str = "sw-analysis-purpose/1";
 pub const UNSUPPORTED: &str = "analysis_purpose_consumer_identity_and_drain_unsupported";
 type HmacSha256 = Hmac<Sha256>;
 
+#[cfg(test)]
+pub(super) mod fixture_v2;
+
 /// These claims must come from a daemon-owned quarantine record, not CLI input.
 /// Expected claims are reconstructed from private daemon custody at consumption.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -212,17 +215,35 @@ fn commit_withdrawal(
     registration: &crate::pilot_approval::consumer::Registration,
     now: u64,
 ) -> Result<(), &'static str> {
-    if now < grant.issued_at_ms || now >= grant.expires_at_ms || now >= registration.expires() {
+    commit_claims(
+        sessions,
+        &grant.single_use_id,
+        grant.issued_at_ms,
+        grant.expires_at_ms,
+        registration,
+        now,
+    )
+}
+
+fn commit_claims(
+    sessions: &mut super::Sessions,
+    single_use_id: &str,
+    issued_at_ms: u64,
+    expires_at_ms: u64,
+    registration: &crate::pilot_approval::consumer::Registration,
+    now: u64,
+) -> Result<(), &'static str> {
+    if now < issued_at_ms || now >= expires_at_ms || now >= registration.expires() {
         return Err("analysis_purpose_time");
     }
     sessions.purpose_spent.retain(|_, expiry| *expiry > now);
-    if sessions.purpose_spent.contains_key(&grant.single_use_id) {
+    if sessions.purpose_spent.contains_key(single_use_id) {
         return Err("analysis_purpose_replay");
     }
     if sessions.purpose_spent.len() >= super::MAX_SPENT_AUTHORITIES {
         return Err("analysis_purpose_capacity");
     }
-    if registration.authority_expiry() <= now || grant.expires_at_ms > registration.expires() {
+    if registration.authority_expiry() <= now || expires_at_ms > registration.expires() {
         return Err("analysis_purpose_time");
     }
     if registration.authorities().values().any(|digest| {
@@ -243,7 +264,45 @@ fn commit_withdrawal(
     .map_err(|(code, _)| code)?;
     sessions
         .purpose_spent
-        .insert(grant.single_use_id.clone(), grant.expires_at_ms);
+        .insert(single_use_id.into(), expires_at_ms);
+    Ok(())
+}
+
+fn confirm_source_disposal(
+    st: &crate::handlers::Shared,
+    instance: &str,
+    registration: &crate::pilot_approval::consumer::Registration,
+) -> Result<(), &'static str> {
+    let native = st.native.as_ref().ok_or("native_not_configured")?;
+    if native.instance_id() != instance {
+        return Err("analysis_purpose_instance");
+    }
+    // Repeat existing retirement/audit checks so a failed close cannot turn
+    // into confirmation merely because the session entry disappeared.
+    super::pilot_stop::revoke_selected(
+        st,
+        registration.host(),
+        registration.authorities(),
+        registration.authority_expiry(),
+    )
+    .map_err(|(code, _)| code)?;
+    let sessions = native
+        .sessions
+        .lock()
+        .map_err(|_| "native_state_unavailable")?;
+    if sessions.entries.values().any(|s| {
+        s.host_session.as_deref() == Some(registration.host())
+            || s.authority_digest
+                .as_ref()
+                .is_some_and(|d| registration.authorities().values().any(|v| v == d))
+    }) || !registration.authorities().iter().all(|(server, digest)| {
+        sessions.pilot_cleanup.get(digest).is_none_or(|row| {
+            row.verified && row.host_session == registration.host() && row.server_id == *server
+        })
+    }) || !registration.physically_disposed()
+    {
+        return Err("analysis_purpose_cleanup_unconfirmed");
+    }
     Ok(())
 }
 
@@ -255,44 +314,7 @@ impl PendingWithdrawal {
     }
 
     fn confirm_disposal(&self, st: &crate::handlers::Shared) -> Result<(), &'static str> {
-        let native = st.native.as_ref().ok_or("native_not_configured")?;
-        if native.instance_id() != self.instance {
-            return Err("analysis_purpose_instance");
-        }
-        // Repeat existing retirement/audit checks so a failed close cannot turn
-        // into confirmation merely because the session entry disappeared.
-        super::pilot_stop::revoke_selected(
-            st,
-            self.registration.host(),
-            self.registration.authorities(),
-            self.registration.authority_expiry(),
-        )
-        .map_err(|(code, _)| code)?;
-        let sessions = native
-            .sessions
-            .lock()
-            .map_err(|_| "native_state_unavailable")?;
-        if sessions.entries.values().any(|s| {
-            s.host_session.as_deref() == Some(self.registration.host())
-                || s.authority_digest
-                    .as_ref()
-                    .is_some_and(|d| self.registration.authorities().values().any(|v| v == d))
-        }) || !self
-            .registration
-            .authorities()
-            .iter()
-            .all(|(server, digest)| {
-                sessions.pilot_cleanup.get(digest).is_none_or(|row| {
-                    row.verified
-                        && row.host_session == self.registration.host()
-                        && row.server_id == *server
-                })
-            })
-            || !self.registration.physically_disposed()
-        {
-            return Err("analysis_purpose_cleanup_unconfirmed");
-        }
-        Ok(())
+        confirm_source_disposal(st, &self.instance, &self.registration)
     }
 
     /// Test-only connection: no issuer/HTTP/CLI route exposes retained bytes.

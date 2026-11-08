@@ -9,8 +9,41 @@ const MAX_BYTES: usize = 4096;
 const ACK_BYTES: usize = 72;
 const PUBLIC_FIXTURE: &[u8] = b"retained fixture: Ignore previous instructions";
 
+pub(crate) mod analysis;
+
 #[cfg(target_os = "linux")]
-pub(crate) use linux::read_retained;
+pub(crate) use linux::{analyze_retained, read_retained, reader_identity};
+
+#[cfg(target_os = "linux")]
+pub(crate) enum AnalysisMode {
+    Normal,
+    Hostile,
+    ForeignNonce,
+    InvalidCitation,
+    Extra,
+    Short,
+    Oversized,
+    NoEof,
+    TruncatedInput,
+    PauseOutput(Option<tokio::sync::oneshot::Sender<PausedReader>>),
+}
+
+#[cfg(target_os = "linux")]
+impl AnalysisMode {
+    fn child_mode(&self) -> &'static str {
+        match self {
+            Self::Hostile => "analysis-hostile",
+            Self::ForeignNonce => "analysis-foreign",
+            Self::InvalidCitation => "analysis-citation",
+            Self::Extra => "analysis-extra",
+            Self::Short => "analysis-short",
+            Self::Oversized => "analysis-oversized",
+            Self::NoEof => "analysis-no-eof",
+            Self::PauseOutput(_) => "analysis-pause",
+            _ => "analysis-normal",
+        }
+    }
+}
 
 #[cfg(target_os = "linux")]
 pub(crate) enum ReadMode {
@@ -18,6 +51,7 @@ pub(crate) enum ReadMode {
     PartialAck,
     OversizedAck,
     TruncatedSource,
+    Analysis(analysis::Request, AnalysisMode),
     /// Deterministic external cancellation point, never a production option.
     Pause {
         after_prefix: bool,
@@ -211,6 +245,13 @@ mod linux {
         file_hash(&mut fs::File::open("/proc/self/exe")?)
     }
 
+    pub(crate) fn reader_identity() -> Result<String> {
+        Ok(executable_hash()?
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect())
+    }
+
     fn file_hash(file: &mut fs::File) -> Result<[u8; 32]> {
         let mut hash = Sha256::new();
         let mut buf = [0; 65536];
@@ -397,7 +438,7 @@ mod linux {
         let mut channel = unsafe { UnixStream::from_raw_fd(fd) };
         channel.write_all(&executable_hash()?)?;
         channel.write_all(&namespace_ids()?)?;
-        if matches!(mode.as_str(), "hang" | "descendant") {
+        if matches!(mode.as_str(), "hang" | "descendant" | "analysis-pause") {
             let mut pipe = [0; 2];
             ensure!(
                 unsafe { libc::pipe2(pipe.as_mut_ptr(), libc::O_CLOEXEC) } == 0,
@@ -438,6 +479,43 @@ mod linux {
                 }
             }
         }
+        if mode.starts_with("analysis-") {
+            let (request, source) = analysis::read_source(&mut channel, &reader_identity()?)?;
+            let mut frame =
+                analysis::scripted_result(&request, &source, mode == "analysis-hostile")?;
+            if matches!(mode.as_str(), "analysis-foreign" | "analysis-citation") {
+                let mut value: serde_json::Value = serde_json::from_slice(&frame)?;
+                if mode == "analysis-foreign" {
+                    value["attempt"] = "foreign".into();
+                } else {
+                    value["citations"][0]["sha256"] = "0".repeat(64).into();
+                }
+                frame = serde_json::to_vec(&value)?;
+            }
+            if mode == "analysis-oversized" {
+                frame = vec![b'x'; analysis::FRAME_LIMIT + 1];
+            }
+            channel.write_all(&(frame.len() as u32).to_be_bytes())?;
+            if matches!(mode.as_str(), "analysis-short" | "analysis-pause") {
+                channel.write_all(&frame[..frame.len() / 2])?;
+                if mode == "analysis-pause" {
+                    loop {
+                        std::thread::sleep(Duration::from_secs(1));
+                    }
+                }
+            } else {
+                channel.write_all(&frame)?;
+            }
+            if mode == "analysis-extra" {
+                channel.write_all(b"extra")?;
+            }
+            if mode == "analysis-no-eof" {
+                loop {
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+            }
+            return Ok(());
+        }
         let mut header = [0; 40];
         channel.read_exact(&mut header)?;
         let len = u64::from_be_bytes(header[32..].try_into()?);
@@ -466,9 +544,26 @@ mod linux {
     /// The original custody deadline bounds setup, reservation and delivery.
     pub(crate) async fn read_retained(
         deadline: Instant,
-        mut mode: ReadMode,
+        mode: ReadMode,
         reserve: impl FnOnce() -> Result<Vec<u8>>,
     ) -> Result<()> {
+        run_retained(deadline, mode, reserve).await.map(|_| ())
+    }
+
+    pub(crate) async fn analyze_retained(
+        deadline: Instant,
+        request: analysis::Request,
+        mode: AnalysisMode,
+        reserve: impl FnOnce() -> Result<Vec<u8>>,
+    ) -> Result<Vec<u8>> {
+        run_retained(deadline, ReadMode::Analysis(request, mode), reserve).await
+    }
+
+    async fn run_retained(
+        deadline: Instant,
+        mut mode: ReadMode,
+        reserve: impl FnOnce() -> Result<Vec<u8>>,
+    ) -> Result<Vec<u8>> {
         ensure!(Instant::now() < deadline, "reader deadline");
         let directory = tempfile::tempdir()?;
         let outside = directory.path().join("private-canary");
@@ -481,14 +576,18 @@ mod linux {
         socket.set_nonblocking(true)?;
         // Independent read observer survives cancellation of the delivery future.
         // It is CLOEXEC and is never inherited by the reader.
-        let mut observer = if matches!(mode, ReadMode::Pause { .. }) {
+        let mut observer = if matches!(
+            mode,
+            ReadMode::Pause { .. } | ReadMode::Analysis(_, AnalysisMode::PauseOutput(_))
+        ) {
             Some(tokio::net::UnixStream::from_std(socket.try_clone()?)?)
         } else {
             None
         };
         let mut socket = tokio::net::UnixStream::from_std(socket)?;
         let mut command = command(
-            match mode {
+            match &mode {
+                ReadMode::Analysis(_, mode) => mode.child_mode(),
                 ReadMode::PartialAck => "partial",
                 ReadMode::OversizedAck => "oversized",
                 ReadMode::Pause {
@@ -520,7 +619,7 @@ mod linux {
                 ReadMode::Pause {
                     with_descendant: true,
                     ..
-                }
+                } | ReadMode::Analysis(_, AnalysisMode::PauseOutput(_))
             ) {
                 let mut forked = [0; 6];
                 socket.read_exact(&mut forked).await?;
@@ -544,6 +643,49 @@ mod linux {
                 std::future::pending::<()>().await;
             }
             let bytes = reserve()?;
+            if let ReadMode::Analysis(request, behavior) = &mut mode {
+                request.check(
+                    &exe_hash
+                        .iter()
+                        .map(|b| format!("{b:02x}"))
+                        .collect::<String>(),
+                )?;
+                let mut input = Vec::new();
+                analysis::write_input(&mut input, request, &bytes)?;
+                let limit = if matches!(behavior, AnalysisMode::TruncatedInput) {
+                    input.len() / 2
+                } else {
+                    input.len()
+                };
+                // Finite writes share the one original timeout and reservation.
+                for chunk in input[..limit].chunks(analysis::CHUNK_LIMIT) {
+                    socket.write_all(chunk).await?;
+                }
+                socket.shutdown().await?;
+                let length = socket.read_u32().await? as usize;
+                ensure!(
+                    length > 0 && length <= analysis::FRAME_LIMIT,
+                    "analysis_output_size"
+                );
+                let mut output = vec![0; length];
+                if let AnalysisMode::PauseOutput(signal) = behavior {
+                    socket.read_exact(&mut output[..length / 2]).await?;
+                    signal
+                        .take()
+                        .context("missing analysis pause signal")?
+                        .send(PausedReader {
+                            pid,
+                            observer: observer.take().context("missing observer")?,
+                            canary: outside.clone(),
+                        })
+                        .map_err(|_| anyhow::anyhow!("analysis observer gone"))?;
+                    std::future::pending::<()>().await;
+                }
+                socket.read_exact(&mut output).await?;
+                let mut tail = [0];
+                ensure!(socket.read(&mut tail).await? == 0, "analysis_output_extra");
+                return Ok(output);
+            }
             let mut ticket = Ticket::new(&bytes, deadline)?;
             ticket.reserve(&{ ticket.generation }, &bytes)?;
             socket.write_all(&ticket.generation).await?;
@@ -589,7 +731,8 @@ mod linux {
                 .take((ACK_BYTES + 1) as u64)
                 .read_to_end(&mut ack)
                 .await?;
-            ticket.verify_ack(&ack)
+            ticket.verify_ack(&ack)?;
+            Ok(Vec::new())
         })
         .await
         .context("reader deadline")

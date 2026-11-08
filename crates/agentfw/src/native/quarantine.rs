@@ -34,6 +34,17 @@ impl ReaderSource {
         policy: &str,
         now: Instant,
     ) -> Result<Vec<u8>, &'static str> {
+        self.reserve_bounded(quarantine, instance, policy, now, 4096)
+    }
+
+    fn reserve_bounded(
+        &self,
+        quarantine: &mut Quarantine,
+        instance: &str,
+        policy: &str,
+        now: Instant,
+        limit: usize,
+    ) -> Result<Vec<u8>, &'static str> {
         let record = quarantine
             .records
             .get_mut(&self.binding.quarantine_id)
@@ -59,17 +70,114 @@ impl ReaderSource {
             .ok_or("analysis_quarantine_state")?;
         if hash(content.as_bytes()) != self.binding.response_sha256
             || content.len() as u64 != self.binding.response_bytes
-            || content.len() > 4096
+            || content.len() > limit
         {
             return Err("analysis_reader_source_bytes");
         }
         Ok(content.as_bytes().to_vec())
+    }
+
+    pub(super) fn reserve_analysis(
+        self,
+        quarantine: &mut Quarantine,
+        instance: &str,
+        policy: &str,
+        now: Instant,
+    ) -> Result<AnalysisSource, &'static str> {
+        // Charge retained input, bounded serialized/decoded copies and buffers
+        // together. The lease survives in the private review object until Drop.
+        let record_len = quarantine
+            .records
+            .get(&self.binding.quarantine_id)
+            .ok_or("analysis_quarantine_unknown")?
+            .bytes
+            .len();
+        let source_len = usize::try_from(self.binding.response_bytes)
+            .map_err(|_| "analysis_reader_source_bytes")?;
+        if source_len > 262_144 {
+            return Err("analysis_reader_source_bytes");
+        }
+        let charge = record_len
+            .checked_mul(4)
+            .and_then(|n| n.checked_add(source_len.checked_mul(3)?))
+            .and_then(|n| n.checked_add(65_536))
+            .ok_or("analysis_quarantine_capacity")?;
+        let used: usize = quarantine.records.values().map(|r| r.bytes.len()).sum();
+        let active = quarantine
+            .analysis_bytes
+            .load(std::sync::atomic::Ordering::Acquire);
+        if charge > MAX_BYTES.saturating_sub(used).saturating_sub(active) {
+            return Err("analysis_quarantine_capacity");
+        }
+        quarantine
+            .analysis_bytes
+            .fetch_add(charge, std::sync::atomic::Ordering::AcqRel);
+        let lease = AnalysisBudget {
+            bytes: quarantine.analysis_bytes.clone(),
+            charge,
+        };
+        let bytes = self.reserve_bounded(quarantine, instance, policy, now, 262_144)?;
+        Ok(AnalysisSource {
+            bytes,
+            selector: self,
+            lease,
+        })
+    }
+}
+
+#[cfg(test)]
+pub(super) struct AnalysisBudget {
+    bytes: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    charge: usize,
+}
+#[cfg(test)]
+impl Drop for AnalysisBudget {
+    fn drop(&mut self) {
+        self.bytes
+            .fetch_sub(self.charge, std::sync::atomic::Ordering::AcqRel);
+    }
+}
+#[cfg(test)]
+pub(super) struct AnalysisSource {
+    pub(super) bytes: Vec<u8>,
+    selector: ReaderSource,
+    pub(super) lease: AnalysisBudget,
+}
+#[cfg(test)]
+impl AnalysisSource {
+    pub(super) fn recheck(
+        &self,
+        quarantine: &Quarantine,
+        instance: &str,
+        policy: &str,
+        now: Instant,
+    ) -> Result<Vec<u8>, &'static str> {
+        let s = &self.selector;
+        let r = quarantine
+            .records
+            .get(&s.binding.quarantine_id)
+            .ok_or("analysis_quarantine_unknown")?;
+        if !r.terminal
+            || !r.reader_reserved
+            || now >= s.deadline
+            || r.expires != s.deadline
+            || r.epoch != s.binding.session_epoch
+            || instance != s.binding.native_instance
+            || policy != s.binding.policy_generation
+            || hash(&r.bytes) != s.record_hash
+            || hash(&self.bytes) != s.binding.response_sha256
+        {
+            return Err("analysis_review_stale_custody");
+        }
+        Ok(r.bytes.clone())
     }
 }
 
 #[derive(Default)]
 pub(super) struct Quarantine {
     records: BTreeMap<String, Record>,
+    #[cfg(test)]
+    analysis_bytes: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
 pub(super) struct Capture<'a> {
@@ -163,6 +271,11 @@ impl Quarantine {
             }
         });
         let used: usize = self.records.values().map(|record| record.bytes.len()).sum();
+        #[cfg(test)]
+        let used = used
+            + self
+                .analysis_bytes
+                .load(std::sync::atomic::Ordering::Acquire);
         let bytes = encode_bounded(&retained, MAX_BYTES.saturating_sub(used))?;
         let id = crate::token::generate();
         if self.records.contains_key(&id) {
@@ -319,6 +432,29 @@ impl Quarantine {
             .get(id)
             .is_some_and(|record| record.reader_reserved)
     }
+
+    #[cfg(all(test, target_os = "linux"))]
+    pub(super) fn tamper_analysis_fixture(&mut self, id: &str, mode: &str) {
+        let record = self.records.get_mut(id).unwrap();
+        match mode {
+            "taint" => {
+                let mut value: Value = serde_json::from_slice(&record.bytes).unwrap();
+                value["inspection"]["taint"] = json!([]);
+                // Ensure a change even if the fixture's original taint is empty.
+                value["inspection"]["findings"] = json!([]);
+                value["tampered"] = json!(true);
+                record.bytes = serde_json::to_vec(&value).unwrap();
+            }
+            "epoch" => record.epoch = "foreign-epoch".into(),
+            _ => panic!("unknown custody mutation"),
+        }
+    }
+
+    #[cfg(all(test, target_os = "linux"))]
+    pub(super) fn analysis_charge(&self) -> usize {
+        self.analysis_bytes
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
 }
 
 fn encode_bounded(value: &Value, limit: usize) -> Result<Vec<u8>, &'static str> {
@@ -349,6 +485,112 @@ fn encode_bounded(value: &Value, limit: usize) -> Result<Vec<u8>, &'static str> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn analysis_record(q: &mut Quarantine, id: &str, length: usize) -> ReaderSource {
+        let content = "x".repeat(length);
+        let binding:analysis_purpose::Binding=serde_json::from_value(json!({
+            "quarantine_id":id,"response_sha256":hash(content.as_bytes()),"response_bytes":length,
+            "native_instance":"instance","host_generation":"host","consumer_identity":"consumer",
+            "consumer_lifecycle":"generation","session_epoch":"epoch","source_grant_digest":hash(b"grant"),
+            "invocation_binding":hash(b"call"),"policy_generation":"policy"
+        })).unwrap();
+        q.records.insert(id.into(),Record {epoch:"epoch".into(),expires:Instant::now()+Duration::from_secs(30),
+            bytes:serde_json::to_vec(&json!({"content":content,"inspection":{"taint":["mcp"],"findings":["retained"]}})).unwrap(),terminal:false,reader_reserved:false});
+        let source = q.reader_source(binding).unwrap();
+        q.spend(id);
+        source
+    }
+
+    #[test]
+    fn analysis_custody_rechecks_full_record_and_keeps_original_cap() {
+        for mode in [
+            "valid", "taint", "epoch", "policy", "instance", "expired", "deadline",
+        ] {
+            let mut q = Quarantine::default();
+            let source = analysis_record(&mut q, "q", 262_144);
+            let original = q.records["q"].bytes.clone();
+            let source = source
+                .reserve_analysis(&mut q, "instance", "policy", Instant::now())
+                .unwrap();
+            assert_eq!(source.bytes.len(), 262_144);
+            match mode {
+                "taint" => q.records.get_mut("q").unwrap().bytes.push(b' '),
+                "epoch" => q.records.get_mut("q").unwrap().epoch = "other".into(),
+                "deadline" => q.records.get_mut("q").unwrap().expires += Duration::from_secs(1),
+                _ => {}
+            }
+            let result = source.recheck(
+                &q,
+                if mode == "instance" {
+                    "other"
+                } else {
+                    "instance"
+                },
+                if mode == "policy" { "other" } else { "policy" },
+                if mode == "expired" {
+                    source.selector.deadline
+                } else {
+                    Instant::now()
+                },
+            );
+            assert_eq!(result.is_ok(), mode == "valid");
+            if let Ok(custody) = result {
+                assert_eq!(custody, original);
+            }
+            assert!(q.analysis_bytes.load(std::sync::atomic::Ordering::Acquire) > 0);
+            drop(source.lease);
+            assert_eq!(
+                q.analysis_bytes.load(std::sync::atomic::Ordering::Acquire),
+                0
+            );
+        }
+        let mut q = Quarantine::default();
+        let legacy = analysis_record(&mut q, "legacy", 4097);
+        assert_eq!(
+            legacy.reserve(&mut q, "instance", "policy", Instant::now()),
+            Err("analysis_reader_source_bytes")
+        );
+        let large = analysis_record(&mut q, "large", 262_145);
+        assert!(matches!(
+            large.reserve_analysis(&mut q, "instance", "policy", Instant::now()),
+            Err("analysis_reader_source_bytes")
+        ));
+    }
+
+    #[test]
+    fn analysis_custody_charges_concurrent_copies_and_reclaims_on_drop() {
+        let mut q = Quarantine::default();
+        let selectors: (Vec<_>, Vec<_>) = (0..4)
+            .map(|n| {
+                let id = format!("q{n}");
+                let source = analysis_record(&mut q, &id, 262_144);
+                (id, source)
+            })
+            .unzip();
+        let (_, mut sources) = selectors;
+        let last = sources.pop().unwrap();
+        let mut held = Vec::new();
+        for source in sources {
+            held.push(
+                source
+                    .reserve_analysis(&mut q, "instance", "policy", Instant::now())
+                    .unwrap(),
+            );
+        }
+        assert!(matches!(
+            last.reserve_analysis(&mut q, "instance", "policy", Instant::now()),
+            Err("analysis_quarantine_capacity")
+        ));
+        let charged = q.analysis_bytes.load(std::sync::atomic::Ordering::Acquire);
+        held.pop();
+        assert!(q.analysis_bytes.load(std::sync::atomic::Ordering::Acquire) < charged);
+        drop(held);
+        assert_eq!(
+            q.analysis_bytes.load(std::sync::atomic::Ordering::Acquire),
+            0
+        );
+        assert!(q.records.values().all(|r| !r.bytes.is_empty()));
+    }
 
     #[test]
     fn reader_reservation_binds_full_custody_deadline_and_one_attempt() {
