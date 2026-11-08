@@ -105,3 +105,38 @@ Rebuild the selected binaries, prepare a new generation, regenerate complete
 inventory/compliance material and rerun compatibility/useful/refused controls.
 A changed review JSON or a newer version label cannot qualify old selected
 bytes. Keep the pre-fix candidate and its unsuccessful observations as history.
+
+## Recorded author checkpoint
+
+The [8 November preparation record](evidence/private-candidate/runtime-admission-preparation.json)
+binds the executed source `9d08dc74`, selection, raw inventory and private review
+archive. Its explicit-policy WSL2 run passes all twelve cases and both benign
+workflows. It is not a native Ubuntu or live-model acceptance claim.
+
+The initial invocation selected `linux-readonly-v1/policy.yaml` with the
+qualification command's different default shared-source Ask expectation and
+passed ten cases. That preset does not implement the expected Ask-on-any-derived-
+read contract. The corrected invocation selects the previously used explicit
+policy with SHA-256
+`dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc`.
+No policy, expected-rule assertion, witness or limit was changed to obtain its
+result. These are separate policy scopes; the first result remains unsuccessful.
+
+The review archive contains 595 copied package compliance/source files, the
+complete unreviewed package/advisory proposal, actual selected-binary facts,
+copyright material for all thirteen selected system-library paths, forty
+retained upstream notice files and the original findings/results. The loader's
+dpkg diversion is correlated through its verified canonical same-file path;
+it is not omitted from coverage. It contains review material, not an executable
+runtime installer or a qualified kit.
+
+The raw CLI remains nonzero, and the generated proposal is independently
+rejected as `runtime_reviews:decision_invalid`. Prior maintainer decisions need
+renewal against this exact source/selection/material. The direct Ubuntu CVE API
+query timed out; observed package versions and retained copyright do not replace
+that missing comprehensive native advisory review. The official package pages
+for [glibc](https://packages.ubuntu.com/noble/libc6),
+[Expat](https://packages.ubuntu.com/noble/libexpat1) and
+[libcap2](https://packages.ubuntu.com/noble-updates/libcap2) match the installed
+versions observed at this checkpoint; this comparison grants no clean native
+or distribution assertion.
