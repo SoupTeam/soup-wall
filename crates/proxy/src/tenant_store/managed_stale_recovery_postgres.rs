@@ -6,9 +6,10 @@ use super::PostgresTenantStore;
 use crate::tenant_store::{
     managed_policy::{ManagedIssuer, SignedManagedBundle},
     managed_stale_recovery::{
-        check_confirmation, credential_digest, evaluate, fence_from_parts, revisions_digest,
-        status, Completion, ConfirmRequest, Confirmed, Decision, Facts, Fence, LatestDeployment,
-        Preview, Status, CONTRACT, FENCE_COLUMNS, POSTGRES_FENCE_HIGH, POSTGRES_RESTORED_FLOOR,
+        check_confirmation, credential_digest, evaluate, fence_from_parts, owner_role_active,
+        revisions_digest, status, Completion, ConfirmRequest, Confirmed, Decision, Facts, Fence,
+        LatestDeployment, Preview, Refusal, Status, BOOTSTRAP_OWNER, CONTRACT, FENCE_COLUMNS,
+        POSTGRES_FENCE_HIGH, POSTGRES_RESTORED_FLOOR,
     },
     now_unix,
 };
@@ -184,6 +185,20 @@ impl PostgresTenantStore {
             &[&tenant, &agent],
         ))
         .await?;
+        // The confirming administrator must still be an active Owner; FOR
+        // SHARE holds a concurrent revoke or demotion until this commits.
+        if admin_id != BOOTSTRAP_OWNER {
+            let role: Option<String> = self
+                .bounded(tx.query_opt(
+                    "SELECT role FROM control_plane_admins WHERE id=$1 AND active=TRUE FOR SHARE",
+                    &[&admin_id],
+                ))
+                .await?
+                .map(|r| r.get(0));
+            if !owner_role_active(role.as_deref()) {
+                return Ok(Err(Refusal::OwnerNotActive));
+            }
+        }
         let digest = serde_json::to_vec(&request.evidence)
             .map(|b| crate::tenant_store::managed_policy::hex(&Sha256::digest(&b)))?;
         if let Some(row) = self

@@ -84,6 +84,7 @@ pub enum Refusal {
     ObservationMismatch,
     StateChanged,
     ConfirmationMismatch,
+    OwnerNotActive,
 }
 impl Refusal {
     pub fn code(self) -> &'static str {
@@ -103,11 +104,13 @@ impl Refusal {
             Self::ObservationMismatch => "observation_mismatch",
             Self::StateChanged => "state_changed",
             Self::ConfirmationMismatch => "confirmation_mismatch",
+            Self::OwnerNotActive => "owner_not_active",
         }
     }
     pub fn http_status(self) -> u16 {
         match self {
             Self::NotEnrolled => 404,
+            Self::OwnerNotActive => 403,
             Self::EvidenceMalformed | Self::ConfirmationMismatch => 400,
             _ => 409,
         }
@@ -129,6 +132,7 @@ impl Refusal {
             Self::ObservationMismatch => "The Agent's fresh report does not name the evidence sequence, revision and digest.",
             Self::StateChanged => "The restored state changed after the preview; preview again.",
             Self::ConfirmationMismatch => "The confirmation does not repeat the exact preview phrase and binding.",
+            Self::OwnerNotActive => "The confirming administrator is no longer an active Owner.",
         }
     }
 }
@@ -547,6 +551,31 @@ pub(super) fn credential_digest(token_hash: &[u8]) -> String {
     sha(token_hash)
 }
 
+/// The bootstrap Owner is the configured admin token itself, not a stored
+/// row: its authority is the live process configuration that just
+/// authenticated it. Every stored administrator is re-read inside the fence
+/// transaction, so revocation or demotion after authentication refuses.
+pub(super) const BOOTSTRAP_OWNER: &str = "bootstrap_owner";
+pub(super) fn owner_role_active(role: Option<&str>) -> bool {
+    role.and_then(|r| super::AdminRole::from_storage(r).ok())
+        .is_some_and(|r| r.permits(super::AdminRole::Owner))
+}
+
+fn sqlite_owner_active(db: &rusqlite::Connection, admin_id: &str) -> Result<bool> {
+    use rusqlite::{params, OptionalExtension};
+    if admin_id == BOOTSTRAP_OWNER {
+        return Ok(true);
+    }
+    let role: Option<String> = db
+        .query_row(
+            "SELECT role FROM control_plane_admins WHERE id=?1 AND active=1",
+            params![admin_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(owner_role_active(role.as_deref()))
+}
+
 /// Outcome of a store call: a decision, or a typed refusal.
 pub type Decision<T> = std::result::Result<T, Refusal>;
 
@@ -726,6 +755,10 @@ impl super::TenantStore {
             use rusqlite::params;
             let mut db = store.connection()?;
             let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            // Under the write lock: a revoke or demotion cannot interleave.
+            if !sqlite_owner_active(&tx, &admin)? {
+                return Ok(Err(Refusal::OwnerNotActive));
+            }
             if let Some(existing) = replayed(&tx, &tenant, &agent, &request)? {
                 return Ok(Ok(existing));
             }
@@ -1078,11 +1111,12 @@ mod tests {
             ObservationMismatch,
             StateChanged,
             ConfirmationMismatch,
+            OwnerNotActive,
         ];
         let codes: std::collections::BTreeSet<_> = all.iter().map(|r| r.code()).collect();
         assert_eq!(codes.len(), all.len());
         assert!(all
             .iter()
-            .all(|r| [400, 404, 409].contains(&r.http_status())));
+            .all(|r| [400, 403, 404, 409].contains(&r.http_status())));
     }
 }

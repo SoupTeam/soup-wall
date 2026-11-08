@@ -81,6 +81,7 @@ class StaleRecoveryPanelBrowserTests(unittest.TestCase):
 
     def setUp(self):
         self.role, self.state, self.posts, self.preview_reply, self.confirm_reply = "owner", "none", [], (200, preview()), (201, None)
+        self.status_gets, self.status_fails = 0, False
         self.context = self.browser.new_context()
         self.addCleanup(self.context.close)
         self.context.route("**/*", self.route)
@@ -108,11 +109,16 @@ class StaleRecoveryPanelBrowserTests(unittest.TestCase):
         if path.endswith("/stale-recovery/confirm"):
             self.posts.append(("confirm", json.loads(request.post_data)))
             code, body = self.confirm_reply
-            if code == 201:
+            if code in (201, "lost"):
                 self.state = "fenced"
                 body = {"contract_version": CONTRACT, "replayed": False, "fence": fence()}
+            if code == "lost":
+                return route.abort("connectionreset")  # committed, response lost
             return self.json(route, body, code)
         if path.endswith("/stale-recovery"):
+            self.status_gets += 1
+            if self.status_fails:
+                return route.abort("connectionreset")
             value = self.state if isinstance(self.state, dict) else status(self.state, parts[4], parts[6])
             return self.json(route, value)
         if path.endswith("/agent-fleet"):
@@ -177,7 +183,7 @@ class StaleRecoveryPanelBrowserTests(unittest.TestCase):
         self.assertTrue(self.page.locator("#recovery-confirm").is_disabled())
         self.page.locator("#recovery-phrase").fill(PHRASE)
         self.page.locator("#recovery-confirm").click()
-        self.wait_status("Recovery fenced at #4, not complete")
+        self.wait_status("Confirmation recorded. Recovery fenced at #4, not complete")
         kinds = [k for k, _ in self.posts]
         self.assertEqual(kinds, ["preview", "confirm"])
         sent = self.posts[1][1]
@@ -199,7 +205,7 @@ class StaleRecoveryPanelBrowserTests(unittest.TestCase):
         self.wait_status("Preview only")
         self.page.locator("#recovery-phrase").fill(PHRASE)
         self.page.locator("#recovery-confirm").click()
-        self.wait_status("Recovery stays closed: The restored state changed")
+        self.wait_status("Confirmation refused: The restored state changed after the preview; preview again. No stale-restore recovery recorded")
         self.assertEqual(self.page.locator("#recovery-preview-detail").inner_text(), "")
         # A preview for another Agent, or with free text, is discarded.
         self.preview_reply = (200, preview(agent="edge-2"))
@@ -209,6 +215,46 @@ class StaleRecoveryPanelBrowserTests(unittest.TestCase):
         self.page.locator("#recovery-preview").click()
         self.wait_status("unexpected shape")
         self.assertEqual(self.page.locator("#recovery-panel b").count(), 0)
+
+    def confirm_once(self):
+        self.open()
+        self.wait_status("No stale-restore")
+        self.page.locator("#recovery-evidence").set_input_files(str(self.evidence))
+        self.page.locator("#recovery-preview").click()
+        self.wait_status("Preview only")
+        self.page.locator("#recovery-phrase").fill(PHRASE)
+        before = self.status_gets
+        self.page.locator("#recovery-confirm").click()
+        return before
+
+    def test_committed_but_lost_response_is_reconciled(self):
+        """P2: a committed fence whose response is lost is read back, not reported closed."""
+        self.confirm_reply = ("lost", None)
+        before = self.confirm_once()
+        self.wait_status("Recovery fenced at #4, not complete")
+        text = self.page.locator("#recovery-status").inner_text()
+        self.assertTrue(text.startswith("Confirmation outcome was unknown ("), text)
+        self.assertNotIn("stays closed", text)
+        self.assertEqual(self.status_gets, before + 1, "exactly one reconciliation read")
+        self.assertEqual([k for k, _ in self.posts].count("confirm"), 1, "the POST is never repeated")
+        self.assertIn("Unrecoverable history interval: #3 to #3", self.page.locator("#recovery-detail").inner_text())
+
+    def test_failed_reconciliation_reports_unknown(self):
+        self.confirm_reply = ("lost", None)
+        before = self.confirm_once()
+        self.status_fails = True
+        self.wait_status("so the outcome is unknown")
+        text = self.page.locator("#recovery-status").inner_text()
+        self.assertIn("do not confirm again until the state is known", text)
+        self.assertNotIn("stays closed", text)
+        self.assertGreaterEqual(self.status_gets, before + 1)
+        self.assertEqual([k for k, _ in self.posts].count("confirm"), 1)
+        self.assertTrue(self.page.locator("#recovery-confirm").is_disabled())
+        self.assertEqual(self.page.locator("#recovery-detail").inner_text(), "")
+        # The Owner's explicit refresh then shows the durable state.
+        self.status_fails = False
+        self.page.locator("#recovery-refresh").click()
+        self.wait_status("Recovery fenced at #4, not complete")
 
     def test_malformed_status_is_discarded(self):
         self.state = status("complete") | {"fences": [fence("complete") | {"completion": None}]}

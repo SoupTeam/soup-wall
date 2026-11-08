@@ -11,7 +11,8 @@ const staleRecovery = (() => {
   let scope = null, epoch = 0, evidence = null, preview = null;
   const int = v => Number.isSafeInteger(v);
   const when = v => int(v) ? new Date(v * 1000).toLocaleString() : "not recorded";
-  const status = (text, cls = "note") => { const n = $("recovery-status"); n.textContent = text; n.className = cls; };
+  const statusLine = (text, cls = "note") => { const n = $("recovery-status"); n.textContent = text; n.className = cls; };
+  const status = statusLine;
   const base = () => `/admin/v1/tenants/${encodeURIComponent(scope.tenant)}/agents/${encodeURIComponent(scope.agent)}/stale-recovery`;
   function validFence(f) {
     return f && int(f.fence_sequence) && int(f.restored_sequence) && f.restored_sequence < f.fence_sequence
@@ -36,9 +37,10 @@ const staleRecovery = (() => {
       && typeof p.confirmation === "string" && p.confirmation.length <= 200 && int(p.observation_age_seconds) && Array.isArray(p.restrictions);
   }
   const interval = i => i ? `#${i.from_sequence} to #${i.to_sequence}` : "none";
-  function renderFences(d) {
+  function renderFences(d, prefix = "") {
     const root = $("recovery-detail"); root.replaceChildren();
     const f = d.fences[0];
+    const status = (text, cls) => statusLine(prefix + text, cls);
     if (d.state === "none") {
       status(`No stale-restore recovery recorded. Latest recorded deployment: #${d.restored_sequence}.`);
     } else if (d.state === "fenced") {
@@ -59,20 +61,25 @@ const staleRecovery = (() => {
     d.restrictions.slice(0, 8).forEach(x => r.append(make("li", String(x))));
     root.append(make("p", "Remaining restrictions:", "note"), r);
   }
-  async function load() {
-    if (!scope) return;
+  // Reads the durable state. Returns true when it was read and shown;
+  // `prefix` explains why the read happened (e.g. after a confirmation).
+  async function load(prefix = "") {
+    if (!scope) return false;
     const generation = epoch, controller = new AbortController(), guard = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
       const d = await request(base(), { signal: controller.signal, cache: "no-store" });
-      if (generation !== epoch) return;
+      if (generation !== epoch) return false;
       if (!validStatus(d)) throw Object.assign(new Error("shape"), { code: "shape" });
-      renderFences(d);
+      renderFences(d, prefix);
+      return true;
     } catch (e) {
-      if (generation !== epoch) return;
+      if (generation !== epoch) return false;
       $("recovery-detail").replaceChildren();
+      if (prefix) return false;
       if (e.status === 401 || e.status === 403) { status("This session cannot read the recovery state.", "outcome-block"); return; }
       if (e.status === 404) { status("Tenant or Agent not found.", "outcome-block"); return; }
       status(e.code === "shape" ? "A recovery status response had an unexpected shape; it was discarded." : "Recovery state could not be read.", "outcome-other");
+      return false;
     } finally { clearTimeout(guard); }
   }
   function resetPreview() {
@@ -118,15 +125,32 @@ const staleRecovery = (() => {
     if (!scope || !preview || $("recovery-phrase").value !== preview.confirmation) return;
     const generation = epoch, body = JSON.stringify({ evidence, state_binding: preview.state_binding, confirmation: preview.confirmation });
     $("recovery-confirm").disabled = true;
+    const controller = new AbortController(), guard = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    let prefix, known = true, refused = false;
     try {
-      await request(`${base()}/confirm`, { method: "POST", body });
-      if (generation !== epoch) return;
-      resetPreview(); evidence = null; $("recovery-evidence").value = ""; $("recovery-preview").disabled = true;
-      await load();
+      await request(`${base()}/confirm`, { method: "POST", body, signal: controller.signal });
+      prefix = "Confirmation recorded. ";
     } catch (e) {
-      if (generation !== epoch) return;
-      resetPreview();
-      status(`Recovery stays closed: ${e.message}`, "outcome-block");
+      // A 4xx is the Console's answer for this request. Anything else (no
+      // response, a timeout, a 5xx) may have committed: the outcome is
+      // unknown. Either way the POST is never repeated automatically; the
+      // durable state is read once and shown instead.
+      const answered = Number.isInteger(e.status) && e.status >= 400 && e.status < 500;
+      known = answered;
+      refused = answered;
+      prefix = answered ? `Confirmation refused: ${e.message} ` : `Confirmation outcome was unknown (${e.message}). `;
+    } finally { clearTimeout(guard); }
+    if (generation !== epoch) return;
+    // A refusal keeps the chosen evidence so the Owner can preview again;
+    // a recorded or unknown outcome clears it.
+    resetPreview();
+    if (!refused) { evidence = null; $("recovery-evidence").value = ""; $("recovery-preview").disabled = true; }
+    statusLine(`${prefix}Reading the recorded recovery state…`, "outcome-other");
+    if (!(await load(prefix)) && generation === epoch) {
+      $("recovery-detail").replaceChildren();
+      statusLine(known
+        ? `${prefix}The recorded recovery state could not be read; select Refresh recovery.`
+        : `${prefix}The recorded recovery state could not be read, so the outcome is unknown. Select Refresh recovery before doing anything else; do not confirm again until the state is known.`, "outcome-block");
     }
   }
   function select(tenant, agent) {

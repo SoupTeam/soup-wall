@@ -620,3 +620,178 @@ async fn postgres_stale_restore_recovery() {
     ))
     .await;
 }
+
+/// Sends a confirm request whose body is held until `between` ran, after the
+/// admin middleware already authenticated the headers.
+async fn held_confirm<F: std::future::Future<Output = ()>>(
+    base: &str,
+    path: &str,
+    token: &str,
+    body: &Value,
+    between: F,
+) -> (u16, Value) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let body = body.to_string();
+    let mut stream = tokio::net::TcpStream::connect(base).await.unwrap();
+    let head = format!(
+        "POST {path} HTTP/1.1\r\nhost: {base}\r\nx-llm-firewall-admin-token: Bearer {token}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(head.as_bytes()).await.unwrap();
+    stream.flush().await.unwrap();
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    between.await;
+    stream.write_all(body.as_bytes()).await.unwrap();
+    let mut raw = Vec::new();
+    stream.read_to_end(&mut raw).await.unwrap();
+    let text = String::from_utf8_lossy(&raw);
+    let code = text[9..12].parse().unwrap();
+    let json = text
+        .split("\r\n\r\n")
+        .nth(1)
+        .and_then(|b| serde_json::from_str(b.trim()).ok())
+        .unwrap_or(Value::Null);
+    (code, json)
+}
+
+/// P1 regression: an Owner authenticated by the middleware but revoked or
+/// demoted before the fence transaction cannot create a fence.
+async fn owner_revalidated(postgres: Option<String>) {
+    let _guard = SERIAL.lock().await;
+    std::env::set_var("SOUP_AGENT_POLICY_KEY_ID", "recovery-key-a");
+    std::env::set_var("SOUP_AGENT_POLICY_SEED_HEX", "0c".repeat(32));
+    let (store, db, _dir) = open(postgres).await;
+    let tenant = store
+        .create_tenant_async(&format!("Owner check {}", rand::random::<u64>()))
+        .await
+        .unwrap()
+        .id;
+    store
+        .enroll_managed_agent_async(&tenant, "edge")
+        .await
+        .unwrap();
+    store
+        .create_managed_revision_async(&tenant, "edge", "r1", "default: allow\n")
+        .await
+        .unwrap();
+    store
+        .approve_managed_revision_async(&tenant, "edge", "r1")
+        .await
+        .unwrap();
+    let revoked = store
+        .create_admin_async("held-owner-revoked", AdminRole::Owner)
+        .await
+        .unwrap();
+    let demoted = store
+        .create_admin_async("held-owner-demoted", AdminRole::Owner)
+        .await
+        .unwrap();
+    let control = store
+        .create_admin_async("held-owner-control", AdminRole::Owner)
+        .await
+        .unwrap();
+    let state = state(store.clone());
+    let h = Http(state.clone());
+    let base = format!("/admin/v1/tenants/{tenant}/agents/edge");
+    assert_eq!(
+        h.admin(
+            "POST",
+            &format!("{base}/revisions/r1/deploy"),
+            OWNER,
+            Some(json!({}))
+        )
+        .await
+        .0,
+        201
+    );
+    let (_, list) = h
+        .admin("GET", &format!("{base}/deployments"), OWNER, None)
+        .await;
+    let seq = list[0]["deployment_sequence"].as_i64().unwrap();
+    let bundle_json: String = if let Some(url) = &db.postgres {
+        let (client, conn) = tokio_postgres::connect(url, tokio_postgres::NoTls)
+            .await
+            .unwrap();
+        let task = tokio::spawn(async move { conn.await.unwrap() });
+        let v = client
+            .query_one(
+                "SELECT bundle_json FROM managed_agent_deployments WHERE tenant_id=$1 AND agent_id='edge' AND deployment_sequence=$2",
+                &[&tenant, &seq],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        drop(client);
+        task.await.unwrap();
+        v
+    } else {
+        let c = rusqlite::Connection::open(db.sqlite.as_ref().unwrap()).unwrap();
+        c.query_row(
+            "SELECT bundle_json FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id='edge' AND deployment_sequence=?2",
+            rusqlite::params![tenant, seq],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    let mut evidence: Value = serde_json::from_str(&bundle_json).unwrap();
+    evidence["deployment_sequence"] = json!(seq + 1);
+    let body = json!({"evidence": evidence, "state_binding": "a".repeat(64), "confirmation": "recover edge"});
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    let server = tokio::spawn(async move { axum::serve(listener, app(state)).await.unwrap() });
+    let path = format!("{base}/stale-recovery/confirm");
+
+    // Control: the same held request from a live Owner reaches the rules.
+    let (code, reply) = held_confirm(&addr, &path, &control.token, &body, async {}).await;
+    assert_eq!(
+        (code, reply["refusal"].as_str()),
+        (409, Some("evidence_signature_invalid")),
+        "{reply}"
+    );
+    // Revoked while the body was held.
+    let (code, reply) = held_confirm(&addr, &path, &revoked.token, &body, async {
+        assert!(store.revoke_admin_async(&revoked.admin.id).await.unwrap());
+    })
+    .await;
+    assert_eq!(
+        (code, reply["refusal"].as_str()),
+        (403, Some("owner_not_active")),
+        "{reply}"
+    );
+    // Demoted to Operator while the body was held.
+    let (code, reply) = held_confirm(&addr, &path, &demoted.token, &body, async {
+        db.exec(&format!(
+            "UPDATE control_plane_admins SET role='operator' WHERE id='{}'",
+            demoted.admin.id
+        ))
+        .await;
+    })
+    .await;
+    assert_eq!(
+        (code, reply["refusal"].as_str()),
+        (403, Some("owner_not_active")),
+        "{reply}"
+    );
+    assert_eq!(
+        db.count(&format!(
+            "SELECT COUNT(*) FROM managed_agent_recovery_fences WHERE tenant_id='{tenant}'"
+        ))
+        .await,
+        0
+    );
+    server.abort();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn sqlite_confirm_revalidates_owner() {
+    owner_revalidated(None).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "requires a disposable SOUP_DEPLOY_TEST_POSTGRES_URL database"]
+async fn postgres_confirm_revalidates_owner() {
+    owner_revalidated(Some(
+        std::env::var("SOUP_DEPLOY_TEST_POSTGRES_URL").expect("disposable database URL"),
+    ))
+    .await;
+}

@@ -43,8 +43,14 @@ acknowledgement for it. Contract: `sw-console-stale-restore-recovery/1`.
    and the evidence, if any), the next issuance sequence, the remaining
    restrictions and an exact confirmation phrase such as
    `recover edge-1 from 2 to 4 9f2c41d07a3b`. A preview writes nothing.
-3. Type the exact phrase and select **Confirm recovery fence**. The Console
-   repeats every check under the same lock as issuance and compares a binding
+3. Type the exact phrase and select **Confirm recovery fence**. Inside the
+   fence transaction the Console first re-reads the confirming administrator:
+   a stored administrator must still be active with the Owner role (SQLite
+   write lock; PostgreSQL `FOR SHARE` on the admin row), so a revoke or
+   demotion after the request was authenticated refuses with
+   `owner_not_active`. The bootstrap Owner is the configured admin token
+   itself and has no stored row. The Console then repeats every check under
+   the same lock as issuance and compares a binding
    over the restored deployments, revisions, enrollment credential, issuer and
    earlier fences. Any change after the preview refuses with `state_changed`;
    preview again. On success it stores one fence row. The state is `fenced`.
@@ -61,6 +67,7 @@ Every refusal keeps recovery closed and changes nothing.
 | --- | --- | --- |
 | `evidence_malformed` | 400 | not a bounded signed bundle, or an unknown field |
 | `confirmation_mismatch` | 400 | the phrase is not the exact preview phrase |
+| `owner_not_active` | 403 | the confirming administrator was revoked or demoted after authentication |
 | `not_enrolled` | 404 | no such Agent in this tenant |
 | `revoked` | 409 | the enrollment credential is revoked |
 | `evidence_wrong_audience` | 409 | the bundle names another tenant or Agent |
@@ -76,7 +83,15 @@ Every refusal keeps recovery closed and changes nothing.
 | `state_changed` | 409 | the restored state changed after the preview, or a concurrent confirmation won |
 
 Preview and confirmation are Owner-only; Operators and Viewers get 403, and
-an Agent credential gets 401. Repeating a successful confirmation with the
+an Agent credential gets 401.
+
+If the confirmation gets no answer (lost response, timeout or a 5xx), the
+outcome is unknown: the fence may be stored. The panel never repeats the
+POST. It reads the recorded state once and shows it with "Confirmation
+outcome was unknown". If that read also fails, it says the outcome is
+unknown and asks you to select **Refresh recovery** before doing anything
+else. A 4xx answer is shown as "Confirmation refused", followed by the
+recorded state. Repeating a successful confirmation with the
 same evidence and binding returns the same fence (`replayed: true`).
 Concurrent confirmations create exactly one fence.
 
