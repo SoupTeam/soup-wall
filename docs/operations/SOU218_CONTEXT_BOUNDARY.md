@@ -810,3 +810,173 @@ native matrix/model rerun is requested. Useful source-bound semantic output,
 its separately reviewed provider/egress boundary, production policy-transition
 semantics and all six original benign/malicious outcomes remain open. Keep
 Draft/In Progress and the original corpus labels/denominators.
+
+### Useful receiver design for decision - November 8
+
+**Proposal only. No new worker protocol, provider call or semantic-output release
+is activated by this section.**
+[Review 5818207973](https://github.com/SoupTeam/soup-wall/pull/346#pullrequestreview-5818207973)
+accepted both component SIGKILL points at `7a04349e` on Linux/WSL2, together with
+the connected reader, standalone kernel controls, strict Clippy and fmt. General
+at 19:15 requested the useful receiver next. Installed-daemon crash qualification
+is still open; the accepted test component must not be relabelled as that result.
+
+#### Concrete source and transport gaps
+
+The existing reader returns only a 72-byte digest/length acknowledgement. That
+does not answer a user question about the retained material. Its 4096-byte input
+ceiling, also enforced by `native/quarantine.rs::ReaderSource::reserve`, cannot
+deliver two of the six complete original cases:
+
+| Original case | Original bytes | Fits current reader | Semantic result now |
+| --- | ---: | --- | --- |
+| g05-a | 589 | Yes | Not implemented |
+| g06-b | 652 | Yes | Not implemented |
+| f05-a | 1375 | Yes | Not implemented |
+| g11-a | 600 | Yes | Not implemented |
+| g12-a | 262144 | No | Not run; full source required |
+| f12-a | 262144 | No | Not run; full source required |
+
+Sizes and exact source hashes come from the retained
+[public control plan](evidence/sou218-context-controls/plan.json), not a new
+experiment or a claim about native execution. The complete frozen inputs remain
+unchanged. A prefix, snippet or independently successful chunk cannot stand in
+for either large original.
+
+Code inspection also rules out two apparent shortcuts:
+
+- `pilot_host::isolate` cleans host configuration but passes selected provider
+  inputs and creates no OS namespaces. Existing pilot launch also installs MCP
+  capabilities. Do not reuse that ordinary agent session as the restricted reader.
+- `judge::Judge` truncates/neutralizes its input and returns a two-word verdict;
+  its established contract can only tighten policy. It is not this useful
+  source-bound analysis surface and must not become a permission to soften Deny.
+- The current pinned HTTPS POST profile accepts only 4096 request-body bytes.
+  Its shared response parser and encrypted-byte counter have separate fixed
+  limits. It has no approved analysis-provider credential/header contract.
+  Merely selecting that executor does not authorize inference or the large cases.
+
+#### Proposed next implementation, still private and fixture-only first
+
+Reuse the existing quarantine, affine withdrawal, launcher and required sandbox.
+Extend that reader with one versioned typed-result mode after review; do not add
+a second launcher, classifier or general-purpose command/RPC executor. The first
+increment uses scripted public responses to exercise the real confined channel
+and daemon-side result validation. Those responses are transport fixtures, not
+observed model quality or corrected benign outcomes.
+
+The trusted controller fixes an analysis question independently of source text.
+For the first semantic experiment, the task is to explain the material and cite
+the portions supporting that explanation; no requested or generated command is
+executed. Bind the question hash, reader executable/profile hash, attempt nonce
+and optional approved provider/model configuration hash to the existing complete
+source/call/policy/epoch/instance binding. A question supplied inside tool content
+cannot replace that controller-owned question.
+
+Do not extend or reinterpret `sw-analysis-purpose/1` in place. If this purpose is
+approved beyond fixtures, specify `sw-analysis-purpose/2` with a separate MAC
+domain under the existing operator key boundary: all v1 binding claims plus the
+question/profile/output-contract/provider-configuration digests and exact limits.
+An old v1 grant must not authorize the new output mode or any provider request.
+Fixture-only construction of the expected tuple is not operator authorization;
+production mint and release remain unsupported until their own reviewed wiring.
+
+Proposed worker response `sw-analysis-result/1` is one bounded frame with only:
+
+| Field | Proposed validation |
+| --- | --- |
+| `attempt` | Exact active controller nonce; one terminal response attempt |
+| `source_sha256`, `source_bytes` | Exact full source hash and length from private custody |
+| `summary` | UTF-8 text, at most 2048 bytes; untrusted analysis, not a verdict |
+| `citations` | At most 8 nonempty ranges, each at most 256 bytes, within the complete original byte sequence |
+
+Each citation carries start/end byte offsets and the SHA-256 of that exact slice.
+The controller checks integer overflow, UTF-8 boundaries and the original bytes.
+It generates any displayed excerpt itself from custody. Citation validity proves
+where text came from, not that a summary is correct or benign. The whole response
+is at most 4096 bytes, parsed with the existing strict duplicate-key rejection;
+unknown fields, extra frames, invalid UTF-8, oversize, missing EOF and timeout
+consume the attempt and produce no artifact. There are no action, command,
+URL-fetch, tool-call, policy, verdict, grant, trust or taint-clearing fields.
+
+The controller, never the worker, attaches the original inspection findings,
+taint, provenance, policy generation, source binding and retained-record digest.
+It rechecks current instance/policy/expiry and unchanged custody before accepting
+the response and requires confirmed recipient disposal before publishing it.
+Derived output lives in a separate private review object. It must have no implicit
+conversion into an ordinary tool response, hook response or action authorization.
+No output from an expired, superseded or interrupted attempt can be shown later.
+The first prototype stores no review object beyond the existing task lifetime;
+durable storage/retention would need its own design.
+
+The review display must show untrusted text as escaped plain text, with original
+findings/taint alongside it. No Markdown/HTML rendering, automatic links, images,
+commands or provider-generated instructions become UI actions. No summary/source
+text, credential or full provider error goes to ordinary stdout, audit or status;
+diagnostics contain bounded codes and approved identifiers only.
+
+#### Provider and full-input proposal, not inherited authorization
+
+Keep the reader networkless and credential-free. If TL approves an existing
+semantic backend for shadow use, a controller-owned one-shot provider adapter
+constructs the request from the exact retained source and the fixed question.
+The worker cannot select a URL, headers, model, prompt, tools or another request.
+Provider credentials remain only in the adapter, obtained through the existing
+operator-owned carrier/configuration boundary; neither worker, source nor output
+can supply them. No source is sent if independent secret/PII or operator policy
+forbids that disclosure. A valid analysis purpose alone does not override it.
+
+Reuse the pinned TLS/DNS/address checks and cancellation accounting in the HTTPS
+transport. A separately reviewed named analysis profile would specify exactly
+one operator-selected HTTPS endpoint and model, fixed authentication header
+schema, no redirects/proxy inheritance/retries, no tool schemas or automatic tool
+handling, and a closed response schema. Existing GET/POST profiles keep all their
+current constants and semantics. The generic judge client is not the adapter.
+
+For the six-case development scope, proposed full-input transport is at most
+262144 source bytes, in ordered chunks of at most 4096 bytes, under one original
+deadline, reservation and whole-source hash/length. Verify completeness before
+inference; no truncation, per-chunk retry or independent chunk acceptance. The
+existing larger MCP frame limit is not silently promoted into this profile.
+Proposed provider bounds to review: 2 MiB encoded request, 64 KiB response body,
+8 KiB response headers, 128 KiB encrypted response and one request within the
+lesser of 60 seconds or the remaining original authorization lifetime. JSON
+escaping and prompt overhead count toward the encoded request limit. Exceeding
+any limit is explicit not-run/error, never a fallback to less source or more
+authority. These are proposed profile-specific bounds, not changed constants.
+
+Provider request commitment cannot be undone by cancellation. On uncertain
+delivery, mark the attempt terminal/unknown, kill the recipient and refuse retry.
+Report provider commitment separately from local TLS write progress and from
+semantic usefulness. An existing account/key or endpoint being configured does
+not by itself authorize this new payload/destination use or an extra model run.
+If an already authorized backend cannot satisfy the proposed exact protocol,
+retain the interface gap instead of adding a new service or paid access.
+
+#### Independent acceptance and decisions requested
+
+Approve or amend the typed-result/private-review contract and its no-provider
+fixture implementation first. For a subsequent shadow inference increment, TL
+must identify the already authorized backend/model/endpoint configuration and
+accept its data-disclosure, authentication and finite transport profile. This
+proposal does not request new model access or budget. Production result release
+or a change to signature interpretation is a separate decision, still unapproved.
+
+Required runnable controls for the next approved fixture increment: a valid
+source-bound summary/citation result; forged/foreign/replayed attempt; changed
+source/taint/epoch/policy; malformed/duplicate/extra fields; attempted action or
+taint-clearing fields; invalid/out-of-range citations; split UTF-8; short/extra/
+oversized output; expiry while blocked; cancellation and SIGKILL during output;
+and no review object before confirmed cleanup. Repeat matched malicious inputs
+under the identical purpose/capabilities, including a syntactically valid hostile
+summary. Such a summary must stay untrusted and unable to authorize actions.
+
+Only after that component review may an explicitly authorized shadow run measure
+real useful analysis. Keep separate columns for original policy verdict, confined
+delivery, artifact validation, semantic usefulness, provider effects and actions.
+Use the existing reporter and original 48 semantic / 3 technical denominators;
+all six originals and all 24 attacks remain individually accounted for. A private
+analysis artifact from both benign and malicious input is not attack-Deny and
+must not lower the frozen refusal count. No automatic route from model judgement
+to baseline-Allow is proposed. These decisions and runtime evidence are required
+before claiming any of the six corrected or moving SOU-218 to Done.
