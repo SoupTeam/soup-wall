@@ -46,6 +46,7 @@ impl Access {
         ledger: &str,
         now: u64,
     ) -> Result<Self> {
+        let mut key = key.map(zeroize::Zeroizing::new);
         ensure!(bytes.len() <= 4096, "gemini_access_limit");
         ensure!(
             (32..=256).contains(&operator_secret.len()),
@@ -56,7 +57,10 @@ impl Access {
         access_mac(operator_secret, &claim)
             .verify_slice(&URL_SAFE_NO_PAD.decode(&claim.signature)?)
             .map_err(|_| anyhow::anyhow!("gemini_operator_signature"))?;
-        let key = Key::new(key.ok_or_else(|| anyhow::anyhow!("gemini_operator_key_missing"))?)?;
+        let key = Key::new(std::mem::take(
+            key.as_deref_mut()
+                .ok_or_else(|| anyhow::anyhow!("gemini_operator_key_missing"))?,
+        ))?;
         ensure!(
             claim.profile == profile_hash()
                 && claim.ledger == ledger

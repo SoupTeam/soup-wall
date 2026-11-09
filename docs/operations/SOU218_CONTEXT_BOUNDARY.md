@@ -1546,3 +1546,27 @@ agentfw all-targets Clippy and fmt passed; the unchanged documentation checker
 passed 426 Markdown files / 1359 local links using an exact-source private Git
 index for this archived source. Original failures and the added red identity
 control are retained separately in the review evidence.
+
+### Manual credential input
+
+The Linux controller now offers `open_interactive` for a trusted operator caller
+running in the operator's own terminal, before async work. It reads `/dev/tty`
+with echo disabled, including newline echo. There is no stdin, environment,
+command argument, credential-file or chat fallback. Enter accepts the bounded
+ASCII key; Backspace edits it and Ctrl-C, Ctrl-D or Escape cancel. Input is
+limited to 256 bytes. The terminal mode is restored and unread pasted input is
+flushed on success, cancellation and ordinary errors; the guard also restores
+on unwinding. A forced process kill cannot run destructors.
+
+The input buffer, retained key and constructed HTTP credential header are wiped
+on normal drop. This is not a guarantee that the OS, terminal, allocator or TLS
+implementation keeps no other memory copies. The key value is never written to
+the experiment journal; the existing key digest remains its identity binding.
+Opening still verifies signed operator evidence and does not dispatch requests.
+This is a controller API, not an installed command: the authenticated operator
+caller/issuer and independent Linux validation remain required. Do not ask the
+operator to enter a real key into an assistant-controlled terminal or into chat.
+
+Portable tests cover editing, cancellation, EOF, invalid bytes, both size
+boundaries and static errors. A Linux pseudo-terminal test checks hidden mode
+and restoration after cancellation; it has not been run on this Windows host.

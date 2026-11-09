@@ -11,6 +11,7 @@ use crate::sandbox::fixture_reader::analysis::{hash, validate_mcp_source, FRAME_
 pub(in crate::native) mod controller;
 #[cfg(target_os = "linux")]
 pub(in crate::native) mod ledger;
+mod manual_key;
 mod tests;
 mod transport;
 
@@ -62,8 +63,15 @@ pub(in crate::native) fn profile_hash() -> String {
 
 // Secret has neither Debug nor Serialize. Transport errors are static codes.
 struct Key(String);
+impl Drop for Key {
+    fn drop(&mut self) {
+        zeroize::Zeroize::zeroize(&mut self.0);
+    }
+}
 impl Key {
     fn new(value: String) -> Result<Self> {
+        let key = Self(value);
+        let value = &key.0;
         ensure!(
             (20..=256).contains(&value.len())
                 && value
@@ -71,7 +79,7 @@ impl Key {
                     .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'),
             "gemini_key_shape"
         );
-        Ok(Self(value))
+        Ok(key)
     }
 }
 

@@ -60,6 +60,7 @@ libc = "0.2"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Diagnostics_Debug", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_IO", "Win32_System_SystemServices", "Win32_System_Threading"] }
 
 [dev-dependencies]
+zeroize = "1"
 tower = { version = "0.5", features = ["util"] }
 tempfile = "3"
 wiremock = "0.6"

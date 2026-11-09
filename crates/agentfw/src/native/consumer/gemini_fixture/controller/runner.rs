@@ -45,6 +45,17 @@ impl Wire for Direct {
     }
 }
 impl Controller {
+    /// Call only from the operator's own terminal, before entering async work.
+    /// No stdin/env/argument fallback and no provider request at opening.
+    pub(in crate::native) fn open_interactive(
+        path: &std::path::Path,
+        claim: &[u8],
+        operator_secret: &[u8],
+    ) -> Result<Self> {
+        let mut key = super::super::manual_key::prompt()?;
+        Self::open(path, claim, Some(std::mem::take(&mut key)), operator_secret)
+    }
+
     /// The operator key and signed evidence come from the trusted caller, never
     /// source content, a model answer or a chat. Opening does not dispatch.
     pub(in crate::native) fn open(
@@ -53,11 +64,19 @@ impl Controller {
         key: Option<String>,
         operator_secret: &[u8],
     ) -> Result<Self> {
+        let mut key = key.map(zeroize::Zeroizing::new);
         let ledger = Ledger::open(path)?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_secs();
-        let access = Access::verify(claim, key, operator_secret, &ledger.identity()?, now)?;
+        let identity = ledger.identity()?;
+        let access = Access::verify(
+            claim,
+            key.as_deref_mut().map(std::mem::take),
+            operator_secret,
+            &identity,
+            now,
+        )?;
         let manifest = serde_json::to_vec(
             &json!({"contract":"sw-gemini-serial/1","profile":profile_hash(),"plan":json_digest(PLAN),"acceptance":json_digest(ACCEPTANCE),"project":access.claim.project,"key_sha256":access.claim.key_sha256,"rows":30,"originals":6,"attacks":24,"usd_ceiling":0}),
         )?;

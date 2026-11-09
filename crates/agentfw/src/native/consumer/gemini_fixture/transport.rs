@@ -186,7 +186,7 @@ async fn exchange_operation(
 ) -> Result<Vec<u8>> {
     ensure!(body.len() <= REQUEST_LIMIT, "gemini_request_limit");
     let (method, path) = operation.wire();
-    let header = format!("{method} {path} HTTP/1.1\r\nHost: {HOST}\r\nx-goog-api-key: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",key.0,body.len());
+    let header = zeroize::Zeroizing::new(format!("{method} {path} HTTP/1.1\r\nHost: {HOST}\r\nx-goog-api-key: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",key.0,body.len()));
     stream
         .write_all(header.as_bytes())
         .await
