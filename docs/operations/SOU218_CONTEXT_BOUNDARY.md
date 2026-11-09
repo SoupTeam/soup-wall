@@ -1305,3 +1305,33 @@ strict agentfw all-targets Clippy and fmt. Review the new credential/egress/sche
 boundary and the explicit integration gaps before the connected increment.
 Keep Draft / In Progress. All six semantic refusals remain open; structural
 artifact validity and a scripted/private answer are not semantic usefulness.
+
+### Independent adapter review - exact public wire bytes
+
+Review of `fb415d98` reproduced a public-data gate defect without a provider:
+adding a synthetic canary encoded as JSON whitespace left both approved channel
+texts unchanged, but the prepared provider request retained those extra bytes.
+This is a prepared-request control failure, not an observed external disclosure.
+The regression fails against the submitted adapter before the fix.
+
+The adapter now constructs the expected public envelope from fixed fields and
+the verified frozen text, then requires exact equality with the original source
+bytes before preparing a request. It does not canonicalize or trim received
+sources. The profile additionally binds `wire=exact-public-frame/1`, so a future
+purpose grant must attest this stricter disclosure rule. Alternate whitespace,
+trailing line endings and alternate JSON escaping refuse even when the decoded
+JSON equals an approved fixture. All 30 exact public frames remain eligible.
+This intentionally narrow public experiment policy does not alter the generic
+MCP fixture parser or its accepted boundary controls.
+
+No key lookup, provider call, account billing change or semantic experiment was
+performed during the review. Authenticated purpose/custody integration, all
+adapter copy accounting in the same 8 MiB lease, a protected persistent attempt
+ledger, real free-tier/countTokens evidence and durable result reporting remain
+required before any live dispatch. The six semantic refusals remain open and
+the PR remains Draft / In Progress.
+
+Independent WSL2/Linux follow-up: all nine `gemini_` tests pass without skips,
+including all 30 public frames and the new exact-wire regression. Strict
+agentfw all-targets Clippy and workspace fmt check pass. The original submitted
+adapter separately passed eight tests before the new regression exposed the gap.

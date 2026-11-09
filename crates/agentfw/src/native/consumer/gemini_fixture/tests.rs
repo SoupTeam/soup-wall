@@ -239,3 +239,53 @@ fn gemini_persistent_reservation_refuses_replay_after_drop_nonce_or_whitespace_c
     assert!(record.contains("reserved_unknown"));
     assert!(!record.contains("README") && !record.contains("key"));
 }
+
+#[test]
+fn gemini_public_allowlist_refuses_nonfrozen_wire_encoding() {
+    let canonical = source();
+    let canary = b"REVIEW_PRIVATE_CANARY";
+    let prefix: String = canary
+        .iter()
+        .flat_map(|b| {
+            (0..8)
+                .rev()
+                .map(move |bit| if (b >> bit) & 1 == 1 { '\t' } else { ' ' })
+        })
+        .collect();
+    for changed in [
+        format!("{prefix}{canonical}"),
+        format!("{canonical}\r\n"),
+        canonical.replacen("README", "\\u0052EADME", 1),
+    ] {
+        assert_ne!(hash(changed.as_bytes()), hash(canonical.as_bytes()));
+        assert_eq!(
+            serde_json::from_str::<Value>(&changed).unwrap(),
+            serde_json::from_str::<Value>(&canonical).unwrap()
+        );
+        let result = prepare(
+            &changed,
+            "review-nonce",
+            Instant::now() + std::time::Duration::from_secs(30),
+            preflight_for(&changed),
+        );
+        if let Ok(ref prepared) = result {
+            let body: Value = serde_json::from_slice(&prepared.body).unwrap();
+            assert_eq!(body["contents"][0]["parts"][0]["text"], changed);
+            if changed.starts_with(&prefix) {
+                let recovered: Vec<u8> = changed.as_bytes()[..prefix.len()]
+                    .chunks(8)
+                    .map(|bits| {
+                        bits.iter()
+                            .fold(0u8, |acc, b| (acc << 1) | u8::from(*b == b'\t'))
+                    })
+                    .collect();
+                assert_eq!(recovered, canary);
+                println!("REVIEW_GATE_REPRO: arbitrary_nonpublic_octets={} preserved_in_prepared_request=true network_calls=0",canary.len());
+            }
+        }
+        assert!(
+            result.is_err(),
+            "non-frozen wire bytes must not gain public-data disclosure authority"
+        );
+    }
+}
