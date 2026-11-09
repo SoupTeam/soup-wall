@@ -1,0 +1,339 @@
+// SPDX-License-Identifier: Apache-2.0
+//! Fixed-host single TLS socket, no proxy/redirect/retry/configurable URL.
+use super::*;
+use std::{
+    io,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+use tokio_rustls::rustls;
+
+const HEADER_LIMIT: usize = 8192;
+const ENCRYPTED_LIMIT: usize = 131_072;
+
+struct Counted<T> {
+    inner: T,
+    read: usize,
+}
+impl<T: AsyncRead + Unpin> AsyncRead for Counted<T> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
+        let remaining = ENCRYPTED_LIMIT
+            .saturating_sub(this.read)
+            .min(buf.remaining());
+        if remaining == 0 {
+            return Poll::Ready(Err(io::Error::other("gemini_encrypted_limit")));
+        }
+        let mut scratch = [0; 4096];
+        let capacity = remaining.min(scratch.len());
+        let mut limited = ReadBuf::new(&mut scratch[..capacity]);
+        match Pin::new(&mut this.inner).poll_read(cx, &mut limited) {
+            Poll::Ready(Ok(())) => {
+                this.read += limited.filled().len();
+                buf.put_slice(limited.filled());
+                Poll::Ready(Ok(()))
+            }
+            other => other,
+        }
+    }
+}
+impl<T: AsyncWrite + Unpin> AsyncWrite for Counted<T> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bytes: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.get_mut().inner).poll_write(cx, bytes)
+    }
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.get_mut().inner).poll_flush(cx)
+    }
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.get_mut().inner).poll_shutdown(cx)
+    }
+}
+
+fn tls_config() -> Result<rustls::ClientConfig> {
+    let mut roots = rustls::RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let mut config = rustls::ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()?
+    .with_root_certificates(roots)
+    .with_no_client_auth();
+    config.alpn_protocols = vec![b"http/1.1".to_vec()];
+    config.enable_early_data = false;
+    config.resumption = rustls::client::Resumption::disabled();
+    Ok(config)
+}
+
+/// Affine component API. Not wired to any operator or production endpoint.
+/// No test invokes this real network method; tests exercise its wire routines.
+async fn execute(prepared: Prepared, key: Key, ledger: &std::path::Path) -> Result<Vec<u8>> {
+    reserve_attempt(ledger, &prepared)?;
+    let deadline = tokio::time::Instant::from_std(prepared.deadline);
+    let response = tokio::time::timeout_at(deadline, async {
+        let addresses: Vec<_> = tokio::net::lookup_host((HOST, 443))
+            .await
+            .map_err(|_| anyhow::anyhow!("gemini_dns"))?
+            .collect();
+        ensure!(
+            !addresses.is_empty()
+                && addresses
+                    .iter()
+                    .all(|x| crate::mcp::https_get::is_public_address(x.ip())),
+            "gemini_dns_private"
+        );
+        // Freeze one address from this lookup; no fallback reconnect/re-resolution.
+        let address = addresses[0];
+        let socket = tokio::net::TcpStream::connect(address)
+            .await
+            .map_err(|_| anyhow::anyhow!("gemini_connect"))?;
+        ensure!(socket.peer_addr().ok() == Some(address), "gemini_peer");
+        let connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config()?));
+        let name = rustls_pki_types::ServerName::try_from(HOST).unwrap();
+        let mut stream = connector
+            .connect(
+                name,
+                Counted {
+                    inner: socket,
+                    read: 0,
+                },
+            )
+            .await
+            .map_err(|_| anyhow::anyhow!("gemini_tls"))?;
+        exchange(&mut stream, &prepared.body, &key).await
+    })
+    .await
+    .map_err(|_| anyhow::anyhow!("gemini_timeout_unknown"))??;
+    decode(&prepared, &response)
+}
+
+async fn exchange(
+    stream: &mut (impl AsyncRead + AsyncWrite + Unpin),
+    body: &[u8],
+    key: &Key,
+) -> Result<Vec<u8>> {
+    ensure!(body.len() <= REQUEST_LIMIT, "gemini_request_limit");
+    let header = format!("POST {PATH} HTTP/1.1\r\nHost: {HOST}\r\nx-goog-api-key: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",key.0,body.len());
+    stream
+        .write_all(header.as_bytes())
+        .await
+        .map_err(|_| anyhow::anyhow!("gemini_write_unknown"))?;
+    stream
+        .write_all(body)
+        .await
+        .map_err(|_| anyhow::anyhow!("gemini_write_unknown"))?;
+    stream
+        .flush()
+        .await
+        .map_err(|_| anyhow::anyhow!("gemini_write_unknown"))?;
+    read_response(stream).await
+}
+
+async fn exact(stream: &mut (impl AsyncRead + Unpin), bytes: &mut [u8]) -> Result<()> {
+    stream
+        .read_exact(bytes)
+        .await
+        .map_err(|_| anyhow::anyhow!("gemini_incomplete_http"))?;
+    Ok(())
+}
+
+async fn read_response(stream: &mut (impl AsyncRead + Unpin)) -> Result<Vec<u8>> {
+    let mut header = Vec::new();
+    while !header.ends_with(b"\r\n\r\n") {
+        ensure!(header.len() < HEADER_LIMIT, "gemini_header_limit");
+        let mut byte = [0];
+        exact(stream, &mut byte).await?;
+        header.push(byte[0]);
+    }
+    let mut slots = [httparse::EMPTY_HEADER; 64];
+    let mut parsed = httparse::Response::new(&mut slots);
+    ensure!(
+        parsed
+            .parse(&header)
+            .map_err(|_| anyhow::anyhow!("gemini_http"))?
+            == httparse::Status::Complete(header.len())
+            && parsed.version == Some(1),
+        "gemini_http"
+    );
+    let status = parsed.code.unwrap_or(0);
+    ensure!(status != 429, "gemini_quota_stop");
+    ensure!(!(300..400).contains(&status), "gemini_redirect_refused");
+    ensure!(status == 200, "gemini_http_status");
+    let mut length = None;
+    let mut chunked = false;
+    let mut content_type = false;
+    for h in parsed.headers {
+        if h.name.eq_ignore_ascii_case("content-length") {
+            ensure!(
+                length.is_none() && !h.value.is_empty() && h.value.iter().all(u8::is_ascii_digit),
+                "gemini_length"
+            );
+            length = Some(
+                std::str::from_utf8(h.value)?
+                    .parse::<usize>()
+                    .map_err(|_| anyhow::anyhow!("gemini_length"))?,
+            );
+        } else if h.name.eq_ignore_ascii_case("transfer-encoding") {
+            ensure!(
+                !chunked && h.value == b"chunked",
+                "gemini_transfer_encoding"
+            );
+            chunked = true;
+        } else if h.name.eq_ignore_ascii_case("content-encoding") {
+            anyhow::bail!("gemini_compression_refused");
+        } else if h.name.eq_ignore_ascii_case("content-type") {
+            ensure!(
+                !content_type
+                    && matches!(
+                        h.value,
+                        b"application/json"
+                            | b"application/json; charset=UTF-8"
+                            | b"application/json; charset=utf-8"
+                    ),
+                "gemini_content_type"
+            );
+            content_type = true;
+        }
+    }
+    ensure!(
+        content_type && (length.is_some() != chunked),
+        "gemini_http_framing"
+    );
+    let mut body = Vec::new();
+    if let Some(length) = length {
+        ensure!(length <= RESPONSE_LIMIT, "gemini_response_limit");
+        body.resize(length, 0);
+        exact(stream, &mut body).await?;
+    } else {
+        let mut framing = 0;
+        loop {
+            let mut line = Vec::new();
+            while !line.ends_with(b"\r\n") {
+                ensure!(
+                    line.len() < 10 && framing < HEADER_LIMIT,
+                    "gemini_chunk_framing"
+                );
+                let mut byte = [0];
+                exact(stream, &mut byte).await?;
+                line.push(byte[0]);
+                framing += 1;
+            }
+            let digits = &line[..line.len() - 2];
+            ensure!(
+                !digits.is_empty() && digits.iter().all(u8::is_ascii_hexdigit),
+                "gemini_chunk_size"
+            );
+            let count = usize::from_str_radix(std::str::from_utf8(digits)?, 16)
+                .map_err(|_| anyhow::anyhow!("gemini_chunk_size"))?;
+            ensure!(
+                count <= RESPONSE_LIMIT.saturating_sub(body.len()),
+                "gemini_response_limit"
+            );
+            if count > 0 {
+                let start = body.len();
+                body.resize(start + count, 0);
+                exact(stream, &mut body[start..]).await?;
+            }
+            let mut end = [0; 2];
+            exact(stream, &mut end).await?;
+            framing += 2;
+            ensure!(
+                end == *b"\r\n" && framing <= HEADER_LIMIT,
+                "gemini_chunk_trailer"
+            );
+            if count == 0 {
+                break;
+            }
+        }
+    }
+    // Require complete response EOF, including no extra body or HTTP messages.
+    let mut tail = [0];
+    ensure!(
+        stream
+            .read(&mut tail)
+            .await
+            .map_err(|_| anyhow::anyhow!("gemini_http_eof"))?
+            == 0,
+        "gemini_extra_http"
+    );
+    Ok(body)
+}
+
+#[tokio::test]
+async fn gemini_transport_bounds_quota_redirect_framing_and_encrypted_reads() {
+    for (status, code) in [
+        (429, "gemini_quota_stop"),
+        (302, "gemini_redirect_refused"),
+        (401, "gemini_http_status"),
+    ] {
+        let text = format!("HTTP/1.1 {status} Error\r\nContent-Length: 0\r\n\r\n");
+        assert_eq!(
+            read_response(&mut text.as_bytes())
+                .await
+                .unwrap_err()
+                .to_string(),
+            code
+        );
+    }
+    for header in [
+        "Content-Length: 65537",
+        "Content-Length: 1\r\nContent-Length: 1",
+        "Content-Length: 1\r\nTransfer-Encoding: chunked",
+        "Transfer-Encoding: gzip",
+        "Content-Length: 1\r\nContent-Encoding: gzip",
+    ] {
+        let text =
+            format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n{header}\r\n\r\nx");
+        assert!(read_response(&mut text.as_bytes()).await.is_err());
+    }
+    for text in [b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n2\r\n{}\r\n0\r\n\r\n".as_slice(), b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}"] {
+        assert_eq!(read_response(&mut &text[..]).await.unwrap(),b"{}");
+        let mut extra = text.to_vec();extra.push(1);assert!(read_response(&mut extra.as_slice()).await.is_err());
+        assert!(read_response(&mut &text[..text.len()-1]).await.is_err());
+    }
+    let oversized = vec![b'x'; HEADER_LIMIT + 1];
+    assert!(read_response(&mut oversized.as_slice()).await.is_err());
+    let bytes = vec![0; ENCRYPTED_LIMIT + 1];
+    let mut counted = Counted {
+        inner: bytes.as_slice(),
+        read: 0,
+    };
+    let mut output = Vec::new();
+    assert!(counted.read_to_end(&mut output).await.is_err());
+    assert_eq!(output.len(), ENCRYPTED_LIMIT);
+    // Compile the real connector, but never invoke it in unattended tests.
+    let _connector = execute;
+    assert!(!tls_config().unwrap().enable_early_data);
+}
+
+#[tokio::test]
+async fn gemini_transport_key_only_in_header_no_retry_and_deadline_cancellation() {
+    let key = Key::new("synthetic_key_for_test_only".into()).unwrap();
+    let (mut client, mut server) = tokio::io::duplex(4096);
+    let work = async {
+        tokio::time::timeout(
+            std::time::Duration::from_millis(20),
+            exchange(&mut client, b"{}", &key),
+        )
+        .await
+    };
+    assert!(work.await.is_err());
+    drop(client);
+    let mut wire = Vec::new();
+    server.read_to_end(&mut wire).await.unwrap();
+    let wire = String::from_utf8(wire).unwrap();
+    assert!(wire.starts_with(&format!("POST {PATH} HTTP/1.1\r\nHost: {HOST}\r\n")));
+    assert_eq!(wire.matches("synthetic_key_for_test_only").count(), 1);
+    assert_eq!(wire.matches("POST ").count(), 1);
+    assert!(wire.ends_with("\r\n\r\n{}"));
+    assert!(!wire.contains("Authorization:") && !wire.contains("?key="));
+}

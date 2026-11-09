@@ -1232,3 +1232,76 @@ All six semantic refusals remain unresolved; this amendment addresses the
 complete-input transport obstacle only. Keep Draft / In Progress, unchanged
 original 48/3 denominators and 24-attack acceptance, and separate future
 provider/model/disclosure/transport authorization from fixture acceptance.
+
+
+### Gemini public-data adapter component - November 9
+
+The full-envelope increment at `9ed19042` was independently accepted in
+[review 5821944403](https://github.com/SoupTeam/soup-wall/pull/346#pullrequestreview-5821944403).
+The active [USD 0 direction](https://github.com/SoupTeam/soup-wall/pull/346#issuecomment-6733249478)
+supersedes the held Gemini 3.1 / USD 1 proposal. It selects direct
+`gemini-3.8-flash`, free-tier public development data only, six originals plus
+24 matched controls, and normal code/security review before live inference.
+No model call, credential lookup, billing change or corpus rerun was made here.
+
+The new `cfg(test)`-only `native::consumer::gemini_fixture` component implements:
+
+- A fixed request/question/schema/profile, LOW thinking, temperature 1.0,
+  2048 output tokens and no candidateCount/tools/labels/expected answers.
+  Profile identity includes endpoint, question, schema and canonical JSON
+  identities of the frozen plan and factual acceptance (checkout line endings
+  cannot change the profile; public source bytes are never canonicalized). Preflight token evidence is tied to the exact encoded
+  request hash. Both complete channels must exactly match one frozen public
+  text; additional fields, private material and foreign envelope IDs refuse.
+- An affine prepared dispatch and fixed-host direct TLS connector with normal
+  WebPKI roots/hostname validation, no custom CA, proxy, redirects, connection
+  fallback, retry, TLS resumption or early data. DNS must yield public addresses;
+  one concrete socket is selected and its peer verified. The original deadline
+  caps the whole DNS/connect/TLS/write/read operation at 30 seconds. Request,
+  response body, headers and encrypted input limits are 2 MiB/64 KiB/8 KiB/
+  128 KiB respectively. Content-Length and bounded chunked HTTP/1.1 are supported;
+  compression, trailers, incomplete/extra responses and non-200 status refuse.
+  HTTP 429 is a quota stop. A validated key is used only in x-goog-api-key.
+- A closed inner `{summary, quotes}` decoder and deterministic conversion into
+  the existing result contract. It requires one complete STOP text candidate,
+  the pinned reported model identity, nonblank <=2048-byte summary and 1..4
+  distinct literal <=256-byte quotes. ALL raw-source matches, including overlaps,
+  become byte-range/hash citations, at most eight total. Missing/duplicate quotes,
+  model drift, tools, repair-requiring JSON and source de-escaping refuse.
+  Even a hostile structurally valid summary is still untrusted text, never Allow.
+- Exclusive synced attempt reservation before DNS. The stable frozen public-text
+  hash fences replay across nonce and envelope whitespace changes. Cancellation
+  leaves a `reserved_unknown` record; no automatic deletion or retry is provided.
+  Six-case factual/citation requirements are frozen in
+  [acceptance.json](evidence/sou218-gemini/acceptance.json), separately from the
+  unchanged 48/3 baseline and the separate 24-row attack acceptance.
+
+Validation: eight no-provider Windows tests pass, including reconstruction and
+hash/length validation of all 30 frozen rows with no hidden skips, both complete
+large envelopes, actual refused-capture small source, malformed/model/tool/quote
+refusals, encrypted/header/body/framing bounds, quota/redirect errors, one-shot
+credential placement and cancellation using anonymous duplex streams, and a real
+filesystem reservation surviving drop. Strict all-targets Clippy and fmt pass.
+The real TLS connector is compiled but NOT invoked by tests; no live TLS/API or
+Linux execution is claimed for this new component.
+
+**This is an adapter component submitted for review, not a runnable approved
+experiment or completed custody integration.** Existing fixture purpose v2
+still authorizes only the accepted no-provider profile. The new profile hash
+is not yet in an authenticated provider-purpose grant. No production entrypoint
+can call this module. Preflight fields in tests are explicitly synthetic; no
+operator project, free tier, key ownership, model metadata or countTokens has
+been verified. The live controller must obtain authenticated account/preflight
+facts, bind the new profile and source to the original purpose/remaining
+lifetime, account for all adapter copies in the shared 8 MiB lease, preserve
+final live-custody/disposal checks, and persist raw private response/usage plus
+terminal outcomes before any batch. The ledger directory must be one protected
+operator-owned experiment directory; this component does not authenticate it.
+The optional synthetic smoke and persistent resume/report driver are not enabled.
+Do not call this connector on the strength of synthetic preflight booleans.
+
+Requested review command: `cargo test --locked -p agentfw --lib gemini_`, then
+strict agentfw all-targets Clippy and fmt. Review the new credential/egress/schema
+boundary and the explicit integration gaps before the connected increment.
+Keep Draft / In Progress. All six semantic refusals remain open; structural
+artifact validity and a scripted/private answer are not semantic usefulness.

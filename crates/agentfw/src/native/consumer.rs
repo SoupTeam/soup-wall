@@ -17,6 +17,10 @@ mod analysis_witness;
 #[cfg(test)]
 pub(in crate::native) mod result_contract;
 
+// Public-data provider component under review; no production dispatch caller.
+#[cfg(test)]
+mod gemini_fixture;
+
 // Small replay custody is separate from the 32 live process slots. Expired
 // registrations cannot pass verify(), so their tombstones can be reclaimed.
 fn reclaim_disposed(sessions: &mut Sessions, now: u64) {
