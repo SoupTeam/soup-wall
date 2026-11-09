@@ -241,14 +241,14 @@ impl Controller {
         }
         if let Some(raw) = self.ledger.read(&format!("{id}.response"))? {
             if let Ok(Strict(v)) = serde_json::from_slice::<Strict>(&raw) {
-                if v["modelVersion"].as_str().is_some_and(|m| m != MODEL) {
+                // Missing identity is a batch stop even on a safety block.
+                // Do not let blockReason turn an unverified model into a
+                // normal per-row outcome and permit more generations.
+                if v["modelVersion"] != MODEL {
                     return Ok(State::ModelDrift);
                 }
                 if v["promptFeedback"].get("blockReason").is_some() {
                     return Ok(State::Blocked);
-                }
-                if v["modelVersion"] != MODEL {
-                    return Ok(State::ModelDrift);
                 }
             }
         }
@@ -352,30 +352,29 @@ pub(in crate::native) async fn exercise_serial(capture: &mut impl Capture) {
                 Operation::Generate => {
                     self.generations += 1;
                     if self.mode == "quota"
-                        || (matches!(self.mode, "malformed" | "blocked") && self.generations > 1)
+                        || (matches!(self.mode, "malformed" | "blocked" | "blocked-unknown")
+                            && self.generations > 1)
                     {
                         anyhow::bail!("gemini_quota_stop");
                     }
                     if self.mode == "malformed" {
                         return Ok(b"not JSON".to_vec());
                     }
-                    if self.mode == "blocked" {
-                        return Ok(serde_json::to_vec(
-                            &json!({"modelVersion":MODEL,"promptFeedback":{"blockReason":"SAFETY"}}),
-                        )?);
+                    if matches!(self.mode, "blocked" | "blocked-unknown") {
+                        let mut response =
+                            json!({"modelVersion":MODEL,"promptFeedback":{"blockReason":"SAFETY"}});
+                        if self.mode == "blocked-unknown" {
+                            response.as_object_mut().unwrap().remove("modelVersion");
+                        }
+                        return Ok(serde_json::to_vec(&response)?);
                     }
                     let v: Value = serde_json::from_slice(body)?;
                     let source = v["contents"][0]["parts"][0]["text"].as_str().unwrap();
                     approved_source(source)?;
-                    let quote = if source.len() > 500_000 {
-                        "make verify"
-                    } else if source.contains("ci.template.yml") {
-                        "ci.template.yml"
-                    } else if source.contains("SAMPLES") {
-                        "SAMPLES"
-                    } else {
-                        "README"
-                    };
+                    // Protocol-only witness: attack edits may remove original tail
+                    // text. This exact root key is present in every frozen frame;
+                    // it proves citation validation, never semantic usefulness.
+                    let quote = "\"jsonrpc\"";
                     Ok(serde_json::to_vec(
                         &json!({"modelVersion":if self.mode=="drift" {"different-model"}else{MODEL},"usageMetadata":{"promptTokenCount":1024,"candidatesTokenCount":10,"totalTokenCount":1034},"candidates":[{"finishReason":"STOP","content":{"role":"model","parts":[{"text":json!({"summary":"Synthetic protocol witness only; no semantic evidence.","quotes":[quote]}).to_string()}]}}]}),
                     )?)
@@ -383,7 +382,15 @@ pub(in crate::native) async fn exercise_serial(capture: &mut impl Capture) {
             }
         }
     }
-    for mode in ["valid", "quota", "drift", "malformed", "blocked", "crash"] {
+    for mode in [
+        "valid",
+        "quota",
+        "drift",
+        "malformed",
+        "blocked",
+        "blocked-unknown",
+        "crash",
+    ] {
         let directory = tempfile::tempdir().unwrap();
         std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
         let ledger = Ledger::open(directory.path()).unwrap();
@@ -437,7 +444,7 @@ pub(in crate::native) async fn exercise_serial(capture: &mut impl Capture) {
         let expected = match mode {
             "valid" => "valid_untrusted",
             "quota" => "quota_stop",
-            "drift" => "model_drift",
+            "drift" | "blocked-unknown" => "model_drift",
             "malformed" => "invalid",
             "blocked" => "blocked",
             _ => "started_unknown",
@@ -448,7 +455,7 @@ pub(in crate::native) async fn exercise_serial(capture: &mut impl Capture) {
             wire.generations,
             if mode == "crash" {
                 0
-            } else if matches!(mode, "quota" | "drift") {
+            } else if matches!(mode, "quota" | "drift" | "blocked-unknown") {
                 1
             } else if matches!(mode, "malformed" | "blocked") {
                 2

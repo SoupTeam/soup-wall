@@ -1511,3 +1511,38 @@ original-server qualification, merge or Done is claimed. The six refusals remain
 open. Next: independent controller review, authenticated non-billed operator
 access/caller, then the single real 6+24 experiment and independent factual and
 attack assessment. The Gemini 3.8 Flash / Free Tier / USD 0 decision is unchanged.
+
+### Independent Linux controller follow-up
+
+The exact submitted `fb64540c` failed the mandatory serial Linux witness. Its
+synthetic backend selected `make verify` for the eight large matched variants
+whose edit replaces that tail. The decoder correctly rejected those absent
+quotes; the test incorrectly required all outputs to be structurally valid.
+The protocol-only synthetic response now cites a fixed raw envelope key present
+in every approved full frame. This is explicitly not semantic evidence; all
+corpus bytes, labels, response validation and independent usefulness requirements
+are unchanged. The malformed/absent-citation refusal controls remain.
+
+A separate negative control reproduced continued batching when a blocked
+response omitted `modelVersion`: it was treated as a normal `blocked` row rather
+than a model-identity stop. The controller now verifies exact model identity
+before classifying a safety block. The connected witness covers both an
+identified block and an unidentified block; the latter stops after one generation
+and sends nothing after reopening. Raw responses remain private evidence.
+
+No credential lookup, provider request, spending, production result release or
+semantic correction was performed in this review. The next operational step
+still needs the authenticated operator caller and evidence for an operator-owned
+non-billed Free Tier project/key, followed by one serial 6+24 experiment through
+the accepted path. The model, zero-dollar budget, limits and security floors are
+already agreed; no replacement model or renewed scope approval is requested.
+
+Patched-tree independent WSL2/Linux validation with Rust 1.99.1 and real
+bubblewrap: `gemini_` 16 passed, `analysis_` 23 passed (overlapping selectors).
+The launcher children marked ignored in the outer harness were actually run by
+their mandatory parents; no missing-environment skip was accepted. The serial
+witness includes all 30 full public rows and seven outcome modes. Strict
+agentfw all-targets Clippy and fmt passed; the unchanged documentation checker
+passed 426 Markdown files / 1359 local links using an exact-source private Git
+index for this archived source. Original failures and the added red identity
+control are retained separately in the review evidence.
