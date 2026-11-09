@@ -139,6 +139,30 @@ pub(super) struct AnalysisBudget {
     charge: usize,
 }
 #[cfg(test)]
+impl AnalysisBudget {
+    pub(super) fn extend_provider(
+        &mut self,
+        q: &mut Quarantine,
+        additional: usize,
+    ) -> Result<(), &'static str> {
+        if !std::sync::Arc::ptr_eq(&self.bytes, &q.analysis_bytes) {
+            return Err("analysis_budget_owner");
+        }
+        let used: usize = q.records.values().map(|r| r.bytes.len()).sum();
+        let active = q.analysis_bytes.load(std::sync::atomic::Ordering::Acquire);
+        if additional > MAX_BYTES.saturating_sub(used).saturating_sub(active) {
+            return Err("analysis_quarantine_capacity");
+        }
+        self.charge = self
+            .charge
+            .checked_add(additional)
+            .ok_or("analysis_quarantine_capacity")?;
+        q.analysis_bytes
+            .fetch_add(additional, std::sync::atomic::Ordering::AcqRel);
+        Ok(())
+    }
+}
+#[cfg(test)]
 impl Drop for AnalysisBudget {
     fn drop(&mut self) {
         self.bytes
@@ -458,7 +482,7 @@ impl Quarantine {
         }
     }
 
-    #[cfg(all(test, target_os = "linux"))]
+    #[cfg(test)]
     pub(super) fn analysis_charge(&self) -> usize {
         self.analysis_bytes
             .load(std::sync::atomic::Ordering::Acquire)
@@ -673,6 +697,25 @@ mod tests {
             let held = source
                 .reserve_analysis(&mut serial, "instance", "policy", Instant::now())
                 .unwrap();
+            if record["content"].as_str().unwrap().len() < 589_824 {
+                let extra = super::super::consumer::gemini_fixture::provider_copy_charge(
+                    record["content"].as_str().unwrap(),
+                )
+                .unwrap();
+                let mut held = held;
+                held.lease.extend_provider(&mut serial, extra).unwrap();
+                let before = serial.analysis_charge();
+                assert!(held.lease.extend_provider(&mut serial, MAX_BYTES).is_err());
+                assert_eq!(serial.analysis_charge(), before);
+                let mut foreign = Quarantine::default();
+                assert!(held.lease.extend_provider(&mut foreign, 1).is_err());
+                assert_eq!(foreign.analysis_charge(), 0);
+                let used: usize = serial.records.values().map(|r| r.bytes.len()).sum();
+                assert!(used + serial.analysis_charge() <= MAX_BYTES);
+                drop(held);
+                assert_eq!(serial.analysis_charge(), 0);
+                continue;
+            }
             let used: usize = serial.records.values().map(|r| r.bytes.len()).sum();
             assert!(
                 used + serial

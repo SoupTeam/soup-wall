@@ -3,6 +3,8 @@
 use super::*;
 use crate::sandbox::fixture_reader::analysis;
 
+pub(in crate::native) mod provider;
+
 const CONTRACT_V2: &str = "sw-analysis-purpose/2";
 const DOMAIN: &[u8] = b"agentfw/analysis-purpose-signature/v2\0";
 
@@ -236,7 +238,10 @@ pub(in crate::native) struct PrivateReview {
     pub excerpts: Vec<String>,
     pub custody: Vec<u8>,
     pub request: analysis::Request,
-    _budget: super::super::quarantine::AnalysisBudget,
+    source: super::super::quarantine::AnalysisSource,
+    grant: FixtureGrant,
+    registration: crate::pilot_approval::consumer::Registration,
+    deadline: std::time::Instant,
 }
 
 #[cfg(target_os = "linux")]
@@ -343,10 +348,71 @@ impl PendingAnalysis {
             summary: decoded.summary,
             excerpts: decoded.excerpts.iter().map(|s| s.to_string()).collect(),
             custody,
-            request: self.grant.request,
-            _budget: source.lease,
+            request: self.grant.request.clone(),
+            source,
+            grant: self.grant,
+            registration: self.registration,
+            deadline,
         };
         Ok(review)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl PrivateReview {
+    fn with_current<T>(
+        &mut self,
+        st: &crate::handlers::Shared,
+        action: impl FnOnce(&mut Self, &mut super::super::quarantine::Quarantine) -> anyhow::Result<T>,
+    ) -> anyhow::Result<T> {
+        use anyhow::{ensure, Context};
+        let native = st.native.as_ref().context("native_not_configured")?;
+        confirm_source_disposal(st, &self.grant.binding.native_instance, &self.registration)
+            .map_err(anyhow::Error::msg)?;
+        let sessions = native
+            .sessions
+            .lock()
+            .map_err(|_| anyhow::anyhow!("native_state_unavailable"))?;
+        let firewall = st
+            .firewall
+            .lock()
+            .map_err(|_| anyhow::anyhow!("native_state_unavailable"))?;
+        let policy = super::super::canonical_digest(&serde_json::to_value(
+            firewall.policy_for_diagnostics(),
+        )?);
+        let mut q = native
+            .quarantine
+            .lock()
+            .map_err(|_| anyhow::anyhow!("analysis_quarantine_state"))?;
+        check_current(
+            st,
+            &sessions,
+            &self.registration,
+            &self.grant,
+            self.grant.expires.min(self.registration.expires()),
+        )?;
+        ensure!(
+            std::time::Instant::now() < self.deadline,
+            "analysis_v2_time"
+        );
+        let custody = self
+            .source
+            .recheck(&q, native.instance_id(), &policy, native.monotonic_now())
+            .map_err(anyhow::Error::msg)?;
+        ensure!(custody == self.custody, "analysis_review_custody_changed");
+        let result = action(self, &mut q)?;
+        check_current(
+            st,
+            &sessions,
+            &self.registration,
+            &self.grant,
+            self.grant.expires.min(self.registration.expires()),
+        )?;
+        ensure!(
+            std::time::Instant::now() < self.deadline,
+            "analysis_v2_time"
+        );
+        Ok(result)
     }
 }
 

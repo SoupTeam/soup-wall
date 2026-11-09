@@ -8,6 +8,8 @@ use std::{collections::BTreeSet, time::Instant};
 use crate::mcp::admission::Strict;
 use crate::sandbox::fixture_reader::analysis::{hash, validate_mcp_source, FRAME_LIMIT, OUTPUT};
 
+#[cfg(target_os = "linux")]
+pub(in crate::native) mod ledger;
 mod tests;
 mod transport;
 
@@ -35,7 +37,7 @@ fn json_digest(text: &str) -> String {
     hash(&serde_json::to_vec(&value).unwrap())
 }
 
-fn profile_hash() -> String {
+pub(in crate::native) fn profile_hash() -> String {
     hash(
         &serde_json::to_vec(&(
             PROFILE,
@@ -68,28 +70,42 @@ impl Key {
 /// Caller supplies independently verified operator facts, not source/model data.
 /// These fields are NOT an API for proving a project's billing state. The live
 /// controller must authenticate and persist that evidence before integration.
-struct Preflight {
-    free_project_confirmed: bool,
-    quota_available: bool,
-    counted_tokens: u64,
-    counted_request_sha256: String,
-    input_limit: u64,
-    model_version: String,
+#[derive(Clone, serde::Serialize)]
+pub(in crate::native) struct Preflight {
+    pub(in crate::native) free_project_confirmed: bool,
+    pub(in crate::native) quota_available: bool,
+    pub(in crate::native) counted_tokens: u64,
+    pub(in crate::native) counted_request_sha256: String,
+    pub(in crate::native) input_limit: u64,
+    pub(in crate::native) model_version: String,
+}
+
+#[cfg(target_os = "linux")]
+pub(in crate::native) fn synthetic_preflight_for_fixture(source: &str) -> Preflight {
+    // Only connected no-provider tests call this. Not real account/token proof.
+    Preflight {
+        free_project_confirmed: true,
+        quota_available: true,
+        counted_tokens: 1024,
+        counted_request_sha256: hash(&request_body(source).unwrap()),
+        input_limit: 1_048_576,
+        model_version: MODEL.into(),
+    }
 }
 
 // No Clone/Serialize/Debug: affine prepared dispatch, with no credential in it.
-struct Prepared {
-    body: Vec<u8>,
-    source: String,
-    nonce: String,
-    profile: String,
-    version: String,
-    deadline: Instant,
+pub(in crate::native) struct Prepared {
+    pub(in crate::native) body: Vec<u8>,
+    pub(in crate::native) source: String,
+    pub(in crate::native) nonce: String,
+    pub(in crate::native) profile: String,
+    pub(in crate::native) version: String,
+    pub(in crate::native) deadline: Instant,
 }
 
 /// Match the complete frozen public frame, including BOTH mandatory channels.
 /// A text hash alone does not authorize disclosure of unchecked envelope bytes.
-fn approved_source(source: &str) -> Result<()> {
+pub(in crate::native) fn approved_source(source: &str) -> Result<()> {
     validate_mcp_source(source.as_bytes())?;
     let Strict(value) = serde_json::from_str(source)?;
     ensure!(value["id"] == "host-call", "gemini_public_envelope");
@@ -124,19 +140,53 @@ fn approved_source(source: &str) -> Result<()> {
     Ok(())
 }
 
-fn request_body(source: &str) -> Result<Vec<u8>> {
-    let body = serde_json::to_vec(&json!({
+fn request_value(source: &str) -> Value {
+    json!({
         "systemInstruction":{"parts":[{"text":QUESTION}]},
         "contents":[{"role":"user","parts":[{"text":source}]}],
         "generationConfig":{"temperature":1.0,"maxOutputTokens":2048,
             "thinkingConfig":{"thinkingLevel":"LOW"},
             "responseMimeType":"application/json","responseJsonSchema":schema()}
-    }))?;
-    ensure!(body.len() <= REQUEST_LIMIT, "gemini_request_limit");
+    })
+}
+fn request_body(source: &str) -> Result<Vec<u8>> {
+    let body = serde_json::to_vec(&request_value(source))?;
+    ensure!(
+        body.len() <= REQUEST_LIMIT && body.capacity() <= body.len().saturating_mul(2),
+        "gemini_request_limit"
+    );
     Ok(body)
 }
 
-fn prepare(
+pub(in crate::native) fn provider_copy_charge(source: &str) -> Result<usize> {
+    struct Count(usize);
+    impl std::io::Write for Count {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0 = self
+                .0
+                .checked_add(bytes.len())
+                .ok_or_else(|| std::io::Error::other("gemini_size"))?;
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut count = Count(0);
+    serde_json::to_writer(&mut count, &request_value(source))?;
+    ensure!(count.0 <= REQUEST_LIMIT, "gemini_request_limit");
+    // Original lease covers retained custody/source/validation scratch. Add
+    // Vec capacity (<=2*encoded length), 64KiB raw response + bounded decode/
+    // journal scratch and 128KiB encrypted/TLS transport allowance. This is
+    // serialized copy accounting, not a claim about allocator or TLS RSS.
+    count
+        .0
+        .checked_mul(2)
+        .and_then(|n| n.checked_add(262_144))
+        .ok_or_else(|| anyhow::anyhow!("gemini_size"))
+}
+
+pub(in crate::native) fn prepare(
     source: &str,
     nonce: &str,
     original_deadline: Instant,
@@ -173,7 +223,7 @@ fn prepare(
 }
 
 /// Pure schema conversion, not publication, permission, or semantic acceptance.
-fn decode(prepared: &Prepared, bytes: &[u8]) -> Result<Vec<u8>> {
+pub(in crate::native) fn decode(prepared: &Prepared, bytes: &[u8]) -> Result<Vec<u8>> {
     ensure!(
         Instant::now() < prepared.deadline && prepared.profile == profile_hash(),
         "gemini_binding"

@@ -1335,3 +1335,94 @@ Independent WSL2/Linux follow-up: all nine `gemini_` tests pass without skips,
 including all 30 public frames and the new exact-wire regression. Strict
 agentfw all-targets Clippy and workspace fmt check pass. The original submitted
 adapter separately passed eight tests before the new regression exposed the gap.
+
+
+### Connected provider-purpose fixture and journal - November 9
+
+Started from independently accepted `186aba13` and
+[review 5825954555](https://github.com/SoupTeam/soup-wall/pull/346#pullrequestreview-5825954555).
+The full public-frame equality fix is retained. This increment connects the
+provider contract to actual quarantine consumption and the accepted confined
+reader **in tests**, using a synthetic provider response, not Google inference.
+
+A new domain-separated provider-purpose MAC covers the complete original v2
+grant (including source/call/policy/epoch/consumer/nonce/expiry and its signature),
+current Gemini profile, held journal directory identity and preflight digest.
+A valid no-provider grant is insufficient. Consumption verifies the provider MAC
+then uses the original lock-protected exact-custody/time check, same one-use
+nonce and atomic withdrawal. No production mint, endpoint or flag is enabled.
+The signed test Preflight remains synthetic evidence, not a real free-project
+or account attestation.
+
+The existing networkless reader receives the complete original source and must
+finish its disposal/EOF checks. Its private review now retains the affine source
+selector and lease. Before the backend is called, fresh locks recheck custody,
+registration, source-owner cleanup, policy and the original deadline; the public
+frame equality gate runs; extra copies are charged; and the request-bound
+preflight is verified. A durable journal marker is then created under another
+fresh state check. No clock/grant is renewed. A future controller's real backend
+must use the already reviewed fixed connector, not arbitrary routing; the new
+backend callback is only a cfg(test) injection seam. No real connector is selected
+or invoked by this integration test.
+
+Memory accounting retains the previous `4 * record + 3 * source + 65536` lease
+and adds `2 * exact_encoded_request_length + 262144` for request Vec capacity and
+bounded provider/response/journal buffers. Counting serialization precedes body
+allocation. Admission mutates the same quarantine counter under its lock;
+foreign-quarantine leases and over-budget extension refuse without charge.
+The lease stays with the private object and drops on every error/cancellation.
+Both actual large originals individually fit the unchanged 8 MiB total in the
+portable test; a second excessive reservation refuses. This remains conservative
+serialized copy accounting, not allocator/TLS RSS measurement or a claim that
+all 30 retained records fit simultaneously. No whole-batch capacity qualification
+is implied by fresh serial fixture states.
+
+Linux journal operations use a held `O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC` descriptor,
+current UID/private mode checks, exclusive nonblocking flock and `openat` with
+`O_EXCL|O_NOFOLLOW`/0600 files. File and directory fsync precede dispatch. The
+provider grant binds device/inode/owner/mode identity; directories cannot be
+silently substituted. A crash leaves started_unknown; Drop writes cancelled_unknown
+when possible. No ledger mutation can erase the exclusive started fence. Raw
+bounded provider responses, including modelVersion/usage or invalid JSON, are
+persisted before decoding. Explicit terminal records distinguish invalid,
+quota_stop, transport_unknown, stale and valid_untrusted. The last means only
+structural validity, not semantic usefulness or confirmed delivery. State is
+rechecked after journal I/O too; a late refusal adds a separate publication-refused
+record and returns no private object. Errors never expose the key or raw response.
+
+The new required Linux parent `connected_gemini_provider_fixture` launches a real
+registered source process and the required sandbox, then tests all six unchanged
+originals (including both large envelopes), forged provider profile, replay,
+malformed and hostile output, quota stop, cancellation during backend wait, and
+live taint/expiry/consumer/cleanup mutation before publication. It asserts complete
+custody, exact source identity, lease reclamation and private journal outcomes.
+Its ignored child is executed by the parent, not a missing-sandbox skip. The
+separate protected-ledger test covers exclusive ownership, symlink rejection,
+permissions, raw invalid-response retention, cancellation and restart replay.
+**Those new Linux-only tests have not been compiled or run on this Windows host.**
+
+Local validation: `gemini_` passed 10 portable tests; `analysis_` passed 19,
+with one overlapping provider-purpose test (28 distinct tests total). The large
+actual-custody memory selector was also run separately and passed. Strict
+all-targets Clippy and fmt passed. Test nonces now use the existing cryptographic
+generator to address the nine CodeQL fixed-nonce annotations; resolution of those
+remote alerts is not asserted before current-head analysis.
+
+Independent exact-head review commands:
+
+```sh
+cargo test --locked -p agentfw --lib gemini_ -- --test-threads=1
+cargo test --locked -p agentfw --lib analysis_ -- --test-threads=1
+cargo clippy --locked -p agentfw --all-targets -- -D warnings
+cargo fmt --all -- --check
+```
+
+Remaining live dependencies: independently review this connected increment;
+obtain an operator-owned key and confirm its non-billed Free Tier project;
+implement/verify real model/countTokens preflight and authenticated account facts
+instead of synthetic test fields; use the protected persistent journal with the
+bounded 6+24 serial driver and complete independent factual/attack report. The
+current process/user GEMINI_API_KEY variables were absent when checked; no key
+values were read. No API request, spend, semantic score, final original-server
+qualification, merge or Done is claimed. Keep all six refusals open, Draft and
+In Progress. The selected model and USD 0 scope are unchanged.

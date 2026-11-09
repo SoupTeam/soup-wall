@@ -21,10 +21,10 @@ fn preflight_for(source: &str) -> Preflight {
 fn preflight() -> Preflight {
     preflight_for(&source())
 }
-fn prepared() -> Prepared {
+pub(super) fn prepared() -> Prepared {
     prepare(
         &source(),
-        "controller-nonce",
+        &crate::token::generate(),
         Instant::now() + std::time::Duration::from_secs(30),
         preflight(),
     )
@@ -54,7 +54,7 @@ fn gemini_profile_complete_public_data_only_and_fixed_request() {
     assert_eq!(body["generationConfig"]["maxOutputTokens"], 2048);
     assert!(!String::from_utf8(p.body.clone())
         .unwrap()
-        .contains("controller-nonce"));
+        .contains(&p.nonce));
     let mut value: Value = serde_json::from_str(&p.source).unwrap();
     for pointer in [
         "/id",
@@ -70,20 +70,26 @@ fn gemini_profile_complete_public_data_only_and_fixed_request() {
     assert!(approved_source(&value.to_string()).is_err());
     let mut f = preflight();
     f.free_project_confirmed = false;
-    assert!(prepare(&p.source, "n", p.deadline, f).is_err());
+    assert!(prepare(&p.source, &crate::token::generate(), p.deadline, f).is_err());
     let mut f = preflight();
     f.quota_available = false;
-    assert!(prepare(&p.source, "n", p.deadline, f).is_err());
+    assert!(prepare(&p.source, &crate::token::generate(), p.deadline, f).is_err());
     let mut f = preflight();
     f.counted_tokens = 1_048_577;
-    assert!(prepare(&p.source, "n", p.deadline, f).is_err());
+    assert!(prepare(&p.source, &crate::token::generate(), p.deadline, f).is_err());
     let mut f = preflight();
     f.counted_request_sha256 = hash(b"another request");
-    assert!(prepare(&p.source, "n", p.deadline, f).is_err());
+    assert!(prepare(&p.source, &crate::token::generate(), p.deadline, f).is_err());
     let mut f = preflight();
     f.model_version = "gemini-3.1-flash-lite".into();
-    assert!(prepare(&p.source, "n", p.deadline, f).is_err());
-    assert!(prepare(&p.source, "n", Instant::now(), preflight()).is_err());
+    assert!(prepare(&p.source, &crate::token::generate(), p.deadline, f).is_err());
+    assert!(prepare(
+        &p.source,
+        &crate::token::generate(),
+        Instant::now(),
+        preflight()
+    )
+    .is_err());
     for key in [
         "short",
         "synthetic_key\r\nx-evil: true",
@@ -122,7 +128,7 @@ fn gemini_all_frozen_rows_and_both_large_full_frames() {
         assert!(text.len() <= 262_144); // All 30 frozen rows fit; no hidden skips.
         let p = prepare(
             &frame,
-            "n",
+            &crate::token::generate(),
             Instant::now() + std::time::Duration::from_secs(30),
             preflight_for(&frame),
         )
@@ -225,7 +231,7 @@ fn gemini_persistent_reservation_refuses_replay_after_drop_nonce_or_whitespace_c
     reserve_attempt(directory.path(), &p).unwrap();
     drop(p);
     let mut again = prepared();
-    again.nonce = "new nonce".into();
+    again.nonce = crate::token::generate();
     assert!(reserve_attempt(directory.path(), &again).is_err());
     again.source = format!(" {} ", again.source);
     assert!(reserve_attempt(directory.path(), &again).is_err());
@@ -264,7 +270,7 @@ fn gemini_public_allowlist_refuses_nonfrozen_wire_encoding() {
         );
         let result = prepare(
             &changed,
-            "review-nonce",
+            &crate::token::generate(),
             Instant::now() + std::time::Duration::from_secs(30),
             preflight_for(&changed),
         );
