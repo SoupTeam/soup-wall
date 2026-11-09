@@ -21,11 +21,95 @@ impl Drop for Held {
 fn child() -> Held {
     Held(
         std::process::Command::new("/bin/sleep")
+            .env_clear()
             .arg("60")
             .process_group(0)
             .spawn()
             .unwrap(),
     )
+}
+
+#[test]
+fn connected_gemini_serial_controller_fixture() {
+    let status = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "pilot-launch",
+            "native::consumer::analysis_witness::connected_gemini_serial_controller_child",
+            "--ignored",
+            "--nocapture",
+        ])
+        .status()
+        .unwrap();
+    assert!(
+        status.success(),
+        "connected serial controller helper failed"
+    );
+}
+
+#[tokio::test]
+#[ignore = "re-executed by connected_gemini_serial_controller_fixture with launcher identity"]
+async fn connected_gemini_serial_controller_child() {
+    use crate::native::analysis_purpose::fixture_v2::provider;
+    use crate::native::consumer::gemini_fixture::{self as gemini, controller::runner};
+    assert_eq!(std::env::args().nth(1).as_deref(), Some("pilot-launch"));
+    struct FixtureCapture {
+        retained: Option<execution::tests::ReaderCapture>,
+    }
+    impl runner::Capture for FixtureCapture {
+        async fn authorize(
+            &mut self,
+            text: &str,
+            preflight: gemini::Preflight,
+            ledger: &gemini::ledger::Ledger,
+        ) -> anyhow::Result<(Shared, provider::PendingProvider)> {
+            if let Some(previous) = self.retained.take() {
+                assert_eq!(
+                    previous
+                        .st
+                        .native
+                        .as_ref()
+                        .unwrap()
+                        .quarantine
+                        .lock()
+                        .unwrap()
+                        .analysis_charge(),
+                    0
+                );
+            }
+            let mut held = child();
+            let captured = execution::tests::analysis_capture(&held.0, text);
+            register(&captured.st, &captured.registration).await;
+            let grant = provider::mint_fixture_provider(
+                &captured.st,
+                &captured.registration,
+                &captured.id,
+                ledger,
+                &preflight,
+            );
+            let pending = provider::consume(&captured.st, &grant, ledger, preflight)?;
+            held.0.kill()?;
+            held.0.wait()?;
+            let st = captured.st.clone();
+            self.retained = Some(captured);
+            Ok((st, pending))
+        }
+    }
+    let mut capture = FixtureCapture { retained: None };
+    runner::exercise_serial(&mut capture).await;
+    assert_eq!(
+        capture
+            .retained
+            .unwrap()
+            .st
+            .native
+            .as_ref()
+            .unwrap()
+            .quarantine
+            .lock()
+            .unwrap()
+            .analysis_charge(),
+        0
+    );
 }
 async fn register(st: &Shared, registration: &Registration) {
     let mut headers = HeaderMap::new();

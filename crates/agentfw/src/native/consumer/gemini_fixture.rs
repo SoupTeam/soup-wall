@@ -8,10 +8,18 @@ use std::{collections::BTreeSet, time::Instant};
 use crate::mcp::admission::Strict;
 use crate::sandbox::fixture_reader::analysis::{hash, validate_mcp_source, FRAME_LIMIT, OUTPUT};
 
+pub(in crate::native) mod controller;
 #[cfg(target_os = "linux")]
 pub(in crate::native) mod ledger;
 mod tests;
 mod transport;
+
+#[cfg(target_os = "linux")]
+pub(in crate::native) fn rejected_body(error: &anyhow::Error) -> Option<&[u8]> {
+    error
+        .downcast_ref::<transport::Rejection>()
+        .map(|r| r.body.as_slice())
+}
 
 const HOST: &str = "generativelanguage.googleapis.com";
 const MODEL: &str = "gemini-3.8-flash";

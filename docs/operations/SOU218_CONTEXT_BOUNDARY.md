@@ -1426,3 +1426,88 @@ current process/user GEMINI_API_KEY variables were absent when checked; no key
 values were read. No API request, spend, semantic score, final original-server
 qualification, merge or Done is claimed. Keep all six refusals open, Draft and
 In Progress. The selected model and USD 0 scope are unchanged.
+
+### Bounded serial Gemini controller - November 9
+
+Independent review 5830103586 accepted `de3ffd88` on WSL2/Linux, Rust
+1.99.1 and real bubblewrap: `gemini_` 12 passed (mandatory child actually
+executed), `analysis_` 22 passed (two children actually executed), strict
+all-targets Clippy and fmt passed. These overlapping selectors are not summed.
+That review accepted the connected synthetic increment, not semantic outcomes.
+
+The next cfg(test) controller wraps this accepted delivery path. Its externally
+callable `run` selects the existing direct TLS connector, never a caller-selected
+provider. Only three fixed operations exist: model metadata GET, corresponding
+countTokens POST, and the already accepted generateContent POST. There are no
+redirects, retries, alternate models, SDK defaults or paid fallback. CountTokens
+uses the complete `generateContentRequest`, including system instruction and
+generation settings; its digest is bound to the exact subsequent generation
+body. Metadata must match the selected resource/base model and input/output
+limits. Metadata `version` is retained as metadata; it is not confused with the
+generation response's pinned `modelVersion`.
+
+Before any network access, the controller requires a separately domain-separated
+operator access signature binding the current profile, held ledger identity,
+project, API-key digest, account-evidence digest, affirmative non-billed Free
+Tier/quota attestation, and a maximum one-hour lifetime. The key stays in the
+controller, appears only in the fixed TLS request header, and is not inherited
+by the held source child. Missing key, invalid signature, mismatched project/key
+evidence or expired attestation refuses dispatch. The API cannot itself prove
+that billing is disabled: these are authenticated operator attestations, not
+automatically verified Google billing facts. There is deliberately no live
+attestation issuer, credential lookup or unattended live test in this change.
+An authenticated operator caller and account evidence must be supplied before
+live use; synthetic fixture signatures are NOT an operational permission.
+
+Exactly 30 frozen rows are reconstructed one at a time and checked against the
+existing source/edit/result hashes and exact whole-frame gate. Labels, case IDs
+and expected outcomes stay outside provider requests. The optional smoke is not
+implemented or consumed. Public count preflight occurs under the separate
+operator corpus permission, before creating the row's native custody grant.
+It never counts or discloses arbitrary quarantine content. Large public row
+copies are dropped after capture, before accepted analysis/provider delivery;
+the existing original-lifetime, one-use, cleanup, 8 MiB lease and publication
+checks remain in that path. No source truncation or policy relaxation occurs.
+
+The held-directory journal pins project/key identity in the batch manifest and
+retains signed operator evidence privately, without the key. Access lifetime is
+checked against the controller's wall clock at opening and a monotonic deadline
+during the run. Changing projects or keys cannot silently reset this batch.
+The journal adds a durable per-row
+fence BEFORE count preflight. Restart skips completed rows and refuses uncertain
+ones, including a crash before generation. Quota stops the batch; a newly signed
+quota attestation can continue only untouched rows, never the quota attempt.
+Known drift or technical uncertainty stops further dispatch. Blocked and invalid
+outputs remain visible rather than disappearing from denominators. Raw bounded
+provider envelopes retain usage/model information, and framed non-200 responses
+are retained privately too. Incomplete or unsupported HTTP framing remains an
+explicit unknown/technical stop, not an invented response. Journal reads use
+held-FD openat/no-follow/nonblocking access, private regular-file owner checks,
+single-link and size checks. Partial/corrupt journal JSON fails closed.
+
+The bounded report lists all 30 rows, including unrun/unknown, with raw-response
+hashes and bounded numeric usage fields. Full usage metadata and private
+untrusted summaries remain in the journal. Six originals and 24 matched attacks
+are separate; the original 48 semantic / 3 technical baseline is unchanged.
+`valid_untrusted` is only structural acceptance. Every row's semantic evaluation
+remains pending independent review; `policy_allow` and `done` remain false.
+
+Portable tests cover all 30 exact request/count bodies, signed access refusal,
+metadata/count drift, fixed metadata/count HTTP paths, and retained quota bodies.
+The new mandatory Linux `connected_gemini_serial_controller_fixture` re-executes
+its launcher-bound child. Its offline witness uses actual capture and accepted
+delivery for the full 30-row batch, malformed/blocked output, quota and model
+drift, durable restart fences, fresh-attestation continuation of untouched rows,
+and zero residual leases between rows. Missing-key and unknown-attempt controls
+must return before network access. All model responses in that witness are
+synthetic; it cannot establish usefulness. Its private injected wire is not
+selectable through the external `run` API.
+
+Local Windows validation is reported in the PR checkpoint. New Linux-only
+controller/journal/connected-witness code has not been compiled or executed on
+this Windows host and requires exact-head Linux review using the commands above.
+No real preflight, generation request, spend, semantic fix, production issuer,
+original-server qualification, merge or Done is claimed. The six refusals remain
+open. Next: independent controller review, authenticated non-billed operator
+access/caller, then the single real 6+24 experiment and independent factual and
+attack assessment. The Gemini 3.8 Flash / Free Tier / USD 0 decision is unchanged.

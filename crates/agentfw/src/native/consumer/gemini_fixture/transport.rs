@@ -13,6 +13,26 @@ use tokio_rustls::rustls;
 const HEADER_LIMIT: usize = 8192;
 const ENCRYPTED_LIMIT: usize = 131_072;
 
+pub(super) struct Rejection {
+    status: u16,
+    pub(super) body: Vec<u8>,
+}
+impl std::fmt::Display for Rejection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self.status {
+            429 => "gemini_quota_stop",
+            300..=399 => "gemini_redirect_refused",
+            _ => "gemini_http_status",
+        })
+    }
+}
+impl std::fmt::Debug for Rejection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self, f)
+    }
+}
+impl std::error::Error for Rejection {}
+
 struct Counted<T> {
     inner: T,
     read: usize,
@@ -78,7 +98,41 @@ fn tls_config() -> Result<rustls::ClientConfig> {
 /// No test invokes this real network method; tests exercise its wire routines.
 async fn execute(prepared: Prepared, key: Key, ledger: &std::path::Path) -> Result<Vec<u8>> {
     reserve_attempt(ledger, &prepared)?;
-    let deadline = tokio::time::Instant::from_std(prepared.deadline);
+    let response = request(Operation::Generate, &prepared.body, &key, prepared.deadline).await?;
+    decode(&prepared, &response)
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum Operation {
+    Generate,
+    Metadata,
+    Count,
+}
+impl Operation {
+    fn wire(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Generate => ("POST", PATH),
+            Self::Metadata => ("GET", "/v1beta/models/gemini-3.8-flash"),
+            Self::Count => ("POST", "/v1beta/models/gemini-3.8-flash:countTokens"),
+        }
+    }
+}
+
+pub(super) async fn request(
+    operation: Operation,
+    body: &[u8],
+    key: &Key,
+    deadline: Instant,
+) -> Result<Vec<u8>> {
+    ensure!(
+        body.len() <= REQUEST_LIMIT && Instant::now() < deadline,
+        "gemini_request_limit_or_expired"
+    );
+    ensure!(
+        !matches!(operation, Operation::Metadata) || body.is_empty(),
+        "gemini_metadata_body"
+    );
+    let deadline = tokio::time::Instant::from_std(deadline);
     let response = tokio::time::timeout_at(deadline, async {
         let addresses: Vec<_> = tokio::net::lookup_host((HOST, 443))
             .await
@@ -109,11 +163,11 @@ async fn execute(prepared: Prepared, key: Key, ledger: &std::path::Path) -> Resu
             )
             .await
             .map_err(|_| anyhow::anyhow!("gemini_tls"))?;
-        exchange(&mut stream, &prepared.body, &key).await
+        exchange_operation(&mut stream, operation, body, key).await
     })
     .await
-    .map_err(|_| anyhow::anyhow!("gemini_timeout_unknown"))??;
-    decode(&prepared, &response)
+    .map_err(|_| anyhow::anyhow!("gemini_timeout_unknown"))?;
+    response
 }
 
 async fn exchange(
@@ -121,8 +175,18 @@ async fn exchange(
     body: &[u8],
     key: &Key,
 ) -> Result<Vec<u8>> {
+    exchange_operation(stream, Operation::Generate, body, key).await
+}
+
+async fn exchange_operation(
+    stream: &mut (impl AsyncRead + AsyncWrite + Unpin),
+    operation: Operation,
+    body: &[u8],
+    key: &Key,
+) -> Result<Vec<u8>> {
     ensure!(body.len() <= REQUEST_LIMIT, "gemini_request_limit");
-    let header = format!("POST {PATH} HTTP/1.1\r\nHost: {HOST}\r\nx-goog-api-key: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",key.0,body.len());
+    let (method, path) = operation.wire();
+    let header = format!("{method} {path} HTTP/1.1\r\nHost: {HOST}\r\nx-goog-api-key: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",key.0,body.len());
     stream
         .write_all(header.as_bytes())
         .await
@@ -165,9 +229,6 @@ async fn read_response(stream: &mut (impl AsyncRead + Unpin)) -> Result<Vec<u8>>
         "gemini_http"
     );
     let status = parsed.code.unwrap_or(0);
-    ensure!(status != 429, "gemini_quota_stop");
-    ensure!(!(300..400).contains(&status), "gemini_redirect_refused");
-    ensure!(status == 200, "gemini_http_status");
     let mut length = None;
     let mut chunked = false;
     let mut content_type = false;
@@ -205,7 +266,7 @@ async fn read_response(stream: &mut (impl AsyncRead + Unpin)) -> Result<Vec<u8>>
         }
     }
     ensure!(
-        content_type && (length.is_some() != chunked),
+        (content_type || status != 200) && (length.is_some() != chunked),
         "gemini_http_framing"
     );
     let mut body = Vec::new();
@@ -265,6 +326,9 @@ async fn read_response(stream: &mut (impl AsyncRead + Unpin)) -> Result<Vec<u8>>
             == 0,
         "gemini_extra_http"
     );
+    if status != 200 {
+        return Err(anyhow::Error::new(Rejection { status, body }));
+    }
     Ok(body)
 }
 
@@ -336,4 +400,39 @@ async fn gemini_transport_key_only_in_header_no_retry_and_deadline_cancellation(
     assert_eq!(wire.matches("POST ").count(), 1);
     assert!(wire.ends_with("\r\n\r\n{}"));
     assert!(!wire.contains("Authorization:") && !wire.contains("?key="));
+}
+
+#[tokio::test]
+async fn gemini_transport_preflight_only_fixed_model_paths() {
+    let key = Key::new(crate::token::generate()).unwrap();
+    for operation in [Operation::Metadata, Operation::Count] {
+        let (mut client, mut server) = tokio::io::duplex(4096);
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_millis(20),
+            exchange_operation(&mut client, operation, &[], &key),
+        )
+        .await;
+        drop(client);
+        let mut bytes = Vec::new();
+        server.read_to_end(&mut bytes).await.unwrap();
+        let wire = String::from_utf8(bytes).unwrap();
+        let (method, path) = operation.wire();
+        assert!(wire.starts_with(&format!("{method} {path} HTTP/1.1\r\nHost: {HOST}\r\n")));
+        assert_eq!(wire.matches(&key.0).count(), 1);
+        assert!(!wire.contains("?key="));
+    }
+    let body = br#"{"error":{"code":429,"message":"quota exhausted"}}"#;
+    let wire = [
+        format!(
+            "HTTP/1.1 429 Error\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        )
+        .into_bytes(),
+        body.to_vec(),
+    ]
+    .concat();
+    let error = read_response(&mut wire.as_slice()).await.unwrap_err();
+    assert_eq!(error.to_string(), "gemini_quota_stop");
+    assert_eq!(error.downcast_ref::<Rejection>().unwrap().body, body);
+    assert!(!format!("{error:?}").contains("quota exhausted"));
 }

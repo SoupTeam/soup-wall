@@ -97,7 +97,7 @@ impl PendingProvider {
     /// Backend is injectable only in this cfg(test) integration. The live
     /// connector is intentionally not selected by an environment variable.
     /// A reviewed controller must supply real authenticated preflight facts.
-    pub(in crate::native) async fn deliver<F, Fut>(
+    pub(in crate::native) async fn deliver<F>(
         self,
         st: &crate::handlers::Shared,
         ledger: &gemini::ledger::Ledger,
@@ -105,8 +105,7 @@ impl PendingProvider {
         before_publish: BeforePublish,
     ) -> anyhow::Result<PrivateReview>
     where
-        F: FnOnce(&gemini::Prepared) -> Fut,
-        Fut: std::future::Future<Output = anyhow::Result<Vec<u8>>>,
+        F: std::ops::AsyncFnOnce(&gemini::Prepared) -> anyhow::Result<Vec<u8>>,
     {
         use anyhow::{ensure, Context};
         verify_provider(
@@ -159,6 +158,11 @@ impl PendingProvider {
             Ok(Ok(body)) => body,
             error => {
                 let quota = matches!(&error,Ok(Err(e)) if e.to_string()=="gemini_quota_stop");
+                if let Ok(Err(e)) = &error {
+                    if let Some(body) = gemini::rejected_body(e) {
+                        attempt.raw(body)?;
+                    }
+                }
                 attempt.finish(if quota {
                     "quota_stop"
                 } else {

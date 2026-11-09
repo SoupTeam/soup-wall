@@ -3,7 +3,7 @@
 use super::*;
 use std::{
     fs::File,
-    io::Write,
+    io::{Read, Write},
     os::fd::{AsRawFd, FromRawFd},
     os::unix::fs::{MetadataExt, OpenOptionsExt},
 };
@@ -47,8 +47,12 @@ impl Ledger {
             m.mode(),
         ))?))
     }
-    fn create(&self, name: &str, bytes: &[u8]) -> Result<()> {
+    pub(super) fn create(&self, name: &str, bytes: &[u8]) -> Result<()> {
         self.identity()?;
+        ensure!(
+            safe_name(name) && bytes.len() <= RESPONSE_LIMIT,
+            "gemini_ledger_name_or_size"
+        );
         let name = std::ffi::CString::new(name)?;
         let fd = unsafe {
             libc::openat(
@@ -68,6 +72,40 @@ impl Ledger {
             .sync_all()
             .map_err(|_| anyhow::anyhow!("gemini_ledger_sync"))?;
         Ok(())
+    }
+    pub(super) fn read(&self, name: &str) -> Result<Option<Vec<u8>>> {
+        self.identity()?;
+        ensure!(safe_name(name), "gemini_ledger_name");
+        let name = std::ffi::CString::new(name)?;
+        let fd = unsafe {
+            libc::openat(
+                self.root.as_raw_fd(),
+                name.as_ptr(),
+                libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK,
+            )
+        };
+        if fd < 0 {
+            let e = std::io::Error::last_os_error();
+            if e.raw_os_error() == Some(libc::ENOENT) {
+                return Ok(None);
+            }
+            anyhow::bail!("gemini_ledger_read");
+        }
+        let file = unsafe { File::from_raw_fd(fd) };
+        let m = file.metadata()?;
+        ensure!(
+            m.is_file()
+                && m.uid() == unsafe { libc::geteuid() }
+                && m.mode() & 0o077 == 0
+                && m.nlink() == 1
+                && m.len() <= RESPONSE_LIMIT as u64,
+            "gemini_ledger_file_permissions_or_size"
+        );
+        let mut bytes = Vec::new();
+        file.take((RESPONSE_LIMIT + 1) as u64)
+            .read_to_end(&mut bytes)?;
+        ensure!(bytes.len() <= RESPONSE_LIMIT, "gemini_ledger_read_limit");
+        Ok(Some(bytes))
     }
     pub(in crate::native) fn publication_refused(&self, id: &str) -> Result<()> {
         ensure!(
@@ -93,6 +131,15 @@ impl Ledger {
             terminal: false,
         })
     }
+}
+fn safe_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 128
+        && name != "."
+        && name != ".."
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
 }
 impl Attempt<'_> {
     pub(in crate::native) fn raw(&self, body: &[u8]) -> Result<()> {
@@ -157,6 +204,29 @@ fn gemini_protected_ledger_permissions_symlink_lock_cancel_and_raw() {
     drop(ledger);
     let ledger = Ledger::open(dir.path()).unwrap();
     assert!(ledger.reserve(&p).is_err());
+    assert_eq!(
+        ledger.read(&format!("{id}.response")).unwrap().unwrap(),
+        b"invalid provider JSON"
+    );
+    symlink(
+        dir.path().join(format!("{id}.response")),
+        dir.path().join("response-link"),
+    )
+    .unwrap();
+    assert!(ledger.read("response-link").is_err());
+    std::fs::hard_link(
+        dir.path().join(format!("{id}.response")),
+        dir.path().join("response-hardlink"),
+    )
+    .unwrap();
+    assert!(ledger.read(&format!("{id}.response")).is_err());
+    ledger.create("public-mode", b"{}").unwrap();
+    std::fs::set_permissions(
+        dir.path().join("public-mode"),
+        std::fs::Permissions::from_mode(0o644),
+    )
+    .unwrap();
+    assert!(ledger.read("public-mode").is_err());
     drop(ledger);
     let parent = tempfile::tempdir().unwrap();
     let link = parent.path().join("link");
