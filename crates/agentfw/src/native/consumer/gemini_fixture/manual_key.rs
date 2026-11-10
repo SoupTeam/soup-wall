@@ -14,10 +14,12 @@ fn read_key(input: &mut impl Read) -> Result<Zeroizing<String>> {
             .map_err(|_| anyhow::anyhow!("gemini_key_input_cancelled"))?;
         match byte[0] {
             b'\r' | b'\n' => {
-                ensure!(key.len() >= 20, "gemini_key_shape");
+                ensure!(key.len() >= 20, "gemini_key_too_short");
                 return Ok(key);
             }
-            3 | 4 | 27 => bail!("gemini_key_input_cancelled"),
+            3 | 4 => bail!("gemini_key_input_cancelled"),
+            27 => bail!("gemini_key_escape_sequence"),
+            22 => bail!("gemini_key_paste_shortcut"),
             8 | 127 => {
                 key.pop();
             }
@@ -25,9 +27,51 @@ fn read_key(input: &mut impl Read) -> Result<Zeroizing<String>> {
                 ensure!(key.len() < 256, "gemini_key_input_limit");
                 key.push(char::from(c));
             }
+            c if !c.is_ascii() => bail!("gemini_key_non_ascii"),
             _ => bail!("gemini_key_shape"),
         }
     }
+}
+
+/// Fixed allowlisted messages only: never expose library errors or input bytes.
+pub(super) fn input_diagnostic(error: &anyhow::Error) -> &'static str {
+    match error.to_string().as_str() {
+        "gemini_key_too_short" => "Hidden input rejected before API access: fewer than 20 characters. Copy the FULL key with the AI Studio copy button; hidden input is not displayed.",
+        "gemini_key_paste_shortcut" => "Hidden input rejected before API access: terminal sent Ctrl-V as a control byte, not pasted text. Use the terminal's Paste command.",
+        "gemini_key_escape_sequence" => "Hidden input cancelled before API access: Escape or a terminal escape sequence was received (for example a paste wrapper). Do not keep retrying the real key; report this message.",
+        "gemini_key_non_ascii" => "Hidden input rejected before API access: non-ASCII input. Check the English keyboard layout and copy only the full API key.",
+        "gemini_key_shape" => "Hidden input rejected before API access: unsupported character or control byte. Copy only the full API key, without quotes, spaces or formatting.",
+        "gemini_key_input_limit" => "Hidden input rejected before API access: input exceeds 256 characters. Do not paste a command, link or message.",
+        "gemini_key_input_cancelled" => "Hidden input cancelled before API access (Ctrl-C, Ctrl-D or terminal input ended).",
+        "gemini_terminal_mode" | "gemini_terminal_restore" | "gemini_operator_terminal_required" => "Hidden terminal setup/restoration failed before API access. Do not enter the key; report this message.",
+        _ => "Operator run refused or stopped; inspect the private journal. Never replay an uncertain attempt.",
+    }
+}
+
+#[test]
+fn gemini_manual_key_input_diagnostics_never_echo_input() {
+    for (bytes, code) in [
+        (b"\x16".as_slice(), "gemini_key_paste_shortcut"),
+        (
+            b"\x1b[200~synthetic_paste_only_123456\x1b[201~\n".as_slice(),
+            "gemini_key_escape_sequence",
+        ),
+        ("тест\n".as_bytes(), "gemini_key_non_ascii"),
+        (b"short\n".as_slice(), "gemini_key_too_short"),
+        (b"\x03".as_slice(), "gemini_key_input_cancelled"),
+    ] {
+        let mut input = bytes;
+        let error = read_key(&mut input).unwrap_err();
+        assert_eq!(error.to_string(), code);
+        assert!(input_diagnostic(&error).contains("before API access"));
+        assert!(!input_diagnostic(&error).contains("synthetic_paste_only"));
+    }
+    let canary = "synthetic_secret_do_not_echo";
+    assert!(!input_diagnostic(&anyhow::anyhow!(canary)).contains(canary));
+    assert!(
+        input_diagnostic(&anyhow::anyhow!("wrapped: gemini_key_shape"))
+            .starts_with("Operator run refused")
+    );
 }
 
 #[cfg(target_os = "linux")]

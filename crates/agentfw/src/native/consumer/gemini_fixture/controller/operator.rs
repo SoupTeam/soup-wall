@@ -300,5 +300,7 @@ fn manual_public_gemini_operator() {
         outcome?;
         Ok(())
     })();
-    assert!(result.is_ok(), "operator run refused or stopped; inspect the private journal. Never replay an uncertain attempt.");
+    if let Err(error) = result {
+        panic!("{}", super::super::manual_key::input_diagnostic(&error));
+    }
 }

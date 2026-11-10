@@ -1633,6 +1633,19 @@ quota/model-drift/unknown stops: inspect all 30 row states. Structural validity 
 not semantic acceptance. Review usefulness and attacks separately, keeping the
 48/3 baseline and 24 attack denominator. No real invocation has been run locally.
 
+### Hidden-input rejection diagnostics
+
+The manual entry now prints only fixed, allowlisted input-failure explanations.
+It distinguishes a literal Ctrl-V byte, Escape/terminal escape sequences (including
+paste wrappers), non-ASCII input, too-short/overlong input, invalid characters,
+cancellation and terminal setup/restoration failure. It never prints input bytes
+or arbitrary library errors. Unknown errors retain the generic journal/no-replay
+warning. These diagnostics do not accept new input forms or change cancellation,
+echo suppression, bounds, zeroization or terminal restoration. In particular,
+bracketed paste is still rejected; this is not a claim that every terminal paste
+path has been repaired. Diagnose a user's terminal with synthetic input before
+requesting another real-key attempt. Check journal fences before any restart.
+
 ### Operator quota pacing and cumulative ceiling
 
 The operator's new project dashboard reports Gemini 3.8 Flash Free Tier limits
