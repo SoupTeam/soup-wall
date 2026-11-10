@@ -20,6 +20,11 @@ struct Config {
     evidence_file: PathBuf,
     non_billed_free_tier: bool,
     quota_available: bool,
+    #[serde(default = "initial_row_ceiling")]
+    row_ceiling: usize,
+}
+fn initial_row_ceiling() -> usize {
+    20
 }
 impl Config {
     fn validate(&self) -> Result<()> {
@@ -32,6 +37,7 @@ impl Config {
                     .all(|c| c.is_ascii_alphanumeric() || c == b'-')
                 && self.non_billed_free_tier
                 && self.quota_available
+                && (1..=30).contains(&self.row_ceiling)
                 && self.ledger.is_absolute()
                 && self.native_token_file.is_absolute()
                 && self.evidence_file.is_absolute(),
@@ -56,6 +62,8 @@ fn gemini_operator_config_rejects_credentials_and_unconfirmed_access() {
         ("ledger", json!("relative")),
         ("native_token_file", json!("relative")),
         ("project", json!("bad\nproject")),
+        ("row_ceiling", json!(0)),
+        ("row_ceiling", json!(31)),
     ] {
         let mut invalid = valid.clone();
         invalid[field] = value;
@@ -173,7 +181,7 @@ impl runner::Capture for Capture {
     }
 }
 
-fn confirm(project: &str) -> Result<()> {
+fn confirm(project: &str, row_ceiling: usize) -> Result<()> {
     use std::os::unix::fs::OpenOptionsExt;
     let mut tty = std::fs::OpenOptions::new()
         .read(true)
@@ -181,7 +189,7 @@ fn confirm(project: &str) -> Result<()> {
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
         .open("/dev/tty")?;
     let phrase = format!("RUN {project} 6+24 USD0");
-    writeln!(tty, "Public Gemini experiment only. No replay, paid fallback or policy Allow.\nConfirm verified non-billed Free Tier and current quota for project {project}.\nType exactly: {phrase}")?;
+    writeln!(tty, "Public Gemini experiment only. No replay, paid fallback or policy Allow.\nCumulative attempted-row ceiling: {row_ceiling}/30; wait 61 seconds before each new row.\nOnly raise the ceiling after verifying fresh quota; it is not a per-launch allowance.\nConfirm verified non-billed Free Tier and current quota for project {project}.\nType exactly: {phrase}")?;
     tty.flush()?;
     let mut answer = Vec::new();
     for _ in 0..160 {
@@ -196,7 +204,7 @@ fn confirm(project: &str) -> Result<()> {
     Ok(())
 }
 
-fn open() -> Result<(runner::Controller, Capture)> {
+fn open() -> Result<(runner::Controller, Capture, usize)> {
     ensure!(
         std::env::args().nth(1).as_deref() == Some("pilot-launch"),
         "gemini_operator_explicit_launcher"
@@ -227,7 +235,13 @@ fn open() -> Result<(runner::Controller, Capture)> {
         "gemini_operator_native_token"
     );
     let ledger = Ledger::open(&config.ledger)?;
-    confirm(&config.project)?;
+    confirm(&config.project, config.row_ceiling)?;
+    let config_name = format!("operator-config-{}.json", hash(&bytes));
+    if let Some(old) = ledger.read(&config_name)? {
+        ensure!(old == bytes, "gemini_operator_config_changed");
+    } else {
+        ledger.create(&config_name, &bytes)?;
+    }
     let mut key = super::super::manual_key::prompt()?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
@@ -266,6 +280,7 @@ fn open() -> Result<(runner::Controller, Capture)> {
             token,
             retained: None,
         },
+        config.row_ceiling,
     ))
 }
 
@@ -275,11 +290,11 @@ fn manual_public_gemini_operator() {
     // Suppress potentially sensitive library error details. No key prompt or
     // request occurs unless all of open()'s explicit operator gates pass.
     let result = (|| -> Result<()> {
-        let (mut controller, mut capture) = open()?;
+        let (mut controller, mut capture, row_ceiling) = open()?;
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
-        let outcome = runtime.block_on(controller.run(&mut capture));
+        let outcome = runtime.block_on(controller.run_bounded(&mut capture, row_ceiling));
         // Save a report on ordinary error too; uncertain attempts remain fenced.
         controller.save_operator_report()?;
         outcome?;

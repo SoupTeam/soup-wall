@@ -1633,6 +1633,34 @@ quota/model-drift/unknown stops: inspect all 30 row states. Structural validity 
 not semantic acceptance. Review usefulness and attacks separately, keeping the
 48/3 baseline and 24 attack denominator. No real invocation has been run locally.
 
+### Operator quota pacing and cumulative ceiling
+
+The operator's new project dashboard reports Gemini 3.8 Flash Free Tier limits
+of 5 RPM, 250,000 TPM and 20 RPD. A serial loop alone does not enforce those
+limits. The manual controller now waits 61 seconds before each untouched row,
+before writing its attempt fence, disclosing countTokens input or obtaining
+custody authority. No provider deadline or custody lease is extended.
+
+The optional non-secret configuration field `row_ceiling` defaults to 20 and
+accepts 1 through 30. It limits cumulative attempted rows in this journal, not
+rows per launch. At the ceiling, reopening returns the retained outcomes without
+metadata, count or generation requests. All remaining rows stay `unrun`, with no
+attempt marker. After personally verifying the quota reset and available quota,
+the operator can renew the evidence and raise this same journal's ceiling to 30.
+Never change journal/project/key to reset the counter. Existing uncertain,
+technical, drift and quota fences retain their original behavior.
+
+This is conservative pacing, not a provider quota guarantee: other project usage,
+token limits and provider accounting can still produce a retained quota stop.
+A quota-stopped row is not replayed; only untouched rows can continue. Full
+configuration bytes (with no API-key field) are retained by content hash, and the
+personal confirmation displays the cumulative ceiling and pacing. Tests exercise
+20 completed rows, ten unfenced untouched rows, reopening at the same ceiling
+with zero requests and continuation to all 30 without repeating earlier rows.
+
+This follow-up requires independent review before real invocation; it is not
+covered by the prior acceptance of exact source `fe85b983`.
+
 ### Independent Linux manual-input review
 
 The submitted `a44a8f02` passed both manual-input tests and the full `gemini_`

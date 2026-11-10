@@ -158,19 +158,47 @@ impl Controller {
     /// preserves every prior marker. A fresh quota attestation permits only
     /// untouched rows; already attempted rows are always skipped.
     pub(in crate::native) async fn run(&mut self, capture: &mut impl Capture) -> Result<Value> {
-        self.run_with(capture, &mut Direct).await
+        self.run_bounded(capture, 20).await
+    }
+    pub(super) async fn run_bounded(
+        &mut self,
+        capture: &mut impl Capture,
+        row_ceiling: usize,
+    ) -> Result<Value> {
+        self.run_limited(
+            capture,
+            &mut Direct,
+            row_ceiling,
+            std::time::Duration::from_secs(61),
+        )
+        .await
     }
     async fn run_with(
         &mut self,
         capture: &mut impl Capture,
         wire: &mut impl Wire,
     ) -> Result<Value> {
+        self.run_limited(capture, wire, 30, std::time::Duration::ZERO)
+            .await
+    }
+    async fn run_limited(
+        &mut self,
+        capture: &mut impl Capture,
+        wire: &mut impl Wire,
+        row_ceiling: usize,
+        spacing: std::time::Duration,
+    ) -> Result<Value> {
+        ensure!((1..=30).contains(&row_ceiling), "gemini_row_ceiling");
         self.check()?;
+        let mut attempted = 0;
         // Check old fences before metadata or any other network operation.
         for i in 0..30 {
             let r = row(i)?;
             let id = hash(r.frame.as_bytes());
             let state = self.state(&id)?;
+            if state != State::Unrun {
+                attempted += 1;
+            }
             if state == State::StartedUnknown
                 || matches!(state, State::ModelDrift | State::TechnicalStop)
             {
@@ -187,6 +215,11 @@ impl Controller {
                 }
             }
         }
+        // A cumulative ceiling survives reopening: no counter reset or
+        // deliberately consuming an extra row to discover the daily limit.
+        if attempted >= row_ceiling {
+            return self.report();
+        }
         self.model(wire).await?;
         for i in 0..30 {
             self.check()?;
@@ -195,6 +228,15 @@ impl Controller {
             if self.state(&id)? != State::Unrun {
                 continue;
             }
+            if attempted >= row_ceiling {
+                break;
+            }
+            // Wait before the attempt fence, count disclosure and custody grant.
+            // Never extend a grant/lease or wait inside provider delivery.
+            if !spacing.is_zero() {
+                tokio::time::sleep(spacing).await;
+            }
+            self.check()?;
             // Includes countTokens disclosure. Crash during ANY row stage is
             // fenced before I/O; do not infer that generation was not submitted.
             self.ledger.create(
@@ -203,6 +245,7 @@ impl Controller {
                     &json!({"profile":profile_hash(),"source":id,"state":"started_unknown"}),
                 )?,
             )?;
+            attempted += 1;
             let result = self.one(r, &id, capture, wire).await;
             let state = match result {
                 Ok(state) => state,
@@ -485,6 +528,56 @@ pub(in crate::native) async fn exercise_serial(capture: &mut impl Capture) {
             mode,
             requests: 0,
         };
+        if mode == "valid" {
+            // Cancelling during pacing must not fence or disclose a row.
+            assert!(tokio::time::timeout(
+                std::time::Duration::from_millis(20),
+                controller.run_limited(capture, &mut wire, 20, std::time::Duration::from_secs(61)),
+            )
+            .await
+            .is_err());
+            assert_eq!(wire.generations, 0);
+            assert!(controller
+                .ledger
+                .read(&format!("{id}.controller-started"))
+                .unwrap()
+                .is_none());
+            let partial = controller
+                .run_limited(capture, &mut wire, 20, std::time::Duration::ZERO)
+                .await
+                .unwrap();
+            assert_eq!(wire.generations, 20, "partial report: {partial}");
+            assert_eq!(partial["rows"][20]["state"], "unrun");
+            let untouched = hash(row(20).unwrap().frame.as_bytes());
+            assert!(controller
+                .ledger
+                .read(&format!("{untouched}.controller-started"))
+                .unwrap()
+                .is_none());
+            controller.save_operator_report().unwrap();
+            drop(controller);
+            controller = Controller::open(
+                directory.path(),
+                &bytes,
+                Some(key.clone()),
+                secret.as_bytes(),
+            )
+            .unwrap();
+            let requests = wire.requests;
+            assert_eq!(
+                controller
+                    .run_limited(capture, &mut wire, 20, std::time::Duration::ZERO)
+                    .await
+                    .unwrap(),
+                partial
+            );
+            assert_eq!(
+                wire.requests, requests,
+                "same ceiling must not contact provider on reopening"
+            );
+            // Raising the cumulative ceiling simulates renewed operator evidence
+            // after reset; the twenty completed originals/controls never replay.
+        }
         let report = controller.run_with(capture, &mut wire).await.unwrap();
         let expected = match mode {
             "valid" => "valid_untrusted",
