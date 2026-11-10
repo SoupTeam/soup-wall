@@ -1570,3 +1570,33 @@ operator to enter a real key into an assistant-controlled terminal or into chat.
 Portable tests cover editing, cancellation, EOF, invalid bytes, both size
 boundaries and static errors. A Linux pseudo-terminal test checks hidden mode
 and restoration after cancellation; it has not been run on this Windows host.
+
+### Independent Linux manual-input review
+
+The submitted `a44a8f02` passed both manual-input tests and the full `gemini_`
+selector on WSL2/Linux, but strict all-targets Clippy found the new Linux-only
+`open_interactive` / `prompt` entry unused. The existing terminal test now keeps
+that planned test-only entry compiled, without opening an unattended real-key
+prompt. No lint suppression, live issuer or production command was added.
+
+An independent executable included the original manual-input module and exercised
+its actual `/dev/tty` path under separate controlling pseudo-terminals using
+synthetic canaries only. Fourteen controls covered LF/CR acceptance, both
+Backspace encodings, Ctrl-C/Ctrl-D/Escape cancellation, short/invalid input,
+256/257-byte limits, unread-paste flushing and no-controlling-terminal refusal
+without consuming stdin. Echo stayed disabled during input, full termios state
+was restored on ordinary exits/errors, and no canary appeared in terminal output.
+The existing forced-termination and memory-erasure limitations remain unchanged.
+
+This accepts the bounded input component only. The explicit authenticated
+operator invocation and confirmed non-billed project evidence remain the next
+unfinished integration step; do not solicit a real credential before that entry
+is ready. No provider request, actual credential access, spending, semantic
+correction, merge or task completion was performed in this review.
+
+Final follow-up tree: both manual tests and all 14 independent actual-PTY
+controls pass, as do strict all-targets agentfw Clippy, fmt and the documentation
+checker (426 files / 1359 local links). The broader `gemini_` selector passed
+18 tests on submitted `a44a8f02` before the compilation-reference-only fix;
+its two launcher children were actually re-executed by mandatory parents.
+These observations do not assert real operator invocation or live inference.

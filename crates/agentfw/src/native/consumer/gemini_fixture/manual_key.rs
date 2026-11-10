@@ -129,6 +129,9 @@ fn gemini_manual_key_bounded_edit_cancel_and_static_errors() {
 #[cfg(target_os = "linux")]
 #[test]
 fn gemini_manual_key_terminal_hides_and_restores_on_cancel() {
+    // Keep the planned test-only entry compiled without prompting for a real
+    // credential in an unattended test. Actual input below remains synthetic.
+    let _interactive_entry = super::controller::runner::Controller::open_interactive;
     use std::os::fd::{AsRawFd, FromRawFd};
     let (mut master, mut slave) = (-1, -1);
     // SAFETY: valid output pointers; no optional name/termios/winsize supplied.
