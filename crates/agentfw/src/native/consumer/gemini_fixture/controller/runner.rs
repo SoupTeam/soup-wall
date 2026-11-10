@@ -66,6 +66,21 @@ impl Controller {
     ) -> Result<Self> {
         let mut key = key.map(zeroize::Zeroizing::new);
         let ledger = Ledger::open(path)?;
+        Self::open_held(
+            ledger,
+            claim,
+            key.as_deref_mut().map(std::mem::take),
+            operator_secret,
+        )
+    }
+
+    pub(super) fn open_held(
+        ledger: Ledger,
+        claim: &[u8],
+        key: Option<String>,
+        operator_secret: &[u8],
+    ) -> Result<Self> {
+        let mut key = key.map(zeroize::Zeroizing::new);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_secs();
@@ -95,6 +110,17 @@ impl Controller {
 
     fn check(&self) -> Result<()> {
         self.access.check(&self.ledger.identity()?)
+    }
+
+    pub(super) fn save_operator_report(&self) -> Result<()> {
+        let report = serde_json::to_vec(&self.report()?)?;
+        let name = format!("report-{}.json", hash(&report));
+        if let Some(old) = self.ledger.read(&name)? {
+            ensure!(old == report, "gemini_report_changed");
+        } else {
+            self.ledger.create(&name, &report)?;
+        }
+        Ok(())
     }
     fn deadline(&self) -> Instant {
         self.access

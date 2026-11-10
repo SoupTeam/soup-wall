@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Test-only public-data adapter component. Not an issuer or publication path.
-//! No production caller, environment key lookup, or live test is installed.
+//! No production caller or environment key lookup. The ignored Linux operator
+//! entry requires explicit configuration, a personal terminal and confirmation.
 use anyhow::{ensure, Result};
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, time::Instant};

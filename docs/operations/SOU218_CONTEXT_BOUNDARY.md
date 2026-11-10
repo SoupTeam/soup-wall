@@ -1571,6 +1571,68 @@ Portable tests cover editing, cancellation, EOF, invalid bytes, both size
 boundaries and static errors. A Linux pseudo-terminal test checks hidden mode
 and restoration after cancellation; it has not been run on this Windows host.
 
+### Explicit manual operator experiment
+
+The manual caller is an ignored Linux-only library harness, invoked by
+`scripts/sou218-manual-gemini.py`. It connects operator evidence, the accepted
+hidden input, fixed direct transport, protected ledger and serial 6+24 controller.
+It refuses ordinary test invocation, CI, absent configuration or no controlling
+terminal. No ordinary product command or result-release permission is enabled.
+This new caller still requires independent Linux review before real use.
+
+The native capture/runtime remains the explicitly fixed public component fixture,
+not a deployed daemon or an original server qualification. The caller injects the
+existing operator-owned native credential instead of the unit-test signing key.
+Its registration and purpose MACs use that credential through the existing checked
+path. The project declaration is signed after the operator personally confirms
+the exact project, 6+24 scope and USD0 ceiling. It is an authenticated operator
+attestation, not automatic verification of Google billing or account ownership.
+Actual model metadata and countTokens still come from the fixed real transport.
+
+On the qualified Linux host, prepare an existing private journal directory (0700)
+and private, single-link, operator-owned configuration/evidence files (0600).
+Do not put an API key in either file. The evidence is a non-secret record of
+the project ID, owner confirmation, disabled billing, quota availability and
+verification time. Use the existing protected native-token file for signing;
+do not substitute a made-up or unit-test token. An example configuration shape:
+
+```json
+{
+  "project": "actual-project-id",
+  "ledger": "/absolute/private/sou218-journal",
+  "native_token_file": "/absolute/existing/agentfw/native-token",
+  "evidence_file": "/absolute/private/free-tier-evidence.txt",
+  "non_billed_free_tier": true,
+  "quota_available": true
+}
+```
+
+The paths are placeholders. Supply actual operator-owned paths and facts; do not
+set the booleans to true merely to get past a refusal. Unknown JSON fields,
+including an API-key field, are rejected. Then run in your own terminal:
+
+```sh
+python3 scripts/sou218-manual-gemini.py --config /absolute/private/operator.json
+```
+
+The script builds the locked library harness, selects exactly its manual ignored
+entry and inherits the operator terminal. It never accepts or reads the API key.
+Only the non-secret configuration path enters the child environment. Confirm the
+displayed phrase, then enter the API key at the hidden prompt. The API key is not
+put in arguments, environment, configuration or the journal. Held source children
+have an empty environment. Do not run this via an assistant-controlled terminal.
+
+The ledger retains the signed declaration and its non-secret evidence, complete
+bounded provider responses/errors/usage, attempt fences, and `report-<sha256>.json`.
+A report snapshot is saved on normal return and ordinary controller errors;
+forced termination can prevent that snapshot, but existing attempt fences still
+prevent replay. Do not delete the journal or change its directory/project/key to
+retry a failed batch. Reopening preserves completed/uncertain rows; renewed quota
+evidence permits only untouched rows. A successful process exit can still report
+quota/model-drift/unknown stops: inspect all 30 row states. Structural validity is
+not semantic acceptance. Review usefulness and attacks separately, keeping the
+48/3 baseline and 24 attack denominator. No real invocation has been run locally.
+
 ### Independent Linux manual-input review
 
 The submitted `a44a8f02` passed both manual-input tests and the full `gemini_`

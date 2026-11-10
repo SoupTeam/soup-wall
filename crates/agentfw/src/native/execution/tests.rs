@@ -37,6 +37,27 @@ pub(in crate::native) fn analysis_capture(
 }
 
 #[cfg(target_os = "linux")]
+pub(in crate::native) fn operator_analysis_capture(
+    child: &std::process::Child,
+    text: &str,
+    token: &str,
+) -> ReaderCapture {
+    finish_reader_capture(
+        child,
+        Env::with_operator_token(
+            "read_text_file",
+            json!({"path":"/workspace/note.txt"}),
+            text,
+            Some(include_str!(
+                "../../../../../profiles/pilot/linux-readonly-v1/policy.yaml"
+            )),
+            soup_wall_agent::engine::DEFAULT_TAINT_CAP,
+            token,
+        ),
+    )
+}
+
+#[cfg(target_os = "linux")]
 pub(in crate::native) fn analysis_capture_frame(
     child: &std::process::Child,
     frame: &[u8],
@@ -245,6 +266,17 @@ impl Env {
         yaml: Option<&str>,
         capacity: usize,
     ) -> Self {
+        Self::with_operator_token(tool_name, args, text, yaml, capacity, "native-unit-key")
+    }
+
+    fn with_operator_token(
+        tool_name: &str,
+        args: Value,
+        text: &str,
+        yaml: Option<&str>,
+        capacity: usize,
+        token: &str,
+    ) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let mut st = super::super::tests::fixture(dir.path());
         Arc::get_mut(&mut st).unwrap().config.max_record_bytes =
@@ -274,12 +306,8 @@ impl Env {
             .unwrap();
         let runtime = Arc::new(Runtime::fixture(&profile));
         let bytes = serde_json::to_vec(&registry).unwrap();
-        let mut native = NativeState::from_bytes(
-            &bytes,
-            &super::super::hash(&bytes),
-            "native-unit-key".into(),
-        )
-        .unwrap();
+        let mut native =
+            NativeState::from_bytes(&bytes, &super::super::hash(&bytes), token.into()).unwrap();
         native.execution = Some(Arc::new(Service {
             catalogue: Catalogue {
                 format: CATALOGUE_FORMAT.into(),

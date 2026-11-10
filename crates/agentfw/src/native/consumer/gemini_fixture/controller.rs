@@ -7,10 +7,12 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
 #[cfg(target_os = "linux")]
+pub(in crate::native) mod operator;
+#[cfg(target_os = "linux")]
 pub(in crate::native) mod runner;
 
 // Operator evidence is authenticated separately from model/source data. This
-// module deliberately has no live issuer and cannot attest billing itself.
+// manual operator signs a local declaration; this cannot attest billing itself.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct AccessClaim {
