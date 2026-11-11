@@ -189,6 +189,15 @@ Sources for the remaining observations are the upstream
 [paste maintenance notice](https://rustsec.org/advisories/RUSTSEC-2024-0436.html)
 and [unsafe-libyaml maintenance notice](https://rustsec.org/advisories/RUSTSEC-2024-0449.html).
 
+## Rust dependency security refresh on 11 November 2026
+
+A fresh RustSec scan at advisory database revision
+`fd6f39814c4d3c359fdbe223d0280dec4933f78f` identifies the unsound xattr
+buffer handling in `rustix 1.1.4` under RUSTSEC-2026-0486. The lock now selects
+the upstream fixed `1.1.6` release. The original unsuccessful scan is retained
+with its exact source. This finding receives a dependency correction through
+the normal qualification path.
+
 ## Git security refresh on 11 November 2026
 
 The selected Git source now uses maintenance release `2.51.3`, published on
