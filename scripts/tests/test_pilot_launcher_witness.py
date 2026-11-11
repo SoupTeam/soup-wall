@@ -14,6 +14,16 @@ SPEC.loader.exec_module(WITNESS)
 
 
 class DispatchControls(unittest.TestCase):
+    def test_dispatch_fingerprint_covers_the_exact_complete_request_frame(self):
+        import hashlib
+        rows = self.trace()[:4]
+        frame = b'{"method":"tools/call","id":17,"params":{"name":"git_show","arguments":{"revision":"HEAD"}}}\r\n'
+        for part in (frame[:19], frame[19:]):
+            text = part.decode()
+            rows.append(f'102 write(9, {json.dumps(text)}, {len(part)}) = {len(part)}')
+        observed = WITNESS.collector_dispatches('\n'.join(rows), Path('/owned/agentfw'), strict=False)
+        self.assertEqual(observed['calls'][0]['request_sha256'], hashlib.sha256(frame).hexdigest())
+
     def test_shared_preparation_does_not_leave_missing_global_names(self):
         for filename in ("qualify-pilot-launcher.py", "qualify-pilot-ask.py"):
             path = ROOT / "scripts" / filename
