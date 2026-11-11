@@ -232,7 +232,7 @@ python3 -B scripts/prepare-installed-pilot.py --prepare \
   --agentfw "$PWD/target/debug/agentfw" \
   --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
   --sandbox-tests /absolute/agentfw-library-test-executable \
-  --node-archive /absolute/node-v22.23.4-linux-x64.tar.xz \
+  --node-archive /absolute/node-v22.23.5-linux-x64.tar.xz \
   --bwrap "$bwrap_path" --git "$git_path" \
   --claude /absolute/claude --python /absolute/python3 \
   --filesystem-classifier "$PWD/rule_baseline/rule_baseline.py" \

@@ -662,7 +662,7 @@ def verify_native_reviews(path, selection, generation, *, preparation):
     upstream = read_json(ROOT / "profiles/mcp/git-readonly-v1/upstream-identity.json")
     pins = {"git": (upstream["git_version"], upstream["git_source_sha256"]),
             "git_python": (upstream["python"]["version"], upstream["python"]["sha256"]),
-            "node": ("22.23.4", "1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce"),
+            "node": ("22.23.5", "cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8"),
             "bwrap": ("0.13.1", "0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d")}
     for role, review in data["components"].items():
         require(review.get("binary_sha256") == expected_binaries[role]["sha256"], "native_review_binary_mismatch")

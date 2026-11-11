@@ -113,8 +113,8 @@
     },
     {
       "component": "node",
-      "path": "upstream-notices/node-v22.23.4-LICENSE",
-      "sourceUrl": "https://raw.githubusercontent.com/nodejs/node/v22.23.4/LICENSE",
+      "path": "upstream-notices/node-v22.23.5-LICENSE",
+      "sourceUrl": "https://raw.githubusercontent.com/nodejs/node/v22.23.5/LICENSE",
       "sha256": "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4"
     }
   ]

@@ -112,7 +112,7 @@ would be wrong). Linux command (the filesystem CI job runs the same):
 ```bash
 python3 -B scripts/verify-filesystem-paths.py --run \
   --agentfw "$PWD/target/debug/agentfw" \
-  --node /path/to/node-v22.23.4/bin/node --npm /path/to/node-v22.23.4/bin/npm \
+  --node /path/to/node-v22.23.5/bin/node --npm /path/to/node-v22.23.5/bin/npm \
   --bwrap /path/to/bubblewrap-0.13.1/bwrap --strace /usr/bin/strace \
   --claude /path/to/claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude \
   --expected-commit "$(git rev-parse HEAD)" --output /tmp/filesystem-paths

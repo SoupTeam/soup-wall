@@ -101,7 +101,7 @@ identity. No server implementation is copied or rewritten into Agent.
 separately retains the pinned upstream notices outside that tree; the complete
 package tree digest is verified before sandbox execution.
 
-The acceptance runtime downloads official Node.js `22.23.4` and bubblewrap
+The acceptance runtime downloads official Node.js `22.23.5` and bubblewrap
 `0.13.1` archives by SHA-256. Node.js retains its upstream license/third-party
 notices; bubblewrap is a separate LGPL-2.0-or-later executable, built from its
 unmodified official release source. Neither executable is linked into or

@@ -35,8 +35,8 @@
       "lockfile_sha256": "6eb6fd9ccda39b10b4cd21e3236fa179330ce4252a3405f193093722be3668e6"
     },
     "runtime": {
-      "node_version": "22.23.4",
-      "node_archive_sha256": "1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce"
+      "node_version": "22.23.5",
+      "node_archive_sha256": "cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8"
     },
     "other_documented_policy_presets_not_selected_by_installed_entry_points": {
       "linux-readonly-v1": {

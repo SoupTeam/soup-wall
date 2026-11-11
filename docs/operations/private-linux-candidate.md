@@ -16,7 +16,7 @@ Python's standard library. The filesystem server and Node are staged assets.
 ```bash
 export CANDIDATE_BWRAP=/private/prepared/bwrap
 export CANDIDATE_BWRAP_SHA256=<recorded-binary-sha256>
-export CANDIDATE_NODE_ARCHIVE=/private/cache/node-v22.23.4-linux-x64.tar.xz
+export CANDIDATE_NODE_ARCHIVE=/private/cache/node-v22.23.5-linux-x64.tar.xz
 export CANDIDATE_BWRAP_ARCHIVE=/private/cache/bubblewrap-0.13.1.tar.xz
 bash scripts/build-candidate.sh
 ```

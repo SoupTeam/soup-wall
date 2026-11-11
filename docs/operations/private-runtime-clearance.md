@@ -18,7 +18,7 @@ records the executed source and remaining qualification limits.
 | Candle ZIP dependency | 9.0.4 | 9.0.5 | Application Cargo lock and registry checksum |
 
 The filesystem profile selects original server `2026.8.31`, SDK `1.32.1` and
-Node `22.23.4`. The dependency overrides retain the original server archive,
+Node `22.23.5`. The dependency overrides retain the original server archive,
 entrypoint and discovery identities. The selected minimatch and glob versions
 support this Node runtime. Pip installs from the verified local wheelhouse
 under the existing shared installation deadline. Its replacement and vendored
@@ -209,27 +209,26 @@ from the [official signed checksum list](https://www.kernel.org/pub/software/scm
 The installer, profile identity, CI downloaders and current scope descriptors
 select those same bytes. Earlier execution reports retain their actual Git
 version. New selections require a fresh installed qualification and native
-review, including this release's source and notices. The unresolved Node hold
-below remains active.
+review, including this release's source and notices.
 
 ## Native review and final qualification
 
-### Unresolved upstream Node security notice
+### Node security release selected on 11 November 2026
 
-On 3 November 2026, the Node.js project announced HIGH-severity security
-updates affecting the 22.x, 24.x and 26.x release lines, scheduled for
-11 November. The selected Node 22.23.4 predates that release. The
-[official announcement](https://nodejs.org/en/blog/vulnerability/november-2026-security-releases)
-does not yet disclose the affected code or a patched release. Do not infer
-non-applicability or invent a CVE from the preannouncement.
+The published Node `22.23.5` security release supersedes the announced hold
+on the previously selected `22.23.4`. The
+[upstream changelog](https://github.com/nodejs/node/blob/v22.23.5/doc/changelogs/CHANGELOG_V22.md#2026-11-11-version-22235-jod-lts-aduh95)
+lists the HTTP/2 and TLS fixes and their CVE identifiers. The official Linux x64
+archive SHA-256 is
+`cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8`,
+and the executable SHA-256 is
+`2f822d544601dfff107f57d945b649d15c5bf6302595735a6bd9cdc7ee9669bd`.
+The archive license matches the tagged upstream notice byte for byte.
 
-The current private candidate therefore retains an explicit unresolved native
-security finding. Package-license decisions, the setuptools subset review,
-maintenance-warning dispositions and trusted setup-input admission cannot
-remove it. A new verified upstream release and a freshly prepared, scanned and
-qualified selection are required before claiming a cleared complete runtime.
-Earlier successful functional runs remain historical execution evidence.
-
+Current installers, input verification and CI select these new bytes.
+Earlier execution and review reports keep their original versions and results.
+A fresh prepared selection, scan and installed qualification are required for
+the update. Complete native-component and system-library review remains open.
 
 The selected Git, bubblewrap, Node and Python binaries, their bundled libraries,
 host Python and selected system ELF libraries require a current native review.
@@ -246,7 +245,7 @@ that code-delivery path while the complete runtime remains unqualified.
 A qualified private candidate or release additionally requires admitted
 license/advisory conditions, complete native review and current-source runtime
 acceptance. Keep the full candidate task open and the inventory nonzero while
-any of those holds remains, including the unresolved Node notice above.
+any of those holds remains.
 Merging source corrections does not authorize packaging or distribution of a
 cleared runtime. Keep every failed and successful observation attributed to its
 actual source, selected binaries and archive.

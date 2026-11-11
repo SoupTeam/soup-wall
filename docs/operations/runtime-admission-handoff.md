@@ -6,19 +6,18 @@ Use the accepted [installed inventory contract](installed-runtime-inventory.md)
 and [material conditions](private-runtime-clearance.md) without changing their
 refusal rules. Earlier reports retain their actual source and selected bytes.
 
-## Upstream hold checked on 8 November 2026
+## Security refresh checked on 11 November 2026
 
-The selected Node 22.23.4 predates the
-[announced November security release](https://nodejs.org/en/blog/vulnerability/november-2026-security-releases).
-Upstream schedules HIGH-severity fixes for the 22.x, 24.x and 26.x lines on or
-shortly after 11 November. Its announcement does not disclose affected code or
-a patched version. Keep this finding unresolved; neither another affected
-release line nor a package-license decision establishes non-applicability.
+The selected Node 22.23.5 is the published November security release.
+Its [upstream changelog](https://github.com/nodejs/node/blob/v22.23.5/doc/changelogs/CHANGELOG_V22.md#2026-11-11-version-22235-jod-lts-aduh95)
+records the HIGH-severity HTTP/2 and TLS fixes. The official Linux x64 archive,
+executable and unchanged license notice are bound to their verified hashes.
+Earlier reports for Node 22.23.4 retain their actual selected bytes and hold.
 
-Until upstream publishes the fix, the useful deliverable is a reproducible
-blocked candidate, its raw scans, copied compliance material and explicit review
-worklist. Do not create `status: reviewed` / empty native findings to make it
-pass. No timer or release date is evidence that a fix has actually shipped.
+The current complete native-component and system-library advisory review is
+still required for runtime admission. Package-license dispositions and passing
+functional tests cover their recorded scopes. Keep outstanding findings and
+source obligations explicit in the new selection's review worklist.
 
 ## Author evidence package
 

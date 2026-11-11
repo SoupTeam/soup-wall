@@ -19,8 +19,8 @@ import sys
 ACCEPTED = '17b03aaf63f5100682f2b4048444ce30b6892b33'
 HOST_SHA = 'fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7'
 DOWNLOADS = {
-    'node': ('https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz',
-             '1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce', 'xz'),
+    'node': ('https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz',
+             'cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8', 'xz'),
     'git': ('https://www.kernel.org/pub/software/scm/git/git-2.51.3.tar.xz',
             '8e6ff1adf702c26e75de1846498d00575ff7e9919305b38b4e27c5514062b13d', 'xz'),
     'bwrap': ('https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz',

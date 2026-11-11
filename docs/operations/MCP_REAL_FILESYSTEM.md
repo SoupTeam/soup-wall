@@ -35,11 +35,11 @@ with lifecycle scripts disabled. It verifies the original entry point after
 installation. The installed profile additionally hashes every file, directory
 and contained symlink in the complete installed dependency tree.
 
-The selected runtime is the official Linux x64 Node.js `v22.23.4` binary:
+The selected runtime is the official Linux x64 Node.js `v22.23.5` binary:
 
-- Archive SHA-256: `1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce`.
-- `bin/node` SHA-256: `94efd062ed066c1a0b332e18249859c905e920eeada5df55d24c99b919629a90`.
-- Official archive: [node-v22.23.4-linux-x64.tar.xz](https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz).
+- Archive SHA-256: `cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8`.
+- `bin/node` SHA-256: `2f822d544601dfff107f57d945b649d15c5bf6302595735a6bd9cdc7ee9669bd`.
+- Official archive: [node-v22.23.5-linux-x64.tar.xz](https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz).
 
 The required CI builds [bubblewrap v0.13.1](https://github.com/containers/bubblewrap/releases/tag/v0.13.1)
 from archive SHA-256 `0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d`.
@@ -61,8 +61,8 @@ inspect/remove that owned directory before retrying with a new destination.
 python3 -B scripts/install-sou62-filesystem-profile.py --run \
   --workspace /absolute/reviewed-workspace \
   --destination /absolute/new-private-filesystem-profile \
-  --node /absolute/node-v22.23.4/bin/node \
-  --npm /absolute/node-v22.23.4/bin/npm \
+  --node /absolute/node-v22.23.5/bin/node \
+  --npm /absolute/node-v22.23.5/bin/npm \
   --bwrap /absolute/bubblewrap-0.13.1/bwrap
 ```
 
@@ -89,7 +89,7 @@ AGENTFW_CLASSIFIER=rule-baseline \
 AGENTFW_RULE_BASELINE=/absolute/soup-wall/rule_baseline/rule_baseline.py \
 AGENTFW_CLASSIFIER_PYTHON=/absolute/python3 \
 /absolute/agentfw mcp --native-admission --id filesystem-readonly-v1 -- \
-  /absolute/node-v22.23.4/bin/node \
+  /absolute/node-v22.23.5/bin/node \
   /absolute/new-private-filesystem-profile/package/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js \
   /workspace
 ```
@@ -248,8 +248,8 @@ profile acceptance:
 ```sh
 python3 -B scripts/verify-sou62-real-mcp.py --run \
   --agentfw /absolute/agentfw \
-  --node /absolute/node-v22.23.4/bin/node \
-  --npm /absolute/node-v22.23.4/bin/npm \
+  --node /absolute/node-v22.23.5/bin/node \
+  --npm /absolute/node-v22.23.5/bin/npm \
   --bwrap /absolute/bubblewrap-0.13.1/bwrap \
   --claude /absolute/claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude \
   --sandbox-test-binary /absolute/agentfw-library-test-binary \
@@ -315,8 +315,8 @@ and its established checks still run unchanged.
 ```sh
 python3 -B scripts/verify-sou62-sou63-combined.py --run \
   --agentfw /absolute/agentfw \
-  --node /absolute/node-v22.23.4/bin/node \
-  --npm /absolute/node-v22.23.4/bin/npm \
+  --node /absolute/node-v22.23.5/bin/node \
+  --npm /absolute/node-v22.23.5/bin/npm \
   --bwrap /absolute/bubblewrap-0.13.1/bwrap \
   --claude /absolute/claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude \
   --sandbox-test-binary /absolute/agentfw-library-test-binary \

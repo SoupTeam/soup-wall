@@ -1177,8 +1177,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config zlib1g-dev
           mkdir "$RUNNER_TEMP/sou82-node" "$RUNNER_TEMP/sou82-git" "$RUNNER_TEMP/sou82-bwrap"
-          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz --output "$RUNNER_TEMP/sou82-node.tar.xz"
-          printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce "$RUNNER_TEMP/sou82-node.tar.xz" | sha256sum --check
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz --output "$RUNNER_TEMP/sou82-node.tar.xz"
+          printf '%s  %s\n' cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8 "$RUNNER_TEMP/sou82-node.tar.xz" | sha256sum --check
           tar -xJf "$RUNNER_TEMP/sou82-node.tar.xz" -C "$RUNNER_TEMP/sou82-node" --strip-components=1 --no-same-owner --no-same-permissions
           curl --fail --location --retry 3 https://www.kernel.org/pub/software/scm/git/git-2.51.3.tar.xz --output "$RUNNER_TEMP/sou82-git.tar.xz"
           printf '%s  %s\n' 8e6ff1adf702c26e75de1846498d00575ff7e9919305b38b4e27c5514062b13d "$RUNNER_TEMP/sou82-git.tar.xz" | sha256sum --check
@@ -2004,8 +2004,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config ripgrep zlib1g-dev strace
           mkdir -p "$RUNNER_TEMP/sou62-runtime" "$RUNNER_TEMP/sou62-bwrap-source"
-          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz --output "$RUNNER_TEMP/sou62-node.tar.xz"
-          printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce "$RUNNER_TEMP/sou62-node.tar.xz" | sha256sum --check
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz --output "$RUNNER_TEMP/sou62-node.tar.xz"
+          printf '%s  %s\n' cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8 "$RUNNER_TEMP/sou62-node.tar.xz" | sha256sum --check
           tar --extract --xz --file "$RUNNER_TEMP/sou62-node.tar.xz" --directory "$RUNNER_TEMP/sou62-runtime" --strip-components=1 --no-same-owner --no-same-permissions
           curl --fail --location --retry 3 https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz --output "$RUNNER_TEMP/sou62-bwrap.tar.xz"
           printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d "$RUNNER_TEMP/sou62-bwrap.tar.xz" | sha256sum --check
@@ -2871,9 +2871,9 @@ jobs:
           PY
           }
           mkdir -m 700 "$RUNNER_TEMP/sou111-assets"
-          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz \
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz \
             --output "$RUNNER_TEMP/sou111-assets/node.tar.xz"
-          printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce \
+          printf '%s  %s\n' cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8 \
             "$RUNNER_TEMP/sou111-assets/node.tar.xz" | sha256sum --check
           curl --fail --location --retry 3 https://www.kernel.org/pub/software/scm/git/git-2.51.3.tar.xz \
             --output "$RUNNER_TEMP/sou111-assets/git.tar.xz"
@@ -5486,8 +5486,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config
           mkdir "$RUNNER_TEMP/sou79-node" "$RUNNER_TEMP/sou79-bwrap-source"
-          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz --output "$RUNNER_TEMP/sou79-node.tar.xz"
-          printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce "$RUNNER_TEMP/sou79-node.tar.xz" | sha256sum --check
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz --output "$RUNNER_TEMP/sou79-node.tar.xz"
+          printf '%s  %s\n' cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8 "$RUNNER_TEMP/sou79-node.tar.xz" | sha256sum --check
           tar --extract --xz --file "$RUNNER_TEMP/sou79-node.tar.xz" --directory "$RUNNER_TEMP/sou79-node" --strip-components=1 --no-same-owner --no-same-permissions
           curl --fail --location --retry 3 https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz --output "$RUNNER_TEMP/sou79-bwrap.tar.xz"
           printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d "$RUNNER_TEMP/sou79-bwrap.tar.xz" | sha256sum --check
@@ -5945,8 +5945,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config
           mkdir "$RUNNER_TEMP/sou86-node" "$RUNNER_TEMP/sou86-bwrap-source"
-          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz --output "$RUNNER_TEMP/sou86-node.tar.xz"
-          printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce "$RUNNER_TEMP/sou86-node.tar.xz" | sha256sum --check
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz --output "$RUNNER_TEMP/sou86-node.tar.xz"
+          printf '%s  %s\n' cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8 "$RUNNER_TEMP/sou86-node.tar.xz" | sha256sum --check
           tar --extract --xz --file "$RUNNER_TEMP/sou86-node.tar.xz" --directory "$RUNNER_TEMP/sou86-node" --strip-components=1 --no-same-owner --no-same-permissions
           curl --fail --location --retry 3 https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz --output "$RUNNER_TEMP/sou86-bwrap.tar.xz"
           printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d "$RUNNER_TEMP/sou86-bwrap.tar.xz" | sha256sum --check

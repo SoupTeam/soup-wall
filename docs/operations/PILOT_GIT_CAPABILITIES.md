@@ -42,7 +42,7 @@ agentfw pilot preview --prefix /home/operator/pilot-file \
   --git-launcher /home/operator/runtime/agentfw-git-sandbox \
   --sandbox-tests /home/operator/runtime/sandbox_tests \
   --git /home/operator/runtime/git --bwrap /home/operator/runtime/bwrap \
-  --node-archive /home/operator/inputs/node-v22.23.4-linux-x64.tar.xz \
+  --node-archive /home/operator/inputs/node-v22.23.5-linux-x64.tar.xz \
   --claude /home/operator/runtime/claude --python /usr/bin/python3.12 \
   --python-archive /home/operator/inputs/python.tar.gz \
   --npm-cache /home/operator/inputs/npm-cache \

@@ -491,7 +491,7 @@ def plan(args):
         stages.append({"stage": "node", "action": "use supplied Node runtime",
                        "inputs": {name: describe(inputs[name]) for name in ("node_archive", "node", "npm") if name in inputs}})
     else:
-        stages.append({"stage": "node", "action": "download pinned Node 22.23.4 archive into " + str(paths["inputs"]),
+        stages.append({"stage": "node", "action": "download pinned Node 22.23.5 archive into " + str(paths["inputs"]),
                        "url": PREP.NODE_URL, "sha256": PREP.NODE_ARCHIVE_SHA256,
                        "missing": [] if args.allow_download else ["--node-archive PINNED_TAR_XZ, --node and --npm, or --allow-download"]})
     automatic_node = not ("node_archive" in inputs or ("node" in inputs and "npm" in inputs))
@@ -585,7 +585,7 @@ def prepare(args):
         inputs_dir.mkdir(mode=0o700)
     PREP.private_dir(inputs_dir)
     if not ("node_archive" in inputs or ("node" in inputs and "npm" in inputs)):
-        archive = inputs_dir / "node-v22.23.4-linux-x64.tar.xz"
+        archive = inputs_dir / "node-v22.23.5-linux-x64.tar.xz"
         if not archive.exists():
             download(PREP.NODE_URL, archive, PREP.NODE_ARCHIVE_SHA256)
         require(sha(archive) == PREP.NODE_ARCHIVE_SHA256, "node_archive_digest_mismatch", "node")
