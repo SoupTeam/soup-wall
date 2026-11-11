@@ -39,7 +39,8 @@ INSTALL_STEPS = {
     ("ci.yml", "all-features"): "Install Linux sandbox runtime",
     ("identity-sandbox.yml", "vendor-driver-safety"): "Install Linux sandbox runtime",
 }
-MIRRORS = {"archive.ubuntu.com", "security.ubuntu.com", "azure.archive.ubuntu.com"}
+MIRRORS = {"archive.ubuntu.com", "security.ubuntu.com", "azure.archive.ubuntu.com",
+           "mirrors.edge.kernel.org"}
 MIRROR_ERROR = re.compile(
     r"^E: Failed to fetch https?://([a-z0-9.-]+)/\S+\s+"
     r"(500 Internal Server Error|502 Bad Gateway|503 Service Unavailable|"

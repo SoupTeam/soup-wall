@@ -42,8 +42,8 @@ echo "Verifying Restored Executable Permissions..."
 ./bin/bwrap --version >/dev/null 2>&1 || { echo "CRITICAL: bwrap lost executable permission"; exit 1; }
 
 echo "=> Extracting Node & Bootstrapping Profile (Strictly Offline)..."
-tar -xf node-v22.23.4-linux-x64.tar.xz
-export PATH="$(pwd)/node-v22.23.4-linux-x64/bin:$(pwd)/bin:$PATH"
+tar -xf node-v22.23.5-linux-x64.tar.xz
+export PATH="$(pwd)/node-v22.23.5-linux-x64/bin:$(pwd)/bin:$PATH"
 
 node --version >/dev/null 2>&1 || { echo "CRITICAL: Node lost executable permission"; exit 1; }
 
@@ -61,7 +61,7 @@ fs.install(dest, ws, node, bwrap, npm, npm_cache=cache, offline=True)
 EOF
 
 ./bin/bwrap --unshare-net --dev /dev --proc /proc --bind / / --die-with-parent \
-    python3 run_installer.py "$HOME/profile-sou62" "$(pwd)/workspace" "$(pwd)/node-v22.23.4-linux-x64/bin/node" "$(pwd)/bin/bwrap" "$(pwd)/node-v22.23.4-linux-x64/bin/npm" "$(pwd)/npm-cache"
+    python3 run_installer.py "$HOME/profile-sou62" "$(pwd)/workspace" "$(pwd)/node-v22.23.5-linux-x64/bin/node" "$(pwd)/bin/bwrap" "$(pwd)/node-v22.23.5-linux-x64/bin/npm" "$(pwd)/npm-cache"
 
 REGISTRY_PATH="$HOME/profile-sou62/registry.json"
 export CANDIDATE_REGISTRY_SHA256="$(sha256sum "$REGISTRY_PATH" | cut -d " " -f 1)"
@@ -86,7 +86,7 @@ cp "$VALIDATOR_SCRIPTS/candidate_mcp_driver.py" mcp_test_driver.py
 cp "$VALIDATOR_SCRIPTS/candidate_evidence.py" candidate_evidence.py
 export PYTHONPATH="$(pwd)${PYTHONPATH:+:$PYTHONPATH}"
 
-NODE_BIN="$(pwd)/node-v22.23.4-linux-x64/bin/node"
+NODE_BIN="$(pwd)/node-v22.23.5-linux-x64/bin/node"
 INDEX_JS="$HOME/profile-sou62/package/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"
 
 export AGENTFW_MCP_SERVER_PROFILE="$HOME/profile-sou62/profile.json"

@@ -343,7 +343,7 @@ class Wheelhouse(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("wheelhouse_test_ci", ROOT / "scripts/ci/native-prepared-host-inputs.py")
         ci = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(ci)
-        self.assertEqual(ci.ACCEPTED, '37dd43e268573be3eab92e3b211e9cec224025af')
+        self.assertEqual(ci.ACCEPTED, '69cea163935783f54ebfbc999ceca77bd5bfe11a')
         names = ["wheels.lock.json", "requirements.lock"]
         data = {name: (self.root / name).read_bytes() for name in names}
         def git(*words):

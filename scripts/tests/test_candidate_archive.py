@@ -99,7 +99,7 @@ class CandidateArchiveTests(unittest.TestCase):
 
     def test_self_declared_changed_runtime_archive_is_refused(self):
         files = dict(self.files)
-        files["node-v22.23.4-linux-x64.tar.xz"] = b"changed but correctly rehashed"
+        files["node-v22.23.5-linux-x64.tar.xz"] = b"changed but correctly rehashed"
         self.refuse(self.pack(files), "pinned_archive")
 
     def test_duplicate_link_special_and_unsafe_members_are_refused(self):

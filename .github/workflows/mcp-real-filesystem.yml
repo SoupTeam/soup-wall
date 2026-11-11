@@ -431,8 +431,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config ripgrep zlib1g-dev strace
           mkdir -p "$RUNNER_TEMP/sou62-runtime" "$RUNNER_TEMP/sou62-bwrap-source"
-          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz --output "$RUNNER_TEMP/sou62-node.tar.xz"
-          printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce "$RUNNER_TEMP/sou62-node.tar.xz" | sha256sum --check
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz --output "$RUNNER_TEMP/sou62-node.tar.xz"
+          printf '%s  %s\n' cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8 "$RUNNER_TEMP/sou62-node.tar.xz" | sha256sum --check
           tar --extract --xz --file "$RUNNER_TEMP/sou62-node.tar.xz" --directory "$RUNNER_TEMP/sou62-runtime" --strip-components=1 --no-same-owner --no-same-permissions
           curl --fail --location --retry 3 https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz --output "$RUNNER_TEMP/sou62-bwrap.tar.xz"
           printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d "$RUNNER_TEMP/sou62-bwrap.tar.xz" | sha256sum --check
@@ -441,8 +441,8 @@ jobs:
           meson compile -C "$RUNNER_TEMP/sou62-bwrap-build"
           # Reuse the accepted Git profile's exact runtime, without a kit builder.
           mkdir "$RUNNER_TEMP/sou100-git-source"
-          curl --fail --location --retry 3 https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz --output "$RUNNER_TEMP/sou100-git.tar.xz"
-          printf '%s  %s\n' 233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3 "$RUNNER_TEMP/sou100-git.tar.xz" | sha256sum --check
+          curl --fail --location --retry 3 https://www.kernel.org/pub/software/scm/git/git-2.51.3.tar.xz --output "$RUNNER_TEMP/sou100-git.tar.xz"
+          printf '%s  %s\n' 8e6ff1adf702c26e75de1846498d00575ff7e9919305b38b4e27c5514062b13d "$RUNNER_TEMP/sou100-git.tar.xz" | sha256sum --check
           tar -xJf "$RUNNER_TEMP/sou100-git.tar.xz" -C "$RUNNER_TEMP/sou100-git-source" --strip-components=1 --no-same-owner --no-same-permissions
           make -C "$RUNNER_TEMP/sou100-git-source" -j2 NO_CURL=YesPlease NO_EXPAT=YesPlease NO_TCLTK=YesPlease NO_GETTEXT=YesPlease NO_OPENSSL=YesPlease git
           "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --help | rg -- '--ro-bind-fd'
@@ -1367,13 +1367,13 @@ jobs:
           PY
           }
           mkdir -m 700 "$RUNNER_TEMP/sou111-assets"
-          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz \
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz \
             --output "$RUNNER_TEMP/sou111-assets/node.tar.xz"
-          printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce \
+          printf '%s  %s\n' cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8 \
             "$RUNNER_TEMP/sou111-assets/node.tar.xz" | sha256sum --check
-          curl --fail --location --retry 3 https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz \
+          curl --fail --location --retry 3 https://www.kernel.org/pub/software/scm/git/git-2.51.3.tar.xz \
             --output "$RUNNER_TEMP/sou111-assets/git.tar.xz"
-          printf '%s  %s\n' 233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3 \
+          printf '%s  %s\n' 8e6ff1adf702c26e75de1846498d00575ff7e9919305b38b4e27c5514062b13d \
             "$RUNNER_TEMP/sou111-assets/git.tar.xz" | sha256sum --check
           mkdir -m 700 "$RUNNER_TEMP/sou111-assets/libcap"
           if [[ "$PILOT_COORDINATED_UPDATE_ONLY" == 1 ]]; then
@@ -2967,8 +2967,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends meson ninja-build libcap-dev pkg-config ripgrep zlib1g-dev strace
           mkdir -p "$RUNNER_TEMP/sou62-runtime" "$RUNNER_TEMP/sou62-bwrap-source"
-          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz --output "$RUNNER_TEMP/sou62-node.tar.xz"
-          printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce "$RUNNER_TEMP/sou62-node.tar.xz" | sha256sum --check
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz --output "$RUNNER_TEMP/sou62-node.tar.xz"
+          printf '%s  %s\n' cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8 "$RUNNER_TEMP/sou62-node.tar.xz" | sha256sum --check
           tar --extract --xz --file "$RUNNER_TEMP/sou62-node.tar.xz" --directory "$RUNNER_TEMP/sou62-runtime" --strip-components=1 --no-same-owner --no-same-permissions
           curl --fail --location --retry 3 https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz --output "$RUNNER_TEMP/sou62-bwrap.tar.xz"
           printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d "$RUNNER_TEMP/sou62-bwrap.tar.xz" | sha256sum --check
@@ -2977,8 +2977,8 @@ jobs:
           meson compile -C "$RUNNER_TEMP/sou62-bwrap-build"
           # Reuse the accepted Git profile's exact runtime, without a kit builder.
           mkdir "$RUNNER_TEMP/sou100-git-source"
-          curl --fail --location --retry 3 https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz --output "$RUNNER_TEMP/sou100-git.tar.xz"
-          printf '%s  %s\n' 233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3 "$RUNNER_TEMP/sou100-git.tar.xz" | sha256sum --check
+          curl --fail --location --retry 3 https://www.kernel.org/pub/software/scm/git/git-2.51.3.tar.xz --output "$RUNNER_TEMP/sou100-git.tar.xz"
+          printf '%s  %s\n' 8e6ff1adf702c26e75de1846498d00575ff7e9919305b38b4e27c5514062b13d "$RUNNER_TEMP/sou100-git.tar.xz" | sha256sum --check
           tar -xJf "$RUNNER_TEMP/sou100-git.tar.xz" -C "$RUNNER_TEMP/sou100-git-source" --strip-components=1 --no-same-owner --no-same-permissions
           make -C "$RUNNER_TEMP/sou100-git-source" -j2 NO_CURL=YesPlease NO_EXPAT=YesPlease NO_TCLTK=YesPlease NO_GETTEXT=YesPlease NO_OPENSSL=YesPlease git
           "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --help | rg -- '--ro-bind-fd'
@@ -3151,8 +3151,8 @@ jobs:
           mkdir -m 700 "$task_scratch"
           mkdir -m 700 "$task_scratch"/{home,cargo-home,tmp,host,npm-cache,packages,node,bwrap-source,binaries}
           ln -s "$HOME/.cargo/registry" "$task_scratch/cargo-home/registry"
-          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz -o "$task_scratch/node.tar.xz"
-          printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce "$task_scratch/node.tar.xz" | sha256sum --check
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz -o "$task_scratch/node.tar.xz"
+          printf '%s  %s\n' cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8 "$task_scratch/node.tar.xz" | sha256sum --check
           tar -xJf "$task_scratch/node.tar.xz" -C "$task_scratch/node" --strip-components=1 --no-same-owner --no-same-permissions
           curl --fail --location --retry 3 https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz -o "$task_scratch/bwrap.tar.xz"
           printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d "$task_scratch/bwrap.tar.xz" | sha256sum --check

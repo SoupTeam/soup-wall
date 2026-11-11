@@ -388,7 +388,7 @@
         "policy": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
         "registry": null,
         "runtime": null,
-        "server": "bc8c0f6a826e7ddfc4452ae63b719c22174e3e8828d508a2201d977759cadf75"
+        "server": "c06d11a7195ca481cba22f826e3258db2b9411697ea21549299eecf46ac4b659"
       }
     },
     {
@@ -408,7 +408,7 @@
         "policy": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
         "registry": null,
         "runtime": null,
-        "server": "4195dd3b6b8d8a9d6fd18c670c80554a1b73920f594a48b89fa8f213b08b72eb"
+        "server": "ff8ca03c9b8c5048a90d31665fbff42d581440bb7419e046f906dc919e6d603c"
       }
     },
     {
@@ -911,7 +911,7 @@
       "capability": "filesystem-linux",
       "path": "profiles/mcp/filesystem-readonly-v1/upstream-identity.json",
       "identity_field": "server",
-      "sha256": "bc8c0f6a826e7ddfc4452ae63b719c22174e3e8828d508a2201d977759cadf75"
+      "sha256": "c06d11a7195ca481cba22f826e3258db2b9411697ea21549299eecf46ac4b659"
     },
     {
       "capability": "git-linux",
@@ -923,7 +923,7 @@
       "capability": "git-linux",
       "path": "profiles/mcp/git-readonly-v1/upstream-identity.json",
       "identity_field": "server",
-      "sha256": "4195dd3b6b8d8a9d6fd18c670c80554a1b73920f594a48b89fa8f213b08b72eb"
+      "sha256": "ff8ca03c9b8c5048a90d31665fbff42d581440bb7419e046f906dc919e6d603c"
     }
   ]
 }

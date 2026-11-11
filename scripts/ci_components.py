@@ -4,6 +4,7 @@
 The original manually dispatchable workflows remain the editable source of truth.
 Names, planner/build dependencies and the reviewed execution mode change.
 Commands, artifacts, runtime isolation and matrices stay in the source workflows.
+A bounded Ubuntu DNS fallback precedes package-installing component jobs.
 """
 from __future__ import annotations
 import argparse
@@ -32,6 +33,23 @@ on:
 permissions:
   contents: read
 jobs:
+"""
+
+
+UBUNTU_MIRROR_STEP = r"""      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
 """
 
 
@@ -110,6 +128,10 @@ def generated() -> str:
                         raise ValueError("Complex implicit matrix name needs explicit support: " + workflow)
                     value += " (" + ", ".join("${{ matrix." + axis + " }}" for axis in axes) + ")"
                 body = "    name: " + json.dumps(prefix + " / " + value) + "\n" + body
+            if "apt-get" in body or "--with-deps" in body:
+                if body.count("    steps:\n") != 1:
+                    raise ValueError("Unsupported Ubuntu package setup: " + workflow)
+                body = body.replace("    steps:\n", "    steps:\n" + UBUNTU_MIRROR_STEP, 1)
             output.append("  " + prefix + "--" + job_id + ":\n" + body.rstrip() + "\n\n")
     return "".join(output)
 

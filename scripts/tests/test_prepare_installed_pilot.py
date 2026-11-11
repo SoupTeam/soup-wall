@@ -289,16 +289,16 @@ class PreparationBoundary(unittest.TestCase):
             self.assertEqual(list(destination.iterdir()), [])
 
     def test_archive_rejects_traversal_external_symlink_and_link_parent(self):
-        for name, kind, link in (("node-v22.23.4-linux-x64/../escape", tarfile.REGTYPE, ""),
-                                 ("node-v22.23.4-linux-x64/bin/npm", tarfile.SYMTYPE, "/etc/passwd"),
-                                 ("node-v22.23.4-linux-x64/bin/npm/x", tarfile.REGTYPE, "")):
+        for name, kind, link in (("node-v22.23.5-linux-x64/../escape", tarfile.REGTYPE, ""),
+                                 ("node-v22.23.5-linux-x64/bin/npm", tarfile.SYMTYPE, "/etc/passwd"),
+                                 ("node-v22.23.5-linux-x64/bin/npm/x", tarfile.REGTYPE, "")):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 archive, destination = root / "node.tar.xz", root / "runtime"
                 destination.mkdir()
                 with tarfile.open(archive, "w:xz") as bundle:
                     if name.endswith("/x"):
-                        parent = tarfile.TarInfo("node-v22.23.4-linux-x64/bin/npm")
+                        parent = tarfile.TarInfo("node-v22.23.5-linux-x64/bin/npm")
                         parent.type, parent.linkname = tarfile.SYMTYPE, "../lib"
                         bundle.addfile(parent)
                     entry = tarfile.TarInfo(name)

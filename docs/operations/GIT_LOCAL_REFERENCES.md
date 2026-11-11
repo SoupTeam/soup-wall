@@ -100,7 +100,7 @@ obtained for the earlier image.
 Use the prerequisites and pinned build procedure in the
 [original Git guide](GIT_MCP_PROFILE.md). The upstream identity remains
 `mcp-server-git 2026.10.10`, SDK `1.29.0`, protocol `2025-11-25`, Python
-`3.11.18` (standalone release `20261026`), and Git `2.51.2`.
+`3.11.18` (standalone release `20261026`), and Git `2.51.3`.
 The exact archive, wheel, discovery and initialization digests remain in
 [`upstream-identity.json`](../../profiles/mcp/git-readonly-v1/upstream-identity.json)
 and [`requirements.lock`](../../profiles/mcp/git-readonly-v1/requirements.lock).

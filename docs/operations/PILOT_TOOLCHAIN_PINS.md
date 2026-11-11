@@ -7,7 +7,7 @@ inputs as the internal Linux pilot candidate, and see a clear refusal when anyth
 
 The single source of truth is `profiles/toolchain/linux-pilot-toolchain.json`.
 
-The current runtime pins are Node.js 22.23.4 and CPython 3.11.18. Their archive
+The current runtime pins are Node.js 22.23.5 and CPython 3.11.18. Their archive
 identities are verified; native runtime requalification is pending. Retained
 evidence records the earlier runtime versions and does not qualify these updates.
 

@@ -20,6 +20,79 @@ from ci_admission import component_names
 
 
 class SharedComponents(unittest.TestCase):
+
+    @unittest.skipUnless(shutil.which("bash"), "Bash is required for Ubuntu mirror controls")
+    def test_archive_dns_fallback_preserves_signed_repository_configuration(self):
+        command = textwrap.dedent(ci_components.UBUNTU_MIRROR_STEP.split("        run: |\n", 1)[1])
+        original = (
+            "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] "
+            "http://azure.archive.ubuntu.com/ubuntu noble main\n"
+            "URIs: https://security.ubuntu.com/ubuntu/\n"
+            "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n"
+            "deb https://archive.ubuntu.com.evil.example/ubuntu stable main\n"
+            "deb https://unrelated.example/debian stable main\n"
+        )
+        for dns_status in (0, 1):
+            with self.subTest(dns_status=dns_status), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "sources.list.d").mkdir()
+                sources = root / "sources.list.d/ubuntu.sources"
+                sources.write_text(original)
+                script = ('timeout() { return "$FIXTURE_DNS_STATUS"; }\n'
+                          'sudo() { "$@"; }\n' + command.replace("/etc/apt", str(root)))
+                result = subprocess.run([shutil.which("bash"), "-c", script],
+                    env={**os.environ, "FIXTURE_DNS_STATUS": str(dns_status)},
+                    capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                expected = original
+                if dns_status:
+                    expected = expected.replace("http://azure.archive.ubuntu.com/ubuntu",
+                                                "https://mirrors.edge.kernel.org/ubuntu")
+                    expected = expected.replace("https://security.ubuntu.com/ubuntu/",
+                                                "https://mirrors.edge.kernel.org/ubuntu/")
+                self.assertEqual(sources.read_text(), expected)
+                self.assertNotIn("trusted=yes", sources.read_text())
+
+    @unittest.skipUnless(shutil.which("bash"), "Bash is required for pinned shell downloads")
+    def test_pinned_shell_download_fallback_retains_hash_refusal(self):
+        import hashlib
+        source = (ROOT / "scripts/qualify-command-shells.sh").read_text()
+        fetch = source[source.index("fetch() {"):source.index("\nfetch main/")]
+        mocks = r"""
+        curl() {
+            printf '%s\n' "$*" >> "$FIXTURE_URL_LOG"
+            local output=${@: -1}
+            if [[ "$*" == *archive.ubuntu.com* && "$FIXTURE_PRIMARY" == failure ]]; then
+                printf partial > "$output"
+                return 6
+            fi
+            if [[ "$FIXTURE_PRIMARY" == tamper ||
+                  ("$*" == *mirrors.edge.kernel.org* && "$FIXTURE_BAD_MIRROR" == 1) ]]; then
+                printf corrupted > "$output"
+            else
+                printf 'package fixture' > "$output"
+            fi
+        }
+        dpkg-deb() { printf extracted >> "$FIXTURE_EXTRACT_LOG"; }
+        """
+        for primary, bad_mirror, passed, downloads in (
+            ("success", "0", True, 1), ("failure", "0", True, 2),
+            ("tamper", "0", False, 1), ("failure", "1", False, 2),
+        ):
+            with self.subTest(primary=primary, bad_mirror=bad_mirror), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                digest = hashlib.sha256(b"package fixture").hexdigest()
+                script = ('set -euo pipefail\nroot="$FIXTURE_ROOT"\n' + textwrap.dedent(mocks)
+                          + fetch + '\nfetch main/f/fixture fixture.deb "$FIXTURE_DIGEST"\n')
+                result = subprocess.run([shutil.which("bash"), "-c", script],
+                    env={**os.environ, "FIXTURE_ROOT": str(root), "FIXTURE_DIGEST": digest,
+                         "FIXTURE_PRIMARY": primary, "FIXTURE_BAD_MIRROR": bad_mirror,
+                         "FIXTURE_URL_LOG": str(root / "urls"),
+                         "FIXTURE_EXTRACT_LOG": str(root / "extracted")},
+                    capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode == 0, passed, result.stderr)
+                self.assertEqual(len((root / "urls").read_text().splitlines()), downloads)
+                self.assertEqual((root / "extracted").exists(), passed)
     def test_generator_writes_stable_lf_output_on_every_platform(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "components.yml"
@@ -95,8 +168,16 @@ class SharedComponents(unittest.TestCase):
             for job_id in ids:
                 with self.subTest(workflow=wf, job=job_id):
                     old, new = source[job_id], central[f"{wf.removesuffix('.yml')}--{job_id}"]
-                    self.assertEqual(old.split("    steps:", 1)[1].rstrip(),
-                                     new.split("    steps:", 1)[1].rstrip())
+                    original_steps = old.split("    steps:", 1)[1].rstrip()
+                    mirrored_steps = new.split("    steps:", 1)[1].rstrip()
+                    if "apt-get" in old or "--with-deps" in old:
+                        prelude = "\n" + ci_components.UBUNTU_MIRROR_STEP
+                        self.assertTrue(mirrored_steps.startswith(prelude))
+                        self.assertEqual(mirrored_steps.count(ci_components.UBUNTU_MIRROR_STEP), 1)
+                        mirrored_steps = "\n" + mirrored_steps[len(prelude):]
+                    else:
+                        self.assertNotIn(ci_components.UBUNTU_MIRROR_STEP, mirrored_steps)
+                    self.assertEqual(original_steps, mirrored_steps)
                     for field in ("runs-on", "timeout-minutes", "strategy", "services", "container"):
                         pattern = rf"(?m)^    {field}:.*(?:\n(?!    [a-z-]+:|  [a-z-]+:).*)*"
                         self.assertEqual(re.findall(pattern, old), re.findall(pattern, new))

@@ -59,7 +59,7 @@ change neither edits those detectors nor treats a withheld result as success.
 ## Reproducible Linux acceptance
 
 Build the exact clean source with `cargo build --locked -p agentfw --bins`.
-Use the accepted installer prerequisites: pinned official Node 22.23.4, its npm,
+Use the accepted installer prerequisites: pinned official Node 22.23.5, its npm,
 and bubblewrap 0.13.1 with `--ro-bind-fd`. Then run:
 
 ```bash

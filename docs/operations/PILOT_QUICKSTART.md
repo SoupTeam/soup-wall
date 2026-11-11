@@ -74,12 +74,12 @@ lockfile integrity and disables install scripts:
 
 ```bash
 curl --fail --location --proto '=https' --tlsv1.2 \
-  https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz \
+  https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz \
   --output "$assets/node.tar.xz"
-printf '%s  %s\n' 1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce \
+printf '%s  %s\n' cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8 \
   "$assets/node.tar.xz" | sha256sum --check
 tar -xJf "$assets/node.tar.xz" -C "$assets"
-export PATH="$assets/node-v22.23.4-linux-x64/bin:/usr/bin:/bin"
+export PATH="$assets/node-v22.23.5-linux-x64/bin:/usr/bin:/bin"
 mkdir -m 700 "$assets/claude"
 cp "$repo"/profiles/mcp/filesystem-readonly-v1/claude-host/package*.json "$assets/claude/"
 npm ci --ignore-scripts --no-audit --no-fund --prefix "$assets/claude"

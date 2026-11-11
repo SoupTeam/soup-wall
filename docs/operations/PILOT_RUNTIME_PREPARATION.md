@@ -26,13 +26,13 @@ shows how these selected binaries are built. Preparation does not build Agent,
 Claude, classifiers or the policy, and it never reads provider credentials.
 
 The pinned Node archive is
-`node-v22.23.4-linux-x64.tar.xz` from
-`https://nodejs.org/dist/v22.23.4/`, SHA-256
-`1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce`.
+`node-v22.23.5-linux-x64.tar.xz` from
+`https://nodejs.org/dist/v22.23.5/`, SHA-256
+`cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8`.
 Provide it locally with `--node-archive`. Alternatively provide an already
 extracted exact Node and npm with `--node` and `--npm`. The Node executable
 digest must match the reviewed filesystem installer. The selected Git must
-report 2.51.2; its source archive and SHA-256 are in the checked-in
+report 2.51.3; its source archive and SHA-256 are in the checked-in
 `git-readonly-v1/upstream-identity.json`. Bubblewrap must support
 `--ro-bind-fd`. Missing native libraries fail preparation.
 
@@ -45,8 +45,8 @@ python3 -B scripts/prepare-installed-pilot.py \
   --agentfw "$PWD/target/debug/agentfw" \
   --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
   --sandbox-tests /absolute/agentfw-library-test-executable \
-  --node-archive /absolute/node-v22.23.4-linux-x64.tar.xz \
-  --bwrap /absolute/bwrap --git /absolute/git-2.51.2/git \
+  --node-archive /absolute/node-v22.23.5-linux-x64.tar.xz \
+  --bwrap /absolute/bwrap --git /absolute/git-2.51.3/git \
   --claude /absolute/claude --python /absolute/python3 \
   --filesystem-classifier "$PWD/rule_baseline/rule_baseline.py" \
   --git-classifier "$PWD/rule_baseline/git_readonly_v1/rule_baseline.py" \

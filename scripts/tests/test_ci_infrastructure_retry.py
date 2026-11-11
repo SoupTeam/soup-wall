@@ -110,6 +110,13 @@ class Evidence:
 
 
 class RetryPlanTests(unittest.TestCase):
+    def test_verified_fallback_mirror_keeps_the_bounded_retry_contract(self):
+        api = Evidence()
+        api.log = api.log.replace(b"http://archive.ubuntu.com", b"https://mirrors.edge.kernel.org")
+        result = retry.retry_plan(api, 22, JOB, BASE)
+        self.assertEqual(result["identity"]["category"], "package_mirror_503")
+        self.assertEqual(api.posts, 0)
+
     def test_reviewed_mirror_and_allocation_have_finite_plan(self):
         for cause, category in (("mirror", "package_mirror_503"),
                                 ("allocation", "hosted_runner_allocation")):

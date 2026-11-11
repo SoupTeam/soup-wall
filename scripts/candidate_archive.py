@@ -14,14 +14,14 @@ REQUIRED = {"bin/agentfw", "bin/bwrap", "assets/baseline.classifier",
             "scripts/pilot_filesystem_roots.py", "rule_baseline/rule_baseline.py",
             "Cargo.lock", "rust-toolchain.toml", "LICENSE", "NOTICE",
             "npm-inventory.json", "assets/bubblewrap-0.13.1.tar.xz", "upstream-notices/bubblewrap-COPYING",
-            "node-v22.23.4-linux-x64.tar.xz",
+            "node-v22.23.5-linux-x64.tar.xz",
             *(PROFILE + p for p in ("package.json", "package-lock.json", "upstream-identity.json",
                                      "upstream-tools-list.json", "policy.yaml"))}
 MAX_BYTES = 1024 * 1024 * 1024
 MAX_ENTRIES = 20000
 MAX_MANIFEST = 4 * 1024 * 1024
 ARCHIVE_PINS = {
-    "node-v22.23.4-linux-x64.tar.xz": "1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce",
+    "node-v22.23.5-linux-x64.tar.xz": "cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8",
     "assets/bubblewrap-0.13.1.tar.xz": "0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d",
 }
 
