@@ -40,7 +40,7 @@
     },
     "other_documented_policy_presets_not_selected_by_installed_entry_points": {
       "linux-readonly-v1": {
-        "manifest_sha256": "a16029cd846887afe184dab9b3bd0baad959f6596b862ab8ae46ad0eaaf1aa0d",
+        "manifest_sha256": "d8e403a726fdb7942d9ba51f1b5f6ec58a42289c2858d7dc90f6e76ee44de4b2",
         "policy_sha256": "8a8a8f7e7147a977f9d268091152bfd424fe6e61531a313c66eae1bc1fa46f5a"
       }
     }
