@@ -21,8 +21,8 @@ HOST_SHA = 'fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7'
 DOWNLOADS = {
     'node': ('https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz',
              '1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce', 'xz'),
-    'git': ('https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz',
-            '233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3', 'xz'),
+    'git': ('https://www.kernel.org/pub/software/scm/git/git-2.51.3.tar.xz',
+            '8e6ff1adf702c26e75de1846498d00575ff7e9919305b38b4e27c5514062b13d', 'xz'),
     'bwrap': ('https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz',
               '0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d', 'xz'),
     'python': ('https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.11.18%2B20261026-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz',

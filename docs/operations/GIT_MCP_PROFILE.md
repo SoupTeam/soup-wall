@@ -106,7 +106,7 @@ closed; Windows is not a positive isolation result.
 ## Prepare a private installation
 
 Preparation downloads are opt-in; protected startup is offline. Supply a
-separately verified Git 2.51.2 executable and bubblewrap 0.13.1 with
+separately verified Git 2.51.3 executable and bubblewrap 0.13.1 with
 `--ro-bind-fd`, Linux Landlock ABI >= 3, and the `agentfw-git-sandbox` binary built
 from the same reviewed source. The [Linux workflow](../../.github/workflows/mcp-real-git.yml)
 builds these from pinned official sources without changing host security policy.

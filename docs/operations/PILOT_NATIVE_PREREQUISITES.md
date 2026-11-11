@@ -3,7 +3,7 @@
 `scripts/prepare-native-pilot-prerequisites.py` replaces the two manual source
 builds needed before [pilot runtime preparation](PILOT_RUNTIME_PREPARATION.md).
 Concurrent calls use the [owned preparation protocol](PILOT_PREPARATION_COORDINATION.md).
-It builds only Git 2.51.2 and bubblewrap 0.13.1 for native Ubuntu 24.04 x86_64.
+It builds only Git 2.51.3 and bubblewrap 0.13.1 for native Ubuntu 24.04 x86_64.
 It does not install packages, alter the host, grant user namespace permission,
 start the daemon, or claim active protection.
 
@@ -16,7 +16,7 @@ build, or explicitly add `--allow-download`. The only download targets are:
 
 | Input | Exact URL | SHA-256 |
 | --- | --- | --- |
-| Git 2.51.2 | `https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz` | `233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3` |
+| Git 2.51.3 | `https://www.kernel.org/pub/software/scm/git/git-2.51.3.tar.xz` | `8e6ff1adf702c26e75de1846498d00575ff7e9919305b38b4e27c5514062b13d` |
 | bubblewrap 0.13.1 | `https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz` | `0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d` |
 
 The plan inventories `cc`, `make`, Meson, Ninja, `pkg-config`, `ar`, `ranlib`,
@@ -32,7 +32,7 @@ the [native CI lane](../../.github/workflows/mcp-real-filesystem.yml).
 ```sh
 commit="$(git rev-parse HEAD)"
 archive_args=(
-  --git-archive /absolute/git-2.51.2.tar.xz
+  --git-archive /absolute/git-2.51.3.tar.xz
   --bwrap-archive /absolute/bubblewrap-0.13.1.tar.xz
 )
 args=(--output "$HOME/private-native-prerequisites" --expected-commit "$commit" "${archive_args[@]}")
@@ -152,7 +152,7 @@ local Git archive:
 ```sh
 python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --rebuild \
   --offline-bwrap-cache --output "$HOME/private-native-prerequisites" \
-  --expected-commit "$commit" --git-archive /absolute/git-2.51.2.tar.xz
+  --expected-commit "$commit" --git-archive /absolute/git-2.51.3.tar.xz
 ```
 
 For an invalid or exhausted partial, inspect the bounded failure reason and

@@ -20,7 +20,7 @@ prints its observation; inspect `status` and `admitted` before using it.
 
 | Preparation | Additional generation budget | Other writable locations |
 | --- | --- | --- |
-| Native Git 2.51.2 and bubblewrap 0.13.1 (SOU-115) | 80 MiB archive caps + 1 GiB extraction caps + declared build allowance | Build logs and temporary files are inside the generation |
+| Native Git 2.51.3 and bubblewrap 0.13.1 (SOU-115) | 80 MiB archive caps + 1 GiB extraction caps + declared build allowance | Build logs and temporary files are inside the generation |
 | Agent source build (SOU-119) | Existing 8 GiB Cargo generation limit + 512 MiB final-copy allowance | Isolated Cargo cache, target, logs and temporary files are inside the generation |
 | Installed profiles (SOU-111) | 256 MiB archive caps + 2 GiB extraction caps + declared installation allowance | npm cache; npm temporary files in `/tmp`; pip temporary files in caller `TMPDIR`, when set |
 

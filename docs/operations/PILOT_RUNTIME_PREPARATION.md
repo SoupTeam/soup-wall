@@ -32,7 +32,7 @@ The pinned Node archive is
 Provide it locally with `--node-archive`. Alternatively provide an already
 extracted exact Node and npm with `--node` and `--npm`. The Node executable
 digest must match the reviewed filesystem installer. The selected Git must
-report 2.51.2; its source archive and SHA-256 are in the checked-in
+report 2.51.3; its source archive and SHA-256 are in the checked-in
 `git-readonly-v1/upstream-identity.json`. Bubblewrap must support
 `--ro-bind-fd`. Missing native libraries fail preparation.
 
@@ -46,7 +46,7 @@ python3 -B scripts/prepare-installed-pilot.py \
   --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
   --sandbox-tests /absolute/agentfw-library-test-executable \
   --node-archive /absolute/node-v22.23.4-linux-x64.tar.xz \
-  --bwrap /absolute/bwrap --git /absolute/git-2.51.2/git \
+  --bwrap /absolute/bwrap --git /absolute/git-2.51.3/git \
   --claude /absolute/claude --python /absolute/python3 \
   --filesystem-classifier "$PWD/rule_baseline/rule_baseline.py" \
   --git-classifier "$PWD/rule_baseline/git_readonly_v1/rule_baseline.py" \

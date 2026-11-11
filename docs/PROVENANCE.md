@@ -133,7 +133,7 @@ behavioral fixtures, not a replacement server implementation.
 
 CPython 3.11.18 uses the pinned Astral python-build-standalone 20261026 original
 distribution, with Python/third-party distribution notices retained in the
-runtime tree. Git 2.51.2 is a separate GPL-2.0 executable built from its pinned
+runtime tree. Git 2.51.3 is a separate GPL-2.0 executable built from its pinned
 official source archive; its COPYING file remains in the build source. The
 existing separately built bubblewrap 0.13.1 remains LGPL-2.0-or-later. These
 executables are not linked into or redistributed with the Apache-2.0 Agent.

@@ -153,7 +153,7 @@ if kind == "native":
     def captured(command, **_kwargs):
         if command[1] == "--help":
             return "--ro-bind-fd"
-        return "git version 2.51.2" if command[0].endswith("/git") else "bubblewrap 0.13.1"
+        return "git version 2.51.3" if command[0].endswith("/git") else "bubblewrap 0.13.1"
 
     archive_parent = output.parent
     arguments = [str(SCRIPTS / "prepare-native-pilot-prerequisites.py"), "--prepare",

@@ -24,7 +24,7 @@
     "git_profile": {
       "id": "git-readonly-v1",
       "format": "sw-mcp/git-readonly/1",
-      "selection_binding_sha256": "693d13f29d8d169871085b47e4469cd95bbc49ee44ef3688fbe83f73f79f8512",
+      "selection_binding_sha256": "3c1feccfacc1743363537470b723a699914d2f8bb025d77aa04c26450e3a8208",
       "profile_policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
       "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
       "classifier_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474"
@@ -40,7 +40,7 @@
     },
     "other_documented_policy_presets_not_selected_by_installed_entry_points": {
       "linux-readonly-v1": {
-        "manifest_sha256": "ae09f1b9d55fe668d5229b734db0cb64112b0ee2b83fd41d2387eee64c38de93",
+        "manifest_sha256": "a16029cd846887afe184dab9b3bd0baad959f6596b862ab8ae46ad0eaaf1aa0d",
         "policy_sha256": "8a8a8f7e7147a977f9d268091152bfd424fe6e61531a313c66eae1bc1fa46f5a"
       }
     }

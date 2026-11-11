@@ -189,6 +189,20 @@ Sources for the remaining observations are the upstream
 [paste maintenance notice](https://rustsec.org/advisories/RUSTSEC-2024-0436.html)
 and [unsafe-libyaml maintenance notice](https://rustsec.org/advisories/RUSTSEC-2024-0449.html).
 
+## Git security refresh on 11 November 2026
+
+The selected Git source now uses maintenance release `2.51.3`, published on
+10 November. Its release notes include fixes for CVE-2026-111760,
+CVE-2026-113408, CVE-2026-114466, CVE-2026-114467, CVE-2026-114469 and
+CVE-2026-105437. The source archive is bound to SHA-256
+`8e6ff1adf702c26e75de1846498d00575ff7e9919305b38b4e27c5514062b13d`
+from the [official signed checksum list](https://www.kernel.org/pub/software/scm/git/sha256sums.asc).
+The installer, profile identity, CI downloaders and current scope descriptors
+select those same bytes. Earlier execution reports retain their actual Git
+version. New selections require a fresh installed qualification and native
+review, including this release's source and notices. The unresolved Node hold
+below remains active.
+
 ## Native review and final qualification
 
 ### Unresolved upstream Node security notice

@@ -320,7 +320,7 @@ installer into owned roots outside the checkout and drives the installed Agent:
 cargo build --locked --release -p agentfw --bins
 python3 scripts/onboarding-profile-acceptance.py --agentfw target/release/agentfw \
   --node /abs/node-v22.23.4/bin/node --npm /abs/node-v22.23.4/bin/npm \
-  --bwrap /abs/bubblewrap-0.13.1/bwrap --git /abs/git-2.51.2/git --git-sha256 <sha256> \
+  --bwrap /abs/bubblewrap-0.13.1/bwrap --git /abs/git-2.51.3/git --git-sha256 <sha256> \
   --git-launcher target/release/agentfw-git-sandbox --out target/profile-onboarding-evidence
 ```
 
