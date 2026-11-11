@@ -3,8 +3,13 @@ set -euo pipefail
 root=$(mktemp -d "${RUNNER_TEMP:-/tmp}/command-shells.XXXXXX")
 fetch() {
     local directory=$1 package=$2 digest=$3
-    curl --fail --silent --show-error --location --proto '=https' \
-        "https://archive.ubuntu.com/ubuntu/pool/$directory/$package" -o "$root/$package"
+    if ! curl --fail --silent --show-error --location --proto '=https' \
+        --connect-timeout 10 --max-time 60 \
+        "https://archive.ubuntu.com/ubuntu/pool/$directory/$package" -o "$root/$package"; then
+        curl --fail --silent --show-error --location --proto '=https' \
+            --connect-timeout 10 --max-time 60 \
+            "https://mirrors.edge.kernel.org/ubuntu/pool/$directory/$package" -o "$root/$package"
+    fi
     printf '%s  %s\n' "$digest" "$root/$package" | sha256sum --check --strict
     dpkg-deb --extract "$root/$package" "$root/runtime"
 }

@@ -111,6 +111,20 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.1
         with:
@@ -528,6 +542,20 @@ jobs:
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/recovery-build
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -665,6 +693,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
@@ -691,6 +733,20 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -733,6 +789,20 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -821,6 +891,20 @@ jobs:
       matrix:
         backend: [sqlite, postgres]
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -894,6 +978,20 @@ jobs:
       PGUSER: postgres
       PGPASSWORD: disposable-admin
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -1052,6 +1150,20 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.99.1
       - uses: actions/setup-python@v6
@@ -1232,6 +1344,20 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -1319,6 +1445,20 @@ jobs:
       SOU166_ARCHIVE_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_sha256 }}
       SOU166_MANIFEST_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.manifest_sha256 }}
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -1835,6 +1975,20 @@ jobs:
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -2252,6 +2406,20 @@ jobs:
       PILOT_CAPACITY_ONLY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.capacity_only == 'true' && '1' || '0' }}
       PILOT_COORDINATED_UPDATE_ONLY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.coordinated_update_only == 'true' && '1' || '0' }}
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -4289,6 +4457,20 @@ jobs:
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - name: Refuse unqualified combined capability selection
         if: (inputs.local_refs_only && inputs.shallow_only) || (inputs.local_refs_only && inputs.file_revisions_only) || (inputs.shallow_only && inputs.file_revisions_only) || (inputs.tracked_symlinks_only && (inputs.local_refs_only || inputs.shallow_only || inputs.file_revisions_only))
         run: exit 1
@@ -5116,6 +5298,20 @@ jobs:
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - name: Validate explicit formatter shadow selection
         env:
           FORMATTER_SHADOW: ${{ github.event.inputs.formatter_shadow }}
@@ -5717,6 +5913,20 @@ jobs:
       RUSTUP_TOOLCHAIN: '1.94.1'
       SOU86_ACCEPTED: '2af2f35b326e0f70660b5c4cbde8134fe4ab9751'
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
