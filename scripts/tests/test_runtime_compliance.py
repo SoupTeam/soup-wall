@@ -87,6 +87,41 @@ class RuntimeComplianceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "decision_invalid"):
             reviews.Review(data, self.output / "runtime-reviews.json", self.report, "a"*40, self.generation)
 
+    def test_proposal_retains_scanner_identities_aliases_and_unreviewed_decisions(self):
+        osv = {"id": "GHSA-fixture", "aliases": ["PYSEC-fixture", "CVE-fixture"],
+               "affected": [{"package": {"name": "certifi", "ecosystem": "PyPI"}}]}
+        self.report["findings"] = [{"source": "input", "package": {
+            "ecosystem": "PyPI", "name": "certifi", "version": "2026.10.19"}, "advisory": osv}]
+        cargo = {"id": "RUSTSEC-fixture", "informational": "unmaintained", "aliases": []}
+        self.report["cargo_audit_report"] = {"database": {"advisory-count": 1},
+            "lockfile": {"dependency-count": 1}, "vulnerabilities": {"found": False, "list": []},
+            "warnings": {"unmaintained": [{"package": {"name": "paste", "version": "1.0.15"},
+                                          "advisory": cargo}]}}
+        builder.build(self.report, self.generation, self.output)
+        data = json.loads((self.output / "runtime-reviews-proposal.json").read_text())
+        self.assertEqual(len(data["advisories"]), 2)
+        by_scanner = {row["finding"]["scanner"]: row for row in data["advisories"]}
+        self.assertEqual(by_scanner["osv"]["finding"]["source"], "installed-python")
+        self.assertEqual(by_scanner["osv"]["finding"]["aliases"], sorted(osv["aliases"]))
+        self.assertEqual(by_scanner["osv"]["finding"]["advisory_sha256"], reviews.digest(osv))
+        self.assertEqual(by_scanner["cargo_audit"]["finding"]["source"], "Cargo.lock")
+        self.assertEqual(by_scanner["cargo_audit"]["finding"]["advisory_sha256"], reviews.digest(cargo))
+        self.assertTrue(all(row["disposition"] == "UNREVIEWED" and not row["requirements"]
+                            and not row["rationale"] for row in data["advisories"]))
+        with self.assertRaisesRegex(ValueError, "decision_invalid"):
+            reviews.Review(data, self.output / "runtime-reviews.json", self.report, "a"*40, self.generation)
+
+    def test_advisory_proposal_refuses_unmapped_sources_and_unreviewable_cargo(self):
+        self.report["findings"] = [{"source": "unrelated", "package": {}, "advisory": {}}]
+        with self.assertRaisesRegex(ValueError, "unmapped_advisory_source"):
+            builder.advisory_proposals(self.report)
+        self.report["findings"] = []
+        self.report["cargo_audit_report"] = {"database": {"advisory-count": 1},
+            "lockfile": {"dependency-count": 1}, "vulnerabilities": {"found": True, "list": [{}]},
+            "warnings": {}}
+        with self.assertRaisesRegex(ValueError, "cargo_vulnerabilities_or_incomplete"):
+            builder.advisory_proposals(self.report)
+
     def test_missing_gpl_text_and_changed_covered_source_reject(self):
         builder.build(self.report, self.generation, self.output)
         gpl = self.output / "licenses/GPL-3.0.txt"

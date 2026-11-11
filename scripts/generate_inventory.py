@@ -741,7 +741,7 @@ def main(argv=None):
             if args.native_reviews is not None:
                 report["native_reviews_input"] = {"sha256": runtime_reviews.file_sha(args.native_reviews), "data": read_json(args.native_reviews)}
             report["native_reviews"] = verify_native_reviews(args.native_reviews, selection, args.selection.parent, preparation=prep)
-        except (OSError, ValueError, KeyError, TypeError) as error:
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, subprocess.SubprocessError) as error:
             report["errors"].append("native_reviews:" + str(error))
         # Keep scanner invocation and its complete bounded raw result, including
         # failed reports. Exit 1 and informational findings are never waived.
