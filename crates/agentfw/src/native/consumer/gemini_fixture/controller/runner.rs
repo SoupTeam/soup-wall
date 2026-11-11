@@ -143,6 +143,8 @@ impl Controller {
         {
             Ok(raw) => raw,
             Err(e) => {
+                let code = super::super::transport::failure_code(&e);
+                self.ledger.create("model.failure", code.as_bytes())?;
                 if let Some(raw) = rejected_body(&e) {
                     self.ledger.create("model.error-response", raw)?;
                 }

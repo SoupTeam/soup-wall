@@ -14,21 +14,44 @@ fn read_key(input: &mut impl Read) -> Result<Zeroizing<String>> {
             .map_err(|_| anyhow::anyhow!("gemini_key_input_cancelled"))?;
         match byte[0] {
             b'\r' | b'\n' => {
-                ensure!(key.len() >= 20, "gemini_key_too_short");
-                return Ok(key);
+                let trimmed = key.trim_matches([' ', '\t']);
+                ensure!(trimmed.len() >= 20, "gemini_key_too_short");
+                ensure!(
+                    trimmed
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-' || c == b'.'),
+                    "gemini_key_shape"
+                );
+                return Ok(Zeroizing::new(trimmed.to_owned()));
             }
             3 | 4 => bail!("gemini_key_input_cancelled"),
-            27 => bail!("gemini_key_escape_sequence"),
+            27 => {
+                let mut sequence = Zeroizing::new([0_u8; 5]);
+                input
+                    .read_exact(&mut *sequence)
+                    .map_err(|_| anyhow::anyhow!("gemini_key_escape_sequence"))?;
+                ensure!(
+                    &*sequence == b"[200~" || &*sequence == b"[201~",
+                    "gemini_key_escape_sequence"
+                );
+            }
             22 => bail!("gemini_key_paste_shortcut"),
             8 | 127 => {
                 key.pop();
             }
-            c if c.is_ascii_alphanumeric() || c == b'_' || c == b'-' => {
+            c if c.is_ascii_alphanumeric() || c == b'_' || c == b'-' || c == b'.' => {
                 ensure!(key.len() < 256, "gemini_key_input_limit");
                 key.push(char::from(c));
             }
             c if !c.is_ascii() => bail!("gemini_key_non_ascii"),
-            _ => bail!("gemini_key_shape"),
+            b' ' | b'\t' => {
+                ensure!(key.len() < 256, "gemini_key_input_limit");
+                key.push(char::from(byte[0]));
+            }
+            c if c.is_ascii_control() => bail!("gemini_key_control"),
+            b'"' | b'\'' | b'`' => bail!("gemini_key_quotes"),
+            b':' | b'/' | b'\\' => bail!("gemini_key_path_punctuation"),
+            _ => bail!("gemini_key_punctuation"),
         }
     }
 }
@@ -36,10 +59,16 @@ fn read_key(input: &mut impl Read) -> Result<Zeroizing<String>> {
 /// Fixed allowlisted messages only: never expose library errors or input bytes.
 pub(super) fn input_diagnostic(error: &anyhow::Error) -> &'static str {
     match error.to_string().as_str() {
+        "gemini_operator_confirmation" => "Confirmation text did not match. No API access occurred. Paste the complete RUN confirmation line and press Enter.",
         "gemini_key_too_short" => "Hidden input rejected before API access: fewer than 20 characters. Copy the FULL key with the AI Studio copy button; hidden input is not displayed.",
         "gemini_key_paste_shortcut" => "Hidden input rejected before API access: terminal sent Ctrl-V as a control byte, not pasted text. Use the terminal's Paste command.",
         "gemini_key_escape_sequence" => "Hidden input cancelled before API access: Escape or a terminal escape sequence was received (for example a paste wrapper). Do not keep retrying the real key; report this message.",
         "gemini_key_non_ascii" => "Hidden input rejected before API access: non-ASCII input. Check the English keyboard layout and copy only the full API key.",
+        "gemini_key_whitespace" => "Hidden input rejected before API access: space or tab received. Copy only the full key with the AI Studio copy button.",
+        "gemini_key_control" => "Hidden input rejected before API access: terminal control character received. Report this message; do not retry the real key.",
+        "gemini_key_quotes" => "Hidden input rejected before API access: quote or backtick received. Use the key copy button, without surrounding formatting.",
+        "gemini_key_path_punctuation" => "Hidden input rejected before API access: colon or slash received. Check that you copied the key rather than a URL or command.",
+        "gemini_key_punctuation" => "Hidden input rejected before API access: unsupported printable punctuation received. The key value was not displayed or stored.",
         "gemini_key_shape" => "Hidden input rejected before API access: unsupported character or control byte. Copy only the full API key, without quotes, spaces or formatting.",
         "gemini_key_input_limit" => "Hidden input rejected before API access: input exceeds 256 characters. Do not paste a command, link or message.",
         "gemini_key_input_cancelled" => "Hidden input cancelled before API access (Ctrl-C, Ctrl-D or terminal input ended).",
@@ -52,12 +81,13 @@ pub(super) fn input_diagnostic(error: &anyhow::Error) -> &'static str {
 fn gemini_manual_key_input_diagnostics_never_echo_input() {
     for (bytes, code) in [
         (b"\x16".as_slice(), "gemini_key_paste_shortcut"),
-        (
-            b"\x1b[200~synthetic_paste_only_123456\x1b[201~\n".as_slice(),
-            "gemini_key_escape_sequence",
-        ),
         ("тест\n".as_bytes(), "gemini_key_non_ascii"),
         (b"short\n".as_slice(), "gemini_key_too_short"),
+        (b"\0".as_slice(), "gemini_key_control"),
+        (b"\x1a".as_slice(), "gemini_key_control"),
+        (b"\"".as_slice(), "gemini_key_quotes"),
+        (b"https:".as_slice(), "gemini_key_path_punctuation"),
+        (b"@".as_slice(), "gemini_key_punctuation"),
         (b"\x03".as_slice(), "gemini_key_input_cancelled"),
     ] {
         let mut input = bytes;
@@ -66,6 +96,22 @@ fn gemini_manual_key_input_diagnostics_never_echo_input() {
         assert!(input_diagnostic(&error).contains("before API access"));
         assert!(!input_diagnostic(&error).contains("synthetic_paste_only"));
     }
+    for bytes in [
+        b" \tsynthetic_manual_key_only\t \n".as_slice(),
+        b"\x1b[200~synthetic_manual_key_only\x1b[201~\n".as_slice(),
+    ] {
+        assert_eq!(
+            &*read_key(&mut &*bytes).unwrap(),
+            "synthetic_manual_key_only"
+        );
+    }
+    assert!(read_key(&mut b"synthetic manual_key_only\n".as_slice()).is_err());
+    let dotted = b"AQ.synthetic_key.for_offline_test_123456\n";
+    assert_eq!(
+        &*read_key(&mut dotted.as_slice()).unwrap(),
+        "AQ.synthetic_key.for_offline_test_123456"
+    );
+    assert!(super::Key::new("AQ.synthetic_key.for_offline_test_123456".to_owned()).is_ok());
     let canary = "synthetic_secret_do_not_echo";
     assert!(!input_diagnostic(&anyhow::anyhow!(canary)).contains(canary));
     assert!(

@@ -13,6 +13,54 @@ use tokio_rustls::rustls;
 const HEADER_LIMIT: usize = 8192;
 const ENCRYPTED_LIMIT: usize = 131_072;
 
+// Only fixed error identifiers may be persisted; library errors may contain secrets.
+pub(super) fn failure_code(error: &anyhow::Error) -> &'static str {
+    match error.to_string().as_str() {
+        "gemini_chunk_framing" => "gemini_chunk_framing",
+        "gemini_chunk_size" => "gemini_chunk_size",
+        "gemini_chunk_trailer" => "gemini_chunk_trailer",
+        "gemini_compression_refused" => "gemini_compression_refused",
+        "gemini_connect" => "gemini_connect",
+        "gemini_content_type" => "gemini_content_type",
+        "gemini_dns" => "gemini_dns",
+        "gemini_dns_private" => "gemini_dns_private",
+        "gemini_encrypted_limit" => "gemini_encrypted_limit",
+        "gemini_extra_http" => "gemini_extra_http",
+        "gemini_header_limit" => "gemini_header_limit",
+        "gemini_http" => "gemini_http",
+        "gemini_http_eof" => "gemini_http_eof",
+        "gemini_http_framing" => "gemini_http_framing",
+        "gemini_http_status" => "gemini_http_status",
+        "gemini_incomplete_http" => "gemini_incomplete_http",
+        "gemini_length" => "gemini_length",
+        "gemini_metadata_body" => "gemini_metadata_body",
+        "gemini_peer" => "gemini_peer",
+        "gemini_quota_stop" => "gemini_quota_stop",
+        "gemini_redirect_refused" => "gemini_redirect_refused",
+        "gemini_request_limit" => "gemini_request_limit",
+        "gemini_request_limit_or_expired" => "gemini_request_limit_or_expired",
+        "gemini_response_limit" => "gemini_response_limit",
+        "gemini_timeout_unknown" => "gemini_timeout_unknown",
+        "gemini_tls" => "gemini_tls",
+        "gemini_transfer_encoding" => "gemini_transfer_encoding",
+        "gemini_write_unknown" => "gemini_write_unknown",
+        _ => "gemini_transport_unclassified",
+    }
+}
+
+#[test]
+fn gemini_transport_failure_code_redacts_unrecognized_errors() {
+    assert_eq!(failure_code(&anyhow::anyhow!("gemini_tls")), "gemini_tls");
+    assert_eq!(
+        failure_code(&anyhow::anyhow!("secret synthetic value")),
+        "gemini_transport_unclassified"
+    );
+    assert_eq!(
+        failure_code(&anyhow::anyhow!("gemini_tls: secret synthetic value")),
+        "gemini_transport_unclassified"
+    );
+}
+
 pub(super) struct Rejection {
     status: u16,
     pub(super) body: Vec<u8>,

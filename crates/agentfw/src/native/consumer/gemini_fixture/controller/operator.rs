@@ -200,7 +200,12 @@ fn confirm(project: &str, row_ceiling: usize) -> Result<()> {
         }
         answer.push(byte[0]);
     }
-    ensure!(answer == phrase.as_bytes(), "gemini_operator_confirmation");
+    let answer = std::str::from_utf8(&answer)
+        .map_err(|_| anyhow::anyhow!("gemini_operator_confirmation"))?
+        .trim();
+    let answer = answer.strip_prefix("\x1b[200~").unwrap_or(answer);
+    let answer = answer.strip_suffix("\x1b[201~").unwrap_or(answer).trim();
+    ensure!(answer == phrase, "gemini_operator_confirmation");
     Ok(())
 }
 

@@ -77,7 +77,7 @@ impl Key {
             (20..=256).contains(&value.len())
                 && value
                     .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'),
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-' || b == b'.'),
             "gemini_key_shape"
         );
         Ok(key)
