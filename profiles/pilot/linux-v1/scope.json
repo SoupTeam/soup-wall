@@ -24,7 +24,7 @@
     "git_profile": {
       "id": "git-readonly-v1",
       "format": "sw-mcp/git-readonly/1",
-      "selection_binding_sha256": "3c1feccfacc1743363537470b723a699914d2f8bb025d77aa04c26450e3a8208",
+      "selection_binding_sha256": "30ebf0f9db9691bee7683835eaf6fd0bfd802b8e8bd533ed93fec4d9c90df302",
       "profile_policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
       "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
       "classifier_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474"
