@@ -16,7 +16,7 @@ import stat
 import subprocess
 import sys
 
-ACCEPTED = '17b03aaf63f5100682f2b4048444ce30b6892b33'
+ACCEPTED = '69cea163935783f54ebfbc999ceca77bd5bfe11a'
 HOST_SHA = 'fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7'
 DOWNLOADS = {
     'node': ('https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz',
