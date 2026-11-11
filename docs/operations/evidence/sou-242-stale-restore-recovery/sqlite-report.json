@@ -1,0 +1,93 @@
+{
+  "backend": "sqlite",
+  "binaries": {
+    "agentfw": "d3adb299c4695c15f611d2a25cf8ae0420fb19427199a729e04b4756030c9706",
+    "llm-firewall": "916c1723fc499a1a81c653cf08136fd8bc446526526d062214a32b3f27ea5485"
+  },
+  "checks": {
+    "agent-applies-above-fence": true,
+    "agent-applies-newer-deployment": true,
+    "agent-credential-cannot-preview": true,
+    "agent-unchanged-while-fenced": true,
+    "backup-archive-written": true,
+    "baseline-applied-deny": true,
+    "browser-owner-complete": true,
+    "browser-owner-controls": true,
+    "browser-owner-read-only": true,
+    "browser-viewer-complete": true,
+    "browser-viewer-controls": true,
+    "browser-viewer-read-only": true,
+    "changed-issuer-id-refused": true,
+    "changed-issuer-key-refused": true,
+    "completed-evidence-cannot-reopen": true,
+    "concurrent-confirmations-one-fence": true,
+    "concurrent-mutation-refused": true,
+    "equal-lower-ack-refused": true,
+    "fence-at-agent-sequence": true,
+    "fence-survives-restart": true,
+    "foreign-audience-refused": true,
+    "foreign-credential-ack-refused": true,
+    "forged-signature-refused": true,
+    "issued-above-fence": true,
+    "not-complete-before-ack": true,
+    "observations-free-of-private-values": true,
+    "operator-cannot-confirm": true,
+    "operator-cannot-preview": true,
+    "preview-after-mutation": true,
+    "preview-valid": true,
+    "preview-writes-nothing": true,
+    "recovery-complete-after-applied-ack": true,
+    "recovery-inventory-accepts-fence": true,
+    "replayed-old-evidence-refused": true,
+    "restart-keeps-completion": true,
+    "restore-verified": true,
+    "restored-console-is-behind": true,
+    "retained-signed-bundle-is-active": true,
+    "retry-is-idempotent": true,
+    "revoked-enrollment-refused": true,
+    "stale-console-cannot-rewind-agent": true,
+    "status-none-after-restore": true,
+    "tampered-policy-refused": true,
+    "unknown-field-refused": true,
+    "viewer-cannot-preview": true,
+    "wrong-phrase-refused": true
+  },
+  "format": "sw-console-stale-restore-acceptance/1",
+  "observations": {
+    "completion": {
+      "deployment": 3,
+      "fence": 2,
+      "hook_decision": "deny",
+      "recovery_complete": true
+    },
+    "fenced_reads_before_ack": 8,
+    "original_negative": {
+      "agent_sequence": 2,
+      "hook_decision": "defer",
+      "new_deployment": 2,
+      "recovery_complete": false,
+      "restored_sequence": 1,
+      "status": "rejected"
+    },
+    "preview": {
+      "credential_generation": 1,
+      "latest_restored_sequence": 2,
+      "next_sequence": 3,
+      "observation_age_seconds": 0,
+      "restored_sequence": 1,
+      "unrecoverable_interval": null
+    }
+  },
+  "recovery_schema_version": 33,
+  "scope": "one disposable private Linux deployment; synthetic tenants and Agent IDs; one local Agent with the opt-in heartbeat; recorded Console evidence and the Agent's own witnesses, not production or multi-host",
+  "source_commit": "770afe182539022ef8476f4dc8db272aa9313d4a",
+  "source_dirty": false,
+  "source_tree": "d156e06366f2a76ec472b19807814c24aa65c414",
+  "status": "passed",
+  "timings_seconds": {
+    "backup": 0.137,
+    "confirm": 0.004,
+    "fence_to_applied": 1.647,
+    "restore": 0.032
+  }
+}

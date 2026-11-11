@@ -32,6 +32,7 @@ mod managed_confirmation;
 mod managed_idempotency;
 mod managed_policy;
 pub mod managed_rejection;
+pub mod managed_stale_recovery;
 pub use managed_confirmation::{
     valid_confirmation_id, CohortAgent, CohortBlocker, CohortPreview, ConfirmationFailure,
     ConfirmationRefused, GroupStartPreview, GuardedStart, LatestRollout, StartConfirmation,

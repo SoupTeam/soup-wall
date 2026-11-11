@@ -14,7 +14,7 @@ use crate::tenant_store::{
 use anyhow::Result;
 use tokio_postgres::Row as PgRow;
 
-fn row(r: &PgRow) -> Row {
+pub(in crate::tenant_store) fn row(r: &PgRow) -> Row {
     let seq: Option<i64> = r.get(6);
     Row {
         generation: r.get(0),
@@ -34,7 +34,8 @@ const IDENTITY: &str =
     "SELECT a.tenant_id,a.agent_id,a.created_at_unix,a.revoked_at_unix,a.credential_generation
     FROM managed_agent_enrollments a JOIN tenants t ON t.id=a.tenant_id
     WHERE a.token_hash=$1 AND a.revoked_at_unix IS NULL AND t.active=TRUE FOR SHARE OF a";
-const AVAILABLE: &str = "SELECT to_regclass('agent_observations.heartbeats') IS NOT NULL";
+pub(in crate::tenant_store) const AVAILABLE: &str =
+    "SELECT to_regclass('agent_observations.heartbeats') IS NOT NULL";
 
 impl PostgresTenantStore {
     async fn heartbeat_identity(

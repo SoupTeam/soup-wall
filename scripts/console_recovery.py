@@ -26,7 +26,7 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 
 INVENTORY_PATH = Path(__file__).parent / 'fixtures' / 'console_recovery_inventory_v1.json'
 FORMAT_VERSION = 1
-POSTGRES_SCHEMA_VERSION = 32
+POSTGRES_SCHEMA_VERSION = 33
 MAX_FILE = 256 * 1024 * 1024
 NAME = re.compile(r'[a-z_][a-z0-9_]{0,62}\Z')
 RECIPIENT = re.compile(r'age1[0-9a-z]{58}\Z')
@@ -418,6 +418,8 @@ def inspect_sqlite(path):
             if 'managed_agent_revisions' in tables and 'managed_agent_enrollments' not in tables:
                 raise RecoveryError('Incomplete managed Agent schema.')
             if 'managed_agent_rejections' in tables and 'managed_agent_deployments' not in tables:
+                raise RecoveryError('Incomplete managed Agent schema.')
+            if 'managed_agent_recovery_fences' in tables and 'managed_agent_enrollments' not in tables:
                 raise RecoveryError('Incomplete managed Agent schema.')
             group_tables = {'managed_agent_groups', 'managed_agent_group_members',
                             'managed_group_revisions', 'managed_group_rollouts'}

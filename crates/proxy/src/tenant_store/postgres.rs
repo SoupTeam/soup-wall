@@ -7,13 +7,15 @@
 //! live in PostgreSQL and are therefore shared by every proxy instance.
 
 #[path = "agent_heartbeat_postgres.rs"]
-mod agent_heartbeat;
+pub(super) mod agent_heartbeat;
 #[path = "fleet_postgres.rs"]
 mod fleet;
 #[path = "fleet_triage_postgres.rs"]
 mod fleet_triage;
 #[path = "managed_postgres.rs"]
 mod managed;
+#[path = "managed_stale_recovery_postgres.rs"]
+mod stale_recovery;
 
 use super::operator_audit::{AuditFact, AuditOperation, AuditTarget};
 use std::future::Future;
@@ -1444,7 +1446,8 @@ impl PostgresTenantStore {
     }
 
     async fn ensure_schema_current(&self) -> anyhow::Result<()> {
-        const VERSION: i64 = super::operator_audit::SCHEMA_VERSION;
+        // SOU-242: issuance reads the recovery fence table (migration 33).
+        const VERSION: i64 = super::managed_stale_recovery::SCHEMA_VERSION;
         let client = self.checkout().await?;
         let applied = self
             .bounded(client.query_opt(
