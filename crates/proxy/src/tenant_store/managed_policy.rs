@@ -273,6 +273,15 @@ pub(super) fn exact_id(s: &str) -> bool {
         && s.bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
 }
+fn decode_hex(value: &str) -> Option<Vec<u8>> {
+    if !value.len().is_multiple_of(2) || !value.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    (0..value.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&value[i..i + 2], 16).ok())
+        .collect()
+}
 pub(super) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -394,6 +403,21 @@ impl ManagedIssuer {
         bundle.signature_hex = hex(self.pair.sign(&bundle.transcript()?).as_ref());
         Ok(())
     }
+    /// SOU-242: whether `bundle` carries a valid signature by this issuer key.
+    pub(super) fn verifies(&self, bundle: &SignedManagedBundle) -> bool {
+        let Ok(transcript) = bundle.transcript() else {
+            return false;
+        };
+        let Some(signature) = decode_hex(&bundle.signature_hex) else {
+            return false;
+        };
+        aws_lc_rs::signature::UnparsedPublicKey::new(
+            &aws_lc_rs::signature::ED25519,
+            self.pair.public_key().as_ref(),
+        )
+        .verify(&transcript, &signature)
+        .is_ok()
+    }
 }
 
 pub(super) fn schema(db: &rusqlite::Connection) -> Result<()> {
@@ -425,6 +449,8 @@ pub(super) fn schema(db: &rusqlite::Connection) -> Result<()> {
         );",
     )
     .context("cannot prepare managed policy tables")?;
+    db.execute_batch(super::managed_stale_recovery::SQLITE_SCHEMA)
+        .context("cannot prepare managed recovery fence table")?;
     db.execute_batch(super::managed_rejection::SQLITE_SCHEMA)
         .context("cannot prepare managed rejection table")?;
     db.execute_batch(super::managed_idempotency::SQLITE_KEYS_SCHEMA)
@@ -799,9 +825,17 @@ impl TenantStore {
                 "rollback must select a different approved revision"
             );
         }
+        // SOU-242: a confirmed stale-restore fence raises the floor; the
+        // next issuance is above both the restored deployments and the fence.
+        let fence: i64 = db.query_row(
+            super::managed_stale_recovery::SQLITE_FENCE_HIGH,
+            params![tenant, agent],
+            |r| r.get(0),
+        )?;
         let seq = last
             .map(|(s, _)| s)
             .unwrap_or(0)
+            .max(fence)
             .checked_add(1)
             .context("sequence exhausted")?;
         let issued = now_unix();

@@ -28,6 +28,9 @@
     #triage-list td:last-child{white-space:nowrap}
     .heartbeat-fresh{color:var(--blue)}
     .heartbeat-facts{margin:8px 0;padding-left:20px;overflow-wrap:anywhere}
+    .recovery-facts,.recovery-restrictions{margin:8px 0;padding-left:20px;overflow-wrap:anywhere}
+    .recovery-phrase{display:block;margin:6px 0;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+    #recovery-panel input[type=file],#recovery-panel input[type=text]{max-width:100%}
     .heartbeat-digest{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:#c9d9fa;list-style:none}
     #history-timeline{display:grid;gap:8px;margin:12px 0 0;padding-left:22px}
     #history-timeline li{padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface2);overflow-wrap:anywhere}
@@ -125,6 +128,20 @@
     <ol id="history-timeline" aria-label="Recorded events, oldest first"></ol>
     <pre id="history-snapshot" class="hidden" tabindex="0" aria-label="Incident snapshot preview"></pre>
   </section>
+  <section id="recovery-panel" class="section" aria-labelledby="recovery-title">
+    <div class="detail-head"><div><h2 id="recovery-title">Stale-restore recovery</h2><p class="note">After a Console restore, an unchanged Agent may already run a newer signed deployment than the restored database. An Owner can fence that sequence from the Agent's retained signed bundle and its fresh authenticated report, so the next deployment is issued above it. The Agent's active policy is never rewound.</p></div><button id="recovery-refresh" type="button" class="secondary" disabled>Refresh recovery</button></div>
+    <p id="recovery-status" role="status" class="note">Select an Agent in the fleet list to see its stale-restore recovery state.</p>
+    <div id="recovery-detail" aria-live="polite"></div>
+    <div class="owner-action">
+      <label for="recovery-evidence">Agent evidence: its retained <code>managed-policy-active.json</code></label>
+      <input id="recovery-evidence" type="file" accept="application/json,.json" disabled>
+      <div class="inline"><button id="recovery-preview" type="button" class="secondary tiny" disabled>Preview recovery</button></div>
+      <div id="recovery-preview-detail" aria-live="polite"></div>
+      <label for="recovery-phrase">Confirmation phrase</label>
+      <input id="recovery-phrase" type="text" autocomplete="off" spellcheck="false" maxlength="200">
+      <div class="inline"><button id="recovery-confirm" type="button" class="danger tiny" disabled>Confirm recovery fence</button></div>
+    </div>
+  </section>
 </section>
 
 <section id="enroll-panel" class="section" aria-labelledby="enroll-title">
@@ -201,8 +218,9 @@
     /* AGENT_HISTORY */
     /* FLEET_TRIAGE */
     /* AGENT_HEARTBEAT */
+    /* STALE_RECOVERY */
     /* OPERATOR_AUDIT */
-    const selectPanels=id=>{singlePolicy.select(id);agentHistory.clear();agentHeartbeat.clear();fleetTriage.select(id);fleet.select(id);enrollment.select(id);rollout.select(id);operatorAudit.select(id)};
+    const selectPanels=id=>{singlePolicy.select(id);agentHistory.clear();agentHeartbeat.clear();staleRecovery.clear();fleetTriage.select(id);fleet.select(id);enrollment.select(id);rollout.select(id);operatorAudit.select(id)};
     $("lock-console").addEventListener("click",()=>{adminToken="";currentAdmin=null;enrollment.clear();location.replace("/admin")});
     const applyRole=()=>{const role=currentAdmin.role;document.body.classList.remove("role-owner","role-operator","role-viewer");document.body.classList.add("role-"+role);$("current-admin").textContent=currentAdmin.admin_name+" · "+role;$("role-display").textContent=role};
     const renderTenants=()=>{const q=$("tenant-search").value.trim().toLowerCase(),shown=tenants.filter(t=>!q||t.name.toLowerCase().includes(q)||t.id.toLowerCase().includes(q));$("tenant-total").textContent=tenants.length;$("tenant-active").textContent=tenants.filter(t=>t.active).length;$("tenant-suspended").textContent=tenants.filter(t=>!t.active).length;const list=$("tenant-list");list.replaceChildren();if(!shown.length){list.append(make("p",q?"No tenants match this search.":"No tenants yet.","empty"));return}shown.forEach(t=>{const b=make("button",undefined,"tenant "+(t.active?"active":"inactive")+(selectedTenant?.id===t.id?" selected":""));b.append(make("span",t.name),make("small",t.id));b.addEventListener("click",()=>selectTenant(t));list.append(b)})};

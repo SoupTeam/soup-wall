@@ -336,6 +336,35 @@ impl PostgresTenantStore {
             rejections_exist,
             "managed rejection migration table is missing"
         );
+        // SOU-242: confirmed stale-restore recovery fences.
+        let fence_version = super::super::managed_stale_recovery::SCHEMA_VERSION;
+        if self
+            .bounded(tx.query_opt(
+                "SELECT version FROM llm_firewall_schema_migrations WHERE version=$1",
+                &[&fence_version],
+            ))
+            .await?
+            .is_none()
+        {
+            self.bounded(tx.batch_execute(super::super::managed_stale_recovery::POSTGRES_SCHEMA))
+                .await?;
+            self.bounded(tx.execute(
+                "INSERT INTO llm_firewall_schema_migrations(version,applied_at_unix) VALUES($1,$2)",
+                &[&fence_version, &now_unix()],
+            ))
+            .await?;
+        }
+        let fences_exist: bool = self
+            .bounded(tx.query_one(
+                "SELECT to_regclass('public.managed_agent_recovery_fences') IS NOT NULL",
+                &[],
+            ))
+            .await?
+            .get(0);
+        ensure!(
+            fences_exist,
+            "managed recovery fence migration table is missing"
+        );
         self.bounded(tx.commit()).await?;
         Ok(())
     }
@@ -380,7 +409,11 @@ impl PostgresTenantStore {
         Ok(())
     }
 
-    async fn lock_managed_tenant(&self, tx: &Transaction<'_>, tenant: &str) -> Result<()> {
+    pub(in crate::tenant_store) async fn lock_managed_tenant(
+        &self,
+        tx: &Transaction<'_>,
+        tenant: &str,
+    ) -> Result<()> {
         ensure!(valid_id(tenant), "invalid tenant identity");
         ensure!(
             self.bounded(tx.query_opt(
@@ -821,9 +854,18 @@ impl PostgresTenantStore {
                 "rollback must select a different approved revision"
             );
         }
+        // SOU-242: a confirmed stale-restore fence raises the floor.
+        let fence: i64 = self
+            .bounded(tx.query_one(
+                super::super::managed_stale_recovery::POSTGRES_FENCE_HIGH,
+                &[&tenant, &agent],
+            ))
+            .await?
+            .get(0);
         let seq = last
             .map(|r| r.get::<_, i64>(0))
             .unwrap_or(0)
+            .max(fence)
             .checked_add(1)
             .context("sequence exhausted")?;
         let issued = now_unix();

@@ -33,6 +33,7 @@ pub mod rollout_reconciliation;
 pub mod saml_auth;
 pub mod scim;
 pub mod spend_limit;
+pub mod stale_recovery_api;
 pub mod tenant_store;
 pub mod usage;
 
@@ -285,6 +286,23 @@ pub fn app(state: Shared) -> Router {
             .route(
                 "/admin/v1/tenants/:tenant_id/agents/:agent_id/deployments",
                 get(managed_agent_api::deployments),
+            )
+            // SOU-242: owner-confirmed stale-restore recovery for one Agent.
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/stale-recovery",
+                get(stale_recovery_api::status),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/stale-recovery/preview",
+                post(stale_recovery_api::preview).layer(DefaultBodyLimit::max(
+                    crate::tenant_store::managed_stale_recovery::MAX_BODY_BYTES,
+                )),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/stale-recovery/confirm",
+                post(stale_recovery_api::confirm).layer(DefaultBodyLimit::max(
+                    crate::tenant_store::managed_stale_recovery::MAX_BODY_BYTES,
+                )),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/groups",
