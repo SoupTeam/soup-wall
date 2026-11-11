@@ -135,12 +135,47 @@ pub(super) fn prompt() -> Result<Zeroizing<String>> {
     let result = (|| {
         tty.write_all(b"Gemini API key (hidden; Enter to accept, Ctrl-C to cancel): ")?;
         tty.flush()?;
-        read_key(&mut tty)
+        read_key(&mut EscapeBoundedInput {
+            input: &mut tty,
+            remaining: 0,
+        })
     })();
     // Flush unread pasted bytes while restoring the terminal, including errors.
     guard.restore()?;
     tty.write_all(b"\n")?;
     result
+}
+
+// Wait indefinitely for ordinary human input, but bound incomplete paste wrappers.
+// A lone Escape must not strand the terminal in hidden noncanonical mode.
+#[cfg(target_os = "linux")]
+struct EscapeBoundedInput<'a> {
+    input: &'a mut std::fs::File,
+    remaining: usize,
+}
+#[cfg(target_os = "linux")]
+impl Read for EscapeBoundedInput<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        use std::os::fd::AsRawFd;
+        if self.remaining > 0 {
+            let mut descriptor = libc::pollfd {
+                fd: self.input.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            // SAFETY: one initialized pollfd borrowing a live file descriptor.
+            if unsafe { libc::poll(&mut descriptor, 1, 250) } <= 0 {
+                return Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof));
+            }
+        }
+        let read = self.input.read(buffer)?;
+        if self.remaining == 0 && read == 1 && buffer[0] == 27 {
+            self.remaining = 5;
+        } else {
+            self.remaining = self.remaining.saturating_sub(read);
+        }
+        Ok(read)
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -260,6 +295,18 @@ fn gemini_manual_key_terminal_hides_and_restores_on_cancel() {
             0
         );
         assert!(read_key(&mut b"partial\x03".as_slice()).is_err());
+        use std::io::Write;
+        let mut writer = &_master;
+        writer.write_all(b"\x1b").unwrap();
+        let mut reader = _slave.try_clone().unwrap();
+        let started = std::time::Instant::now();
+        let error = read_key(&mut EscapeBoundedInput {
+            input: &mut reader,
+            remaining: 0,
+        })
+        .unwrap_err();
+        assert_eq!(error.to_string(), "gemini_key_escape_sequence");
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
     }
     let after = state();
     assert_eq!(before.c_lflag, after.c_lflag);

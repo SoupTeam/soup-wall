@@ -23,6 +23,8 @@ struct AccessClaim {
     evidence_sha256: String,
     non_billed_free_tier: bool,
     quota_available: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    metadata_recovery_started_sha256: Option<String>,
     issued: u64,
     expires: u64,
     signature: String,
@@ -229,6 +231,7 @@ fn gemini_controller_operator_access_requires_signed_free_project_key_and_time()
         evidence_sha256: hash(b"operator billing evidence"),
         non_billed_free_tier: true,
         quota_available: true,
+        metadata_recovery_started_sha256: None,
         issued: 100,
         expires: 200,
         signature: String::new(),
@@ -244,6 +247,16 @@ fn gemini_controller_operator_access_requires_signed_free_project_key_and_time()
     )
     .unwrap();
     a.check(&c.ledger).unwrap();
+    let mut forged = c.clone();
+    forged.metadata_recovery_started_sha256 = Some(hash(b"not personally signed"));
+    assert!(Access::verify(
+        &serde_json::to_vec(&forged).unwrap(),
+        Some(raw_key.clone()),
+        secret.as_bytes(),
+        &c.ledger,
+        101
+    )
+    .is_err());
     assert_eq!(hash(a.key.0.as_bytes()), c.key_sha256);
     assert!(a.check("different ledger").is_err());
     for (key, ledger, now) in [

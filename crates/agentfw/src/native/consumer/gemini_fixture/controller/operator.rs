@@ -22,6 +22,8 @@ struct Config {
     quota_available: bool,
     #[serde(default = "initial_row_ceiling")]
     row_ceiling: usize,
+    #[serde(default)]
+    metadata_recovery_started_sha256: Option<String>,
 }
 fn initial_row_ceiling() -> usize {
     20
@@ -43,6 +45,12 @@ impl Config {
                 && self.evidence_file.is_absolute(),
             "gemini_operator_config"
         );
+        if let Some(digest) = &self.metadata_recovery_started_sha256 {
+            ensure!(
+                digest.len() == 64 && digest.bytes().all(|b| b.is_ascii_hexdigit()),
+                "gemini_metadata_recovery_digest"
+            );
+        }
         Ok(())
     }
 }
@@ -181,14 +189,20 @@ impl runner::Capture for Capture {
     }
 }
 
-fn confirm(project: &str, row_ceiling: usize) -> Result<()> {
+fn confirm(project: &str, row_ceiling: usize, recovery: Option<&str>) -> Result<()> {
     use std::os::unix::fs::OpenOptionsExt;
     let mut tty = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
         .open("/dev/tty")?;
-    let phrase = format!("RUN {project} 6+24 USD0");
+    let phrase = match recovery {
+        Some(digest) => format!("RECOVER METADATA {digest} USD0"),
+        None => format!("RUN {project} 6+24 USD0"),
+    };
+    if recovery.is_some() {
+        writeln!(tty, "One explicit metadata-only GET re-observation. Preserve the uncertain original marker and every row fence. No automatic retry if this observation fails.")?;
+    }
     writeln!(tty, "Public Gemini experiment only. No replay, paid fallback or policy Allow.\nCumulative attempted-row ceiling: {row_ceiling}/30; wait 61 seconds before each new row.\nOnly raise the ceiling after verifying fresh quota; it is not a per-launch allowance.\nConfirm verified non-billed Free Tier and current quota for project {project}.\nType exactly: {phrase}")?;
     tty.flush()?;
     let mut answer = Vec::new();
@@ -240,7 +254,11 @@ fn open() -> Result<(runner::Controller, Capture, usize)> {
         "gemini_operator_native_token"
     );
     let ledger = Ledger::open(&config.ledger)?;
-    confirm(&config.project, config.row_ceiling)?;
+    confirm(
+        &config.project,
+        config.row_ceiling,
+        config.metadata_recovery_started_sha256.as_deref(),
+    )?;
     let config_name = format!("operator-config-{}.json", hash(&bytes));
     if let Some(old) = ledger.read(&config_name)? {
         ensure!(old == bytes, "gemini_operator_config_changed");
@@ -261,6 +279,7 @@ fn open() -> Result<(runner::Controller, Capture, usize)> {
         evidence_sha256: hash(&evidence),
         non_billed_free_tier: true,
         quota_available: true,
+        metadata_recovery_started_sha256: config.metadata_recovery_started_sha256,
         issued: now,
         expires: now + 3600,
         signature: String::new(),

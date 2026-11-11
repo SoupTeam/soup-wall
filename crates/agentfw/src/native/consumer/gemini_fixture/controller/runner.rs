@@ -134,24 +134,92 @@ impl Controller {
             metadata(&raw)?;
             return Ok(());
         }
-        // A missing response after this marker is uncertain, never retried.
-        self.ledger
-            .create("model.started", b"{\"state\":\"started_unknown\"}")?;
+        let original = self.ledger.read("model.started")?;
+        let prefix = if let Some(original) = original {
+            let original_sha256 = hash(&original);
+            if let Some(raw) = self.ledger.read("model.recovery.response")? {
+                let receipt = self
+                    .ledger
+                    .read("model.recovery.started")?
+                    .ok_or_else(|| anyhow::anyhow!("gemini_metadata_recovery_receipt"))?;
+                let Strict(receipt) = serde_json::from_slice(&receipt)?;
+                ensure!(
+                    receipt["original_started_sha256"] == original_sha256,
+                    "gemini_metadata_recovery_receipt"
+                );
+                metadata(&raw)?;
+                return Ok(());
+            }
+            ensure!(
+                self.access
+                    .claim
+                    .metadata_recovery_started_sha256
+                    .as_deref()
+                    == Some(original_sha256.as_str()),
+                "gemini_metadata_recovery_not_authorized"
+            );
+            ensure!(
+                self.ledger.read("model.error-response")?.is_none(),
+                "gemini_metadata_recovery_http_error"
+            );
+            // This exception is only for preflight GET, before any row disclosure.
+            // Count/generate uncertainty and all existing terminal outcomes stay fenced.
+            for i in 0..30 {
+                let id = hash(row(i)?.frame.as_bytes());
+                ensure!(
+                    self.state(&id)? == State::Unrun,
+                    "gemini_metadata_recovery_rows_started"
+                );
+                for suffix in [
+                    "count-response",
+                    "count-error-response",
+                    "response",
+                    "terminal",
+                    "private-review",
+                    "publication-refused",
+                ] {
+                    ensure!(
+                        self.ledger.read(&format!("{id}.{suffix}"))?.is_none(),
+                        "gemini_metadata_recovery_row_artifact"
+                    );
+                }
+            }
+            self.ledger.create(
+                "model.recovery.started",
+                &serde_json::to_vec(&json!({
+                    "state":"started_unknown", "operation":"metadata_get_only",
+                    "original_started_sha256":original_sha256,
+                    "access_claim_sha256":hash(&serde_json::to_vec(&self.access.claim)?),
+                    "ledger":self.ledger.identity()?, "profile":profile_hash()
+                }))?,
+            )?;
+            "model.recovery"
+        } else {
+            ensure!(
+                self.access.claim.metadata_recovery_started_sha256.is_none(),
+                "gemini_metadata_recovery_without_original"
+            );
+            self.ledger
+                .create("model.started", b"{\"state\":\"started_unknown\"}")?;
+            "model"
+        };
         let raw = match wire
             .request(Operation::Metadata, &[], &self.access.key, self.deadline())
             .await
         {
             Ok(raw) => raw,
-            Err(e) => {
-                let code = super::super::transport::failure_code(&e);
-                self.ledger.create("model.failure", code.as_bytes())?;
-                if let Some(raw) = rejected_body(&e) {
-                    self.ledger.create("model.error-response", raw)?;
+            Err(error) => {
+                let code = super::super::transport::failure_code(&error);
+                self.ledger
+                    .create(&format!("{prefix}.failure"), code.as_bytes())?;
+                if let Some(raw) = rejected_body(&error) {
+                    self.ledger
+                        .create(&format!("{prefix}.error-response"), raw)?;
                 }
-                return Err(e);
+                return Err(error);
             }
         };
-        self.ledger.create("model.response", &raw)?;
+        self.ledger.create(&format!("{prefix}.response"), &raw)?;
         metadata(&raw)?;
         Ok(())
     }
@@ -498,6 +566,7 @@ pub(in crate::native) async fn exercise_serial(capture: &mut impl Capture) {
             evidence_sha256: hash(b"synthetic not permission"),
             non_billed_free_tier: true,
             quota_available: true,
+            metadata_recovery_started_sha256: None,
             issued: now - 10,
             expires: now + 3590,
             signature: String::new(),
@@ -650,6 +719,162 @@ pub(in crate::native) async fn exercise_serial(capture: &mut impl Capture) {
             assert!(report["rows"].as_array().unwrap()[1..]
                 .iter()
                 .all(|r| r["state"] == "valid_untrusted"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn gemini_metadata_recovery_is_explicit_once_and_preserves_row_fences() {
+    use std::os::unix::fs::PermissionsExt;
+    struct MetadataWire {
+        requests: usize,
+        fail: bool,
+        invalid: bool,
+    }
+    impl Wire for MetadataWire {
+        async fn request(
+            &mut self,
+            operation: Operation,
+            body: &[u8],
+            _: &Key,
+            _: Instant,
+        ) -> Result<Vec<u8>> {
+            assert!(matches!(operation, Operation::Metadata));
+            assert!(body.is_empty());
+            self.requests += 1;
+            if self.fail {
+                anyhow::bail!("gemini_timeout_unknown");
+            }
+            if self.invalid {
+                return Ok(b"{}".to_vec());
+            }
+            Ok(serde_json::to_vec(
+                &json!({"name":format!("models/{MODEL}"),"baseModelId":MODEL,
+                "version":"offline-metadata","inputTokenLimit":1048576,"outputTokenLimit":8192,
+                "supportedGenerationMethods":["generateContent","countTokens"]}),
+            )?)
+        }
+    }
+    for mode in [
+        "success",
+        "absent-approval",
+        "wrong-digest",
+        "row-started",
+        "row-provider-started",
+        "row-terminal",
+        "row-orphan-response",
+        "http-error",
+        "already-started",
+        "network-failure",
+        "invalid-response",
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        let ledger = Ledger::open(directory.path()).unwrap();
+        let original = br#"{"state":"started_unknown"}"#;
+        ledger.create("model.started", original).unwrap();
+        let id = hash(row(0).unwrap().frame.as_bytes());
+        match mode {
+            "row-started" => ledger
+                .create(&format!("{id}.controller-started"), b"{}")
+                .unwrap(),
+            "row-provider-started" => ledger.create(&format!("{id}.started"), b"{}").unwrap(),
+            "row-terminal" => ledger
+                .create(
+                    &format!("{id}.controller-terminal"),
+                    br#"{"state":"quota_stop"}"#,
+                )
+                .unwrap(),
+            "row-orphan-response" => ledger.create(&format!("{id}.response"), b"{}").unwrap(),
+            "http-error" => ledger.create("model.error-response", b"{}").unwrap(),
+            "already-started" => ledger.create("model.recovery.started", b"{}").unwrap(),
+            _ => {}
+        }
+        let secret = crate::token::generate();
+        let key = crate::token::generate();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let mut claim = AccessClaim {
+            profile: profile_hash(),
+            ledger: ledger.identity().unwrap(),
+            key_sha256: hash(key.as_bytes()),
+            project: "offline-recovery".into(),
+            evidence_sha256: hash(b"synthetic personal confirmation"),
+            non_billed_free_tier: true,
+            quota_available: true,
+            metadata_recovery_started_sha256: match mode {
+                "absent-approval" => None,
+                "wrong-digest" => Some(hash(b"wrong")),
+                _ => Some(hash(original)),
+            },
+            issued: now - 1,
+            expires: now + 3500,
+            signature: String::new(),
+        };
+        claim.signature = URL_SAFE_NO_PAD.encode(
+            access_mac(secret.as_bytes(), &claim)
+                .finalize()
+                .into_bytes(),
+        );
+        let mut controller = Controller::open_held(
+            ledger,
+            &serde_json::to_vec(&claim).unwrap(),
+            Some(key.clone()),
+            secret.as_bytes(),
+        )
+        .unwrap();
+        let mut wire = MetadataWire {
+            requests: 0,
+            fail: mode == "network-failure",
+            invalid: mode == "invalid-response",
+        };
+        let result = controller.model(&mut wire).await;
+        assert_eq!(result.is_ok(), mode == "success", "{mode}: {result:?}");
+        let permitted = matches!(mode, "success" | "network-failure" | "invalid-response");
+        assert_eq!(wire.requests, usize::from(permitted), "{mode}");
+        assert_eq!(
+            controller.ledger.read("model.started").unwrap().unwrap(),
+            original
+        );
+        if permitted {
+            assert!(controller
+                .ledger
+                .read("model.recovery.started")
+                .unwrap()
+                .is_some());
+            let requests = wire.requests;
+            let again = controller.model(&mut wire).await;
+            assert_eq!(again.is_ok(), mode == "success");
+            assert_eq!(
+                wire.requests, requests,
+                "no second metadata observation: {mode}"
+            );
+            if mode == "network-failure" {
+                assert_eq!(
+                    controller
+                        .ledger
+                        .read("model.recovery.failure")
+                        .unwrap()
+                        .unwrap(),
+                    b"gemini_timeout_unknown"
+                );
+            }
+            drop(controller);
+            // Same held-directory identity, no journal reset, fresh opening.
+            controller = Controller::open(
+                directory.path(),
+                &serde_json::to_vec(&claim).unwrap(),
+                Some(key),
+                secret.as_bytes(),
+            )
+            .unwrap();
+            assert_eq!(controller.model(&mut wire).await.is_ok(), mode == "success");
+            assert_eq!(
+                wire.requests, requests,
+                "reopening must never repeat metadata: {mode}"
+            );
         }
     }
 }

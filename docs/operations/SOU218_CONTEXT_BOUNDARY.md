@@ -1640,10 +1640,10 @@ It distinguishes a literal Ctrl-V byte, Escape/terminal escape sequences (includ
 paste wrappers), non-ASCII input, too-short/overlong input, invalid characters,
 cancellation and terminal setup/restoration failure. It never prints input bytes
 or arbitrary library errors. Unknown errors retain the generic journal/no-replay
-warning. These diagnostics do not accept new input forms or change cancellation,
-echo suppression, bounds, zeroization or terminal restoration. In particular,
-bracketed paste is still rejected; this is not a claim that every terminal paste
-path has been repaired. Diagnose a user's terminal with synthetic input before
+warning. The current compatibility follow-up accepts dotted keys, surrounding spaces or
+tabs and exact bracketed-paste delimiters. Internal whitespace and other escape
+sequences remain rejected. Echo suppression, bounds, zeroization and terminal
+restoration remain required. Diagnose a user's terminal with synthetic input before
 requesting another real-key attempt. Check journal fences before any restart.
 
 ### Operator quota pacing and cumulative ceiling
@@ -1703,3 +1703,46 @@ checker (426 files / 1359 local links). The broader `gemini_` selector passed
 18 tests on submitted `a44a8f02` before the compilation-reference-only fix;
 its two launcher children were actually re-executed by mandatory parents.
 These observations do not assert real operator invocation or live inference.
+
+
+### One explicit recovery of an uncertain metadata observation
+
+The original `model.started` with no response remains an uncertain historical
+GET. Its original transport cause cannot be recovered from a missing error
+record. The maintainer authorizes one new, personally confirmed metadata-only
+GET observation for this pre-row state. This narrowly scoped recovery does not
+permit repeating a countTokens request or generation.
+
+Use the same private directory, project, key and native token. Preserve every
+existing file. Do not remove, rename or fabricate any attempt/response/failure.
+Compute the SHA-256 of the existing non-secret `model.started` file locally and
+add this optional field to the existing private operator configuration:
+
+```json
+"metadata_recovery_started_sha256": "<SHA-256 of the retained model.started>"
+```
+
+Run the same manual command. The personal confirmation changes to
+`RECOVER METADATA <that SHA-256> USD0`. The signed access declaration binds the
+recovery digest to the held journal identity, project/key, profile and fresh
+operator evidence. An absent/wrong confirmation, existing HTTP error response,
+or any attempted/completed row refuses recovery. Existing uncertainty is never
+relabelled as success.
+
+Before the GET, `model.recovery.started` durably records the original marker
+digest and signed-declaration digest. A successful observation goes into
+`model.recovery.response`; errors go into `model.recovery.failure` with fixed
+allowlisted codes and, if available, `model.recovery.error-response`. Exactly one
+such observation is possible. If it fails or the process dies after its fence,
+stop and retain the journal for review. Reopening never repeats it. A valid
+cached recovery response can be reused during the already approved quota-window
+continuation. The original metadata uncertainty stays in the evidence.
+
+Only the fixed GET endpoint with an empty body is eligible. The 30 row fences,
+6+24 source bytes, model/profile, 61-second spacing, cumulative 20 then 30 limit,
+USD 0 ceiling, custody/memory limits and unchanged policy remain enforced. Once
+metadata passes, continue the original one experiment and deliver its complete
+private report, including both metadata observations and every negative result.
+Passing offline recovery tests does not prove a real provider transport problem
+is resolved. The live terminal, personal key and billing/quota confirmation
+remain the operator's actions.
