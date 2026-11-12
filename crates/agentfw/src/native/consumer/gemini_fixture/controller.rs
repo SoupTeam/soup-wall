@@ -168,7 +168,7 @@ fn metadata(bytes: &[u8]) -> Result<Value> {
     let Strict(v) = serde_json::from_slice(bytes)?;
     ensure!(
         v["name"] == format!("models/{MODEL}")
-            && v["baseModelId"] == MODEL
+            && v.get("baseModelId").is_none_or(|id| id == MODEL)
             && v["version"]
                 .as_str()
                 .is_some_and(|s| !s.is_empty() && s.len() <= 128)
@@ -180,6 +180,32 @@ fn metadata(bytes: &[u8]) -> Result<Value> {
         "gemini_model_metadata"
     );
     Ok(v)
+}
+
+#[test]
+fn gemini_metadata_absent_base_model_keeps_other_guards() {
+    let valid = json!({"name":format!("models/{MODEL}"),"version":"3.0",
+        "inputTokenLimit":1048576,"outputTokenLimit":65536,
+        "supportedGenerationMethods":["generateContent","countTokens"]});
+    assert!(metadata(&serde_json::to_vec(&valid).unwrap()).is_ok());
+    for (field, value) in [
+        ("baseModelId", Value::Null),
+        ("baseModelId", json!("other")),
+        ("baseModelId", json!(42)),
+        ("baseModelId", json!("")),
+        ("name", json!("models/other")),
+        ("version", json!("")),
+        ("inputTokenLimit", json!(100)),
+        ("outputTokenLimit", json!(1)),
+        ("supportedGenerationMethods", json!(["generateContent"])),
+    ] {
+        let mut bad = valid.clone();
+        bad[field] = value;
+        assert!(
+            metadata(&serde_json::to_vec(&bad).unwrap()).is_err(),
+            "{field}"
+        );
+    }
 }
 fn counted(source: &str, bytes: &[u8]) -> Result<Preflight> {
     ensure!(bytes.len() <= RESPONSE_LIMIT, "gemini_response_limit");

@@ -130,10 +130,9 @@ impl Controller {
 
     async fn model(&self, wire: &mut impl Wire) -> Result<()> {
         self.check()?;
-        ensure!(
-            self.ledger.read("model.metadata.blocked")?.is_none(),
-            "gemini_metadata_observed_error"
-        );
+        if let Some(blocked) = self.ledger.read("model.metadata.blocked")? {
+            return self.revalidate_absent_base_model(&blocked);
+        }
         if let Some(raw) = self.ledger.read("model.response")? {
             metadata(&raw)?;
             return Ok(());
@@ -285,6 +284,102 @@ impl Controller {
                 .create("model.metadata.accepted", &serde_json::to_vec(&receipt)?)?;
         }
         Ok(())
+    }
+
+    // Reinterpret only the agreed absent-field contract mismatch, using the
+    // retained response. Never delete the stop marker or send another GET.
+    fn revalidate_absent_base_model(&self, blocked: &[u8]) -> Result<()> {
+        let Strict(stop) = serde_json::from_slice(blocked)?;
+        ensure!(
+            stop["state"] == "invalid_metadata",
+            "gemini_metadata_observed_error"
+        );
+        let prefix = stop["observation"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("gemini_metadata_observation_receipt"))?;
+        let approval = prefix
+            .strip_prefix("model.observation-")
+            .filter(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+            .ok_or_else(|| anyhow::anyhow!("gemini_metadata_observation_receipt"))?;
+        let read = |name: &str| -> Result<Vec<u8>> {
+            self.ledger
+                .read(name)?
+                .ok_or_else(|| anyhow::anyhow!("gemini_metadata_observation_receipt"))
+        };
+        let original = read("model.started")?;
+        let start = read(&format!("{prefix}.started"))?;
+        let raw = read(&format!("{prefix}.response"))?;
+        let claim = read(&format!("access-{approval}.claim"))?;
+        let Strict(start_value) = serde_json::from_slice(&start)?;
+        let Strict(claim_value) = serde_json::from_slice(&claim)?;
+        ensure!(
+            hash(&claim) == approval
+                && start_value["operation"] == "metadata_get_only"
+                && start_value["access_claim_sha256"] == approval
+                && start_value["original_started_sha256"] == hash(&original)
+                && start_value["ledger"] == self.ledger.identity()?
+                && start_value["profile"] == profile_hash()
+                && claim_value["ledger"] == self.access.claim.ledger
+                && claim_value["profile"] == self.access.claim.profile
+                && claim_value["project"] == self.access.claim.project
+                && claim_value["key_sha256"] == self.access.claim.key_sha256,
+            "gemini_metadata_observation_receipt"
+        );
+        for name in [
+            "model.error-response".to_owned(),
+            "model.recovery.error-response".to_owned(),
+            format!("{prefix}.error-response"),
+            format!("{prefix}.failure"),
+        ] {
+            ensure!(
+                self.ledger.read(&name)?.is_none(),
+                "gemini_metadata_observed_error"
+            );
+        }
+        let value = metadata(&raw)?;
+        ensure!(
+            value.get("baseModelId").is_none(),
+            "gemini_metadata_observed_error"
+        );
+        let receipt = serde_json::to_vec(&json!({
+            "contract":"sw-metadata-absent-base-model/1", "blocked_sha256":hash(blocked),
+            "started_sha256":hash(&start), "response_sha256":hash(&raw),
+            "original_started_sha256":hash(&original), "access_claim_sha256":approval,
+            "ledger":self.ledger.identity()?, "profile":profile_hash()
+        }))?;
+        if let Some(old) = self.ledger.read("model.metadata.revalidated")? {
+            ensure!(old == receipt, "gemini_metadata_observation_receipt");
+            return Ok(());
+        }
+        ensure!(
+            self.access
+                .claim
+                .metadata_recovery_started_sha256
+                .as_deref()
+                == Some(hash(&original).as_str()),
+            "gemini_metadata_recovery_not_authorized"
+        );
+        for i in 0..30 {
+            let id = hash(row(i)?.frame.as_bytes());
+            ensure!(
+                self.state(&id)? == State::Unrun,
+                "gemini_metadata_recovery_rows_started"
+            );
+            for suffix in [
+                "count-response",
+                "count-error-response",
+                "response",
+                "terminal",
+                "private-review",
+                "publication-refused",
+            ] {
+                ensure!(
+                    self.ledger.read(&format!("{id}.{suffix}"))?.is_none(),
+                    "gemini_metadata_recovery_row_artifact"
+                );
+            }
+        }
+        self.ledger.create("model.metadata.revalidated", &receipt)
     }
 
     /// One awaited row at a time, no task spawning, fallback or retry. Reopening
@@ -782,6 +877,195 @@ pub(in crate::native) async fn exercise_serial(capture: &mut impl Capture) {
             assert!(report["rows"].as_array().unwrap()[1..]
                 .iter()
                 .all(|r| r["state"] == "valid_untrusted"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn gemini_metadata_saved_absent_field_revalidation_is_offline_and_bound() {
+    use std::os::unix::fs::PermissionsExt;
+    struct NoNetwork;
+    impl Wire for NoNetwork {
+        async fn request(
+            &mut self,
+            _: Operation,
+            _: &[u8],
+            _: &Key,
+            _: Instant,
+        ) -> Result<Vec<u8>> {
+            panic!("saved metadata must not issue a request");
+        }
+    }
+    for mode in [
+        "success",
+        "http",
+        "wrong-project",
+        "wrong-start",
+        "present-id",
+        "null-id",
+        "wrong-model",
+        "no-approval",
+        "row-started",
+        "orphan-response",
+        "changed-receipt",
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        let ledger = Ledger::open(directory.path()).unwrap();
+        let original = br#"{"state":"started_unknown"}"#;
+        ledger.create("model.started", original).unwrap();
+        let secret = crate::token::generate();
+        let key = crate::token::generate();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let mut claim = AccessClaim {
+            profile: profile_hash(),
+            ledger: ledger.identity().unwrap(),
+            key_sha256: hash(key.as_bytes()),
+            project: "offline-revalidation".into(),
+            evidence_sha256: hash(b"synthetic evidence"),
+            non_billed_free_tier: true,
+            quota_available: true,
+            metadata_recovery_started_sha256: if mode == "no-approval" {
+                None
+            } else {
+                Some(hash(original))
+            },
+            issued: now - 1,
+            expires: now + 3500,
+            signature: String::new(),
+        };
+        claim.signature = URL_SAFE_NO_PAD.encode(
+            access_mac(secret.as_bytes(), &claim)
+                .finalize()
+                .into_bytes(),
+        );
+        let controller = Controller::open_held(
+            ledger,
+            &serde_json::to_vec(&claim).unwrap(),
+            Some(key),
+            secret.as_bytes(),
+        )
+        .unwrap();
+        let mut historical = claim.clone();
+        if mode == "wrong-project" {
+            historical.project = "other-project".into();
+        }
+        let evidence = serde_json::to_vec(&historical).unwrap();
+        let approval = hash(&evidence);
+        if mode == "wrong-project" {
+            controller
+                .ledger
+                .create(&format!("access-{approval}.claim"), &evidence)
+                .unwrap();
+        }
+        let prefix = format!("model.observation-{approval}");
+        let start = serde_json::to_vec(&json!({"operation":"metadata_get_only", "access_claim_sha256":approval,
+            "original_started_sha256":if mode == "wrong-start" {hash(b"other")} else {hash(original)},
+            "ledger":claim.ledger,"profile":claim.profile})).unwrap();
+        controller
+            .ledger
+            .create(&format!("{prefix}.started"), &start)
+            .unwrap();
+        let mut raw = json!({"name":format!("models/{MODEL}"),"version":"3.0","inputTokenLimit":1048576,
+            "outputTokenLimit":65536,"supportedGenerationMethods":["generateContent","countTokens"]});
+        match mode {
+            "present-id" => raw["baseModelId"] = json!(MODEL),
+            "null-id" => raw["baseModelId"] = Value::Null,
+            "wrong-model" => raw["name"] = json!("models/other"),
+            _ => {}
+        }
+        let raw = serde_json::to_vec(&raw).unwrap();
+        controller
+            .ledger
+            .create(&format!("{prefix}.response"), &raw)
+            .unwrap();
+        let blocked = serde_json::to_vec(&json!({"state":if mode == "http" {"http_error"} else {"invalid_metadata"},"observation":prefix})).unwrap();
+        controller
+            .ledger
+            .create("model.metadata.blocked", &blocked)
+            .unwrap();
+        let id = hash(row(0).unwrap().frame.as_bytes());
+        match mode {
+            "row-started" => controller
+                .ledger
+                .create(&format!("{id}.controller-started"), b"{}")
+                .unwrap(),
+            "orphan-response" => controller
+                .ledger
+                .create(&format!("{id}.response"), b"{}")
+                .unwrap(),
+            "changed-receipt" => controller
+                .ledger
+                .create("model.metadata.revalidated", b"{}")
+                .unwrap(),
+            _ => {}
+        }
+        let result = controller.model(&mut NoNetwork).await;
+        assert_eq!(result.is_ok(), mode == "success", "{mode}: {result:?}");
+        assert_eq!(
+            controller
+                .ledger
+                .read("model.metadata.blocked")
+                .unwrap()
+                .unwrap(),
+            blocked
+        );
+        assert_eq!(
+            controller
+                .ledger
+                .read(&format!("{prefix}.response"))
+                .unwrap()
+                .unwrap(),
+            raw
+        );
+        assert_eq!(
+            controller
+                .ledger
+                .read(&format!("{prefix}.started"))
+                .unwrap()
+                .unwrap(),
+            start
+        );
+        assert_eq!(
+            controller.ledger.read("model.started").unwrap().unwrap(),
+            original
+        );
+        if mode == "success" {
+            let receipt = controller
+                .ledger
+                .read("model.metadata.revalidated")
+                .unwrap()
+                .unwrap();
+            controller.model(&mut NoNetwork).await.unwrap();
+            assert_eq!(
+                controller
+                    .ledger
+                    .read("model.metadata.revalidated")
+                    .unwrap()
+                    .unwrap(),
+                receipt
+            );
+            // Even another individually valid response cannot replace the
+            // response bound by the durable revalidation receipt.
+            let mut changed: Value = serde_json::from_slice(&raw).unwrap();
+            changed["version"] = json!("different-valid-version");
+            std::fs::write(
+                directory.path().join(format!("{prefix}.response")),
+                serde_json::to_vec(&changed).unwrap(),
+            )
+            .unwrap();
+            assert!(controller.model(&mut NoNetwork).await.is_err());
+            for i in 0..30 {
+                assert_eq!(
+                    controller
+                        .state(&hash(row(i).unwrap().frame.as_bytes()))
+                        .unwrap(),
+                    State::Unrun
+                );
+            }
         }
     }
 }

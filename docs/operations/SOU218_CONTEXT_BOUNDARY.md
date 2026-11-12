@@ -1751,3 +1751,25 @@ agreed 6+24 experiment and supply all outcomes, usefulness/citations, attack
 results, errors/usage and the complete preserved metadata history in one private
 report. Offline transport checks measure this component. Real provider outcomes
 are recorded by that personal run.
+
+### Retained response with absent baseModelId
+
+The real metadata response omitted `baseModelId` while its exact `name`, token
+limits and required methods matched. The agreed compatibility change accepts
+an absent field only; a present null, non-string or different ID still fails.
+All other metadata predicates remain unchanged.
+
+For the retained `invalid_metadata` observation, the controller validates the
+saved response offline. It checks the original marker, observation start,
+claim hash, held directory, profile, project and key identity. Only this
+absent-field mismatch can be reconsidered. HTTP failures, other invalid
+metadata and any row artifact prevent initial revalidation. The existing
+personal recovery confirmation and fresh quota declaration are still required.
+
+An append-only `model.metadata.revalidated` receipt binds the old blocked marker,
+original marker, observation start and response hashes. The blocked marker and
+every historical file remain intact. Later openings verify that receipt against
+the retained bytes; no extra metadata GET is made. Include this receipt with the
+private experiment evidence. Count/generation fences, pacing and cumulative
+ceilings remain unchanged. This compatibility fix alone supplies no semantic
+result for any of the 30 rows and does not close SOU-218.

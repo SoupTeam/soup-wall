@@ -201,7 +201,7 @@ fn confirm(project: &str, row_ceiling: usize, recovery: Option<&str>) -> Result<
         None => format!("RUN {project} 6+24 USD0"),
     };
     if recovery.is_some() {
-        writeln!(tty, "One metadata-only GET per signed personal confirmation. Each observation is journaled separately. Retain the complete history and inspect any failure before another personal confirmation.")?;
+        writeln!(tty, "At most one metadata-only GET per signed personal confirmation. A retained absent-baseModelId response is revalidated offline without another GET. Each observation is journaled separately. Retain the complete history and inspect any failure before another personal confirmation.")?;
     }
     writeln!(tty, "Public Gemini experiment only. No replay, paid fallback or policy Allow.\nCumulative attempted-row ceiling: {row_ceiling}/30; wait 61 seconds before each new row.\nOnly raise the ceiling after verifying fresh quota; it is not a per-launch allowance.\nConfirm verified non-billed Free Tier and current quota for project {project}.\nType exactly: {phrase}")?;
     tty.flush()?;
