@@ -1705,44 +1705,49 @@ its two launcher children were actually re-executed by mandatory parents.
 These observations do not assert real operator invocation or live inference.
 
 
-### One explicit recovery of an uncertain metadata observation
+### Personally confirmed metadata observations
 
-The original `model.started` with no response remains an uncertain historical
-GET. Its original transport cause cannot be recovered from a missing error
-record. The maintainer authorizes one new, personally confirmed metadata-only
-GET observation for this pre-row state. This narrowly scoped recovery does not
-permit repeating a countTokens request or generation.
+The retained model.started and model.recovery.started/failure remain historical
+metadata observations. Their transport uncertainty stays in the journal. A fixed
+metadata GET is read-only preflight. Each newly signed personal confirmation
+permits one additional metadata observation before any row disclosure. This
+replaces the original one-recovery capacity limit.
 
-Use the same private directory, project, key and native token. Preserve every
-existing file. Do not remove, rename or fabricate any attempt/response/failure.
-Compute the SHA-256 of the existing non-secret `model.started` file locally and
-add this optional field to the existing private operator configuration:
+Use the existing private directory, project, key and native token. The optional
+configuration field metadata_recovery_started_sha256 remains the SHA-256 of the
+original model.started file. The personal phrase remains
+RECOVER METADATA <that SHA-256> USD0. Run the same manual command in your own
+terminal, confirm current non-billed Free Tier/quota and enter the key at the
+hidden prompt.
 
-```json
-"metadata_recovery_started_sha256": "<SHA-256 of the retained model.started>"
-```
+Each signed personal access claim has a distinct digest. The controller writes
+model.observation-<claim-sha256>.started before its single GET, then stores its
+complete bounded response or allowlisted failure. Reusing that signed claim
+cannot dispatch again. An additional observation after a transport failure
+requires a fresh personal confirmation. The controller performs no automatic
+retry. Keep every previous marker, response and report.
 
-Run the same manual command. The personal confirmation changes to
-`RECOVER METADATA <that SHA-256> USD0`. The signed access declaration binds the
-recovery digest to the held journal identity, project/key, profile and fresh
-operator evidence. An absent/wrong confirmation, existing HTTP error response,
-or any attempted/completed row refuses recovery. Existing uncertainty is never
-relabelled as success.
+A successful, fully validated metadata observation creates
+model.metadata.accepted. Its receipt binds original marker, profile, held
+directory, signed-claim identity and hashes of the durable start/response files.
+Later quota-window continuation reuses this verified metadata. Existing
+successful legacy model.response or model.recovery.response is also supported.
 
-Before the GET, `model.recovery.started` durably records the original marker
-digest and signed-declaration digest. A successful observation goes into
-`model.recovery.response`; errors go into `model.recovery.failure` with fixed
-allowlisted codes and, if available, `model.recovery.error-response`. Exactly one
-such observation is possible. If it fails or the process dies after its fence,
-stop and retain the journal for review. Reopening never repeats it. A valid
-cached recovery response can be reused during the already approved quota-window
-continuation. The original metadata uncertainty stays in the evidence.
+Known HTTP errors and invalid/model-drift metadata stop the batch and retain
+their evidence. The new observation path requires all 30 rows to be unrun and
+free of count/generation/result artifacts. Each countTokens or generation
+attempt has its original single-use fence and terminal outcome. The fixed model,
+6+24 corpus, 61-second row spacing, cumulative 20 then 30 limit, USD 0 declaration,
+custody/memory controls and policy are enforced by their existing validators.
 
-Only the fixed GET endpoint with an empty body is eligible. The 30 row fences,
-6+24 source bytes, model/profile, 61-second spacing, cumulative 20 then 30 limit,
-USD 0 ceiling, custody/memory limits and unchanged policy remain enforced. Once
-metadata passes, continue the original one experiment and deliver its complete
-private report, including both metadata observations and every negative result.
-Passing offline recovery tests does not prove a real provider transport problem
-is resolved. The live terminal, personal key and billing/quota confirmation
-remain the operator's actions.
+A peer closing TLS without close_notify is accepted only after an entire
+Content-Length or chunked HTTP message has been read. Truncated headers/bodies,
+malformed framing, additional messages and unrelated I/O errors fail. The
+actual historical error kind behind an earlier gemini_http_eof remains unknown.
+
+After pulling the reviewed follow-up, the operator with the exhausted legacy
+metadata recovery can use the existing command/configuration. Complete the one
+agreed 6+24 experiment and supply all outcomes, usefulness/citations, attack
+results, errors/usage and the complete preserved metadata history in one private
+report. Offline transport checks measure this component. Real provider outcomes
+are recorded by that personal run.

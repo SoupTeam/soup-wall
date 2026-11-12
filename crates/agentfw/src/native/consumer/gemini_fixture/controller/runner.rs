@@ -130,6 +130,10 @@ impl Controller {
 
     async fn model(&self, wire: &mut impl Wire) -> Result<()> {
         self.check()?;
+        ensure!(
+            self.ledger.read("model.metadata.blocked")?.is_none(),
+            "gemini_metadata_observed_error"
+        );
         if let Some(raw) = self.ledger.read("model.response")? {
             metadata(&raw)?;
             return Ok(());
@@ -137,6 +141,12 @@ impl Controller {
         let original = self.ledger.read("model.started")?;
         let prefix = if let Some(original) = original {
             let original_sha256 = hash(&original);
+            ensure!(
+                self.ledger.read("model.error-response")?.is_none()
+                    && self.ledger.read("model.recovery.error-response")?.is_none(),
+                "gemini_metadata_recovery_http_error"
+            );
+            // Read historical successful metadata using its original binding.
             if let Some(raw) = self.ledger.read("model.recovery.response")? {
                 let receipt = self
                     .ledger
@@ -150,6 +160,36 @@ impl Controller {
                 metadata(&raw)?;
                 return Ok(());
             }
+            if let Some(receipt) = self.ledger.read("model.metadata.accepted")? {
+                let Strict(receipt) = serde_json::from_slice(&receipt)?;
+                let approval = receipt["access_claim_sha256"]
+                    .as_str()
+                    .filter(|id| id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit()))
+                    .ok_or_else(|| anyhow::anyhow!("gemini_metadata_observation_receipt"))?;
+                ensure!(
+                    receipt["contract"] == "sw-metadata-observation/1"
+                        && receipt["original_started_sha256"] == original_sha256
+                        && receipt["ledger"] == self.ledger.identity()?
+                        && receipt["profile"] == profile_hash(),
+                    "gemini_metadata_observation_receipt"
+                );
+                let prefix = format!("model.observation-{approval}");
+                let start = self
+                    .ledger
+                    .read(&format!("{prefix}.started"))?
+                    .ok_or_else(|| anyhow::anyhow!("gemini_metadata_observation_receipt"))?;
+                let raw = self
+                    .ledger
+                    .read(&format!("{prefix}.response"))?
+                    .ok_or_else(|| anyhow::anyhow!("gemini_metadata_observation_receipt"))?;
+                ensure!(
+                    receipt["started_sha256"] == hash(&start)
+                        && receipt["response_sha256"] == hash(&raw),
+                    "gemini_metadata_observation_receipt"
+                );
+                metadata(&raw)?;
+                return Ok(());
+            }
             ensure!(
                 self.access
                     .claim
@@ -158,12 +198,7 @@ impl Controller {
                     == Some(original_sha256.as_str()),
                 "gemini_metadata_recovery_not_authorized"
             );
-            ensure!(
-                self.ledger.read("model.error-response")?.is_none(),
-                "gemini_metadata_recovery_http_error"
-            );
-            // This exception is only for preflight GET, before any row disclosure.
-            // Count/generate uncertainty and all existing terminal outcomes stay fenced.
+            // Read-only preflight observation, before any count/generation disclosure.
             for i in 0..30 {
                 let id = hash(row(i)?.frame.as_bytes());
                 ensure!(
@@ -184,24 +219,28 @@ impl Controller {
                     );
                 }
             }
+            // Each signed personal approval permits exactly one GET. Fresh
+            // confirmations append new observations; old uncertain fences persist.
+            let approval = hash(&serde_json::to_vec(&self.access.claim)?);
+            let prefix = format!("model.observation-{approval}");
             self.ledger.create(
-                "model.recovery.started",
+                &format!("{prefix}.started"),
                 &serde_json::to_vec(&json!({
-                    "state":"started_unknown", "operation":"metadata_get_only",
+                    "operation":"metadata_get_only","access_claim_sha256":approval,
                     "original_started_sha256":original_sha256,
-                    "access_claim_sha256":hash(&serde_json::to_vec(&self.access.claim)?),
-                    "ledger":self.ledger.identity()?, "profile":profile_hash()
+                    "ledger":self.ledger.identity()?,"profile":profile_hash()
                 }))?,
             )?;
-            "model.recovery"
+            prefix
         } else {
             ensure!(
-                self.access.claim.metadata_recovery_started_sha256.is_none(),
+                self.access.claim.metadata_recovery_started_sha256.is_none()
+                    && self.ledger.read("model.metadata.accepted")?.is_none(),
                 "gemini_metadata_recovery_without_original"
             );
             self.ledger
                 .create("model.started", b"{\"state\":\"started_unknown\"}")?;
-            "model"
+            "model".to_owned()
         };
         let raw = match wire
             .request(Operation::Metadata, &[], &self.access.key, self.deadline())
@@ -215,12 +254,36 @@ impl Controller {
                 if let Some(raw) = rejected_body(&error) {
                     self.ledger
                         .create(&format!("{prefix}.error-response"), raw)?;
+                    self.ledger.create(
+                        "model.metadata.blocked",
+                        &serde_json::to_vec(&json!({"state":"http_error",
+                            "observation":prefix,"failure":code}))?,
+                    )?;
                 }
                 return Err(error);
             }
         };
         self.ledger.create(&format!("{prefix}.response"), &raw)?;
-        metadata(&raw)?;
+        if let Err(error) = metadata(&raw) {
+            self.ledger.create(
+                "model.metadata.blocked",
+                &serde_json::to_vec(&json!({"state":"invalid_metadata",
+                    "observation":prefix}))?,
+            )?;
+            return Err(error);
+        }
+        if prefix != "model" {
+            let start = self
+                .ledger
+                .read(&format!("{prefix}.started"))?
+                .ok_or_else(|| anyhow::anyhow!("gemini_metadata_observation_receipt"))?;
+            let Strict(mut receipt) = serde_json::from_slice(&start)?;
+            receipt["contract"] = json!("sw-metadata-observation/1");
+            receipt["started_sha256"] = json!(hash(&start));
+            receipt["response_sha256"] = json!(hash(&raw));
+            self.ledger
+                .create("model.metadata.accepted", &serde_json::to_vec(&receipt)?)?;
+        }
         Ok(())
     }
 
@@ -724,7 +787,7 @@ pub(in crate::native) async fn exercise_serial(capture: &mut impl Capture) {
 }
 
 #[tokio::test]
-async fn gemini_metadata_recovery_is_explicit_once_and_preserves_row_fences() {
+async fn gemini_metadata_observations_are_single_use_per_approval_and_preserve_fences() {
     use std::os::unix::fs::PermissionsExt;
     struct MetadataWire {
         requests: usize,
@@ -756,6 +819,7 @@ async fn gemini_metadata_recovery_is_explicit_once_and_preserves_row_fences() {
         }
     }
     for mode in [
+        "legacy-spent",
         "success",
         "absent-approval",
         "wrong-digest",
@@ -764,7 +828,6 @@ async fn gemini_metadata_recovery_is_explicit_once_and_preserves_row_fences() {
         "row-terminal",
         "row-orphan-response",
         "http-error",
-        "already-started",
         "network-failure",
         "invalid-response",
     ] {
@@ -787,7 +850,14 @@ async fn gemini_metadata_recovery_is_explicit_once_and_preserves_row_fences() {
                 .unwrap(),
             "row-orphan-response" => ledger.create(&format!("{id}.response"), b"{}").unwrap(),
             "http-error" => ledger.create("model.error-response", b"{}").unwrap(),
-            "already-started" => ledger.create("model.recovery.started", b"{}").unwrap(),
+            "legacy-spent" => {
+                ledger
+                    .create("model.recovery.started", b"historical retained receipt")
+                    .unwrap();
+                ledger
+                    .create("model.recovery.failure", b"gemini_http_eof")
+                    .unwrap();
+            }
             _ => {}
         }
         let secret = crate::token::generate();
@@ -831,22 +901,51 @@ async fn gemini_metadata_recovery_is_explicit_once_and_preserves_row_fences() {
             invalid: mode == "invalid-response",
         };
         let result = controller.model(&mut wire).await;
-        assert_eq!(result.is_ok(), mode == "success", "{mode}: {result:?}");
-        let permitted = matches!(mode, "success" | "network-failure" | "invalid-response");
+        assert_eq!(
+            result.is_ok(),
+            matches!(mode, "success" | "legacy-spent"),
+            "{mode}: {result:?}"
+        );
+        let permitted = matches!(
+            mode,
+            "success" | "legacy-spent" | "network-failure" | "invalid-response"
+        );
         assert_eq!(wire.requests, usize::from(permitted), "{mode}");
         assert_eq!(
             controller.ledger.read("model.started").unwrap().unwrap(),
             original
         );
         if permitted {
+            let prefix = format!(
+                "model.observation-{}",
+                hash(&serde_json::to_vec(&claim).unwrap())
+            );
             assert!(controller
                 .ledger
-                .read("model.recovery.started")
+                .read(&format!("{prefix}.started"))
                 .unwrap()
                 .is_some());
+            if mode == "legacy-spent" {
+                assert_eq!(
+                    controller
+                        .ledger
+                        .read("model.recovery.started")
+                        .unwrap()
+                        .unwrap(),
+                    b"historical retained receipt"
+                );
+                assert_eq!(
+                    controller
+                        .ledger
+                        .read("model.recovery.failure")
+                        .unwrap()
+                        .unwrap(),
+                    b"gemini_http_eof"
+                );
+            }
             let requests = wire.requests;
             let again = controller.model(&mut wire).await;
-            assert_eq!(again.is_ok(), mode == "success");
+            assert_eq!(again.is_ok(), matches!(mode, "success" | "legacy-spent"));
             assert_eq!(
                 wire.requests, requests,
                 "no second metadata observation: {mode}"
@@ -855,7 +954,7 @@ async fn gemini_metadata_recovery_is_explicit_once_and_preserves_row_fences() {
                 assert_eq!(
                     controller
                         .ledger
-                        .read("model.recovery.failure")
+                        .read(&format!("{prefix}.failure"))
                         .unwrap()
                         .unwrap(),
                     b"gemini_timeout_unknown"
@@ -866,15 +965,71 @@ async fn gemini_metadata_recovery_is_explicit_once_and_preserves_row_fences() {
             controller = Controller::open(
                 directory.path(),
                 &serde_json::to_vec(&claim).unwrap(),
-                Some(key),
+                Some(key.clone()),
                 secret.as_bytes(),
             )
             .unwrap();
-            assert_eq!(controller.model(&mut wire).await.is_ok(), mode == "success");
+            assert_eq!(
+                controller.model(&mut wire).await.is_ok(),
+                matches!(mode, "success" | "legacy-spent")
+            );
             assert_eq!(
                 wire.requests, requests,
                 "reopening must never repeat metadata: {mode}"
             );
+            if matches!(mode, "network-failure" | "invalid-response") {
+                let old_start = controller
+                    .ledger
+                    .read(&format!("{prefix}.started"))
+                    .unwrap()
+                    .unwrap();
+                drop(controller);
+                // A separately signed fresh personal approval can observe a failed
+                // read-only GET. Observed HTTP/model failures are terminal.
+                claim.issued += 1;
+                claim.signature = URL_SAFE_NO_PAD.encode(
+                    access_mac(secret.as_bytes(), &claim)
+                        .finalize()
+                        .into_bytes(),
+                );
+                let fresh = Controller::open(
+                    directory.path(),
+                    &serde_json::to_vec(&claim).unwrap(),
+                    Some(key),
+                    secret.as_bytes(),
+                )
+                .unwrap();
+                wire.fail = false;
+                wire.invalid = false;
+                let fresh_result = fresh.model(&mut wire).await;
+                assert_eq!(fresh_result.is_ok(), mode == "network-failure");
+                assert_eq!(
+                    wire.requests,
+                    requests + usize::from(mode == "network-failure")
+                );
+                assert_eq!(
+                    fresh
+                        .ledger
+                        .read(&format!("{prefix}.started"))
+                        .unwrap()
+                        .unwrap(),
+                    old_start
+                );
+                assert!(fresh.ledger.read("model.response").unwrap().is_none());
+                for i in 0..30 {
+                    assert_eq!(
+                        fresh
+                            .state(&hash(row(i).unwrap().frame.as_bytes()))
+                            .unwrap(),
+                        State::Unrun
+                    );
+                }
+                if mode == "network-failure" {
+                    let count = wire.requests;
+                    fresh.model(&mut wire).await.unwrap();
+                    assert_eq!(wire.requests, count, "validated metadata is reused");
+                }
+            }
         }
     }
 }
