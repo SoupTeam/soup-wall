@@ -364,16 +364,15 @@ async fn read_response(stream: &mut (impl AsyncRead + Unpin)) -> Result<Vec<u8>>
             }
         }
     }
-    // Require complete response EOF, including no extra body or HTTP messages.
+    // HTTP framing above proves the body is complete. Rustls reports a missing
+    // close_notify as UnexpectedEof; accept it only here, after complete framing.
     let mut tail = [0];
-    ensure!(
-        stream
-            .read(&mut tail)
-            .await
-            .map_err(|_| anyhow::anyhow!("gemini_http_eof"))?
-            == 0,
-        "gemini_extra_http"
-    );
+    match stream.read(&mut tail).await {
+        Ok(0) => {}
+        Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {}
+        Ok(_) => anyhow::bail!("gemini_extra_http"),
+        Err(_) => anyhow::bail!("gemini_http_eof"),
+    }
     if status != 200 {
         return Err(anyhow::Error::new(Rejection { status, body }));
     }
@@ -483,4 +482,58 @@ async fn gemini_transport_preflight_only_fixed_model_paths() {
     assert_eq!(error.to_string(), "gemini_quota_stop");
     assert_eq!(error.downcast_ref::<Rejection>().unwrap().body, body);
     assert!(!format!("{error:?}").contains("quota exhausted"));
+}
+
+#[tokio::test]
+async fn gemini_transport_unclean_tls_close_requires_complete_http_body() {
+    struct Abrupt {
+        bytes: Vec<u8>,
+        position: usize,
+        error: io::ErrorKind,
+    }
+    impl AsyncRead for Abrupt {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+            buf: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            if self.position == self.bytes.len() {
+                return Poll::Ready(Err(io::Error::from(self.error)));
+            }
+            let count = buf.remaining().min(self.bytes.len() - self.position);
+            buf.put_slice(&self.bytes[self.position..self.position + count]);
+            self.position += count;
+            Poll::Ready(Ok(()))
+        }
+    }
+    for framing in [
+        "Content-Length: 2\r\n\r\n{}",
+        "Transfer-Encoding: chunked\r\n\r\n2\r\n{}\r\n0\r\n\r\n",
+    ] {
+        let bytes =
+            format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n{framing}").into_bytes();
+        let reader = |bytes| Abrupt {
+            bytes,
+            position: 0,
+            error: io::ErrorKind::UnexpectedEof,
+        };
+        assert_eq!(
+            read_response(&mut reader(bytes.clone())).await.unwrap(),
+            b"{}"
+        );
+        for end in 0..bytes.len() {
+            assert!(read_response(&mut reader(bytes[..end].to_vec()))
+                .await
+                .is_err());
+        }
+        let mut extra = bytes.clone();
+        extra.push(b'x');
+        assert!(read_response(&mut reader(extra)).await.is_err());
+        let mut reset = reader(bytes);
+        reset.error = io::ErrorKind::ConnectionReset;
+        assert_eq!(
+            read_response(&mut reset).await.unwrap_err().to_string(),
+            "gemini_http_eof"
+        );
+    }
 }
