@@ -103,6 +103,84 @@ fn manual_gemini_saved_response_decode() {
 }
 
 #[test]
+#[ignore = "explicit offline audit of hash-bound public responses; no API or journal writes"]
+fn manual_gemini_saved_batch_decode() {
+    let path = std::env::var_os("SOUP_WALL_SAVED_PUBLIC_MANIFEST").expect("explicit manifest");
+    let bytes = std::fs::read(path).unwrap();
+    assert_eq!(
+        hash(&bytes),
+        std::env::var("SOUP_WALL_SAVED_MANIFEST_SHA256").unwrap()
+    );
+    let rows: Vec<Value> = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(rows.len(), 30);
+    let mut sources = BTreeSet::new();
+    for row in rows {
+        let source = row["source"].as_str().unwrap();
+        approved_source(source).unwrap();
+        assert!(sources.insert(hash(source.as_bytes())));
+        let response = std::fs::read(row["response_path"].as_str().unwrap()).unwrap();
+        assert_eq!(hash(&response), row["response_sha256"].as_str().unwrap());
+        let p = prepare(
+            source,
+            "offline-audit",
+            Instant::now() + std::time::Duration::from_secs(30),
+            preflight_for(source),
+        )
+        .unwrap();
+        let outcome = match decode(&p, &response) {
+            Ok(_) => "valid_untrusted".to_string(),
+            Err(e) => e.to_string(),
+        };
+        println!(
+            "OFFLINE_ROW {}",
+            json!({"case_id":row["case_id"],"response_sha256":hash(&response),"outcome":outcome})
+        );
+    }
+}
+
+#[test]
+fn gemini_compact_prompt_is_separately_bound_and_keeps_raw_quote_validation() {
+    let p = prepared();
+    let body: Value = serde_json::from_slice(&p.body).unwrap();
+    assert_eq!(body["systemInstruction"]["parts"][0]["text"], QUESTION);
+    let mut other = body.clone();
+    other["systemInstruction"]["parts"][0]["text"] =
+        json!(if cfg!(feature = "sou218-gemini35-compact") {
+            LEGACY_QUESTION
+        } else {
+            COMPACT_QUESTION
+        });
+    let mut f = preflight();
+    f.counted_request_sha256 = hash(&serde_json::to_vec(&other).unwrap());
+    assert!(prepare(&p.source, "wrong-prompt-count", p.deadline, f).is_err());
+
+    // JSON-decoded text is not a raw-frame quote. Do not silently re-escape
+    // provider output to make a historical invalid response pass.
+    let mut p = prepared();
+    p.source = r#"{"text":"alpha\nbeta","copy":"alpha\nbeta"}"#.into();
+    assert_eq!(
+        decode(&p, &envelope(answer("alpha\nbeta")))
+            .unwrap_err()
+            .to_string(),
+        "gemini_quote_absent"
+    );
+    let frame = decode(&p, &envelope(answer(r"alpha\nbeta"))).unwrap();
+    let frame: Value = serde_json::from_slice(&frame).unwrap();
+    assert_eq!(frame["citations"].as_array().unwrap().len(), 2);
+    for c in frame["citations"].as_array().unwrap() {
+        let start = c["start"].as_u64().unwrap() as usize;
+        let end = c["end"].as_u64().unwrap() as usize;
+        assert_eq!(&p.source[start..end], r"alpha\nbeta");
+    }
+    p.source = "unique duplicate duplicate unique duplicate duplicate".into();
+    let excessive = json!({"summary":"untrusted","quotes":["unique","duplicate","cate"]});
+    assert_eq!(
+        decode(&p, &envelope(excessive)).unwrap_err().to_string(),
+        "gemini_occurrence_limit"
+    );
+}
+
+#[test]
 fn gemini_profile_complete_public_data_only_and_fixed_request() {
     assert_eq!(json_digest(PLAN), json_digest(&PLAN.replace("\r\n", "\n")));
     let p = prepared();

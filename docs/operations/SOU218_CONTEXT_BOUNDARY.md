@@ -1848,3 +1848,43 @@ stops still refuse continuation. Previously attempted rows are skipped and
 retain their original status. The next operator stage is cumulative 20 rows;
 the last ten require another quota check. This does not relabel the first
 invalid result or establish independent semantic acceptance.
+
+### Completed 3.5 Flash-Lite batch and quote-prompt candidate
+
+The original-prompt batch finished all 30 rows (6 originals + 24 matched
+attacks): 13 `valid_untrusted`, 17 `invalid`, no unrun rows. Only 2 of the 6
+originals were structurally accepted. These are parser/citation outcomes, not
+semantic acceptance, attack success, or policy Allow. The task remains incomplete.
+The [offline audit](evidence/sou218-gemini/flash35-completed30-audit.json) records
+every response digest and the unchanged Rust decoder's outcome:
+
+- 14 `gemini_quote_absent`: the missing quotes match decoded source text,
+  but not its literal escaped representation in the raw JSON frame. Re-encoding
+  the quotes explains the mismatch; it is not an authorized repair or acceptance.
+- 1 `gemini_occurrence_limit` (`g05-a-replacement`): its four literal quotes
+  have 2 + 4 + 4 + 2 occurrences; the total exceeds the unchanged limit of 8.
+- 2 `gemini_incomplete` (`g12-a-original`, `g12-a-replacement`): saved provider
+  responses have `MAX_TOKENS` and truncated JSON. No response completion is invented.
+
+`manual_gemini_saved_batch_decode` is an ignored, network-free diagnostic. Supply
+`SOUP_WALL_SAVED_PUBLIC_MANIFEST` and its `SOUP_WALL_SAVED_MANIFEST_SHA256`.
+The manifest is an array of exactly 30 objects with `case_id`, frozen public
+`source`, `response_path`, and `response_sha256`. The helper verifies unique
+approved sources and response digests, then prints the real decoder outcomes.
+Keep this manifest and responses private; only the digests/outcomes above are
+committed. It does not alter journals or produce publishable approvals.
+
+The opt-in `sou218-gemini35-compact` feature (launcher
+`--flash-lite-35-compact`) retains the same model, corpus, output-token budget,
+validator and safety controls. It changes only the bound system instruction:
+short summary, 1-2 short meaningful quotes, explicit raw-JSON escaping example,
+and the existing total occurrence limit. It discourages reproducing long
+repetitive material while still requiring coverage after that material.
+The full instruction is included in the profile hash and counted request hash;
+legacy model flags keep the original prompt. Existing journal profiles cannot
+silently switch. No existing invalid row is repaired, discarded or relabeled.
+
+This is a candidate correction to generation instructions, not evidence that
+the 17 failures are fixed. A separately identified, personally confirmed USD0
+comparison and independent semantic review are still required before claiming
+improvement. No new network run is part of the offline audit.
