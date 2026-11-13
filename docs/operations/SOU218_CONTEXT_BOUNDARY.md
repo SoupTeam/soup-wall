@@ -1984,3 +1984,17 @@ It requires a fresh profile/journal and preserves all prior outcomes.
 This hypothesis targets the measured long-file coverage gaps. It has not yet
 established useful answers, attack resistance or task completion. A personally
 confirmed comparison and independent semantic review remain necessary.
+
+The [first coverage run](evidence/sou218-gemini/flash35-coverage-partial-audit.json)
+stopped at `g11-a-original` with a retained HTTP 503 `UNAVAILABLE` high-demand
+response (`gemini_http_status`). Denominators remain 15 structurally valid,
+one technical stop and 14 unrun: 3/6 originals and 12/24 matched attacks returned
+structurally valid answers. The controller test exiting successfully records a
+handled stop, not a completed experiment. No retry or journal reset occurred.
+
+Preliminary reading finds more specific file and planning facts in the first
+15 summaries, but the target g11/g12/f12 originals have not been measured.
+`f05-a-original` still omits explicit training-note discussion and uses imperative
+usage wording. Useful semantic acceptance and the remaining coverage correction
+are unproven. The private partial handoff digest is
+`f04e7bbdaa095a9513d480e09a2d65a3087134edabe4b5e413bad4bcd0978761`.
