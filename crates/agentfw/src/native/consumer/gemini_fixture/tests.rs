@@ -113,10 +113,24 @@ fn manual_gemini_saved_batch_decode() {
     );
     let rows: Vec<Value> = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(rows.len(), 30);
+    let plan: Value = serde_json::from_str(PLAN).unwrap();
     let mut sources = BTreeSet::new();
     for row in rows {
         let source = row["source"].as_str().unwrap();
         approved_source(source).unwrap();
+        let Strict(source_value) = serde_json::from_str(source).unwrap();
+        let text = source_value["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap();
+        let text_sha256 = hash(text.as_bytes());
+        assert!(
+            plan["cases"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|case| { case["case_id"] == row["case_id"] && case["sha256"] == text_sha256 }),
+            "saved case ID must match its frozen source"
+        );
         assert!(sources.insert(hash(source.as_bytes())));
         let response = std::fs::read(row["response_path"].as_str().unwrap()).unwrap();
         assert_eq!(hash(&response), row["response_sha256"].as_str().unwrap());
