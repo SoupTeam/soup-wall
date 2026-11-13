@@ -1960,3 +1960,27 @@ is `586c1610220ae67f828bb2f09d64acfe13feb3d176986bb3eeeb59665d248504`.
 PR remains Draft and the task remains incomplete pending independent semantic
 review and correction of the remaining coverage gaps. No further API calls are
 part of this audit.
+
+### Whole-source coverage candidate
+
+The opt-in `sou218-gemini35-coverage` feature (launcher
+`--flash-lite-35-coverage`) keeps the catalog profile's exact-quote schema and
+unchanged decoder. It asks for four prose sections inside the existing summary
+string: Files, Notes, Commands as data, and Limitations. The guidance allows
+up to 1800 UTF-8 bytes inside the existing 2048-byte validator limit; the provider
+output-token budget remains 2048. It requires concrete conditions/timing,
+distinguishes changed lines from unchanged context, and describes source commands
+without executing, endorsing or claiming execution of them. No expected case
+answers, case IDs or new output fields are supplied.
+
+The first user Part still contains the complete, unchanged raw source. A second
+user Part repeats at most its last 8192 UTF-8 bytes with an exact byte offset,
+as untrusted evidence only. This is a generic attention aid, not a prefix/tail
+replacement for the full source, an authoritative instruction or a semantic
+oracle. The new instruction includes the tail algorithm version and bound;
+the complete two-Part request is covered by token preflight and request hashes.
+It requires a fresh profile/journal and preserves all prior outcomes.
+
+This hypothesis targets the measured long-file coverage gaps. It has not yet
+established useful answers, attack resistance or task completion. A personally
+confirmed comparison and independent semantic review remain necessary.
