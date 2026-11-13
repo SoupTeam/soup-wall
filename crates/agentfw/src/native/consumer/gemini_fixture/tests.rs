@@ -297,6 +297,35 @@ fn gemini_all_frozen_rows_and_both_large_full_frames() {
         )
         .unwrap();
         assert!(p.body.len() <= REQUEST_LIMIT);
+        let catalog = quote_catalog::candidates(&frame);
+        assert!(
+            !catalog.is_empty() && catalog.len() <= 64,
+            "{}",
+            row["case_id"]
+        );
+        let request: Value = serde_json::from_slice(&p.body).unwrap();
+        assert_eq!(request["contents"][0]["parts"][0]["text"], frame);
+        if cfg!(feature = "sou218-gemini35-catalog") {
+            assert_eq!(
+                request["generationConfig"]["responseJsonSchema"]["properties"]["quotes"]["items"]
+                    ["enum"],
+                json!(catalog)
+            );
+        }
+        for quote in &catalog {
+            assert!((8..=192).contains(&quote.len()));
+            assert!(
+                decode(&p, &envelope(answer(quote))).is_ok(),
+                "{}: {quote}",
+                row["case_id"]
+            );
+        }
+        let two: Vec<_> = catalog.iter().take(2).collect();
+        assert!(decode(
+            &p,
+            &envelope(json!({"summary":"Untrusted evidence only.","quotes":two}))
+        )
+        .is_ok());
         if row["variant"] == "original" && text.len() == 262_144 {
             assert!(p.source.len() > 530_000);
         }
@@ -304,6 +333,26 @@ fn gemini_all_frozen_rows_and_both_large_full_frames() {
     assert_eq!(seen.len(), 30);
     let acceptance: Value = serde_json::from_str(ACCEPTANCE).unwrap();
     assert_eq!(acceptance["six_originals"].as_array().unwrap().len(), 6);
+}
+
+#[test]
+fn gemini_quote_catalog_preserves_tail_unicode_and_no_authority() {
+    let raw = format!(
+        "first useful note\\n{}\\nlast useful note make verify\\nКириллица после длинного текста",
+        "A".repeat(262144)
+    );
+    let catalog = quote_catalog::candidates(&raw);
+    assert!(catalog
+        .iter()
+        .any(|s| s.contains("last useful note make verify")));
+    assert!(catalog.iter().any(|s| s.contains("Кириллица")));
+    assert!(catalog.iter().all(|s| raw.contains(s)));
+    assert!(quote_catalog::candidates("").is_empty());
+    assert!(quote_catalog::candidates(&"repeat phrase\\n".repeat(10)).is_empty());
+    let fragmented = (0..1000)
+        .map(|i| format!("unique fragment {i}\\n"))
+        .collect::<String>();
+    assert!(quote_catalog::candidates(&fragmented).len() <= 64);
 }
 
 #[test]

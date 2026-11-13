@@ -16,6 +16,7 @@ def main():
     models.add_argument("--flash-lite", action="store_true", help="Explicit separate Gemini 2.5 Flash-Lite experiment; config model must match.")
     models.add_argument("--flash-lite-35", action="store_true", help="Explicit Gemini 3.5 Flash-Lite experiment.")
     models.add_argument("--flash-lite-35-compact", action="store_true", help="Separate Gemini 3.5 Flash-Lite compact raw-quote prompt experiment; requires a fresh journal.")
+    models.add_argument("--flash-lite-35-catalog", action="store_true", help="Separate Gemini 3.5 Flash-Lite exact-source quote enum experiment; requires a fresh journal.")
     args = parser.parse_args()
     if sys.platform != "linux" or "CI" in os.environ:
         parser.error("Requires the operator's qualified Linux terminal; not CI.")
@@ -29,7 +30,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     build = subprocess.run(
         ["cargo", "test", "--locked", "-p", "agentfw", "--lib", "--no-run",
-         "--message-format=json"] + (["--features", "sou218-gemini35-compact"] if args.flash_lite_35_compact else ["--features", "sou218-gemini35-lite"] if args.flash_lite_35 else ["--features", "sou218-gemini25-lite"] if args.flash_lite else []), cwd=root, stdout=subprocess.PIPE, text=True,
+         "--message-format=json"] + (["--features", "sou218-gemini35-catalog"] if args.flash_lite_35_catalog else ["--features", "sou218-gemini35-compact"] if args.flash_lite_35_compact else ["--features", "sou218-gemini35-lite"] if args.flash_lite_35 else ["--features", "sou218-gemini25-lite"] if args.flash_lite else []), cwd=root, stdout=subprocess.PIPE, text=True,
         check=True,
     )
     binaries = []

@@ -12,6 +12,7 @@ default-run = "agentfw"
 sou218-gemini25-lite = []
 sou218-gemini35-lite = []
 sou218-gemini35-compact = ["sou218-gemini35-lite"]
+sou218-gemini35-catalog = ["sou218-gemini35-lite"]
 
 [lib]
 name = "agentfw"
