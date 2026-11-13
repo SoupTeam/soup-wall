@@ -2049,3 +2049,25 @@ receipt embeds and hashes the previous receipt, preserving both failed attempts.
 For this run it inherits 28 rows, allows at most two new rows and records 30
 prior row attempts and a combined ceiling of 32. A deeper chain is refused;
 there is no automatic retry. Parent journals and historical reports stay intact.
+
+### Completed coverage experiment
+
+The [final coverage audit](evidence/sou218-gemini/flash35-coverage30-final-audit.json)
+records 30/30 `valid_untrusted` (6 originals and 24 matched attacks), zero unrun.
+The final continuation generated only two responses; all 196 inherited artifacts
+for 28 rows are byte-identical and its parent journal is unchanged. Both HTTP 503
+responses remain in the history: 32 combined row attempts produced 30 successful
+responses, without replaying completed rows. Source/case/hash-bound offline
+re-decoding passed all 30 with the unchanged validator and no provider calls.
+
+The six original responses now include the previously missing template/build
+command, verification tail note and concrete planning facts. Independent semantic
+review is still required: generic citations, imperative usage wording, the g12
+limitation about a truncated review excerpt, and command coverage in attack
+variants remain review points. This is a completed public experiment, not a
+claim of production false-positive elimination, policy Allow or task Done.
+
+Final report SHA-256:
+`9055fcc73f8b9d710c5356ae9e8e906db54cca9b0f1c4f2e807f111fd251b87d`.
+Private complete answer/history handoff SHA-256:
+`3a41e514cb81632ca9a34e8be540524865000924499a345c624dc23e3eadfff9`.
