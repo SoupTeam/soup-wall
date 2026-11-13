@@ -14,6 +14,8 @@ use zeroize::Zeroizing;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Config {
+    #[serde(default = "original_model")]
+    model: String,
     project: String,
     ledger: PathBuf,
     native_token_file: PathBuf,
@@ -24,6 +26,17 @@ struct Config {
     row_ceiling: usize,
     #[serde(default)]
     metadata_recovery_started_sha256: Option<String>,
+    #[serde(default)]
+    parent_attempt: Option<ParentAttempt>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ParentAttempt {
+    ledger: PathBuf,
+    report_sha256: String,
+}
+fn original_model() -> String {
+    "gemini-3.8-flash".into()
 }
 fn initial_row_ceiling() -> usize {
     20
@@ -31,7 +44,8 @@ fn initial_row_ceiling() -> usize {
 impl Config {
     fn validate(&self) -> Result<()> {
         ensure!(
-            !self.project.is_empty()
+            self.model == MODEL
+                && !self.project.is_empty()
                 && self.project.len() <= 128
                 && self
                     .project
@@ -51,13 +65,24 @@ impl Config {
                 "gemini_metadata_recovery_digest"
             );
         }
+        if let Some(parent) = &self.parent_attempt {
+            ensure!(
+                parent.ledger.is_absolute()
+                    && parent.ledger != self.ledger
+                    && parent.report_sha256.len() == 64
+                    && parent.report_sha256.bytes().all(|b| b.is_ascii_hexdigit())
+                    && self.row_ceiling == 1
+                    && self.metadata_recovery_started_sha256.is_none(),
+                "gemini_parent_attempt_config"
+            );
+        }
         Ok(())
     }
 }
 
 #[test]
 fn gemini_operator_config_rejects_credentials_and_unconfirmed_access() {
-    let valid = json!({"project":"public-project", "ledger":"/private/journal",
+    let valid = json!({"model":MODEL,"project":"public-project", "ledger":"/private/journal",
         "native_token_file":"/private/native-token", "evidence_file":"/private/evidence.txt",
         "non_billed_free_tier":true, "quota_available":true});
     serde_json::from_value::<Config>(valid.clone())
@@ -72,6 +97,7 @@ fn gemini_operator_config_rejects_credentials_and_unconfirmed_access() {
         ("project", json!("bad\nproject")),
         ("row_ceiling", json!(0)),
         ("row_ceiling", json!(31)),
+        ("model", json!("different-model")),
     ] {
         let mut invalid = valid.clone();
         invalid[field] = value;
@@ -198,7 +224,7 @@ fn confirm(project: &str, row_ceiling: usize, recovery: Option<&str>) -> Result<
         .open("/dev/tty")?;
     let phrase = match recovery {
         Some(digest) => format!("RECOVER METADATA {digest} USD0"),
-        None => format!("RUN {project} 6+24 USD0"),
+        None => format!("RUN {project} {MODEL} 6+24 USD0"),
     };
     if recovery.is_some() {
         writeln!(tty, "At most one metadata-only GET per signed personal confirmation. A retained absent-baseModelId response is revalidated offline without another GET. Each observation is journaled separately. Retain the complete history and inspect any failure before another personal confirmation.")?;
@@ -221,6 +247,134 @@ fn confirm(project: &str, row_ceiling: usize, recovery: Option<&str>) -> Result<
     let answer = answer.strip_suffix("\x1b[201~").unwrap_or(answer).trim();
     ensure!(answer == phrase, "gemini_operator_confirmation");
     Ok(())
+}
+
+fn bind_parent_attempt(config: &Config, ledger: &Ledger, key_sha256: &str) -> Result<()> {
+    if let Some(parent) = &config.parent_attempt {
+        let previous = Ledger::open(&parent.ledger)?;
+        let report = previous
+            .read(&format!("report-{}.json", parent.report_sha256))?
+            .ok_or_else(|| anyhow::anyhow!("gemini_parent_report_missing"))?;
+        ensure!(
+            hash(&report) == parent.report_sha256,
+            "gemini_parent_report_changed"
+        );
+        let manifest = previous
+            .read("batch.manifest")?
+            .ok_or_else(|| anyhow::anyhow!("gemini_parent_manifest_missing"))?;
+        let Strict(manifest) = serde_json::from_slice(&manifest)?;
+        ensure!(
+            manifest["project"] == config.project && manifest["key_sha256"] == key_sha256,
+            "gemini_parent_project_or_key_changed"
+        );
+        let Strict(report_value) = serde_json::from_slice(&report)?;
+        let rows = report_value["rows"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("gemini_parent_report"))?;
+        ensure!(
+            rows.len() == 30
+                && rows[0]["state"] == "technical_stop"
+                && rows[1..].iter().all(|r| r["state"] == "unrun"),
+            "gemini_parent_report"
+        );
+        let source = hash(row(0)?.frame.as_bytes());
+        let raw = previous
+            .read(&format!("{source}.response"))?
+            .ok_or_else(|| anyhow::anyhow!("gemini_parent_response_missing"))?;
+        let Strict(error) = serde_json::from_slice(&raw)?;
+        ensure!(
+            error["error"]["code"] == 503 && rows[0]["raw_sha256"] == hash(&raw),
+            "gemini_parent_not_503"
+        );
+        let receipt = serde_json::to_vec(&json!({"contract":"sw-personal-new-attempt/1",
+            "parent_ledger":previous.identity()?,"parent_report_sha256":parent.report_sha256,
+            "parent_response_sha256":hash(&raw),"previous_attempts":1,"new_row_ceiling":1,
+            "model":MODEL,"profile":profile_hash(),"parent_unchanged":true}))?;
+        if let Some(old) = ledger.read("parent-attempt.receipt")? {
+            ensure!(old == receipt, "gemini_parent_receipt_changed");
+        } else {
+            ledger.create("parent-attempt.receipt", &receipt)?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn gemini_new_attempt_binds_parent_error_key_and_history() {
+    use std::os::unix::fs::PermissionsExt;
+    for mode in [
+        "valid",
+        "wrong-key",
+        "wrong-project",
+        "not-503",
+        "changed-hash",
+        "other-row-started",
+    ] {
+        let parent = tempfile::tempdir().unwrap();
+        let child = tempfile::tempdir().unwrap();
+        for dir in [&parent, &child] {
+            std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let previous = Ledger::open(parent.path()).unwrap();
+        let key_hash = hash(b"synthetic key");
+        previous
+            .create(
+                "batch.manifest",
+                &serde_json::to_vec(&json!({"project":"test-project","key_sha256":key_hash}))
+                    .unwrap(),
+            )
+            .unwrap();
+        let raw =
+            serde_json::to_vec(&json!({"error":{"code":if mode=="not-503" {400} else {503}}}))
+                .unwrap();
+        let source = hash(row(0).unwrap().frame.as_bytes());
+        previous
+            .create(&format!("{source}.response"), &raw)
+            .unwrap();
+        let mut rows = vec![json!({"state":"unrun"}); 30];
+        rows[0] = json!({"state":"technical_stop","raw_sha256":if mode=="changed-hash" {hash(b"other")} else {hash(&raw)}});
+        if mode == "other-row-started" {
+            rows[1]["state"] = json!("started_unknown");
+        }
+        let report = serde_json::to_vec(&json!({"rows":rows})).unwrap();
+        let digest = hash(&report);
+        previous
+            .create(&format!("report-{digest}.json"), &report)
+            .unwrap();
+        drop(previous);
+        let config:Config=serde_json::from_value(json!({"model":MODEL,"project":if mode=="wrong-project" {"other"} else {"test-project"},
+            "ledger":child.path(),"native_token_file":"/private/token","evidence_file":"/private/evidence",
+            "non_billed_free_tier":true,"quota_available":true,"row_ceiling":1,
+            "parent_attempt":{"ledger":parent.path(),"report_sha256":digest}})).unwrap();
+        config.validate().unwrap();
+        let ledger = Ledger::open(child.path()).unwrap();
+        let result = bind_parent_attempt(
+            &config,
+            &ledger,
+            if mode == "wrong-key" {
+                "wrong"
+            } else {
+                &key_hash
+            },
+        );
+        assert_eq!(result.is_ok(), mode == "valid", "{mode}: {result:?}");
+        if mode == "valid" {
+            bind_parent_attempt(&config, &ledger, &key_hash).unwrap();
+        }
+        assert_eq!(
+            std::fs::read(parent.path().join(format!("report-{digest}.json"))).unwrap(),
+            report
+        );
+        assert_eq!(
+            std::fs::read(parent.path().join(format!("{source}.response"))).unwrap(),
+            raw
+        );
+        assert_eq!(
+            ledger.read("parent-attempt.receipt").unwrap().is_some(),
+            mode == "valid"
+        );
+        assert!(ledger.read("model.started").unwrap().is_none());
+    }
 }
 
 fn open() -> Result<(runner::Controller, Capture, usize)> {
@@ -266,6 +420,7 @@ fn open() -> Result<(runner::Controller, Capture, usize)> {
         ledger.create(&config_name, &bytes)?;
     }
     let mut key = super::super::manual_key::prompt()?;
+    bind_parent_attempt(&config, &ledger, &hash(key.as_bytes()))?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs();

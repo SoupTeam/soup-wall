@@ -1773,3 +1773,39 @@ the retained bytes; no extra metadata GET is made. Include this receipt with the
 private experiment evidence. Count/generation fences, pacing and cumulative
 ceilings remain unchanged. This compatibility fix alone supplies no semantic
 result for any of the 30 rows and does not close SOU-218.
+
+### Explicit comparison attempts after the retained 503
+
+The operator authorized a separately recorded retry and other models on
+2026-11-13 after the first generation returned HTTP 503. Keep the original
+journal and incomplete 6+24 outcome. A comparison is not a successful replay
+of that attempt and its results must not be merged with another model's batch.
+
+The default test build still selects Gemini 3.8 Flash. The explicit
+`sou218-gemini25-lite` Cargo feature selects only Gemini 2.5 Flash-Lite, with
+fixed metadata/count/generation paths and `thinkingBudget: 0` instead of
+`thinkingLevel: LOW`. Its profile identity differs. The public corpus, bounded
+response parsing, custody, policy and USD0 controls are unchanged. This is
+test-only; there is no runtime fallback or arbitrary endpoint/model selection.
+See [Google thinking configuration](https://ai.google.dev/gemini-api/docs/generate-content/thinking)
+and [Flash-Lite model](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-lite).
+
+Use `scripts/sou218-manual-gemini.py --config <private-config> --flash-lite`
+for the alternative. Config `model` must match the selected binary; omission
+means the original 3.8 model. The fresh-run confirmation includes the model.
+Every comparison needs its own private journal, current personal Free Tier
+and quota confirmation, and hidden key input. There is no cached key.
+
+The two prepared comparison attempts have `row_ceiling: 1`, one each for the
+original model and Flash-Lite. Their `parent_attempt` points to the original
+journal and exact saved report hash. Before API access, the operator checks the
+same project/key, retained 503 response hash, first-row technical stop and 29
+unrun rows, then adds a parent receipt to the new journal. The parent remains
+unchanged. Reopening a stopped comparison does not reset its row fence.
+
+Account for the original failed attempt plus both new attempts, conservatively
+three generation attempts in total if both are started. Verify each model's
+remaining quota before its single attempt; neither a new directory nor a new
+model proves quota reset. Do not raise these comparison ceilings blindly. After
+the one-row outcomes are inspected, choose an explicit full-batch continuation
+with fresh quota evidence and retain all failures and model-specific denominators.

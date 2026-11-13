@@ -630,7 +630,7 @@ async fn connected_gemini_provider_child() {
             let raw = if mode == "malformed" {
                 b"invalid JSON".to_vec()
             } else {
-                serde_json::to_vec(&json!({"modelVersion":"gemini-3.8-flash","usageMetadata":{"promptTokenCount":1024,"candidatesTokenCount":10},"candidates":[{"finishReason":"STOP","content":{"role":"model","parts":[{"text":serde_json::to_string(&answer).unwrap()}]}}]})).unwrap()
+                serde_json::to_vec(&json!({"modelVersion":p.version,"usageMetadata":{"promptTokenCount":1024,"candidatesTokenCount":10},"candidates":[{"finishReason":"STOP","content":{"role":"model","parts":[{"text":serde_json::to_string(&answer).unwrap()}]}}]})).unwrap()
             };
             async move {
                 let _ = started.send(());

@@ -48,8 +48,12 @@ fn gemini_profile_complete_public_data_only_and_fixed_request() {
     }
     assert!(body["generationConfig"].get("candidateCount").is_none());
     assert_eq!(
-        body["generationConfig"]["thinkingConfig"]["thinkingLevel"],
-        "LOW"
+        body["generationConfig"]["thinkingConfig"],
+        if cfg!(feature = "sou218-gemini25-lite") {
+            json!({"thinkingBudget":0})
+        } else {
+            json!({"thinkingLevel":"LOW"})
+        }
     );
     assert_eq!(body["generationConfig"]["maxOutputTokens"], 2048);
     assert!(!String::from_utf8(p.body.clone())

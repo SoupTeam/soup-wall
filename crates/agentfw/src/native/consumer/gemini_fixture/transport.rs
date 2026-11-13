@@ -160,8 +160,8 @@ impl Operation {
     fn wire(self) -> (&'static str, &'static str) {
         match self {
             Self::Generate => ("POST", PATH),
-            Self::Metadata => ("GET", "/v1beta/models/gemini-3.8-flash"),
-            Self::Count => ("POST", "/v1beta/models/gemini-3.8-flash:countTokens"),
+            Self::Metadata => ("GET", METADATA_PATH),
+            Self::Count => ("POST", COUNT_PATH),
         }
     }
 }

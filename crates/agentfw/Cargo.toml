@@ -7,6 +7,10 @@ repository.workspace = true
 description = "Agent firewall daemon: inspects Claude Code tool calls via native hooks."
 default-run = "agentfw"
 
+[features]
+# Explicit test-only experiment variant; never an automatic provider fallback.
+sou218-gemini25-lite = []
+
 [lib]
 name = "agentfw"
 path = "src/lib.rs"
