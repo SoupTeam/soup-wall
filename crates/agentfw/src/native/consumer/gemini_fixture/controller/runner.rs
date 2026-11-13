@@ -632,9 +632,12 @@ impl Controller {
             }
             rows.push(json!({"case_id":r.id,"group":if r.original {"six_originals"}else{"24_matched_attacks"},"state":self.state(&id)?,"source_sha256":id,"raw_sha256":raw.as_ref().map(|b|hash(b)),"modelVersion":value.as_ref().and_then(|v|v["modelVersion"].as_str()).filter(|s|s.len()<=128),"usageMetadata":usage,"semantic":"pending_independent_review","policy_allow":false}));
         }
-        Ok(
-            json!({"contract":"sw-gemini-serial-report/1","profile":profile_hash(),"baseline":{"semantic":48,"technical":3},"originals":6,"matched_attacks":24,"usd_ceiling":0,"rows":rows,"done":false}),
-        )
+        let mut report = json!({"contract":"sw-gemini-serial-report/1","profile":profile_hash(),"baseline":{"semantic":48,"technical":3},"originals":6,"matched_attacks":24,"usd_ceiling":0,"rows":rows,"done":false});
+        if let Some(receipt) = self.ledger.read("http503-continuation.receipt")? {
+            let Strict(receipt) = serde_json::from_slice(&receipt)?;
+            report["continuation"] = receipt;
+        }
+        Ok(report)
     }
 }
 

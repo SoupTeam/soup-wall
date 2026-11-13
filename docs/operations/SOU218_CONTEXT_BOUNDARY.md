@@ -1998,3 +1998,34 @@ Preliminary reading finds more specific file and planning facts in the first
 usage wording. Useful semantic acceptance and the remaining coverage correction
 are unproven. The private partial handoff digest is
 `f04e7bbdaa095a9513d480e09a2d65a3087134edabe4b5e413bad4bcd0978761`.
+
+### Explicit continuation of the retained HTTP 503
+
+Optional private operator config `resume_http503` contains `ledger` and
+`report_sha256` of the parent. It is mutually exclusive with `parent_attempt`
+and metadata recovery. The destination must be a separate fresh owner-only
+journal. After personal confirmation and hidden key entry, the controller binds
+the parent report to the same project, key hash, model profile, corpus and
+acceptance plan. It verifies every case/source identity, response hash and
+terminal state, then re-decodes all inherited successful responses offline.
+
+Only a completed prefix followed by one retained HTTP error with code 503,
+status UNAVAILABLE and `gemini_http_status`, then wholly unrun rows, is eligible.
+Unknown transport outcomes, other error codes, hidden later fences, differing
+identities and nested continuations are refused. No parent artifact is changed.
+
+The child receives byte-identical completed-row artifacts and an append-only
+continuation receipt before network work. A partial local import is idempotent;
+changed artifacts/receipts are refused. Existing controller fences skip those
+inherited rows. For this run, 15 inherited successes count toward cumulative
+ceiling 30, leaving at most 15 new attempts, beginning with the failed row.
+The report includes the parent failure hash and explicit accounting: 16 parent
+attempted rows, 15 inherited rows, 15 new attempt budget, 31 combined attempts.
+The historical 503 is not relabeled. Another stop remains terminal; there is no
+automatic retry loop or new permission to release content.
+
+`manual_gemini_http503_resume_preview` can validate the actual retained journal
+into a temporary child offline using `SOUP_WALL_RESUME_PREVIEW_PARENT` and
+`SOUP_WALL_RESUME_PREVIEW_REPORT`. It reads only the existing key hash, not the
+key or native token, and makes no provider calls. Real continuation still needs
+fresh personal Free Tier/quota confirmation and hidden key entry.

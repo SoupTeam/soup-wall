@@ -28,6 +28,8 @@ struct Config {
     metadata_recovery_started_sha256: Option<String>,
     #[serde(default)]
     parent_attempt: Option<ParentAttempt>,
+    #[serde(default)]
+    resume_http503: Option<ParentAttempt>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -65,7 +67,13 @@ impl Config {
                 "gemini_metadata_recovery_digest"
             );
         }
-        if let Some(parent) = &self.parent_attempt {
+        ensure!(
+            self.resume_http503.is_none()
+                || (self.parent_attempt.is_none()
+                    && self.metadata_recovery_started_sha256.is_none()),
+            "gemini_resume_exclusive"
+        );
+        for parent in self.parent_attempt.iter().chain(self.resume_http503.iter()) {
             ensure!(
                 parent.ledger.is_absolute()
                     && parent.ledger != self.ledger
@@ -436,6 +444,9 @@ fn open() -> Result<(runner::Controller, Capture, usize)> {
         "gemini_operator_native_token"
     );
     let ledger = Ledger::open(&config.ledger)?;
+    if config.resume_http503.is_some() {
+        eprintln!("Explicit separate continuation after retained HTTP 503. Completed rows are inherited without provider replay. The failed row gets one new attempt; all original evidence remains unchanged. No automatic retry.");
+    }
     confirm(
         &config.project,
         config.row_ceiling,
@@ -449,6 +460,15 @@ fn open() -> Result<(runner::Controller, Capture, usize)> {
     }
     let mut key = super::super::manual_key::prompt()?;
     bind_parent_attempt(&config, &ledger, &hash(key.as_bytes()))?;
+    if let Some(parent) = &config.resume_http503 {
+        super::resume::bind(
+            &parent.ledger,
+            &parent.report_sha256,
+            &ledger,
+            &config.project,
+            &hash(key.as_bytes()),
+        )?;
+    }
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs();

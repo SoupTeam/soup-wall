@@ -9,6 +9,8 @@ use sha2::Sha256;
 #[cfg(target_os = "linux")]
 pub(in crate::native) mod operator;
 #[cfg(target_os = "linux")]
+mod resume;
+#[cfg(target_os = "linux")]
 pub(in crate::native) mod runner;
 
 // Operator evidence is authenticated separately from model/source data. This
