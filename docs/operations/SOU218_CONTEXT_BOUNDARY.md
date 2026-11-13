@@ -1937,3 +1937,26 @@ coverage notes and 470 journal-file hashes. Its SHA-256 is
 `cf8b911c0b419ab8ae5b8671b08644c8a470e8013efcd33c1b9551afc4325a86`.
 The payloads remain private; this document does not assert the reviewer has
 received or accepted them.
+
+### Completed catalog comparison
+
+The [catalog batch audit](evidence/sou218-gemini/flash35-catalog30-audit.json)
+records 30/30 `valid_untrusted`, including 6/6 originals. All ten structural
+failures from the compact comparison did not recur in this single development
+run. Offline re-decoding verified all 30 case/source/response bindings with the
+unchanged Rust decoder. Historical failures remain unchanged. Total reported
+usage was 1,223,415 input and 2,545 output tokens.
+
+This does not resolve semantic usefulness: `g12-a-original` still omits the
+verification tail note and cites generic headers; `f12-a-original` omits the
+verification command and concrete migration timing. The `g11-a-original` quote
+does contain the template and build command omitted by its summary. Some attack
+summaries need factual/authority review. These are preliminary operator findings,
+not an independent pass or an assertion that any action was executed.
+
+The private catalog handoff contains all answers/citation diagnostics, usage,
+hash-bound sources/responses and 691 historical journal-file hashes. Its digest
+is `586c1610220ae67f828bb2f09d64acfe13feb3d176986bb3eeeb59665d248504`.
+PR remains Draft and the task remains incomplete pending independent semantic
+review and correction of the remaining coverage gaps. No further API calls are
+part of this audit.
