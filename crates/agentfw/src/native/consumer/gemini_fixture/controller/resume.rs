@@ -43,10 +43,7 @@ pub(super) fn bind(
     key_hash: &str,
 ) -> Result<()> {
     let parent = Ledger::open(parent_path)?;
-    ensure!(
-        parent.read("http503-continuation.receipt")?.is_none(),
-        "gemini_resume_nested_attempt"
-    );
+    let parent_continuation = parent.read("http503-continuation.receipt")?;
     ensure!(
         parent.identity()? != child.identity()?,
         "gemini_resume_same_ledger"
@@ -156,12 +153,40 @@ pub(super) fn bind(
         .iter()
         .map(|(name, bytes)| json!({"name":name,"sha256":hash(bytes)}))
         .collect();
-    let receipt = serde_json::to_vec(&json!({"contract":"sw-explicit-http503-continuation/1",
+    let mut receipt = json!({"contract":"sw-explicit-http503-continuation/1",
         "parent_ledger":parent.identity()?,"parent_report_sha256":report_hash,"profile":profile_hash(),
         "inherited_completed_rows":completed,"prior_attempted_rows":completed+1,"new_attempt_budget":30-completed,
         "combined_attempt_ceiling":31,"failed_source_sha256":rows[completed]["source_sha256"],
         "failed_response_sha256":rows[completed]["raw_sha256"],"inherited_artifact_manifest_sha256":hash(&serde_json::to_vec(&artifacts)?),
-        "parent_unchanged":true,"policy_allow":false}))?;
+        "parent_unchanged":true,"policy_allow":false});
+    if let Some(bytes) = parent_continuation {
+        let previous = value(&bytes)?;
+        let inherited = previous["inherited_completed_rows"]
+            .as_u64()
+            .filter(|n| *n <= completed as u64)
+            .ok_or_else(|| anyhow::anyhow!("gemini_resume_chain"))?
+            as usize;
+        ensure!(
+            previous["contract"] == "sw-explicit-http503-continuation/1"
+                && previous["profile"] == profile_hash()
+                && previous.get("parent_continuation").is_none()
+                && previous["prior_attempted_rows"] == inherited + 1
+                && previous["new_attempt_budget"] == 30 - inherited
+                && previous["combined_attempt_ceiling"] == 31
+                && previous["failed_source_sha256"] == hash(row(inherited)?.frame.as_bytes())
+                && report["continuation"] == previous
+                && previous["inherited_artifact_manifest_sha256"]
+                    == hash(&serde_json::to_vec(&artifacts[..inherited * COPIED.len()])?),
+            "gemini_resume_chain"
+        );
+        receipt["prior_attempted_rows"] = json!(completed + 2);
+        receipt["combined_attempt_ceiling"] = json!(32);
+        receipt["parent_continuation_sha256"] = json!(hash(&bytes));
+        receipt["parent_continuation"] = previous;
+    } else {
+        ensure!(report.get("continuation").is_none(), "gemini_resume_chain");
+    }
+    let receipt = serde_json::to_vec(&receipt)?;
     match child.read("http503-continuation.receipt")? {
         Some(old) => ensure!(old == receipt, "gemini_resume_receipt_changed"),
         None => {
@@ -197,6 +222,8 @@ fn gemini_http503_continuation_preserves_fifteen_and_rejects_unsafe_imports() {
     use std::os::unix::fs::PermissionsExt;
     for mode in [
         "valid",
+        "continued",
+        "changed-chain",
         "wrong-key",
         "wrong-profile",
         "wrong-report",
@@ -279,7 +306,22 @@ fn gemini_http503_continuation_preserves_fifteen_and_rejects_unsafe_imports() {
             }
             rows.push(record);
         }
-        let report = serde_json::to_vec(&json!({"profile":profile_hash(),"rows":rows})).unwrap();
+        let mut report_value = json!({"profile":profile_hash(),"rows":rows});
+        if matches!(mode, "continued" | "changed-chain") {
+            let first: Vec<_> = original[..2 * COPIED.len()]
+                .iter()
+                .map(|(n, b)| json!({"name":n,"sha256":hash(b)}))
+                .collect();
+            let previous = json!({"contract":"sw-explicit-http503-continuation/1","profile":profile_hash(),"inherited_completed_rows":2,"prior_attempted_rows":3,"new_attempt_budget":28,"combined_attempt_ceiling":31,"failed_source_sha256":hash(row(2).unwrap().frame.as_bytes()),"inherited_artifact_manifest_sha256":if mode=="changed-chain" {hash(b"changed")}else{hash(&serde_json::to_vec(&first).unwrap())}});
+            parent
+                .create(
+                    "http503-continuation.receipt",
+                    &serde_json::to_vec(&previous).unwrap(),
+                )
+                .unwrap();
+            report_value["continuation"] = previous;
+        }
+        let report = serde_json::to_vec(&report_value).unwrap();
         let digest = hash(&report);
         let requested = if mode == "wrong-report" {
             hash(b"different")
@@ -301,14 +343,17 @@ fn gemini_http503_continuation_preserves_fifteen_and_rejects_unsafe_imports() {
             "test-project",
             if mode == "wrong-key" { "wrong" } else { &key },
         );
-        if mode == "valid" {
+        if matches!(mode, "valid" | "continued") {
             result.unwrap();
             bind(old.path(), &digest, &child, "test-project", &key).unwrap();
             let receipt =
                 value(&required(&child, "http503-continuation.receipt").unwrap()).unwrap();
             assert_eq!(receipt["inherited_completed_rows"], 15);
             assert_eq!(receipt["new_attempt_budget"], 15);
-            assert_eq!(receipt["combined_attempt_ceiling"], 31);
+            assert_eq!(
+                receipt["combined_attempt_ceiling"],
+                if mode == "continued" { 32 } else { 31 }
+            );
             let retry = hash(row(15).unwrap().frame.as_bytes());
             for suffix in FENCES {
                 assert!(child.read(&format!("{retry}.{suffix}")).unwrap().is_none());
@@ -357,12 +402,18 @@ fn manual_gemini_http503_resume_preview() {
     )
     .unwrap();
     let receipt = value(&required(&child, "http503-continuation.receipt").unwrap()).unwrap();
-    assert_eq!(receipt["inherited_completed_rows"], 15);
-    assert_eq!(receipt["new_attempt_budget"], 15);
+    let completed = value(&old).unwrap()["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .take_while(|r| r["state"] == "valid_untrusted")
+        .count();
+    assert_eq!(receipt["inherited_completed_rows"], completed);
+    assert_eq!(receipt["new_attempt_budget"], 30 - completed);
     let parent = Ledger::open(&path).unwrap();
     assert_eq!(
         required(&parent, &format!("report-{report}.json")).unwrap(),
         old
     );
-    println!("Offline preview passed: 15 exact inherited rows; 15 remaining; no provider calls, no key read, original report unchanged.");
+    println!("Offline preview passed: {completed} exact inherited rows; {} remaining; no provider calls, no key read, original report unchanged.",30-completed);
 }

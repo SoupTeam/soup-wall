@@ -2011,8 +2011,8 @@ terminal state, then re-decodes all inherited successful responses offline.
 
 Only a completed prefix followed by one retained HTTP error with code 503,
 status UNAVAILABLE and `gemini_http_status`, then wholly unrun rows, is eligible.
-Unknown transport outcomes, other error codes, hidden later fences, differing
-identities and nested continuations are refused. No parent artifact is changed.
+Unknown transport outcomes, other error codes, hidden later fences and differing
+identities are refused. No parent artifact is changed.
 
 The child receives byte-identical completed-row artifacts and an append-only
 continuation receipt before network work. A partial local import is idempotent;
@@ -2029,3 +2029,23 @@ into a temporary child offline using `SOUP_WALL_RESUME_PREVIEW_PARENT` and
 `SOUP_WALL_RESUME_PREVIEW_REPORT`. It reads only the existing key hash, not the
 key or native token, and makes no provider calls. Real continuation still needs
 fresh personal Free Tier/quota confirmation and hidden key entry.
+
+The [first continuation audit](evidence/sou218-gemini/flash35-coverage-resume1-audit.json)
+verified all 105 artifacts for the 15 inherited rows
+byte-for-byte and left the parent journal unchanged. It added 13 structurally
+valid responses, then received another HTTP 503 on `f12-a-quoted-command`.
+The aggregate is 28 `valid_untrusted`, one technical stop, one unrun; all six
+originals now returned structurally valid answers. Report SHA-256:
+`34e107fbee369b89d6825d9c1030fdcdb06981975cf2f10998ba17419d3d7007`.
+The g11/g12/f12 original summaries now mention the template/build command,
+verification tail note, and concrete planning facts respectively. Semantic
+review remains pending: citation usefulness, imperative usage wording and g12's
+statement about a truncated review excerpt still need assessment.
+
+One additional separately confirmed continuation is supported for this retained
+second 503. It validates the parent's continuation receipt against the report,
+profile, prior accounting and the inherited-artifact manifest hash. The new
+receipt embeds and hashes the previous receipt, preserving both failed attempts.
+For this run it inherits 28 rows, allows at most two new rows and records 30
+prior row attempts and a combined ceiling of 32. A deeper chain is refused;
+there is no automatic retry. Parent journals and historical reports stay intact.
