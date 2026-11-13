@@ -331,7 +331,19 @@ pub(in crate::native) fn decode(prepared: &Prepared, bytes: &[u8]) -> Result<Vec
         .as_array()
         .ok_or_else(|| anyhow::anyhow!("gemini_parts"))?;
     ensure!(
-        parts.len() == 1 && parts[0].as_object().is_some_and(|o| o.len() == 1),
+        parts.len() == 1
+            && parts[0].as_object().is_some_and(|o| {
+                o.contains_key("text")
+                    && o.keys().all(|k| k == "text" || k == "thoughtSignature")
+                    && o.get("thoughtSignature").is_none_or(|v| {
+                        use base64::Engine as _;
+                        v.as_str().is_some_and(|s| {
+                            !s.is_empty()
+                                && s.len() <= 4096
+                                && base64::engine::general_purpose::STANDARD.decode(s).is_ok()
+                        })
+                    })
+            }),
         "gemini_nontext_part"
     );
     let text = parts[0]["text"]

@@ -38,6 +38,71 @@ fn answer(quote: &str) -> Value {
 }
 
 #[test]
+fn gemini_signature_metadata_is_bounded_opaque_and_not_authority() {
+    let p = prepared();
+    let plain = envelope(answer("README"));
+    let expected = decode(&p, &plain).unwrap();
+    let mut signed: Value = serde_json::from_slice(&plain).unwrap();
+    signed["candidates"][0]["content"]["parts"][0]["thoughtSignature"] = json!("AA==");
+    assert_eq!(
+        decode(&p, &serde_json::to_vec(&signed).unwrap()).unwrap(),
+        expected
+    );
+    for value in [
+        Value::Null,
+        json!(42),
+        json!(""),
+        json!("not base64!"),
+        json!("A".repeat(4100)),
+    ] {
+        let mut bad = signed.clone();
+        bad["candidates"][0]["content"]["parts"][0]["thoughtSignature"] = value;
+        assert!(decode(&p, &serde_json::to_vec(&bad).unwrap()).is_err());
+    }
+    for name in [
+        "thought",
+        "functionCall",
+        "inlineData",
+        "fileData",
+        "unknown",
+    ] {
+        let mut bad = signed.clone();
+        bad["candidates"][0]["content"]["parts"][0][name] = json!(true);
+        assert!(decode(&p, &serde_json::to_vec(&bad).unwrap()).is_err());
+    }
+    signed["candidates"][0]["content"]["parts"][0]["text"] =
+        json!(answer("ABSENT_UNTRUSTED_QUOTE").to_string());
+    assert!(decode(&p, &serde_json::to_vec(&signed).unwrap()).is_err());
+}
+
+#[test]
+#[ignore = "explicit offline validation of a saved public response; no provider or publication"]
+fn manual_gemini_saved_response_decode() {
+    let path = std::env::var_os("SOUP_WALL_SAVED_PUBLIC_RESPONSE").expect("explicit response path");
+    let expected =
+        std::env::var("SOUP_WALL_SAVED_RESPONSE_SHA256").expect("explicit response digest");
+    let bytes = std::fs::read(path).unwrap();
+    assert_eq!(hash(&bytes), expected);
+    let p = prepared();
+    assert_eq!(
+        hash(p.source.as_bytes()),
+        "569f00582eb16b487a6976fe9b7fcd55ad8544df9527fb204901fe1303b40665"
+    );
+    let expected_outcome =
+        std::env::var("SOUP_WALL_EXPECTED_DECODE").unwrap_or_else(|_| "valid".into());
+    match decode(&p, &bytes) {
+        Ok(frame) => {
+            assert_eq!(expected_outcome, "valid");
+            println!("OFFLINE_DECODE_PASS response={} frame={}; no network, publication or journal mutation", expected, hash(&frame));
+        }
+        Err(error) => {
+            assert_eq!(error.to_string(), expected_outcome);
+            println!("OFFLINE_DECODE_REJECT response={} reason={}; no network, publication or journal mutation", expected, expected_outcome);
+        }
+    }
+}
+
+#[test]
 fn gemini_profile_complete_public_data_only_and_fixed_request() {
     assert_eq!(json_digest(PLAN), json_digest(&PLAN.replace("\r\n", "\n")));
     let p = prepared();

@@ -1828,3 +1828,23 @@ codes (`.count-failure` / `.failure`). The outer generation deadline records
 `gemini_transport_unclassified`. No arbitrary exception text or credentials are
 saved. Existing stop/replay and terminal-state behavior is unchanged. This adds
 diagnostics for future attempts; it cannot establish the previous failure cause.
+
+The 3.5 Flash-Lite smoke returned a complete answer (618 input / 95 output
+tokens), but its first-row outcome remains `invalid`. Its single text Part
+included `thoughtSignature`. The decoder now permits this one optional bounded
+base64 field as opaque metadata, never as authority or answer content; unknown
+fields, tool/thought parts and malformed signatures remain rejected. See
+[Google thought signatures](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/thinking/thought-signatures).
+Offline re-decoding of the exact retained response then revealed
+`gemini_quote_absent`: at least one quote was not a literal substring of the
+original raw source. The quote rule is unchanged and the invalid outcome is
+preserved, without regeneration or publication.
+
+After inspection, the existing model-specific journal may continue at a higher
+cumulative ceiling under fresh personal quota confirmation. A parent-linked
+attempt cannot start above one row without its existing parent receipt and a
+first-row `valid_untrusted` or `invalid` terminal record. Technical/unknown
+stops still refuse continuation. Previously attempted rows are skipped and
+retain their original status. The next operator stage is cumulative 20 rows;
+the last ten require another quota check. This does not relabel the first
+invalid result or establish independent semantic acceptance.

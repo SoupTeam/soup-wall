@@ -71,7 +71,6 @@ impl Config {
                     && parent.ledger != self.ledger
                     && parent.report_sha256.len() == 64
                     && parent.report_sha256.bytes().all(|b| b.is_ascii_hexdigit())
-                    && self.row_ceiling == 1
                     && self.metadata_recovery_started_sha256.is_none(),
                 "gemini_parent_attempt_config"
             );
@@ -251,6 +250,24 @@ fn confirm(project: &str, row_ceiling: usize, recovery: Option<&str>) -> Result<
 
 fn bind_parent_attempt(config: &Config, ledger: &Ledger, key_sha256: &str) -> Result<()> {
     if let Some(parent) = &config.parent_attempt {
+        if config.row_ceiling > 1 {
+            ensure!(
+                ledger.read("parent-attempt.receipt")?.is_some(),
+                "gemini_smoke_required"
+            );
+            let source = hash(row(0)?.frame.as_bytes());
+            let terminal = ledger
+                .read(&format!("{source}.controller-terminal"))?
+                .ok_or_else(|| anyhow::anyhow!("gemini_smoke_required"))?;
+            let Strict(terminal) = serde_json::from_slice(&terminal)?;
+            ensure!(
+                matches!(
+                    terminal["state"].as_str(),
+                    Some("valid_untrusted" | "invalid")
+                ),
+                "gemini_smoke_technical_stop"
+            );
+        }
         let previous = Ledger::open(&parent.ledger)?;
         let report = previous
             .read(&format!("report-{}.json", parent.report_sha256))?
@@ -360,6 +377,17 @@ fn gemini_new_attempt_binds_parent_error_key_and_history() {
         assert_eq!(result.is_ok(), mode == "valid", "{mode}: {result:?}");
         if mode == "valid" {
             bind_parent_attempt(&config, &ledger, &key_hash).unwrap();
+            let mut continuation = config;
+            continuation.row_ceiling = 20;
+            continuation.validate().unwrap();
+            assert!(bind_parent_attempt(&continuation, &ledger, &key_hash).is_err());
+            ledger
+                .create(
+                    &format!("{source}.controller-terminal"),
+                    br#"{"state":"invalid"}"#,
+                )
+                .unwrap();
+            bind_parent_attempt(&continuation, &ledger, &key_hash).unwrap();
         }
         assert_eq!(
             std::fs::read(parent.path().join(format!("report-{digest}.json"))).unwrap(),
