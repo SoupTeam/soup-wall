@@ -142,6 +142,13 @@ fn safe_name(name: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
 }
 impl Attempt<'_> {
+    pub(in crate::native) fn failure(&self, error: &anyhow::Error) -> Result<()> {
+        // Never persist arbitrary library messages, URLs or credential text.
+        self.ledger.create(
+            &format!("{}.failure", self.id),
+            super::transport::failure_code(error).as_bytes(),
+        )
+    }
     pub(in crate::native) fn raw(&self, body: &[u8]) -> Result<()> {
         ensure!(body.len() <= RESPONSE_LIMIT, "gemini_response_limit");
         // Raw private provider envelope includes returned modelVersion and usage;
@@ -186,6 +193,16 @@ fn gemini_protected_ledger_permissions_symlink_lock_cancel_and_raw() {
     assert!(Ledger::open(dir.path()).is_err());
     let p = super::tests::prepared();
     let attempt = ledger.reserve(&p).unwrap();
+    attempt
+        .failure(&anyhow::anyhow!("secret synthetic diagnostic"))
+        .unwrap();
+    assert_eq!(
+        ledger
+            .read(&format!("{}.failure", hash(p.source.as_bytes())))
+            .unwrap()
+            .unwrap(),
+        b"gemini_transport_unclassified"
+    );
     attempt.raw(b"invalid provider JSON").unwrap();
     drop(attempt);
     assert!(ledger.reserve(&p).is_err());

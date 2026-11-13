@@ -12,7 +12,9 @@ import sys
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True, type=Path)
-    parser.add_argument("--flash-lite", action="store_true", help="Explicit separate Gemini 2.5 Flash-Lite experiment; config model must match.")
+    models = parser.add_mutually_exclusive_group()
+    models.add_argument("--flash-lite", action="store_true", help="Explicit separate Gemini 2.5 Flash-Lite experiment; config model must match.")
+    models.add_argument("--flash-lite-35", action="store_true", help="Explicit Gemini 3.5 Flash-Lite experiment.")
     args = parser.parse_args()
     if sys.platform != "linux" or "CI" in os.environ:
         parser.error("Requires the operator's qualified Linux terminal; not CI.")
@@ -26,7 +28,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     build = subprocess.run(
         ["cargo", "test", "--locked", "-p", "agentfw", "--lib", "--no-run",
-         "--message-format=json"] + (["--features", "sou218-gemini25-lite"] if args.flash_lite else []), cwd=root, stdout=subprocess.PIPE, text=True,
+         "--message-format=json"] + (["--features", "sou218-gemini35-lite"] if args.flash_lite_35 else ["--features", "sou218-gemini25-lite"] if args.flash_lite else []), cwd=root, stdout=subprocess.PIPE, text=True,
         check=True,
     )
     binaries = []

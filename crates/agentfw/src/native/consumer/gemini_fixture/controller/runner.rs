@@ -503,6 +503,10 @@ impl Controller {
         {
             Ok(raw) => raw,
             Err(e) => {
+                self.ledger.create(
+                    &format!("{id}.count-failure"),
+                    super::super::transport::failure_code(&e).as_bytes(),
+                )?;
                 if let Some(raw) = rejected_body(&e) {
                     self.ledger
                         .create(&format!("{id}.count-error-response"), raw)?;

@@ -159,9 +159,12 @@ impl PendingProvider {
             error => {
                 let quota = matches!(&error,Ok(Err(e)) if e.to_string()=="gemini_quota_stop");
                 if let Ok(Err(e)) = &error {
+                    attempt.failure(e)?;
                     if let Some(body) = gemini::rejected_body(e) {
                         attempt.raw(body)?;
                     }
+                } else {
+                    attempt.failure(&anyhow::anyhow!("gemini_timeout_unknown"))?;
                 }
                 attempt.finish(if quota {
                     "quota_stop"

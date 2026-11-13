@@ -10,6 +10,7 @@ default-run = "agentfw"
 [features]
 # Explicit test-only experiment variant; never an automatic provider fallback.
 sou218-gemini25-lite = []
+sou218-gemini35-lite = []
 
 [lib]
 name = "agentfw"

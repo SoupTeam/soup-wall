@@ -552,6 +552,7 @@ async fn connected_gemini_provider_child() {
         "hostile",
         "malformed",
         "quota",
+        "transport-redacted",
         "cancel",
         "taint",
         "expired",
@@ -640,6 +641,9 @@ async fn connected_gemini_provider_child() {
                 if mode == "quota" {
                     anyhow::bail!("gemini_quota_stop");
                 }
+                if mode == "transport-redacted" {
+                    anyhow::bail!("synthetic-secret-transport-detail");
+                }
                 Ok(raw)
             }
         };
@@ -725,18 +729,29 @@ async fn connected_gemini_provider_child() {
         let id = hash(original.as_bytes());
         assert!(directory.path().join(format!("{id}.started")).exists());
         assert!(directory.path().join(format!("{id}.terminal")).exists());
-        if !matches!(mode, "cancel" | "quota") {
+        if !matches!(mode, "cancel" | "quota" | "transport-redacted") {
             assert!(directory.path().join(format!("{id}.response")).exists());
         }
         let terminal: Value = serde_json::from_slice(
             &std::fs::read(directory.path().join(format!("{id}.terminal"))).unwrap(),
         )
         .unwrap();
+        if matches!(mode, "quota" | "transport-redacted") {
+            assert_eq!(
+                std::fs::read(directory.path().join(format!("{id}.failure"))).unwrap(),
+                if mode == "quota" {
+                    b"gemini_quota_stop".as_slice()
+                } else {
+                    b"gemini_transport_unclassified".as_slice()
+                }
+            );
+        }
         assert_eq!(
             terminal["state"],
             match mode {
                 "cancel" => "cancelled_unknown",
                 "quota" => "quota_stop",
+                "transport-redacted" => "transport_unknown",
                 "malformed" => "invalid",
                 _ if mutate => "stale",
                 _ => "valid_untrusted",

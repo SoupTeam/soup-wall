@@ -1809,3 +1809,22 @@ remaining quota before its single attempt; neither a new directory nor a new
 model proves quota reset. Do not raise these comparison ceilings blindly. After
 the one-row outcomes are inspected, choose an explicit full-batch continuation
 with fresh quota evidence and retain all failures and model-specific denominators.
+
+The subsequent 2.5 Flash-Lite count request returned HTTP 404: unavailable to new
+users. The separate 3.8 Flash repeat completed countTokens (618) but ended with
+`transport_unknown` and no saved response; its exact transport cause was not
+retained. Neither journal is replayed or reset.
+
+The next explicit alternative is `sou218-gemini35-lite` / `--flash-lite-35`:
+fixed `gemini-3.5-flash-lite` paths and `thinkingLevel: MINIMAL`, with its own
+profile, journal, parent binding and one-row ceiling. The launcher rejects both
+alternative flags together. If both Cargo features are enabled for CI, the 3.5
+variant takes precedence; the required config model still prevents accidentally
+launching the wrong model. See the [3.5 Flash-Lite model documentation](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite).
+
+New count and generation transport failures persist only allowlisted static
+codes (`.count-failure` / `.failure`). The outer generation deadline records
+`gemini_timeout_unknown`; unrecognized library details become
+`gemini_transport_unclassified`. No arbitrary exception text or credentials are
+saved. Existing stop/replay and terminal-state behavior is unchanged. This adds
+diagnostics for future attempts; it cannot establish the previous failure cause.
