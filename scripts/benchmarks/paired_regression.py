@@ -41,9 +41,13 @@ import tempfile
 
 import agentdojo_live as adapter
 import agentdojo_protocol as protocol
+import paired_regression_project_cases as project_cases
 
 SCHEMA = "soup-wall-paired-regression/1"
 INPUTS_SCHEMA = "soup-wall-paired-regression-inputs/1"
+# Project-authored annotations are accepted by project-pinned content hash, never by a
+# caller-supplied digest. Each entry targets only its original development pair.
+PROJECT_CASES_SHA256 = frozenset({"0dd02f0e6bef6138e2e1b1b03809eaa3339db5a279d74b4625e000f1d4e4d4b6"})
 FAMILIES_SCHEMA = "soup-wall-paired-regression-families/1"
 UNKNOWNS_SCHEMA = "soup-wall-paired-regression-unknowns/1"
 DEFAULT_LIMITS = {
@@ -290,6 +294,14 @@ def load_inputs(path, limits):
     if case_manifest is not None and (not isinstance(case_manifest, str) or case_manifest not in files):
         raise Rejected("invalid_inputs_bundle", "case_manifest must be null or the path of a bundled src/ file")
     return bundle, protocol.digest(raw)
+
+
+def load_project_cases(path, limits):
+    raw = read_bounded(path, min(limits["max_file_bytes"], 256 * 1024))
+    sha = protocol.digest(raw)
+    if sha not in PROJECT_CASES_SHA256:
+        raise Rejected("unreviewed_project_cases", "project manifest SHA-256 is not pinned by the comparator")
+    return parse(raw), sha
 
 
 def load_unknowns(path, limits):
@@ -1011,7 +1023,7 @@ def _unit_view(state):
 # ---------------------------------------------------------------- driver
 
 def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_path=None, families_path=None,
-            limits=None, baseline_unknowns=None, candidate_unknowns=None):
+            limits=None, baseline_unknowns=None, candidate_unknowns=None, project_cases_path=None):
     """Return ``(result, exit_code)``. Never raises for bad inputs; they become explicit statuses."""
     limits = dict(DEFAULT_LIMITS, **(limits or {}))
     errors, inputs = [], []
@@ -1025,6 +1037,7 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
     cand = load_side("candidate", candidate_plan, candidate_run, limits, inputs, errors)
     optional = {}
     for role, path, loader in (("inputs", inputs_path, load_inputs), ("families", families_path, load_families),
+                               ("project_cases", project_cases_path, load_project_cases),
                                ("baseline_unknowns", baseline_unknowns, load_unknowns),
                                ("candidate_unknowns", candidate_unknowns, load_unknowns)):
         if path is None:
@@ -1052,6 +1065,28 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
 
     reasons = comparability_reasons(base, cand)
     binding = input_binding(bundle, base, cand)
+    project = optional.get("project_cases")
+    if project is not None:
+        try:
+            links = binding["links"]
+            if (binding["status"] != "partially_verified" or families is not None
+                    or any(links[key]["status"] != "verified" for key in ("source_to_inventory", "injections_to_plan"))):
+                raise project_cases.Invalid("project cases need verified source and injection inputs without another family source")
+            records, identity = project_cases.verify(project["data"], project["sha256"], bundle,
+                                                     optional["inputs"]["sha256"], (base, cand),
+                                                     limits["max_plan_cases"])
+            binding["cases"] = records
+            binding["links"]["case_semantic_input"] = {
+                "status": "verified", "method": "project-pinned development manifest",
+                **identity}
+            binding["status"] = "verified"
+            result["limitations"] = list(LIMITATIONS)
+            result["limitations"][2] = (
+                "The AI-assisted project manifest describes these public development inputs. "
+                "It binds original source, plan and report bytes. The historic producers did not emit its families, "
+                "and matching hashes do not attest model or evaluator execution.")
+        except project_cases.Invalid as error:
+            reasons.append(_reason("project_case_binding_failed", str(error)))
     if binding["status"] == "declared_unverified":
         reasons.append(_reason("input_identity_unverified", binding["detail"]))
     elif binding["status"] == "mismatch":
@@ -1070,10 +1105,16 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
         grouped = {}
         for case_id, record in binding["cases"].items():
             grouped.setdefault(record["semantic_family"], []).append(case_id)
-        families = {"binding": "bound_by_source_inventory", "sha256": None,
-                    "data": {"families": grouped, "provenance": {
-                        "kind": bundle["provenance"]["kind"], "assigned_by": "case manifest",
-                        "basis": f"{bundle['case_manifest']} inside the inventoried source"}}}
+        if project is not None and "manifest_sha256" in binding["links"]["case_semantic_input"]:
+            provenance = binding["links"]["case_semantic_input"]["provenance"]
+            families = {"binding": "bound_by_project_manifest", "sha256": project["sha256"],
+                        "data": {"families": grouped, "provenance": {
+                            **provenance, "assigned_by": "AI-assisted project development annotation"}}}
+        else:
+            families = {"binding": "bound_by_source_inventory", "sha256": None,
+                        "data": {"families": grouped, "provenance": {
+                            "kind": bundle["provenance"]["kind"], "assigned_by": "case manifest",
+                            "basis": f"{bundle['case_manifest']} inside the inventoried source"}}}
     # Gaps do not block the diagnostic report, but a comparison with any gap is never verified.
     gaps = []
     case_link = binding["links"]["case_semantic_input"]
@@ -1362,6 +1403,7 @@ def main(argv=None) -> int:
         parser.add_argument(f"--{name}", required=True)
     parser.add_argument("--inputs", help=f"{INPUTS_SCHEMA} source bundle binding both plans to source bytes")
     parser.add_argument("--families", help=f"{FAMILIES_SCHEMA} declared semantic families")
+    parser.add_argument("--project-cases", help="project-pinned public development case manifest")
     for role in ("baseline", "candidate"):
         parser.add_argument(f"--{role}-unknowns", help=f"{UNKNOWNS_SCHEMA} annotation bound to the {role} run report")
     parser.add_argument("--out-dir", required=True, help="new or empty directory for comparison.json")
@@ -1371,7 +1413,7 @@ def main(argv=None) -> int:
         print("usage error: --out-dir must be a new or empty directory", file=sys.stderr)
         return EXIT_USAGE
     result, code = compare(args.baseline_plan, args.baseline_run, args.candidate_plan, args.candidate_run,
-                           args.inputs, args.families, None, args.baseline_unknowns, args.candidate_unknowns)
+                           args.inputs, args.families, None, args.baseline_unknowns, args.candidate_unknowns, args.project_cases)
     destination = write_result(out_dir, result)
     print(summary_line(result, code))
     print(f"wrote {destination}")

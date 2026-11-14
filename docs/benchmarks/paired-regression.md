@@ -179,6 +179,19 @@ The comparator derives each case's `case_input_sha256` from these parts:
 Expected labels still come from the plan; the manifest can only confirm them.
 
 **What remains trusted.** The run's inventory hash is the producer's own runtime record.
+**Project development annotation.** Optional `--project-cases` accepts a
+versioned, comparator-pinned annotation for an exact public development
+pair. It binds both original report and plan hashes, producer SHA-256 and
+source revisions, the original upstream bundle, and its version and
+inventory. Every compared case must match the two frozen plans, expected
+label and injection hash. The user task, environment and attacked case
+evaluator references must hash to the supplied inventoried source. The
+annotation cannot be combined with an upstream case manifest or
+`--families`. The reported family origin is `bound_by_project_manifest`
+with explicit AI-assisted provenance. The historical producers do not
+claim these families. This route accepts neither an arbitrary annotation
+nor a fresh-evaluation set.
+
 The comparator verifies input identity, not execution. Genuine upstream AgentDojo ships no
 case manifest, so its case link stays unverified.
 

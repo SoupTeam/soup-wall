@@ -46,7 +46,7 @@ runs and the regenerated `inputs.json`. Replays record new times and an
 independently selected loopback endpoint.
 
 
-## Remaining producer inputs
+## Upstream manifest and project annotation
 
 The pinned public AgentDojo tree supplies task classes, the environment and
 include files, and the original injection mapping. It has no inventoried
@@ -69,3 +69,23 @@ A reviewed upstream revision containing that manifest, an explicit update to
 the producer's upstream pin, and two fresh matched runs are required for a
 fully bound comparator report. The historic pinned
 runs above keep their original bytes and attribution.
+
+The project also records an AI-assisted development annotation in
+[project-development-cases.json](project-development-cases.json). It is
+pinned by the comparator and tied to these exact original reports. It
+checks the immutable upstream inventory, each case and its source file
+hashes, the injection hashes, and both original plan, producer and report
+identities. The producers did not emit family labels. The outcomes and
+denominators are identical to the original comparison. The separate
+[project-bound result](project-report.md) reports 16 comparable cases and
+insufficient clusters for each interval (1.28 effective clusters).
+
+Use the included original inputs from the evidence archive to replay:
+
+```sh
+python scripts/benchmarks/paired_regression.py \
+  --baseline-plan baseline-plan.json --baseline-run baseline-run.json \
+  --candidate-plan candidate-plan.json --candidate-run candidate-run.json \
+  --inputs inputs.json --project-cases project-development-cases.json \
+  --out-dir /private/fresh-comparison
+```
