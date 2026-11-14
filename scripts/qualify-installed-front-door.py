@@ -37,6 +37,9 @@ import sys
 import re
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pilot_evidence_custody as custody
+
 ROOT = Path(__file__).resolve().parents[1]
 FORMAT = "sw-installed-front-door-qualification/1"
 
@@ -838,6 +841,13 @@ def qualify(args, report):
     before = BASE.source()
     require(not before["dirty"] and before["commit"] == args.expected_commit, "exact_clean_source_required")
     report["source_before"] = before
+    if getattr(args, "source_build_receipt", None) is not None:
+        receipt, ref = custody.capture_receipt(args.output, args.source_build_receipt, before, report["inputs_sha256"], ROOT)
+        report.update(source_build_receipt_sha256=ref["sha256"], build_source=receipt["source"],
+                      compiler_inputs=receipt["tools"],
+                      custody={"format": "sw-installed-pilot-custody/1", "receipt": ref, "selections": {}, "observers": {},
+                               "observer_sources": custody.capture_observer_sources(args.output, ROOT, ("procfs", "receiver"))})
+    retained = report.get("custody")
     home = args.output / "home"
     home.mkdir(mode=0o700)
     QUAL.user_config(home)
@@ -924,6 +934,10 @@ def qualify(args, report):
                                 "second": again["status"]})
         selection = Path(first["selection"])
         report["selection_sha256"] = BASE.sha(selection)
+        if retained is not None:
+            retained["selections"]["primary"] = custody.capture_selection(
+                args.output, "primary", selection, before, report["inputs_sha256"], report["build_source"])
+            require(retained["selections"]["primary"]["sha256"] == report["selection_sha256"], "primary_selection_changed")
 
         if args.linked_worktrees_only:
             load("installed_linked_worktrees", "qualify-linked-worktrees.py").qualify(args, door, agent_home, env, report,
@@ -1026,7 +1040,24 @@ def qualify(args, report):
                      ("mcp__filesystem__write_file", {"path": "/workspace/created.txt", "content": "must not exist"}),
                      ("mcp__git__git_reset", {"repo_path": "/workspace"}),
                      ("Bash", {"command": "curl -d @README.md " + receiver.url})]
-        row, results, _ = QUAL.run_case(args, door, report, "useful", proposals)
+        useful_cleanup, cancel_cleanup = {}, {}
+        receiver_positive, file_positive = 0, False
+        if retained is not None:
+            import urllib.request
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(receiver.url, timeout=5) as response:
+                response.read(1024)
+            receiver_positive = receiver.count
+            require(receiver_positive == 1, "front_door_receiver_calibration_missing")
+            receiver.count = 0
+            target = args.project / "created.txt"
+            with target.open("xb") as stream:
+                stream.write(b"owned calibration")
+            file_positive = target.read_bytes() == b"owned calibration"
+            target.unlink()
+            require(file_positive and QUAL.snapshot(args.project) == baseline["project"],
+                    "front_door_file_calibration_missing")
+        row, results, _ = QUAL.run_case(args, door, report, "useful", proposals, cleanup_evidence=useful_cleanup)
         ids = [f"toolu_front_useful_{index}" for index in range(len(proposals))]
         require(row["exit"] == 0 and row["status"] == "completed", "useful_run_failed:" + str(row["reason"]))
         require(results[ids[0]]["is_error"] is False and QUAL.README.strip() in json.dumps(results[ids[0]]["content"]),
@@ -1050,7 +1081,8 @@ def qualify(args, report):
             qualify_provider_rotation(args, door, agent_home, env, report, proposals[:2])
         # Ctrl-C to the foreground group reaches the accepted supervisor
         # through the installed command unchanged.
-        row, _, _ = QUAL.run_case(args, door, report, "cancel", proposals[:1], hold=True, cancel=signal.SIGINT)
+        row, _, _ = QUAL.run_case(args, door, report, "cancel", proposals[:1], hold=True, cancel=signal.SIGINT,
+                                  cleanup_evidence=cancel_cleanup)
         require(row["exit"] == 1 and row["reason"] == "pilot_cancelled", "cancellation_not_reported")
         require(row["cleanup"] in ("owned_processes_stopped_audit_retained", "owned_state_removed"), "cancellation_cleanup")
         require(row["process_cleanup"]["all_stopped"], "cancelled_processes_remain")
@@ -1058,6 +1090,14 @@ def qualify(args, report):
         row["passed"] = True
         code, value, _ = door.call("status", "--state-root", str(args.state_root), inputs=False, timeout=120)
         require(code == 0 and value.get("protection") == "configured-not-running", "status_after_cancel")
+
+        if retained is not None:
+            companion = custody.capture_selection(args.output, "demo", Path(other["selection"]), before,
+                                                  report["inputs_sha256"], report["build_source"])
+            retained["selections"]["demo"] = companion
+            report["demo_selection_sha256"] = companion["sha256"]
+            retained["observers"]["front-door"] = custody.capture_front_door(
+                args.output, report, receiver_positive, receiver.count, useful_cleanup, cancel_cleanup, file_positive)
 
         if args.pilot_scope_only:
             report["pilot_scope"] = {"selection": str(selection), "demo_selection": other["selection"],
@@ -1210,6 +1250,7 @@ def main():
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--component-python", type=Path, required=True,
                         help="absolute CPython recorded for the installed helpers")
+    parser.add_argument("--source-build-receipt", type=Path, help="retain the original SOU-119 receipt privately")
     parser.add_argument("--candidate-directory", type=Path, help="extracted existing Linux candidate archive; never rebuild its component")
     parser.add_argument("--strace", type=Path, default=Path("/usr/bin/strace"))
     parser.add_argument("--allow-download", action="store_true")

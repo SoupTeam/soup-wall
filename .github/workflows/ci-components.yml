@@ -3846,6 +3846,19 @@ jobs:
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: python3 -I -B scripts/ci_pilot_user_session.py --after-cleanup
+      - name: Seal sou216-clean-user installed pilot custody
+        if: always() && github.event.inputs.installed_focus == 'clean-user'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          output="$RUNNER_TEMP/sou216-clean-user"
+          if test -d "$output/custody"; then
+            cert=scripts/fixtures/sou216-process-recipient.crt
+            test "$(sha256sum "$cert" | cut -d ' ' -f1)" = 70fe2f78676803487c792babc7d49d867c6c12877790d79b93593fd6b8ba69f4
+            tar -C "$output" -cf - custody | openssl cms -encrypt -binary -aes-256-gcm \
+              -out "$output/installed-custody.cms" -outform DER "$cert"
+          fi
       - name: Retain original clean-user outcomes including failed and incomplete attempts
         if: always() && github.event.inputs.installed_focus == 'clean-user'
         uses: actions/upload-artifact@v7
@@ -3857,6 +3870,7 @@ jobs:
             ${{ runner.temp }}/sou216-user-session-after-cleanup/report.json
             ${{ runner.temp }}/sou216-user-session-after-cleanup/private-provenance.cms
             ${{ runner.temp }}/sou216-clean-user/report.json
+            ${{ runner.temp }}/sou216-clean-user/installed-custody.cms
             ${{ runner.temp }}/sou216-clean-user/*/expected.private.json
             ${{ runner.temp }}/sou216-clean-user/walkthrough/report.json
             ${{ runner.temp }}/sou216-clean-user/ask/qualification.json
@@ -4005,8 +4019,10 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_scope.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door.py -v
           python3 -B scripts/pilot_scope.py --check
+          umask 077
+          receipt="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["receipt"])' "$asset/source-first.json")"
           # Installed commands select the scope; the standard useful/refused/cancel cases then run under it.
-          python3 -B scripts/qualify-installed-front-door.py --run --pilot-scope-only \
+          python3 -B scripts/qualify-installed-front-door.py --run --pilot-scope-only --source-build-receipt "$receipt" \
             --output "$RUNNER_TEMP/sou215-pilot-scope" --expected-commit "$(git rev-parse HEAD)" \
             --component-python /usr/bin/python3.12 \
             --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
@@ -4020,14 +4036,27 @@ jobs:
           # on the generation that the scope-selected prefix prepared.
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou215-pilot-scope/report.json").read_text())["pilot_scope"]["demo_selection"])')"
           python3 -B -c 'import json,sys; s=json.load(open(sys.argv[1])); assert s["files"]["policy"]["sha256"] and s["format"]' "$selection"
-          python3 -B scripts/qualify-installed-pilot.py --run --selection "$selection" \
+          python3 -B scripts/qualify-installed-pilot.py --run --selection "$selection" --parent-report "$RUNNER_TEMP/sou215-pilot-scope/report.json" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou215-installed-pilot" \
             2>&1 | tee "$RUNNER_TEMP/sou215-installed-pilot.log"
           # The first-use demo adds the explicit single-use Ask control, timeout and daemon-loss recovery on the same generation.
-          (cd "$HOME" && python3 -B "$GITHUB_WORKSPACE/scripts/pilot-demo.py" --run --selection "$selection" \
+          (cd "$HOME" && python3 -B "$GITHUB_WORKSPACE/scripts/pilot-demo.py" --run --selection "$selection" --parent-report "$RUNNER_TEMP/sou215-pilot-scope/report.json" \
             --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
             --strace "$(command -v strace)" --output "$RUNNER_TEMP/sou215-pilot-demo") \
             2>&1 | tee "$RUNNER_TEMP/sou215-pilot-demo.log"
+      - name: Seal sou215-pilot-scope installed pilot custody
+        if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'pilot-scope'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          output="$RUNNER_TEMP/sou215-pilot-scope"
+          if test -d "$output/custody"; then
+            cert=scripts/fixtures/sou216-process-recipient.crt
+            test "$(sha256sum "$cert" | cut -d ' ' -f1)" = 70fe2f78676803487c792babc7d49d867c6c12877790d79b93593fd6b8ba69f4
+            tar -C "$output" -cf - custody | openssl cms -encrypt -binary -aes-256-gcm \
+              -out "$output/installed-custody.cms" -outform DER "$cert"
+          fi
       - name: Retain finite pilot scope reports including failure
         if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'pilot-scope'
         uses: actions/upload-artifact@v7
@@ -4035,6 +4064,7 @@ jobs:
           name: sou215-pilot-scope-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/sou215-pilot-scope/report.json
+            ${{ runner.temp }}/sou215-pilot-scope/installed-custody.cms
             ${{ runner.temp }}/sou215-pilot-scope.log
             ${{ runner.temp }}/sou215-pilot-scope/installed-tools/demo/report.json
             ${{ runner.temp }}/sou215-pilot-scope/installed-tools/support/report.json

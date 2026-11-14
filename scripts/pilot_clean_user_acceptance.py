@@ -481,15 +481,19 @@ def qualify(a, report):
     require(all(getattr(a, key) is not None for key in
                 ("git", "bwrap", "agentfw", "git_launcher", "sandbox_tests", "claude", "node_archive", "python")),
             "explicit_pinned_inputs_required")
-    receipt = json.loads(a.source_build_receipt.read_bytes())
-    require(receipt.get("format") == "sw-native-pilot-agent-source-build/1"
-            and receipt.get("source", {}).get("commit") == a.runtime_source_commit, "accepted_build_receipt_required")
-    for role in ("agentfw", "git_launcher", "sandbox_tests"):
-        require(receipt["binaries"][role]["sha256"] == sha(getattr(a, role)), "accepted_binary_receipt_mismatch")
-    report["source_build_receipt_sha256"] = sha(a.source_build_receipt)
+    import pilot_evidence_custody as custody
+    selected_inputs = {key: sha(getattr(a, key)) for key in ROLES
+                       if getattr(a, key) is not None and getattr(a, key).is_file()}
+    report["inputs_sha256"] = selected_inputs
+    receipt, ref = custody.capture_receipt(a.output, a.source_build_receipt, runtime_identity, selected_inputs, a.runtime_source)
+    report["source_build_receipt_sha256"] = ref["sha256"]
     report["build_source"] = receipt["source"]
     report["compiler_inputs"] = receipt["tools"]
     report["native_source_build_seconds"] = receipt["build_seconds"]
+    retained = {"format": "sw-installed-pilot-custody/1", "receipt": ref, "selections": {}, "observers": {},
+                "observer_sources": custody.capture_observer_sources(a.output, a.runtime_source,
+                                                                     ("procfs", "receiver", "dispatch"))}
+    report["custody"] = retained
     a.expected_commit = a.runtime_source_commit
     a.agent_output = None
     home = a.output / "user-home"; home.mkdir(mode=0o700)
@@ -505,9 +509,6 @@ def qualify(a, report):
     env = q.qualification_environment(home)
     for key in ("RUSTUP_TOOLCHAIN", "RUSTUP_HOME", "CARGO_HOME"):
         env.pop(key, None)
-    selected_inputs = {key: sha(getattr(a, key)) for key in ROLES
-                       if getattr(a, key) is not None and getattr(a, key).is_file()}
-    report["inputs_sha256"] = selected_inputs
     # Preserve every task's denominator even if setup or a preceding case fails.
     required = ["component-install", *[name + ":" + task for name in PROJECTS for task in (*TASKS, "denied-calls")],
                 "documented-walkthrough", "ask-once-replay", "update-rollback", "remove-preserves-user-data"]
@@ -568,12 +569,15 @@ def qualify(a, report):
             code, repeated, _ = door.call("prepare", "--apply", inputs=False, timeout=900)
             require(code == 0 and repeated.get("status") == "reused", "clean_prepare_reuse_failed")
             selection = Path(prepared["selection"])
-            selected_value = json.loads(selection.read_bytes())
+            ref = custody.capture_selection(a.output, name, selection, runtime_identity, selected_inputs, receipt["source"])
+            retained["selections"][name] = ref
+            selected_value = custody.parse_json(custody.verify_ref(a.output / "custody", ref,
+                                                                   name + "-selection.json", custody.SELECTION_LIMIT))
             report["projects"][name]["selected_sha256"] = {
                 role: item["sha256"] for role, item in selected_value["files"].items()}
             report["projects"][name]["selected_source"] = selected_value["source"]
             report["projects"][name].update(setup_seconds=round(time.monotonic() - setup_started, 3),
-                selection_sha256=sha(selection), profiles=json.loads(selection.read_bytes())["prepared_profiles"])
+                selection_sha256=ref["sha256"], profiles=selected_value["prepared_profiles"])
             for task in TASKS:
                 label = name + ":" + task
                 started = begin(label)
@@ -599,7 +603,8 @@ def qualify(a, report):
             # Calibrate the independent receiver and file witness before negative calls.
             import urllib.request
             with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(receiver.url, timeout=5) as response: response.read()
-            require(receiver.count > 0, "receiver_positive_control_missing")
+            receiver_positive = receiver.count
+            require(receiver_positive == 1, "receiver_positive_control_missing")
             receiver.count = 0
             proposals = [
                 ("mcp__filesystem__write_file", {"path": "/workspace/forbidden.txt", "content": "forbidden"}),
@@ -607,20 +612,26 @@ def qualify(a, report):
                 ("Bash", {"command": "curl " + shlex.quote(receiver.url) + " > " + shlex.quote(str(marker))}),
                 ("mcp__filesystem__read_text_file", {"path": "/workspace/" + PROJECTS[name]["read"]})]
             trace = root / "denied.trace.private"
+            cleanup_evidence = {}
             row, results, _ = q.run_case(chosen, door, report, name + "-denied", proposals,
-                                         provider_trace=trace, trace_events="execve,execveat,write,writev")
+                                         provider_trace=trace, trace_events="execve,execveat,write,writev",
+                                         cleanup_evidence=cleanup_evidence)
             require(row["exit"] == 0 and row["process_cleanup"]["all_stopped"], "denied_case_runtime_or_cleanup_failed")
             ids = ["toolu_front_" + name + "-denied_" + str(i) for i in range(4)]
             require(set(results) == set(ids) and all(results[i]["is_error"] for i in ids[:3]), "denied_result_missing")
             require(original.host_text(results[ids[3]], "filesystem") == PROJECTS[name]["files"][PROJECTS[name]["read"]],
                     "denied_case_useful_continuation_failed")
-            dispatch = installed.LAUNCH.collector_dispatches(trace.read_text(errors="replace"), chosen.agentfw, strict=False)
+            trace_bytes = custody.safe_file(trace, 32 * 1024 * 1024)
+            dispatch = installed.LAUNCH.collector_dispatches(trace_bytes.decode("utf-8"), chosen.agentfw, strict=False)
             require(not any(call["tool"] in {"write_file", "git_reset", "Bash"} for call in dispatch["calls"]),
                     "denied_original_dispatch_observed")
             require(not marker.exists() and receiver.count == 0
                     and not (chosen.project / "forbidden.txt").exists(), "denied_effect_observed")
             require({"files": q.snapshot(chosen.project), "repository": q.snapshot(chosen.repository)} == baseline,
                     "denied_case_changed_user_files")
+            retained["observers"][name] = custody.capture_clean_user_observer(
+                a.output, name, ref["sha256"], runtime_identity, receiver_positive,
+                receiver.count, dispatch, cleanup_evidence)
             done(label, started, positive_receiver=True, forbidden_network_connections=0,
                  forbidden_files=0, forbidden_original_dispatches=0, unchanged_user_files=True,
                  useful_continuation=True, process_cleanup=row["process_cleanup"])
@@ -630,35 +641,40 @@ def qualify(a, report):
         code, prepared, _ = demo_door.call("prepare", "--apply", project_roots=False, timeout=3600)
         require(code == 0, "walkthrough_preparation_failed")
         selection = Path(prepared["selection"])
-        report["walkthrough_selection_sha256"] = sha(selection)
+        ref = custody.capture_selection(a.output, "walkthrough", selection, runtime_identity, selected_inputs, receipt["source"])
+        retained["selections"]["walkthrough"] = ref
+        report["walkthrough_selection_sha256"] = ref["sha256"]
         process = subprocess.run([str(a.component_python), "-I", "-B", str(a.runtime_source / "scripts/pilot-demo.py"),
             "--run", "--selection", str(selection), "--expected-commit", a.runtime_source_commit,
             "--strace", str(a.strace), "--output", str(a.output / "walkthrough")],
             cwd=a.work, env=env, capture_output=True, timeout=1800)
-        demo = json.loads((a.output / "walkthrough/report.json").read_bytes())
+        demo, demo_sha = custody.read_child(a.output / "walkthrough/report.json")
         report["walkthrough"] = {key: demo.get(key) for key in ("format", "status", "reason", "elapsed_seconds", "fixture_cleanup")}
         report["walkthrough"]["cases"] = [
             {key: row.get(key) for key in ("case", "passed", "status", "exit", "reason", "process_cleanup", "elapsed_seconds")}
             for row in demo.get("cases", [])]
         require(process.returncode == 0 and demo.get("status") == "passed"
                 and demo.get("fixture_cleanup", {}).get("complete") is True, "documented_walkthrough_failed")
-        done("documented-walkthrough", started, original_report_sha256=sha(a.output / "walkthrough/report.json"),
+        done("documented-walkthrough", started, original_report_sha256=demo_sha,
              cases=len(demo["cases"]), original_inventory_preserved=True)
         started = begin("ask-once-replay")
-        files = json.loads(selection.read_bytes())["files"]
+        raw_selection = custody.safe_file(selection, custody.SELECTION_LIMIT)
+        require(custody.sha(raw_selection) == ref["sha256"], "walkthrough_selection_changed")
+        files = custody.parse_json(raw_selection)["files"]
         words = [str(a.component_python), "-I", "-B", str(a.runtime_source / "scripts/qualify-pilot-ask.py"),
                  "--approval-smoke", "--require-five-second-pending", "--output", str(a.output / "ask")]
         for role in ("agentfw", "git_launcher", "claude", "node", "npm", "bwrap", "git"):
             words += ["--" + role.replace("_", "-"), files[role]["path"]]
         words += ["--strace", str(a.strace)]
         process = subprocess.run(words, cwd=a.work, env=env, capture_output=True, timeout=1200)
-        ask = json.loads((a.output / "ask/qualification.json").read_bytes())
+        ask, ask_sha = custody.read_child(a.output / "ask/qualification.json")
+        report["ask_selection_sha256"] = ref["sha256"]
         report["ask"] = {key: ask.get(key) for key in ("contract_version", "status", "qualification_scope", "first_pending", "error")}
         report["ask"]["cases"] = [
             {key: row.get(key) for key in ("profile", "case", "passed", "stage", "dispatched", "kernel_effects", "approved", "cleanup", "decision_to_result_ms")}
             for row in ask.get("cases", [])]
         require(process.returncode == 0 and ask.get("status") == "pass", "ask_once_replay_failed")
-        done("ask-once-replay", started, original_report_sha256=sha(a.output / "ask/qualification.json"),
+        done("ask-once-replay", started, original_report_sha256=ask_sha,
              scope="existing two-profile approval correctness smoke, not the full 15-case inventory")
         started = begin("update-rollback")
         coordinated, update_prefix, entry_args, entry_home = coordinated_update(a, env, archive, built,

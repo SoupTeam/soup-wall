@@ -43,6 +43,8 @@ import wsl_qualification
 import pilot_source_identity as SOURCE_IDENTITY
 import pilot_git_profiles as GIT_PROFILES
 import pilot_runtime_identity as IDENTITY
+from roadmap_support import safe_file
+from pilot_evidence_custody import verify_parent
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -1113,8 +1115,8 @@ def run(args):
     selected = {}
     def prepare():
         nonlocal pilot, private, selected
-        require(args.selection.stat().st_size <= 65536, "selection_byte_limit")
-        selection = strict_json(args.selection.read_bytes())
+        selection_bytes = safe_file(args.selection, 65536)
+        selection = strict_json(selection_bytes)
         if args.fault == "bad-candidate":
             selection["source"]["commit"] = "0" * 40
         if args.fault == "missing-sandbox":
@@ -1125,6 +1127,9 @@ def run(args):
         selected = paths
         report["source_before"] = before
         report["selection_format"] = selection["format"]
+        report["selection_sha256"] = hashlib.sha256(selection_bytes).hexdigest()
+        if getattr(args, "parent_report", None) is not None:
+            report["parent_report_sha256"] = verify_parent(args.parent_report, report["selection_sha256"], before)
         report["selected_sha256"] = {key: selection["files"][key]["sha256"] for key in paths}
         require(platform.system() == "Linux" and platform.machine() == "x86_64", "linux_x86_64_required")
         # Prerequisite validation happens before profile downloads or execution.
@@ -1199,6 +1204,7 @@ def run(args):
                     # runtime outcome itself must remain failed.
                     report["source_after"] = source()
             require(report.get("source_before") == report["source_after"], "candidate_changed_during_run")
+            require(sha(args.selection) == report["selection_sha256"], "selected_generation_changed_during_run")
             require(all(sha(path) == report["selected_sha256"][key] for key, path in selected.items()), "selected_runtime_changed_during_run")
             require(pilot is not None, "runtime_not_started")
             if getattr(args, "wsl_root", None) is not None:
@@ -1225,6 +1231,7 @@ def main():
     parser.add_argument("--matched-development", action="store_true", help="Run the frozen SOU-106 workload on both actual-host paths")
     parser.add_argument("--offline-inputs", type=Path, help="Pinned Python archive, wheelhouse and npm cache; disable runtime downloads")
     parser.add_argument("--selection", type=Path)
+    parser.add_argument("--parent-report", type=Path, help="bind the original installed qualification parent report")
     parser.add_argument("--expected-commit")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--wsl-root", type=Path,

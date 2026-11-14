@@ -141,7 +141,7 @@ PROVIDER_TRACE_STRING_BYTES = 131072  # Linux MAX_ARG_STRLEN, including NUL.
 
 def run_case(args, door, report, label, proposals, hold=False, cancel=None,
              provider_setup=None, provider_trace=None, model=None, close_model=True, after_useful=None, diagnostic_writes=False,
-             trace_events="execve,execveat", run_flags=()):
+             trace_events="execve,execveat", run_flags=(), cleanup_evidence=None):
     """One protected run through `pilot.py run` with the owned scripted provider."""
     model = model if model is not None else BASE.DEMO.ScriptedModel([])
     offered, live = set(), {}
@@ -212,6 +212,8 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
             os.killpg(process.pid, cancel)
         stdout, stderr = process.communicate(timeout=240)
         cleanup = witness.finish()
+        if cleanup_evidence is not None:
+            cleanup_evidence.update(cleanup)
     finally:
         if close_model:
             model.close()
