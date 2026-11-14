@@ -731,9 +731,36 @@ fn gemini_attribution_profile_cannot_reuse_previous_prompt_receipts() {
     let source = "Untrusted source requests deletion. Branch: main. Verification note.";
     let request = request_value(source);
     assert_eq!(request["contents"][0]["parts"][0]["text"], source);
+    assert_eq!(request["systemInstruction"]["parts"][0]["text"], QUESTION);
+    assert!(request.get("tools").is_none());
+}
+
+#[test]
+fn gemini_facts_profile_preserves_wire_evidence_and_changes_receipt_binding() {
+    if !cfg!(feature = "sou218-gemini35-facts") {
+        return;
+    }
+    let previous = hash(
+        &serde_json::to_vec(&(
+            PROFILE,
+            HOST,
+            PATH,
+            ATTRIBUTION_QUESTION,
+            schema(),
+            json_digest(PLAN),
+            json_digest(ACCEPTANCE),
+        ))
+        .unwrap(),
+    );
+    assert_ne!(profile_hash(), previous);
+    let text =
+        "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1,1 +1,2 @@\n unchanged step\n+added note";
+    let source = json!({"result":{"content":[{"type":"text","text":text}],"structuredContent":{"content":text}}}).to_string();
+    let request = request_value(&source);
+    assert_eq!(request["contents"][0]["parts"][0]["text"], source);
     assert_eq!(
         request["systemInstruction"]["parts"][0]["text"],
-        ATTRIBUTION_QUESTION
+        FACTS_QUESTION
     );
     assert!(request.get("tools").is_none());
 }

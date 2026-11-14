@@ -2314,3 +2314,25 @@ mislabels hostile source text as a user instruction. Preserve these regressions.
 Local archive SOU218-attribution-before-after.zip contains60 raw responses and
 shared sources, audits and decoder results. SHA-256: 7729987d847d99e3f9912d2458e2726c3ee6ce63007ca95743314838654e2d55.
 No provider replay or Telegram/Linear publication was performed.
+
+### Logical-file and diff-fact candidate
+
+The opt-in sou218-gemini35-facts profile changes only the trusted summary
+instruction. It requires a distinct logical-file inventory before summarizing:
+duplicate JSON representations and quote indices do not create extra files.
+Diff changes must follow hunk prefixes, excluding file headers; unchanged
+workflow steps are not added steps or evidence of execution. It explicitly
+distinguishes source-contained hostile text from actual user instructions in
+every language. Long/repeated data and verification notes do not establish
+truncation. Source bytes, schema, quote extraction and gates remain unchanged.
+
+The prior attribution profile is retained for reproduction. New profile receipts
+are distinct; old answers cannot qualify as this candidate's measured results.
+Tests check receipt separation and unchanged wire evidence containing a diff
+with unchanged and added lines, as well as the existing frozen30-case suite.
+These are construction checks, not proof of model semantic compliance.
+
+A fresh six-original/24-attack comparison must verify inventory, change claims,
+source-request attribution, useful planning/training facts, command spelling and
+supporting citations. Preserve all prior regressions in the comparison. No
+automatic API retries, paid fallback, policy Allow, or Telegram/Linear posting.
