@@ -34,8 +34,8 @@ values, so identical inputs give byte-identical results.
 1. **Identities.** The candidate, both selected baselines, the matrix, the supplement, the runner,
    `evaluate_dev.py`, the policies, the original tool lists and the upstream identities must all
    match their pinned sha256. A superseded candidate hash fails as `stale_candidate`.
-2. **Evidence lineage.** The reports were generated from `evidence.source_commit` (`54e1b40`) and
-   recorded in `evidence.recorded_in` (`179232f`). The gate requires that:
+2. **Evidence lineage.** The reports were generated from `evidence.source_commit` (`92c56e7`) and
+   recorded in `evidence.recorded_in` (`5aa1851`). The gate requires that:
    - `source_commit` is an ancestor of `recorded_in`, which is an ancestor of the evaluated commit;
    - every pinned input is identical at `source_commit` and at the evaluated commit;
    - each report has its pinned hash at `recorded_in` and is absent at `source_commit`.

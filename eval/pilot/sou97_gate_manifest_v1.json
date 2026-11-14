@@ -21,28 +21,28 @@
     "eval/fixtures/soup_pilot_readonly_supplement_v0.1.json": "a09cac0679a0e1876089c91c604ae0b511558b7173a0ee3464e7cd225e2cd366",
     "profiles/mcp/filesystem-readonly-v1/policy.yaml": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
     "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
-    "profiles/mcp/filesystem-readonly-v1/upstream-identity.json": "bd2b235f11e4e3ccd31467185b33b26751a626ed23e499ca72392b56dc9849ca",
+    "profiles/mcp/filesystem-readonly-v1/upstream-identity.json": "c06d11a7195ca481cba22f826e3258db2b9411697ea21549299eecf46ac4b659",
     "profiles/mcp/git-readonly-v1/policy.yaml": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
     "profiles/mcp/git-readonly-v1/upstream-tools-list.json": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
-    "profiles/mcp/git-readonly-v1/upstream-identity.json": "90fbf2f84db1fee38145914adaf851c35d9b8b3735dc4e78caf7820c507e09e4"
+    "profiles/mcp/git-readonly-v1/upstream-identity.json": "ff8ca03c9b8c5048a90d31665fbff42d581440bb7419e046f906dc919e6d603c"
   },
   "evidence": {
-    "source_commit": "54e1b4006786763d6186fa42e7461f509167c572",
-    "recorded_in": "179232f9f201288baf8f02937ebdbd1f57faec53",
+    "source_commit": "92c56e7a681b41480efc484bb0f633358d3d3e07",
+    "recorded_in": "5aa18514a8f5106b56c67a8b8f07ad39f39ca201",
     "note": "Reports were generated in a clean checkout of source_commit and committed afterwards in recorded_in; they cannot exist at source_commit.",
     "reports": [
       {
         "fixture": "eval/fixtures/soup_pilot_readonly_matrix_v0.1.json",
         "runs": {
-          "eval/evidence/sou97/v1.2/pilot/matrix/run1/pilot_report.json": "34982159c2fa5bbdbc3028400cc133895029add088ba7944d377f8b35ae3bce6",
-          "eval/evidence/sou97/v1.2/pilot/matrix/run2/pilot_report.json": "b99f9dd6875837fd464ed6e748d938882de7e69e582256d00ea60ea09e9708b3"
+          "eval/evidence/sou97/v1.2-main-8c249000/pilot/matrix/run1/pilot_report.json": "c7b50aadcbc5fa1d24c92666f83dde62a89a10ea159362cf4f6eea058ddeeed3",
+          "eval/evidence/sou97/v1.2-main-8c249000/pilot/matrix/run2/pilot_report.json": "9a2c39ce4930e4250af220450d57df5c8b94d527f7af1cc048b225b60c917578"
         }
       },
       {
         "fixture": "eval/fixtures/soup_pilot_readonly_supplement_v0.1.json",
         "runs": {
-          "eval/evidence/sou97/v1.2/pilot/supplement/run1/pilot_report.json": "90102d469a740ffaf268793f64ce237840ef3c6a327e907ae53b388bdffd364b",
-          "eval/evidence/sou97/v1.2/pilot/supplement/run2/pilot_report.json": "3c364dcbe40899da424524aca6fe148d54e8877c4296c6f9549220558c29f184"
+          "eval/evidence/sou97/v1.2-main-8c249000/pilot/supplement/run1/pilot_report.json": "5c62d886c3e56c6dcbb70cb525b922da002d25c20ad0c2af307029c4c0472520",
+          "eval/evidence/sou97/v1.2-main-8c249000/pilot/supplement/run2/pilot_report.json": "e3e3db9a4171974b5252f991741100695e64994ff2d860760c214c424807353c"
         }
       }
     ]
