@@ -860,6 +860,7 @@ fn validate_registry(
         server_profile::git::FORMAT
         | server_profile::git::LOCAL_REFS_FORMAT
         | server_profile::git::FILE_READS_FORMAT
+        | server_profile::git::FIRST_PARENT_FORMAT
         | server_profile::git::SHALLOW_FORMAT
         | server_profile::git::linked_worktree::FORMAT
         | server_profile::git_local_clone::FORMAT
@@ -1331,7 +1332,9 @@ where
                                     None => "MCP arguments violate the selected input profile",
                                 };
                                 let rejected = error(request_id, -32602, message);
-                                if crate::mcp::verified_git::supports_profile(format) {
+                                if crate::mcp::verified_git::supports_profile(format)
+                                    || format == server_profile::git::FIRST_PARENT_FORMAT
+                                {
                                     diagnostic!("{}", json!({"event":"mcp_call_outcome","version":1,
                                         "stage":"input_profile","request_sha256":sha(&raw),
                                         "host_call_sha256":sha(canonical(request_id).to_string().as_bytes()),

@@ -157,6 +157,7 @@ pub(crate) struct View {
     source: Mutex<Withdrawal>,
     object_cache: BTreeMap<String, Object>,
     head: String,
+    first_parent: Option<String>,
     directories: BTreeSet<PathBuf>,
     images: Vec<(PathBuf, File)>,
 }
@@ -288,6 +289,7 @@ struct Capture {
     images: Vec<(PathBuf, File)>,
     objects: File,
     object_cache: BTreeMap<String, Object>,
+    prove_first_parent: bool,
     bytes: usize,
 }
 
@@ -387,7 +389,7 @@ impl Capture {
         let prefix = child(&self.objects, &id[..2], true)?;
         self.source.watch(&prefix)?;
         let bytes = self.read(child(&prefix, &id[2..], false)?, MAX_OBJECT_BYTES)?;
-        let object = decode_object(id, &bytes)?;
+        let object = decode_object(id, &bytes, self.prove_first_parent)?;
         self.image(
             Path::new(ROOT)
                 .join("objects")
@@ -421,8 +423,39 @@ impl Capture {
     }
 }
 
+fn no_first_parent_path(workspace: &File) -> anyhow::Result<bool> {
+    // Do not let the upstream Git command reinterpret the token as a path.
+    // This lookup runs while the sticky workspace directory watch is active.
+    let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+    let status = unsafe {
+        libc::fstatat(
+            workspace.as_raw_fd(),
+            c"HEAD~1".as_ptr(),
+            stat.as_mut_ptr(),
+            libc::AT_SYMLINK_NOFOLLOW,
+        )
+    };
+    if status == 0 {
+        return Ok(false);
+    }
+    let error = std::io::Error::last_os_error();
+    if error.kind() == std::io::ErrorKind::NotFound {
+        Ok(true)
+    } else {
+        Err(error.into())
+    }
+}
+
 impl View {
     pub(crate) fn capture(workspace: &File) -> anyhow::Result<Arc<Self>> {
+        Self::capture_view(workspace, false)
+    }
+
+    pub(crate) fn capture_first_parent(workspace: &File) -> anyhow::Result<Arc<Self>> {
+        Self::capture_view(workspace, true)
+    }
+
+    fn capture_view(workspace: &File, first_parent: bool) -> anyhow::Result<Arc<Self>> {
         owned(&workspace.metadata()?)?;
         // Retain this observer for the entire selected session, including Ask.
         // It must cover the first dependent .git directory-entry lookup.
@@ -452,13 +485,39 @@ impl View {
         source.watch(&git)?;
         // A pending lock is an unsupported/racy state, never a retry that
         // silently acquires authority over a different reference image.
-        entries(&git)?;
+        let git_entries = entries(&git)?;
+        if first_parent {
+            ensure!(
+                git_entries.iter().all(|name| matches!(
+                    name.as_str(),
+                    "HEAD"
+                        | "branches"
+                        | "config"
+                        | "description"
+                        | "hooks"
+                        | "index"
+                        | "info"
+                        | "logs"
+                        | "objects"
+                        | "packed-refs"
+                        | "refs"
+                        | "COMMIT_EDITMSG"
+                )),
+                "Git first-parent metadata machinery unsupported"
+            );
+        }
         let objects = child(&git, "objects", true)?;
         source.watch(&objects)?;
         for name in ["info", "pack"] {
             let directory = child(&objects, name, true)?;
             source.watch(&directory)?;
             let names = entries(&directory)?;
+            if first_parent {
+                ensure!(
+                    names.is_empty(),
+                    "Git first-parent object machinery unsupported"
+                );
+            }
             ensure!(
                 name != "pack" || names.is_empty(),
                 "Git per-file profile requires bounded loose objects"
@@ -478,6 +537,7 @@ impl View {
             images: Vec::new(),
             objects,
             object_cache: BTreeMap::new(),
+            prove_first_parent: first_parent,
             bytes: 0,
         };
         capture.directory(format!("{ROOT}/objects"))?;
@@ -571,6 +631,11 @@ impl View {
             );
             oid(head_text)?
         };
+        let first_parent = if first_parent && no_first_parent_path(workspace)? {
+            super::sealed_first_parent(&capture.object_cache, &head_id)
+        } else {
+            None
+        };
         ensure!(
             capture.source.valid(),
             "Git file-revision source changed during capture"
@@ -579,6 +644,7 @@ impl View {
             source: Mutex::new(capture.source),
             object_cache: capture.object_cache,
             head: head_id,
+            first_parent,
             directories: capture.directories,
             images: capture.images,
         }))
@@ -639,6 +705,21 @@ impl View {
                 };
                 super::validate_path(&self.object_cache, &commit, path)?;
             }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn validate_first_parent_call(
+        &self,
+        tool: &str,
+        args: &Value,
+    ) -> anyhow::Result<()> {
+        self.object_witness_valid()?;
+        if tool == "git_diff" && args["target"] == super::super::FIRST_PARENT_TARGET {
+            ensure!(
+                self.first_parent.is_some(),
+                "Git first-parent commit unavailable in the sealed view or ambiguous with a workspace path"
+            );
         }
         Ok(())
     }
@@ -749,6 +830,147 @@ mod tests {
         std::fs::write(git.join("refs/heads/main"), format!("{id}\n")).unwrap();
         std::fs::write(git.join("refs/tags/lightweight"), format!("{id}\n")).unwrap();
         (root, id)
+    }
+
+    fn write_object(git: &Path, kind: &str, payload: &[u8]) -> String {
+        let mut raw = format!("{kind} {}\0", payload.len()).into_bytes();
+        raw.extend_from_slice(payload);
+        let id = sha1_smol::Sha1::from(&raw).digest().to_string();
+        let mut compressor =
+            flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());
+        compressor.write_all(&raw).unwrap();
+        let prefix = git.join("objects").join(&id[..2]);
+        std::fs::create_dir_all(&prefix).unwrap();
+        std::fs::write(prefix.join(&id[2..]), compressor.finish().unwrap()).unwrap();
+        id
+    }
+
+    fn write_commit(git: &Path, tree: &str, parents: &str, message: &str) -> String {
+        write_object(git, "commit", format!(
+            "tree {tree}\n{parents}author Owner <owner@example.invalid> 1 +0000\ncommitter Owner <owner@example.invalid> 1 +0000\n\n{message}\n"
+        ).as_bytes())
+    }
+
+    fn first_parent_args() -> Value {
+        serde_json::json!({"repo_path":"/workspace","target":"HEAD~1","context_lines":3})
+    }
+
+    fn first_parent_fixture() -> (tempfile::TempDir, String, String, String) {
+        let (root, _) = fixture();
+        let git = root.path().join(".git");
+        let tree = write_object(&git, "tree", b"");
+        let first = write_commit(&git, &tree, "", "first");
+        let second = write_commit(&git, &tree, "", "second");
+        let merge = write_commit(
+            &git,
+            &tree,
+            &format!("parent {first}\nparent {second}\n"),
+            "merge",
+        );
+        std::fs::write(git.join("refs/heads/main"), format!("{merge}\n")).unwrap();
+        (root, tree, first, merge)
+    }
+
+    #[test]
+    fn first_parent_uses_the_first_merge_parent_in_the_mounted_image() {
+        let (root, _, first, _) = first_parent_fixture();
+        let view = View::capture_first_parent(&File::open(root.path()).unwrap()).unwrap();
+        let images = view.object_witness_images().unwrap();
+        assert_eq!(view.first_parent.as_deref(), Some(first.as_str()));
+        assert!(images.contains_key(&format!(".git/objects/{}/{}", &first[..2], &first[2..])));
+        view.validate_first_parent_call("git_diff", &first_parent_args())
+            .unwrap();
+    }
+
+    #[test]
+    fn first_parent_refuses_absent_malformed_wrong_kind_and_path_collision() {
+        let (root, tree, first, merge) = first_parent_fixture();
+        let git = root.path().join(".git");
+        let branch = git.join("refs/heads/main");
+        let root_commit = write_commit(&git, &tree, "", "root");
+        let missing = write_commit(
+            &git,
+            &tree,
+            &format!("parent {}\n", "0".repeat(40)),
+            "missing",
+        );
+        let malformed = write_commit(&git, &tree, "parent malformed\n", "malformed");
+        let wrong_kind = write_commit(&git, &tree, &format!("parent {tree}\n"), "wrong kind");
+        let bad_merge = write_commit(
+            &git,
+            &tree,
+            &format!("parent {first}\nparent malformed\n"),
+            "bad merge",
+        );
+        let invalid_commit = write_object(&git, "commit", format!("tree {tree}\n").as_bytes());
+        let invalid_parent = write_commit(
+            &git,
+            &tree,
+            &format!("parent {invalid_commit}\n"),
+            "invalid commit parent",
+        );
+        let workspace = File::open(root.path()).unwrap();
+        for head in [
+            root_commit,
+            missing,
+            malformed,
+            wrong_kind,
+            bad_merge,
+            invalid_parent,
+        ] {
+            std::fs::write(&branch, format!("{head}\n")).unwrap();
+            let view = View::capture_first_parent(&workspace).unwrap();
+            assert!(view
+                .validate_first_parent_call("git_diff", &first_parent_args())
+                .is_err());
+            view.validate_first_parent_call("git_status", &serde_json::json!({}))
+                .unwrap();
+        }
+        std::fs::write(&branch, format!("{merge}\n")).unwrap();
+        std::fs::write(root.path().join("HEAD~1"), b"literal path").unwrap();
+        let view = View::capture_first_parent(&workspace).unwrap();
+        assert!(view
+            .validate_first_parent_call("git_diff", &first_parent_args())
+            .is_err());
+    }
+
+    #[test]
+    fn first_parent_view_withdrawal_is_sticky_on_ref_or_object_replacement() {
+        let (root, _, first, _) = first_parent_fixture();
+        let git = root.path().join(".git");
+        let workspace = File::open(root.path()).unwrap();
+        for selected in [
+            git.join("refs/heads/main"),
+            git.join("objects").join(&first[..2]).join(&first[2..]),
+        ] {
+            let args = first_parent_args();
+            let view = View::capture_first_parent(&workspace).unwrap();
+            view.validate_first_parent_call("git_diff", &args).unwrap();
+            let backup = selected.with_file_name("retired");
+            std::fs::rename(&selected, &backup).unwrap();
+            std::fs::rename(&backup, &selected).unwrap();
+            assert!(view.validate_first_parent_call("git_diff", &args).is_err());
+            assert!(view.validate_first_parent_call("git_diff", &args).is_err());
+        }
+    }
+
+    #[test]
+    fn first_parent_refuses_unsupported_metadata_machinery() {
+        let (root, _, _, _) = first_parent_fixture();
+        let git = root.path().join(".git");
+        let workspace = File::open(root.path()).unwrap();
+        for path in [
+            "shallow",
+            "info/grafts",
+            "objects/info/commit-graph",
+            "objects/pack/test.promisor",
+        ] {
+            std::fs::write(git.join(path), b"unsupported").unwrap();
+            assert!(View::capture_first_parent(&workspace).is_err(), "{path}");
+            std::fs::remove_file(git.join(path)).unwrap();
+        }
+        std::fs::create_dir(git.join("refs/replace")).unwrap();
+        assert!(View::capture_first_parent(&workspace).is_err());
     }
 
     struct Mapping {

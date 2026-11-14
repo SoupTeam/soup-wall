@@ -42,7 +42,7 @@ def reference(api, git_driver, case, pair, native, env, workspace, work, log):
                 env, workspace, output, "original Git reference")
             try:
                 client.initialize()
-                result, _ = client.exchange(git_driver.call(10, case["tool"], original_args, workspace))
+                result, raw = client.exchange(git_driver.call(10, case["tool"], original_args, workspace))
                 text = api.extract_text(result)
                 api.V.require(isinstance(text, str), "original_git_reference_failed")
                 data = text.replace(str(workspace), api.GEN.REPO).encode("utf-8")
@@ -56,7 +56,8 @@ def reference(api, git_driver, case, pair, native, env, workspace, work, log):
             # default without widening the accepted core configuration.
             subprocess.run([str(native.git), "-C", str(workspace), "config", "--unset", "core.autocrlf"],
                            env=env, capture_output=True, check=True, timeout=10)
-            return protected_args, data.replace(api.GEN.REPO.encode(), api.SANDBOX_ROOT.encode())
+            return (protected_args, data.replace(api.GEN.REPO.encode(), api.SANDBOX_ROOT.encode()),
+                    api.sha_bytes(raw), len(raw))
         if pair["host"] != "padded" or len(data) == len(expected):
             break
         pad += len(expected) - len(data)
@@ -144,10 +145,11 @@ def run_case(api, driver, outcome_driver, case, pair, native, observers, outside
     before = None
     client = repository = outside_watch = None
     try:
-        arguments, expected = reference(api, driver, case, pair, native, native.reference_env,
+        arguments, expected, reference_frame_hash, reference_frame_bytes = reference(api, driver, case, pair, native, native.reference_env,
                                         workspace, work, logs / f"{case_id}.reference.private")
         row.update(reference_verified=True, reference_sha256=case["sha256"],
-                   mapped_reference_sha256=api.sha_bytes(expected), arguments=arguments)
+                   mapped_reference_sha256=api.sha_bytes(expected), arguments=arguments,
+                   reference_text_bytes=len(expected), reference_frame_bytes=reference_frame_bytes)
         before = snapshot(api, workspace, native.git, native.reference_env)
         collector_log = logs / f"{case_id}.collector.private"
         outside_sha = api.V.sha(outside / "sentinel")
@@ -161,6 +163,11 @@ def run_case(api, driver, outcome_driver, case, pair, native, observers, outside
             outside_watch.drain()
             response, raw = client.exchange(driver.call(10, case["tool"], arguments))
             text = project(api, collector_log, client, outcome_driver, row, response, raw, expected, repository.drain())
+            if native.first_parent and row.get("dispatched"):
+                row["reference_frame_sha256"] = reference_frame_hash
+                row["original_frame_matches_reference"] = (
+                    row["boundaries"]["original_response"]["response_sha256"] == reference_frame_hash)
+                api.V.require(row["original_frame_matches_reference"], "original_diff_frame_changed")
             follow, _ = client.exchange(driver.call(11, "git_status", {}))
             follow_text = api.extract_text(follow)
             row["useful_continuation"] = bool(follow_text and "On branch main" in follow_text and repository.drain() > 0)
@@ -210,7 +217,7 @@ SAFE_ERRORS = frozenset({
     "original_git_reference_failed", "reference_cleanup_unverified", "original_git_reference_bytes_differ",
     "duplicate_git_boundary_observation", "input_refusal_witness_conflict", "required_git_boundary_witness_missing",
     "client_delivery_witness_conflict", "inspection_refusal_witness_conflict", "released_original_frame_changed",
-    "delivered_git_payload_changed",
+    "delivered_git_payload_changed", "original_diff_frame_changed",
 })
 
 
@@ -222,6 +229,13 @@ def inventory(api, args):
     selected, skipped = api.select_cases(manifest, git=True)
     api.V.require(len(selected) == len(CASE_IDS) and {row["case_id"] for row in selected} == CASE_IDS,
                   "frozen_git_case_inventory_mismatch")
+    if getattr(args, "git_first_parent", False):
+        skipped += [{"case_id": row["case_id"], "reason": "first_parent_measurement_diff_only"}
+                    for row in selected if row["tool"] != "git_diff"]
+        selected = [row for row in selected if row["tool"] == "git_diff"]
+        api.V.require({row["case_id"] for row in selected} == DIFF_IDS
+                      and all(row["arguments"]["target"] == "HEAD~1" for row in selected),
+                      "frozen_first_parent_inventory_mismatch")
     return selected, skipped
 
 
@@ -296,10 +310,11 @@ def row_complete(row):
 
 def grade(api, report):
     rows = report["cases"]
+    expected = DIFF_IDS if report.get("first_parent") else CASE_IDS
     ids = [row["case_id"] for row in rows]
     complete = [row for row in rows if row_complete(row)]
-    integrity = (len(ids) == len(set(ids)) == len(CASE_IDS) and set(ids) == CASE_IDS
-                 and len(complete) == len(CASE_IDS) and report.get("calibration", {}).get("valid") is True
+    integrity = (len(ids) == len(set(ids)) == len(expected) and set(ids) == expected
+                 and len(complete) == len(expected) and report.get("calibration", {}).get("valid") is True
                  and report.get("daemon_stopped") is True and report.get("private_profile_removed") is True
                  and report.get("inputs_unchanged") is True)
     api.grade(report)
@@ -307,13 +322,13 @@ def grade(api, report):
                             dispatch_unknown=sum(row.get("dispatched") is None for row in rows),
                             useful_continuation_lost=sum(row.get("useful_continuation") is False for row in rows),
                             useful_continuation_unknown=sum(row.get("useful_continuation") is None for row in rows),
-                            planned=len(CASE_IDS), attempted=len(rows), observed=len(complete),
-                            not_attempted=len(CASE_IDS - set(ids)),
+                            planned=len(expected), attempted=len(rows), observed=len(complete),
+                            not_attempted=len(expected - set(ids)),
                             non_comparable=sum(row["status"] != "measured" for row in complete),
                             incomplete=sum(not row_complete(row) for row in rows),
                             timeouts=sum(row["status"] == "timeout" for row in rows))
     report["denominators"] = {label: {
-        "planned": len(CASE_IDS) // 2,
+        "planned": len(expected) // 2,
         "comparable": sum(row.get("label") == label and row["status"] == "measured" for row in complete),
         "non_comparable": sum(row.get("label") == label and row["status"] != "measured" for row in complete),
         "incomplete": sum(row.get("label") == label and not row_complete(row) for row in rows),
@@ -336,17 +351,23 @@ def run(api, args):
     outcomes = api.load("sou244_boundaries", api.ROOT / "scripts/pilot_git_outcomes.py")
     pilot = api.V.load("sou244_pilot_policy", "pilot_policy.py")
     policy_manifest = pilot.verify_assets()
+    profiles = api.V.load("sou244_git_profiles", "pilot_git_profiles.py")
+    profile = profiles.FIRST_PARENT if args.git_first_parent else None
+    native.first_parent = profile is not None
+    classifier = profiles.classifier_path(profile or profiles.DEFAULT)
     assets = driver.INSTALL.ASSETS
     pins = {"source": before["commit"], "source_tree": before["tree"], "build_source": receipt["source_commit"],
             "manifest_sha256": MANIFEST_SHA256, "policy_sha256": api.V.sha(pilot.ASSETS / "policy.yaml"),
             "preset_manifest_sha256": api.V.sha(pilot.ASSETS / "manifest.json"),
-            "classifier_sha256": api.V.sha(api.ROOT / pilot.KINDS["git"][1]),
+            "classifier_sha256": api.V.sha(classifier),
             "upstream_identity_sha256": api.V.sha(assets / "upstream-identity.json"),
             "upstream_wheels_lock_sha256": api.V.sha(assets / "wheels.lock.json"),
             "wheelhouse_sha256": driver.INSTALL.tree_sha(native.wheelhouse),
             "runtime_sha256": hashes,
             "harness_sha256": api.V.sha(api.HERE / "effect_controls.py"),
             "driver_sha256": api.V.sha(Path(__file__))}
+    if profile:
+        pins["git_profile_binding"] = profiles.binding(profile)
     baseline_path = api.HERE / "baseline-main-adefce2a.json"
     baseline_sha256 = api.V.sha(baseline_path)
     api.V.require(baseline_sha256 == BASELINE_SHA256, "historical_git_baseline_digest_mismatch")
@@ -362,6 +383,8 @@ def run(api, args):
                                 "protected_fixture_core_autocrlf": "defaults_false_with_no_global_or_system_config"},
               "inventory": [{k: row[k] for k in ("case_id", "pair_id", "label", "tool", "arguments", "sha256")}
                             for row in selected]}
+    if profile:
+        report["first_parent"] = True
     api.V.write(output / "plan.json", report)
     private = work = None
     try:
@@ -383,16 +406,18 @@ def run(api, args):
                 native.reference_env.update({f"GIT_{who}_NAME": "Corpus Author",
                     f"GIT_{who}_EMAIL": "corpus@example.invalid", f"GIT_{who}_DATE": "2026-10-23T09:00:00+00:00"})
             with (logs / "installer.log").open("wb") as log:
-                driver.INSTALL.install(install, native.workspace, native.git, hashes["git"], native.bwrap,
-                                       native.git_launcher, python_archive=native.python_archive,
-                                       wheelhouse=native.wheelhouse, allow_download=False, log=log)
+                profiles.install(profile or profiles.DEFAULT, install, native.workspace, native.git, hashes["git"],
+                                 native.bwrap, native.git_launcher, python_archive=native.python_archive,
+                                 wheelhouse=native.wheelhouse, allow_download=False, log=log)
             clear(native.workspace)
             native.python = install / "package/python/bin/python3.11"
             port = api.DEMO.free_port()
-            config, selection = pilot.prepare("git", install, work / "selection", port, native.python)
+            config, selection = pilot.prepare("git", install, work / "selection", port, native.python, git_profile=profile)
             api.V.require(selection["manifest_sha256"] == pins["preset_manifest_sha256"]
                           and selection["policy_sha256"] == pins["policy_sha256"]
-                          and selection["classifier_sha256"] == pins["classifier_sha256"], "git_policy_pin_changed")
+                          and selection["classifier_sha256"] == pins["classifier_sha256"]
+                          and selection.get("git_profile_binding") == pins.get("git_profile_binding"),
+                          "git_policy_pin_changed")
             report["pilot_selection"] = {k: v for k, v in selection.items() if k != "environment"}
             report["package_tree_sha256"] = json.loads((install / "profile.json").read_bytes())["packageTreeSha256"]
             native.env = dict(env, **selection["environment"])
@@ -446,6 +471,8 @@ def run(api, args):
                 and selection["profile_sha256"] == api.V.sha(install / "profile.json")
                 and selection["registry_sha256"] == api.V.sha(install / "registry.json")
                 and selection["policy_sha256"] == api.V.sha(work / "selection/policy.yaml")
+                and classifier.is_file() and api.V.sha(classifier) == pins["classifier_sha256"]
+                and (profile is None or profiles.binding(profile) == pins["git_profile_binding"])
                 and pilot.verify_assets() == policy_manifest and api.V.source() == before
             )
     except (KeyboardInterrupt, OSError, ValueError, subprocess.SubprocessError) as failure:
@@ -463,3 +490,4 @@ def run(api, args):
 BASELINE_SHA256 = "82026804c925c1d302d5ba2fdcfa1ad2b328d5a50b27c8febbff6c49d2db877b"
 MANIFEST_SHA256 = "3a7fd3091990d8425df42914321336dd25bdf9ff34f677450935a0c26c674e33"
 CASE_IDS = frozenset(f"g{number:02d}-{side}" for number in range(1, 13) for side in ("a", "b"))
+DIFF_IDS = frozenset(f"{pair}-{side}" for pair in ('g02', 'g04', 'g06', 'g08', 'g10', 'g12') for side in ("a", "b"))
