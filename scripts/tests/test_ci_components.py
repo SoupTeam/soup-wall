@@ -112,6 +112,20 @@ class SharedComponents(unittest.TestCase):
         self.assertIn("mcp-https-post--linux-https-post", actual)
         self.assertIn("mcp-real-filesystem--native-ubuntu-2404", actual)
 
+    def test_manual_workflows_stay_within_github_dispatch_input_limit(self):
+        workflows = ROOT / ".github/workflows"
+        for workflow in sorted((*workflows.glob("*.yml"), *workflows.glob("*.yaml"))):
+            with self.subTest(workflow=workflow.name):
+                source = workflow.read_text(encoding="utf-8-sig")
+                dispatch = re.search(r"(?m)^  workflow_dispatch:[^\n]*\n((?:^    [^\n]*\n|^\s*\n)*)", source)
+                if dispatch is None:
+                    continue
+                inputs = re.search(r"(?m)^    inputs:[^\n]*\n((?:^      [^\n]*\n|^\s*\n)*)", dispatch[1])
+                if inputs is None:
+                    continue
+                names = re.findall(r"(?m)^      [\w-]+:", inputs[1])
+                self.assertLessEqual(len(names), 25, "GitHub allows at most 25 workflow_dispatch inputs")
+
     def test_full_workspace_jobs_keep_the_supported_system_python_and_image_cache(self):
         jobs = blocks((ROOT / ".github/workflows/ci.yml").read_text())
         for name in ("test", "all-features"):

@@ -149,11 +149,13 @@ fn execute(cli: Cli) -> Result<Value> {
     match cli.action {
         Action::Preview(s) => {
             let plan = inventory::preview(&s, &mut budget)?;
-            let blockers = processes::blockers(&plan, &mut budget)?;
+            let mut process_refusals = std::collections::BTreeSet::new();
+            let blockers =
+                processes::blockers_with_refusals(&plan, &mut budget, &mut process_refusals)?;
             Ok(
                 json!({"format":FORMAT,"status":if blockers.is_empty(){"preview"}else{"blocked"},
                 "confirmation_sha256":if blockers.is_empty(){Some(digest(&plan)?)}else{None},
-                "inventory":plan,"blockers":blockers,"executed":false,"provider_requests":0,
+                "inventory":plan,"blockers":blockers,"process_refusals":process_refusals,"executed":false,"provider_requests":0,
                 "retained":["projects","outputs","exports","backups","audit_history","provider_credentials","agent_binary","prepared_generations"],
                 "scope":"verified_front_door_component_only",
                 "prerequisite_cleanup":"use_existing_receipt_aware_pilot_cleanup_separately"}),

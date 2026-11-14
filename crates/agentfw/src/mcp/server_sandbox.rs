@@ -45,6 +45,8 @@ pub(crate) fn profile_name(format: &str) -> &'static str {
         "sw-mcp/filesystem-multi-root-file-links-readonly/linux-bwrap/1"
     } else if format == super::server_profile::filesystem_roots::FORMAT {
         "sw-mcp/filesystem-multi-root-readonly/linux-bwrap/1"
+    } else if format == super::server_profile::git::FIRST_PARENT_FORMAT {
+        "sw-mcp/git-readonly-first-parent/linux-bwrap-landlock/1"
     } else if format == super::server_profile::git::FILE_READS_FORMAT {
         "sw-mcp/git-readonly-file-revisions/linux-bwrap-landlock/1"
     } else if format == super::server_profile::git_tracked_symlinks::FORMAT {

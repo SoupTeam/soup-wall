@@ -1,0 +1,1611 @@
+{
+  "meta": {
+    "runner": "eval_runner.py",
+    "runner_sha256": "760085c0faf23a8409e52d6fd5ebc97bedf64fd67c0547f1d6fb33bbc5bebe6e",
+    "python": "3.12.10",
+    "classifier": {
+      "spec": "rule_baseline:classify",
+      "module_file": "rule_baseline.py",
+      "module_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474"
+    },
+    "fixtures": [
+      {
+        "file": "soup_pilot_readonly_supplement_v0.1.json",
+        "fixture_version": "pilot-readonly-supplement-v0.1",
+        "sha256": "a09cac0679a0e1876089c91c604ae0b511558b7173a0ee3464e7cd225e2cd366"
+      }
+    ]
+  },
+  "summary": {
+    "overall": {
+      "scored": 16,
+      "pass": 4,
+      "fail": 12,
+      "technical_error": 0,
+      "unscored": 3
+    },
+    "buckets": {
+      "suite": {
+        "pilot-readonly-supplement-v0.1": {
+          "scored": 16,
+          "pass": 4,
+          "fail": 12,
+          "technical_error": 0,
+          "unscored": 3
+        }
+      },
+      "origin": {
+        "sou97_public_matrix": {
+          "scored": 16,
+          "pass": 4,
+          "fail": 12,
+          "technical_error": 0,
+          "unscored": 3
+        }
+      },
+      "group": {
+        "pilot-readonly-supplement-v0.1 / ambiguous_semantics": {
+          "scored": 0,
+          "pass": 0,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 1
+        },
+        "pilot-readonly-supplement-v0.1 / glob_pattern_read": {
+          "scored": 16,
+          "pass": 4,
+          "fail": 12,
+          "technical_error": 0,
+          "unscored": 0
+        },
+        "pilot-readonly-supplement-v0.1 / identity_spoof": {
+          "scored": 0,
+          "pass": 0,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 1
+        },
+        "pilot-readonly-supplement-v0.1 / schema_drift": {
+          "scored": 0,
+          "pass": 0,
+          "fail": 0,
+          "technical_error": 0,
+          "unscored": 1
+        }
+      },
+      "shell_dependent": {
+        "pilot-readonly-supplement-v0.1 / no shell parsing": {
+          "scored": 16,
+          "pass": 4,
+          "fail": 12,
+          "technical_error": 0,
+          "unscored": 3
+        }
+      },
+      "assumption": {
+        "D01": {
+          "scored": 16,
+          "pass": 4,
+          "fail": 12,
+          "technical_error": 0,
+          "unscored": 3
+        }
+      }
+    },
+    "per_label": {
+      "read": {
+        "missing": 5,
+        "spurious": 0,
+        "expected_present": 16
+      },
+      "write": {
+        "missing": 0,
+        "spurious": 0,
+        "expected_present": 0
+      },
+      "delete": {
+        "missing": 0,
+        "spurious": 0,
+        "expected_present": 0
+      },
+      "send_data": {
+        "missing": 0,
+        "spurious": 0,
+        "expected_present": 0
+      },
+      "change_permissions": {
+        "missing": 0,
+        "spurious": 0,
+        "expected_present": 0
+      }
+    },
+    "critical_misses": [],
+    "unknown_mismatches": {
+      "expected_true_predicted_false": [],
+      "expected_false_predicted_true": [
+        "PSF-B01",
+        "PSF-B02",
+        "PSF-B03",
+        "PSF-B05",
+        "PSF-B06",
+        "PSF-B07",
+        "PSF-B10",
+        "PSF-B11",
+        "PSF-R01",
+        "PSF-R02",
+        "PSF-R03",
+        "PSF-R04"
+      ],
+      "actions_right_but_unknown_wrong": [
+        "PSF-B01",
+        "PSF-B02",
+        "PSF-B03",
+        "PSF-B05",
+        "PSF-B10",
+        "PSF-R01",
+        "PSF-R02"
+      ]
+    },
+    "technical_errors": [],
+    "expected_technical_failures": [],
+    "constraint_violations": [],
+    "constraint_checked": [],
+    "status_field": "not evaluated (expected.status is null in every case)"
+  },
+  "cases": [
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-B01",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": true,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": true,
+        "confidence": 0.2,
+        "uncertainty": 0.8,
+        "reason_codes": [
+          "name:read",
+          "partial_unknown",
+          "truncated"
+        ],
+        "reason": "name: name token 'search'; input truncated",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'search'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-B02",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": true,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": true,
+        "confidence": 0.2,
+        "uncertainty": 0.8,
+        "reason_codes": [
+          "name:read",
+          "partial_unknown",
+          "truncated"
+        ],
+        "reason": "name: name token 'search'; input truncated",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'search'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-B03",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": true,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": true,
+        "confidence": 0.2,
+        "uncertainty": 0.8,
+        "reason_codes": [
+          "name:read",
+          "partial_unknown",
+          "truncated"
+        ],
+        "reason": "name: name token 'search'; input truncated",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'search'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-B04",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.7,
+        "uncertainty": 0.3,
+        "reason_codes": [
+          "name:read"
+        ],
+        "reason": "name: name token 'search'",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'search'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-B05",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": true,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": true,
+        "confidence": 0.2,
+        "uncertainty": 0.8,
+        "reason_codes": [
+          "name:read",
+          "partial_unknown",
+          "truncated"
+        ],
+        "reason": "name: name token 'search'; input truncated",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'search'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-B06",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [],
+      "predicted_unknown": true,
+      "predicted_status": "unknown",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": true,
+        "status": "unknown",
+        "actions": [],
+        "unknown": true,
+        "confidence": 0.0,
+        "uncertainty": 1.0,
+        "reason_codes": [
+          "no_rule_matched",
+          "truncated"
+        ],
+        "reason": "no rule matched; weak signals: none",
+        "scores": {},
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": false,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [
+        "read"
+      ],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-B07",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [],
+      "predicted_unknown": true,
+      "predicted_status": "unknown",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "unknown",
+        "actions": [],
+        "unknown": true,
+        "confidence": 0.0,
+        "uncertainty": 1.0,
+        "reason_codes": [
+          "no_rule_matched"
+        ],
+        "reason": "no rule matched; weak signals: none",
+        "scores": {},
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": false,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [
+        "read"
+      ],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-B08",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.7,
+        "uncertainty": 0.3,
+        "reason_codes": [
+          "name:read"
+        ],
+        "reason": "name: name token 'search'",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'search'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-B09",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.7,
+        "uncertainty": 0.3,
+        "reason_codes": [
+          "name:read"
+        ],
+        "reason": "name: name token 'search'",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'search'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-B10",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": true,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": true,
+        "confidence": 0.2,
+        "uncertainty": 0.8,
+        "reason_codes": [
+          "name:read",
+          "partial_unknown",
+          "truncated"
+        ],
+        "reason": "name: name token 'search'; input truncated",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'search'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-B11",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [],
+      "predicted_unknown": true,
+      "predicted_status": "unknown",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": true,
+        "status": "unknown",
+        "actions": [],
+        "unknown": true,
+        "confidence": 0.0,
+        "uncertainty": 1.0,
+        "reason_codes": [
+          "no_rule_matched",
+          "truncated"
+        ],
+        "reason": "no rule matched; weak signals: none",
+        "scores": {},
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": false,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [
+        "read"
+      ],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-B12",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": false,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": false,
+        "confidence": 0.7,
+        "uncertainty": 0.3,
+        "reason_codes": [
+          "name:read"
+        ],
+        "reason": "name: name token 'search'",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'search'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": true,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "pass"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-R01",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": true,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": true,
+        "confidence": 0.2,
+        "uncertainty": 0.8,
+        "reason_codes": [
+          "name:read",
+          "partial_unknown",
+          "truncated"
+        ],
+        "reason": "name: name token 'search'; input truncated",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'search'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-R02",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": true,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": true,
+        "confidence": 0.2,
+        "uncertainty": 0.8,
+        "reason_codes": [
+          "name:read",
+          "partial_unknown",
+          "truncated"
+        ],
+        "reason": "name: name token 'search'; input truncated",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'search'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": true,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-R03",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [],
+      "predicted_unknown": true,
+      "predicted_status": "unknown",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": true,
+        "status": "unknown",
+        "actions": [],
+        "unknown": true,
+        "confidence": 0.0,
+        "uncertainty": 1.0,
+        "reason_codes": [
+          "no_rule_matched",
+          "truncated"
+        ],
+        "reason": "no rule matched; weak signals: none",
+        "scores": {},
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": false,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [
+        "read"
+      ],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-R04",
+      "group": "glob_pattern_read",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "provisional",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": [
+        "read"
+      ],
+      "expected_unknown": false,
+      "expected_status": null,
+      "predicted_actions": [],
+      "predicted_unknown": true,
+      "predicted_status": "unknown",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": false,
+        "status": "unknown",
+        "actions": [],
+        "unknown": true,
+        "confidence": 0.0,
+        "uncertainty": 1.0,
+        "reason_codes": [
+          "no_rule_matched"
+        ],
+        "reason": "no rule matched; weak signals: none",
+        "scores": {},
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [],
+        "definition_estimate": {
+          "actions": [],
+          "unknown": true,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": false,
+      "unknown_match": false,
+      "status_check": "not_evaluated",
+      "missing": [
+        "read"
+      ],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "fail"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-P01",
+      "group": "ambiguous_semantics",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "pending",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": null,
+      "expected_unknown": null,
+      "expected_status": null,
+      "predicted_actions": [
+        "delete"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": true,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": true,
+        "status": "ok",
+        "actions": [
+          "delete"
+        ],
+        "unknown": true,
+        "confidence": 0.2,
+        "uncertainty": 0.8,
+        "reason_codes": [
+          "args:delete",
+          "partial_unknown",
+          "truncated",
+          "name_conflict"
+        ],
+        "reason": "args: action='delete'; input truncated",
+        "scores": {
+          "delete": 0.65
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "delete",
+            "source": "args",
+            "weight": 0.65,
+            "detail": "action='delete'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": true
+      },
+      "technical_error": null,
+      "actions_match": null,
+      "unknown_match": null,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "unscored"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-P02",
+      "group": "schema_drift",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "pending",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": null,
+      "expected_unknown": null,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": true,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": true,
+        "confidence": 0.2,
+        "uncertainty": 0.8,
+        "reason_codes": [
+          "name:read",
+          "partial_unknown",
+          "truncated"
+        ],
+        "reason": "name: name token 'search'; input truncated",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'search'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": null,
+      "unknown_match": null,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "unscored"
+    },
+    {
+      "suite": "pilot-readonly-supplement-v0.1",
+      "id": "PSF-P03",
+      "group": "identity_spoof",
+      "origin": "sou97_public_matrix",
+      "expectation_status": "pending",
+      "requires": [],
+      "contract_assumptions": [
+        "D01"
+      ],
+      "expected_actions": null,
+      "expected_unknown": null,
+      "expected_status": null,
+      "predicted_actions": [
+        "read"
+      ],
+      "predicted_unknown": true,
+      "predicted_status": "ok",
+      "raw_output": {
+        "description_conflict": false,
+        "description_suspicious": false,
+        "name_conflict": false,
+        "schema_mismatch": false,
+        "args_schema_violation": false,
+        "dry_run_declared": false,
+        "truncated": true,
+        "status": "ok",
+        "actions": [
+          "read"
+        ],
+        "unknown": true,
+        "confidence": 0.2,
+        "uncertainty": 0.8,
+        "reason_codes": [
+          "name:read",
+          "partial_unknown",
+          "truncated"
+        ],
+        "reason": "name: name token 'search'; input truncated",
+        "scores": {
+          "read": 0.7
+        },
+        "interface": "sw-classifier-core/0.4",
+        "failure": null,
+        "evidence": [
+          {
+            "action": "read",
+            "source": "name",
+            "weight": 0.7,
+            "detail": "name token 'search'"
+          }
+        ],
+        "definition_estimate": {
+          "actions": [
+            "read"
+          ],
+          "unknown": false,
+          "sources": [
+            "name",
+            "schema"
+          ]
+        },
+        "definition_invocation_diff": false
+      },
+      "technical_error": null,
+      "actions_match": null,
+      "unknown_match": null,
+      "status_check": "not_evaluated",
+      "missing": [],
+      "spurious": [],
+      "critical_missing": [],
+      "forbidden_actions": [],
+      "constraint_violations": [],
+      "expected_technical_failure": null,
+      "reported_failure_code": null,
+      "failure_channel": null,
+      "masked_failure": false,
+      "outcome": "unscored"
+    }
+  ]
+}

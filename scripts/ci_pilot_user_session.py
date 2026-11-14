@@ -22,6 +22,14 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 CERT = ROOT / 'scripts/fixtures/sou216-process-recipient.crt'
 CERT_SHA256 = '70fe2f78676803487c792babc7d49d867c6c12877790d79b93593fd6b8ba69f4'
+QUALIFICATION_CERT = ROOT / 'scripts/fixtures/sou243-custody-recipient.crt'
+QUALIFICATION_CERT_SHA256 = '5de07c5f15b1f7c15970769001e527aadacf91a32a826f840932c5cc379db5b2'
+
+
+def process_recipient(name):
+    if name == 'sou243':
+        return QUALIFICATION_CERT, QUALIFICATION_CERT_SHA256
+    return CERT, CERT_SHA256
 
 
 def load(name, filename):
@@ -40,7 +48,7 @@ def raw_bytes(path, cap=65536):
     return value
 
 
-def raw_process(pid):
+def raw_process(pid, *, observe_executable=False):
     path = Path('/proc') / str(pid)
     before = raw_bytes(path / 'stat', 8192).rsplit(b')', 1)[1].split()
     status = dict(line.split(b':', 1) for line in raw_bytes(path / 'status').splitlines() if b':' in line)
@@ -57,8 +65,18 @@ def raw_process(pid):
         try: value = str((path / 'ns' / kind).readlink())
         except OSError as error: value = {'errno': error.errno}
         result['namespaces'][kind] = value
+    if observe_executable:
+        try:
+            link = os.fsencode((path / 'exe').readlink())
+            executable = (path / 'exe').stat()
+            require(len(link) <= 8192, 'session_process_executable_bound')
+            result['executable'] = {'link_sha256': hashlib.sha256(link).hexdigest(),
+                'device': executable.st_dev, 'inode': executable.st_ino, 'mode': executable.st_mode,
+                'owner': executable.st_uid}
+        except OSError as error:
+            result['executable'] = {'errno': error.errno}
     after = raw_bytes(path / 'stat', 8192).rsplit(b')', 1)[1].split()
-    require(before[19] == after[19], 'session_process_identity_changed')
+    require(before[19] == after[19] and before[1] == after[1], 'session_process_identity_changed')
     return result
 
 
@@ -66,20 +84,29 @@ def identity(row):
     return H.digest({'pid': row['pid'], 'start': str(row['start_ticks'])})
 
 
-def kernel_snapshot():
+def kernel_snapshot(proc_root=Path("/proc"), reader=raw_process, observer_pid=None):
     rows = {}
-    entries = list(Path('/proc').iterdir()); require(len(entries) <= 8192, 'session_process_count_bound')
+    uid = os.getuid()
+    entries = list(proc_root.iterdir()); require(len(entries) <= 8192, 'session_process_count_bound')
     for path in entries:
         if not path.name.isdecimal(): continue
         try:
-            if path.stat().st_uid != os.getuid(): continue
-            rows[path.name] = raw_process(int(path.name))
+            info = path.stat()
+            status = raw_bytes(path / 'status', 16384)
+            credentials = [line for line in status.splitlines() if line.startswith(b'Uid:')]
+            require(len(credentials) == 1, 'session_process_credentials_missing')
+            uids = [int(n) for n in credentials[0][4:].split()]
+            require(len(uids) == 4, 'session_process_credentials_missing')
+            if info.st_uid != uid and uid not in uids: continue
+            row = reader(int(path.name))
+            require(row['uids'] == uids and path.stat().st_ino == info.st_ino, 'session_process_credentials_changed')
+            rows[path.name] = row
         except (FileNotFoundError, ProcessLookupError): pass
-    parent = os.getpid()
+    parent = os.getpid() if observer_pid is None else observer_pid
     for _ in range(16):
         if parent == 0: break
         key = str(parent)
-        if key not in rows: rows[key] = raw_process(parent)
+        if key not in rows: rows[key] = reader(parent)
         parent = rows[key]['parent']
     return rows
 
@@ -227,6 +254,10 @@ def main():
     operation = parser.add_mutually_exclusive_group()
     operation.add_argument('--quiesce', action='store_true')
     operation.add_argument('--after-cleanup', action='store_true', help='read-only snapshot after the installed-host attempt')
+    operation.add_argument('--before-clean-user', action='store_true',
+                           help='require readable evidence before an ordinary-user run, without session control')
+    parser.add_argument('--recipient', choices=('sou216', 'sou243'), default='sou216',
+                        help='pinned public certificate for this new snapshot')
     args = parser.parse_args()
     report = {'diagnostic': 'SOU-216 owned CI user-session preparation', 'authorization': False,
         'installed_host_executed': None if args.after_cleanup else False,
@@ -247,9 +278,10 @@ def main():
             quiesce(report, private)
         else:
             report['after'] = H.process_observation()
-            require(not args.quiesce or not report['after']['unavailable'], 'session_visibility_unavailable')
+            require(not (args.quiesce or args.before_clean_user) or not report['after']['unavailable'],
+                    'session_visibility_unavailable')
             require(not args.after_cleanup or not report['after']['unavailable'], 'post_cleanup_process_visibility_unavailable')
-            report['status'] = 'observed' if not args.quiesce else 'already-visible'
+            report['status'] = 'already-visible' if args.quiesce or args.before_clean_user else 'observed'
         private['after'] = kernel_snapshot()
     except Exception as error:
         message = str(error)
@@ -257,13 +289,14 @@ def main():
     if directory is not None:
         raw = H.canonical(private); require(len(raw) <= 2 * 1024 * 1024, 'private_session_observation_bound')
         raw_path = directory / 'private-provenance.json'; raw_path.write_bytes(raw)
-        require(H.sha(CERT) == CERT_SHA256, 'process_recipient_changed')
+        recipient, fingerprint = process_recipient(args.recipient)
+        require(H.sha(recipient) == fingerprint, 'process_recipient_changed')
         encrypted = directory / 'private-provenance.cms'
         subprocess.run(['/usr/bin/openssl', 'cms', '-encrypt', '-binary', '-aes-256-gcm',
-            '-in', str(raw_path), '-out', str(encrypted), '-outform', 'DER', str(CERT)],
+            '-in', str(raw_path), '-out', str(encrypted), '-outform', 'DER', str(recipient)],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=15)
         report.update(private_provenance_sha256=H.sha(raw_path), encrypted_provenance_sha256=H.sha(encrypted),
-            recipient_certificate_sha256=CERT_SHA256, private_provenance='CMS encrypted; private key retained locally, no raw argv/environment captured')
+            recipient_certificate_sha256=fingerprint, private_provenance='CMS encrypted; private key retained locally, no raw argv/environment captured')
         H.save(directory / 'report.json', report)
     print(json.dumps(report, sort_keys=True))
     return 1 if report['status'] == 'failed' else 0

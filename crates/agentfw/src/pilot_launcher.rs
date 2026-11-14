@@ -100,9 +100,10 @@ pub fn inspect_workspaces(args: PilotWorkspacesArgs) -> Result<()> {
 pub(crate) fn validate_selected_git_workspace(root: &Path, format: &str) -> Result<()> {
     use crate::mcp::server_profile::{git, git_local_clone, git_tracked_symlinks};
     match format {
-        git::FORMAT | git::FILE_READS_FORMAT | git::LOCAL_REFS_FORMAT => {
-            git::validate_repository(root)
-        }
+        git::FORMAT
+        | git::FILE_READS_FORMAT
+        | git::FIRST_PARENT_FORMAT
+        | git::LOCAL_REFS_FORMAT => git::validate_repository(root),
         git::SHALLOW_FORMAT => git::validate_repository_with_shallow(root, true),
         git_local_clone::FORMAT => git_local_clone::validate_repository(root),
         git_tracked_symlinks::FORMAT => git_tracked_symlinks::validate_repository(root),
