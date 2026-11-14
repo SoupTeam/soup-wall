@@ -342,6 +342,7 @@ def overlap(client, log, report, base=100):
 
 
 def protected(stack, report, witness_type=RepositoryWitness):
+    classifier = getattr(stack, "classifier", {"path": str(DEFAULT_CLASSIFIER)})
     python = stack.install / "package/python/bin/python3.11"
     env = dict(stack.env, GIT_PYTHON_GIT_EXECUTABLE=str(stack.git), GIT_CONFIG_NOSYSTEM="1",
                GIT_CONFIG_GLOBAL="/dev/null", GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0")
@@ -374,7 +375,7 @@ def protected(stack, report, witness_type=RepositoryWitness):
     (stack.workspace / "notes.txt").write_text("synthetic changed text\n")
     before = BASE.snapshot(stack.workspace)
     env.update(AGENTFW_MCP_SERVER_PROFILE=str(stack.install / "profile.json"), AGENTFW_CLASSIFIER="rule-baseline",
-               AGENTFW_RULE_BASELINE=stack.classifier["path"], AGENTFW_CLASSIFIER_PYTHON=sys.executable)
+               AGENTFW_RULE_BASELINE=classifier["path"], AGENTFW_CLASSIFIER_PYTHON=sys.executable)
     command = [str(stack.binary), "mcp", "--native-admission", "--id", "sou68-git", "--", str(python),
                "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
     log_path = stack.root / "collector.log"
@@ -527,11 +528,12 @@ def write_sou97_evidence(stack, report, args):
 
 def startup_refusals(stack, report):
     """Missing isolation and unsupported repository machinery never spawn a server."""
+    classifier = getattr(stack, "classifier", {"path": str(DEFAULT_CLASSIFIER)})
     profile = json.loads((stack.install / "profile.json").read_text())
     command = [str(stack.binary), "mcp", "--native-admission", "--id", "sou68-startup", "--",
                profile["runtimePath"], "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
     env = dict(stack.env, AGENTFW_MCP_SERVER_PROFILE=str(stack.install / "profile.json"),
-               AGENTFW_CLASSIFIER="rule-baseline", AGENTFW_RULE_BASELINE=stack.classifier["path"],
+               AGENTFW_CLASSIFIER="rule-baseline", AGENTFW_RULE_BASELINE=classifier["path"],
                AGENTFW_CLASSIFIER_PYTHON=sys.executable)
     request = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
         "protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "sou68-refusal", "version": "1"}}}).encode() + b"\n"
