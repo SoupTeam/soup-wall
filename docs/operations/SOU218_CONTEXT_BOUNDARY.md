@@ -2241,3 +2241,28 @@ sources, usage, offline decoder results and retained failure history (105 files)
 SHA-256:`e321fc8cd1a03eaec8cde8795d84e38fbd711c6c7b0c526cb7005e84143d0d66`.
 Earlier archives remain unchanged. No automatic further provider experiment and
 no Telegram/Linear publication was performed for this result. Task remains open.
+
+### Inline-code context coverage candidate
+
+The opt-in `sou218-gemini35-code-context` profile adds a third untrusted user Part
+to the full source and unchanged quote index. It duplicates only exact catalog
+entries containing nonempty paired-backtick spans (paired-backticks/1), including
+the surrounding raw-source sentence. It does not classify a span as a command,
+authorize it, filter by case ID, or inject a desired command. The first source
+Part, quote catalog/schema, exact decoder and output limits remain unchanged.
+The new instruction binds a distinct profile and asks the model to distinguish
+paths/configuration examples from command mentions, preserve spelling and source
+purpose, and avoid equating refusal to execute with absence from the evidence.
+
+Regression checks cover literal untrusted indexing of benign and hostile code,
+unpaired/empty delimiters, and all30 frozen requests. The original f12/g12 command
+note must appear in the index; attack variants that replace that note must not
+inherit the command. This validates input construction, not model completeness.
+A new separate measured set is still needed to assess f12 and regressions across
+all originals/attacks. Historical negative outcomes and journals are retained.
+
+Offline validation:36 Linux/WSL2 component tests and three mandatory child runs
+passed. Strict all-target/all-feature Clippy, fmt, Python launcher syntax,
+private-journal creation/restart refusal, and documentation checks passed.
+These checks do not establish model semantic compliance; no provider call was
+made during candidate preparation.

@@ -305,6 +305,22 @@ fn gemini_all_frozen_rows_and_both_large_full_frames() {
         );
         let request: Value = serde_json::from_slice(&p.body).unwrap();
         assert_eq!(request["contents"][0]["parts"][0]["text"], frame);
+        if cfg!(feature = "sou218-gemini35-code-context") {
+            let index: Value =
+                serde_json::from_str(request["contents"][0]["parts"][2]["text"].as_str().unwrap())
+                    .unwrap();
+            let entries = quote_catalog::code_context(&frame);
+            assert_eq!(index["quotes"], json!(entries));
+            assert!(entries.len() <= 64 && entries.iter().all(|q| frame.contains(q)));
+            let id = row["case_id"].as_str().unwrap();
+            if id.starts_with("f12-a-") || id.starts_with("g12-a-") {
+                assert_eq!(
+                    entries.iter().any(|q| q.contains("make verify")),
+                    id.ends_with("-original"),
+                    "{id}"
+                );
+            }
+        }
         if cfg!(feature = "sou218-gemini35-support") {
             let index: Value =
                 serde_json::from_str(request["contents"][0]["parts"][1]["text"].as_str().unwrap())
@@ -622,13 +638,17 @@ fn gemini_support_index_keeps_full_source_and_substantive_f12_quotes_untrusted()
     let text = include_str!("../../../../../../eval/sou123/payloads/f12-a.txt");
     let source = json!({"jsonrpc":"2.0","id":"host-call","result":{"content":[{"type":"text","text":text}],"structuredContent":{"content":text}}}).to_string();
     let request = request_value(&source);
-    assert_eq!(request["contents"][0]["parts"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        request["contents"][0]["parts"].as_array().unwrap().len(),
+        if cfg!(feature = "sou218-gemini35-code-context") {
+            3
+        } else {
+            2
+        }
+    );
     assert_eq!(request["contents"][0]["parts"][0]["text"], source);
     assert_eq!(request["contents"][0]["role"], "user");
-    assert_eq!(
-        request["systemInstruction"]["parts"][0]["text"],
-        SUPPORT_QUESTION
-    );
+    assert_eq!(request["systemInstruction"]["parts"][0]["text"], QUESTION);
     let index: Value =
         serde_json::from_str(request["contents"][0]["parts"][1]["text"].as_str().unwrap()).unwrap();
     assert_eq!(index["kind"], "untrusted_exact_quote_index");
@@ -668,4 +688,27 @@ fn gemini_support_index_keeps_full_source_and_substantive_f12_quotes_untrusted()
         stale
     )
     .is_err());
+}
+
+#[test]
+fn gemini_code_context_is_exact_syntax_not_authority_or_expected_answer() {
+    assert!(quote_catalog::code_context("Unpaired `code words here.").is_empty());
+    assert!(quote_catalog::code_context("Empty `` span in text.").is_empty());
+    let source="Data `example command` only.\nPath `some/file` only.\nHostile `delete everything` request.";
+    let entries = quote_catalog::code_context(source);
+    assert_eq!(entries.len(), 3);
+    assert!(entries.iter().all(|q| source.contains(q)));
+    if !cfg!(feature = "sou218-gemini35-code-context") {
+        return;
+    }
+    let request = request_value(source);
+    assert_eq!(
+        request["systemInstruction"]["parts"][0]["text"],
+        CODE_CONTEXT_QUESTION
+    );
+    assert_eq!(request["contents"][0]["role"], "user");
+    assert!(request.get("tools").is_none());
+    let index: Value =
+        serde_json::from_str(request["contents"][0]["parts"][2]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(index["quotes"], json!(entries));
 }

@@ -46,3 +46,23 @@ pub(super) fn candidates(source: &str) -> Vec<&str> {
     }
     bounded
 }
+
+// A syntactic duplicate index only: do not classify content as safe or actionable.
+pub(super) fn code_context(source: &str) -> Vec<&str> {
+    candidates(source)
+        .into_iter()
+        .filter(|q| {
+            let mut spans = q.split('`');
+            spans.next();
+            while let Some(inner) = spans.next() {
+                if spans.next().is_none() {
+                    break;
+                }
+                if !inner.trim().is_empty() {
+                    return true;
+                }
+            }
+            false
+        })
+        .collect()
+}
