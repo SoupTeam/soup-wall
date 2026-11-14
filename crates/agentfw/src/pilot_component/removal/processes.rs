@@ -31,6 +31,14 @@ fn referenced(raw: &[u8], roots: &[PathBuf]) -> bool {
     })
 }
 pub(super) fn blockers(plan: &Plan, b: &mut Budget) -> Result<Vec<&'static str>> {
+    blockers_with_refusals(plan, b, &mut BTreeSet::new())
+}
+
+pub(super) fn blockers_with_refusals(
+    plan: &Plan,
+    b: &mut Budget,
+    refusals: &mut BTreeSet<Refusal>,
+) -> Result<Vec<&'static str>> {
     b.tick(0)?;
     let mut blockers = vec![];
     let roots = selected_roots(&plan.selected);
@@ -74,6 +82,7 @@ pub(super) fn blockers(plan: &Plan, b: &mut Budget) -> Result<Vec<&'static str>>
             b,
             unsafe { libc::geteuid() },
             std::process::id(),
+            refusals,
         )?
         .into_iter()
         .map(|code| {
@@ -105,6 +114,7 @@ pub(super) fn environment(b: &mut Budget) -> Result<Vec<&'static str>> {
         b,
         unsafe { libc::geteuid() },
         std::process::id(),
+        &mut BTreeSet::new(),
     )
 }
 
@@ -149,6 +159,15 @@ fn credentials(raw: &[u8]) -> Result<Vec<u32>> {
     Ok(values)
 }
 
+/// Closed vocabulary. No process identifiers, paths, or raw procfs bytes.
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, serde::Serialize)]
+pub(super) struct Refusal {
+    stage: &'static str,
+    ownership: &'static str,
+    reason: &'static str,
+    errno: Option<i32>,
+}
+
 fn scan(
     proc_root: &Path,
     roots: &[PathBuf],
@@ -156,8 +175,17 @@ fn scan(
     b: &mut Budget,
     uid: u32,
     own_pid: u32,
+    refusals: &mut BTreeSet<Refusal>,
 ) -> Result<Vec<&'static str>> {
-    scan_observed(proc_root, roots, objects, b, uid, own_pid, |_| {})
+    scan_observed(
+        proc_root,
+        roots,
+        objects,
+        b,
+        (uid, own_pid),
+        refusals,
+        |_| {},
+    )
 }
 
 fn scan_observed(
@@ -165,10 +193,11 @@ fn scan_observed(
     roots: &[PathBuf],
     objects: &BTreeSet<(u64, u64)>,
     b: &mut Budget,
-    uid: u32,
-    own_pid: u32,
+    caller: (u32, u32),
+    refusals: &mut BTreeSet<Refusal>,
     after_evidence: impl Fn(&Path),
 ) -> Result<Vec<&'static str>> {
+    let (uid, own_pid) = caller;
     let mut blockers = vec![];
     let mut count = 0;
     for entry in fs::read_dir(proc_root)? {
@@ -187,18 +216,30 @@ fn scan_observed(
         count += 1;
         ensure!(count <= 4096, "removal_process_inventory_cap");
         let p = entry.path();
+        let mut stage = "initial_metadata";
+        let mut ownership = "unknown";
         let inspected = (|| -> Result<bool> {
             let m = fs::metadata(&p)?;
+            stage = "initial_stat";
             let before = bounded(&p.join("stat"), 8192, b)?;
             let (start, state) = process_identity(&before, pid)?;
+            stage = "initial_credentials";
             let before_uids = credentials(&bounded(&p.join("status"), 16384, b)?)?;
             let owned = before_uids.contains(&uid) || m.uid() == uid;
+            ownership = if before_uids == [uid; 4] {
+                "owned"
+            } else if owned {
+                "mixed"
+            } else {
+                "other"
+            };
             ensure!(
                 !owned || before_uids == [uid; 4],
                 "process_identity_inconsistent"
             );
             if owned && state != b"Z" {
                 for leaf in ["cwd", "exe", "root"] {
+                    stage = leaf;
                     ensure!(b.read_limit(8192)? > 8192, "removal_read_cap");
                     let path = fs::read_link(p.join(leaf))?;
                     b.tick(path.as_os_str().len())?;
@@ -210,11 +251,13 @@ fn scan_observed(
                     }
                 }
                 for leaf in ["cmdline", "environ"] {
+                    stage = leaf;
                     let raw = bounded(&p.join(leaf), 1024 * 1024, b)?;
                     if referenced(&raw, roots) {
                         return Ok(true);
                     }
                 }
+                stage = "maps";
                 let raw = bounded(&p.join("maps"), 1024 * 1024, b)?;
                 for line in std::str::from_utf8(&raw)?.lines() {
                     let fields = line.split_whitespace().collect::<Vec<_>>();
@@ -243,6 +286,7 @@ fn scan_observed(
                         }
                     }
                 }
+                stage = "fd";
                 let mut fds = 0;
                 for fd in fs::read_dir(p.join("fd"))? {
                     fds += 1;
@@ -266,12 +310,16 @@ fn scan_observed(
                 }
             }
             after_evidence(&p);
+            stage = "closing_stat";
             let after = bounded(&p.join("stat"), 8192, b)?;
+            stage = "closing_metadata";
             let after_meta = fs::metadata(&p)?;
+            stage = "closing_credentials";
             ensure!(
                 before_uids == credentials(&bounded(&p.join("status"), 16384, b)?)?,
                 "process_identity_inconsistent"
             );
+            stage = "closing_identity";
             ensure!(
                 start == process_identity(&after, pid)?.0
                     && (state != b"Z" || process_identity(&after, pid)?.1 == b"Z")
@@ -300,6 +348,28 @@ fn scan_observed(
                     } else {
                         "process_evidence_unavailable_or_inconsistent"
                     };
+                    let reason = match error
+                        .downcast_ref::<std::io::Error>()
+                        .map(std::io::Error::kind)
+                    {
+                        Some(std::io::ErrorKind::PermissionDenied) => "permission_denied",
+                        Some(std::io::ErrorKind::NotFound) => "missing_record",
+                        Some(_) => "io_error",
+                        None => match error.to_string().as_str() {
+                            "removal_read_cap" => "read_budget",
+                            "removal_process_inventory_cap" => "inventory_bound",
+                            "process_identity_inconsistent" => "identity_inconsistent",
+                            _ => "unreadable_record",
+                        },
+                    };
+                    refusals.insert(Refusal {
+                        stage,
+                        ownership,
+                        reason,
+                        errno: error
+                            .downcast_ref::<std::io::Error>()
+                            .and_then(std::io::Error::raw_os_error),
+                    });
                     blockers.push(code);
                 }
             }
@@ -345,6 +415,7 @@ mod tests {
             &mut Budget::new(),
             unsafe { libc::geteuid() },
             99,
+            &mut BTreeSet::new(),
         )
         .unwrap()
     }
@@ -358,8 +429,8 @@ mod tests {
                 &[],
                 &BTreeSet::new(),
                 &mut Budget::new(),
-                unsafe { libc::geteuid() },
-                99,
+                (unsafe { libc::geteuid() }, 99),
+                &mut BTreeSet::new(),
                 |p| fs::write(p.join("stat"), record(41, 101, "S")).unwrap(),
             )
             .unwrap();
@@ -377,8 +448,8 @@ mod tests {
             &[],
             &BTreeSet::new(),
             &mut Budget::new(),
-            unsafe { libc::geteuid() },
-            99,
+            (unsafe { libc::geteuid() }, 99),
+            &mut BTreeSet::new(),
             |p| fs::remove_dir_all(p).unwrap(),
         )
         .unwrap();
@@ -400,6 +471,7 @@ mod tests {
             &mut Budget::new(),
             unsafe { libc::geteuid() },
             99,
+            &mut BTreeSet::new(),
         )
         .unwrap();
         assert_eq!(rows, ["live_process_references_selected_scope"]);
@@ -414,6 +486,23 @@ mod tests {
             fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
         }
         fs::write(path, vec![b'x'; 1024 * 1024 + 1]).unwrap();
-        assert!(!observe(root.path()).is_empty());
+        let mut refusals = BTreeSet::new();
+        let rows = scan(
+            root.path(),
+            &[],
+            &BTreeSet::new(),
+            &mut Budget::new(),
+            unsafe { libc::geteuid() },
+            99,
+            &mut refusals,
+        )
+        .unwrap();
+        assert_eq!(rows, ["process_evidence_unavailable_or_inconsistent"]);
+        assert_eq!(
+            serde_json::to_value(refusals).unwrap(),
+            serde_json::json!([{
+                "stage": "environ", "ownership": "owned", "reason": "inventory_bound", "errno": null
+            }])
+        );
     }
 }

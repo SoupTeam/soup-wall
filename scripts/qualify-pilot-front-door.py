@@ -86,14 +86,22 @@ class FrontDoor:
                 words.append("--allow-download")
         return words + [str(word) for word in extra]
 
-    def call(self, command, *extra, inputs=True, trace=None, env=None, timeout=900, prefix=None, project_roots=True):
+    def call(self, command, *extra, inputs=True, trace=None, env=None, timeout=900, prefix=None,
+             project_roots=True, observe=None):
         words = self.words(command, *extra, inputs=inputs, prefix=prefix, project_roots=project_roots)
         if trace is not None:
             words = [str(self.args.strace), "-f", "-qq", "-s", "256", "-e", "trace=execve,connect", "-o", str(trace), *words]
         result = subprocess.run(words, cwd=self.cwd, env=env or self.env, stdin=subprocess.DEVNULL,
                                 capture_output=True, timeout=timeout)
         lines = [line for line in result.stdout.decode("utf-8", "replace").splitlines() if line.strip()]
-        value = json.loads(lines[-1]) if lines else {}
+        try:
+            value = json.loads(lines[-1]) if lines else {}
+        except ValueError:
+            if observe is not None:
+                observe(result, {})
+            raise
+        if observe is not None and (result.returncode != 0 or value.get("status") in ("failed", "refused", "blocked")):
+            observe(result, value)
         return result.returncode, value, result.stderr.decode("utf-8", "replace")
 
 
@@ -141,7 +149,7 @@ PROVIDER_TRACE_STRING_BYTES = 131072  # Linux MAX_ARG_STRLEN, including NUL.
 
 def run_case(args, door, report, label, proposals, hold=False, cancel=None,
              provider_setup=None, provider_trace=None, model=None, close_model=True, after_useful=None, diagnostic_writes=False,
-             trace_events="execve,execveat", run_flags=()):
+             trace_events="execve,execveat", run_flags=(), cleanup_evidence=None):
     """One protected run through `pilot.py run` with the owned scripted provider."""
     model = model if model is not None else BASE.DEMO.ScriptedModel([])
     offered, live = set(), {}
@@ -212,6 +220,8 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
             os.killpg(process.pid, cancel)
         stdout, stderr = process.communicate(timeout=240)
         cleanup = witness.finish()
+        if cleanup_evidence is not None:
+            cleanup_evidence.update(cleanup)
     finally:
         if close_model:
             model.close()

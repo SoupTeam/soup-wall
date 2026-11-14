@@ -5,8 +5,9 @@
 > Implemented: the input contract, comparability, per-case input binding, completeness,
 > paired transitions, missing-outcome bounds, [family-aware uncertainty](#family-aware-uncertainty),
 > supplementary unknown outcomes, descriptive latency, CSV/Markdown output, controls and a
-> reproducible [evidence bundle](evidence/sou153/README.md). No verified two-revision public
-> comparison exists yet; see [remaining work](#remaining-work).
+> reproducible [evidence bundle](evidence/sou153/README.md). The
+> [two-revision public scripted run](evidence/sou153-public-runtime/README.md)
+> has conditional comparability. See the [remaining input binding](#remaining-work).
 
 ## Approved scope (DEC-SOU153-20261027)
 
@@ -178,10 +179,23 @@ The comparator derives each case's `case_input_sha256` from these parts:
 Expected labels still come from the plan; the manifest can only confirm them.
 
 **What remains trusted.** The run's inventory hash is the producer's own runtime record.
+**Project development annotation.** Optional `--project-cases` accepts a
+versioned, comparator-pinned annotation for an exact public development
+pair. It binds both original report and plan hashes, producer SHA-256 and
+source revisions, the original upstream bundle, and its version and
+inventory. Every compared case must match the two frozen plans, expected
+label and injection hash. The user task, environment and attacked case
+evaluator references must hash to the supplied inventoried source. The
+annotation cannot be combined with an upstream case manifest or
+`--families`. The reported family origin is `bound_by_project_manifest`
+with explicit AI-assisted provenance. The historical producers do not
+claim these families. This route accepts neither an arbitrary annotation
+nor a fresh-evaluation set.
+
 The comparator verifies input identity, not execution. Genuine upstream AgentDojo ships no
 case manifest, so its case link stays unverified.
 
-**Public examples.** The only public matched/1 reports are the SOU-36 controlled plan with
+**Historical public examples.** The SOU-36 controlled plan retains
 its development and fresh runs. These are **scripted fixture runs, not live AgentDojo
 runs**: the production `run_live` path with a scripted loopback model, a neutral test
 suite and a test policy. They come from one source revision, have no source bundle, and
@@ -193,8 +207,8 @@ comparison:
 - development vs fresh evaluation, which also reports `plan_set_mismatch` and
   `run_settings_mismatch`.
 
-The [evidence README](evidence/sou153/README.md#public-report-inventory) lists every public
-AgentDojo report and why none forms a verified two-revision pair.
+The [original inventory](evidence/sou153/README.md#public-report-inventory) records the
+reports available at comparator acceptance. The [later scripted workspace run](evidence/sou153-public-runtime/README.md) exercises the original producers.
 
 ## Completeness and outcomes
 
@@ -469,20 +483,14 @@ consistently on both sides.
 
 ## Remaining work
 
-- **Two-revision public comparison (open, for TL review).** The original SOU-153
-  deliverables are implemented. The additional requirement for an actual two-revision,
-  source-bound comparison with frozen families is not met, and stays subject to TL
-  acceptance. No verified pair of matched/1 reports from two source revisions exists in
-  public evidence. For the strongest candidate pair the evidence is missing; this is not
-  a comparator-produced result. Only one public
-  revision has matched/1 reports; the others have schema-1 test reports without per-case
-  outcomes. No public run has a source bundle, case manifest or frozen semantic families.
-  A real comparison needs one recorded matched/1 run per revision. Because a plan freezes
-  one candidate identity, each run needs its own frozen plan with identical cases.
-  Converting legacy reports is not a substitute. On the committed workspace development
-  set, even such runs could give no interval, as explained under [grouping](#grouping).
-  The [two-revision availability assessment](evidence/sou153/README.md#two-revision-availability-assessment)
-  records what was verified for the strongest candidate pair.
+- **Two-revision public comparison (open for full input binding).** The
+  [scripted workspace run](evidence/sou153-public-runtime/README.md) produced
+  original matched/1 reports on two exact revisions, with 16 paired-evaluable
+  units. The comparator verifies the pins it can check and reports two gaps:
+  the source lacks an independently inventoried per-case binding and the producer
+  supplies no confirmed semantic families. The
+  [original availability assessment](evidence/sou153/README.md#two-revision-availability-assessment)
+  records the state at comparator acceptance.
 - **Coverage.** The approved constants are fixed, but the limits under
   [family-aware uncertainty](#family-aware-uncertainty) still apply. Intervals just above
   the minimum are optimistic.

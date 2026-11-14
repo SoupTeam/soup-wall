@@ -278,3 +278,53 @@ screens, inert HTML payloads and offline silence. The
 records the actual source selection, controls and screenshots. These checks
 validate the report tool; they do not constitute platform, model or product
 acceptance.
+
+## Fresh installed-pilot custody
+
+On native Ubuntu 24.04, run the existing owned scripted qualification with
+the exact SOU-119 inputs. Pass the generation's original `receipt.json` as
+`--source-build-receipt` to `qualify-installed-front-door.py`. This also
+applies to `--pilot-scope-only`. The clean-user entry point already requires
+this argument. The producer writes the original receipt and selection bytes
+under the run's private `custody/` directory. It also retains the specific
+observer source and bounded process, receiver, and dispatch observations.
+Keep this directory beside its original `report.json`. For the front-door
+and scope companions, use the producer's demo selection and pass the parent
+`report.json` through each companion's `--parent-report` option.
+
+The focused hosted workflows encrypt the new custody directory with the
+SOU-243 qualification recipient before artifact upload. The focused clean-user
+workflow also selects this recipient for new before/after process snapshots.
+Historical SOU-216 user-session artifacts keep their original recipient. On an authorized
+operator host, decrypt the CMS payload in a private directory, inspect the
+archive member names and extract the `custody/` directory beside the original
+report. Preserve original report and companion paths and SHA-256 digests.
+A scope run records distinct primary and demo selections. A clean-user run
+records both project selections and the walkthrough selection. The Ask
+invocation reuses selected executable inputs and retains its own generated
+policy and report.
+
+Use the existing offline report command with a reviewed private index for
+the executed source. Create a candidate capability and integrated evidence
+row with the report and companion hashes. Copy the measured component
+archive, policy, runtime, registry and server digests into the new row.
+Registry and server digests are ordered SHA-256 aggregates over the selected
+filesystem and Git registry and package-tree digests. See
+[`selected_identities` and `combine_identities`](../../scripts/pilot_evidence_custody.py)
+for the ordering. The capability keeps its per-run runtime digest null.
+Review this index from the exact producer checkout, which also supplies the
+observer sources for comparison.
+
+```sh
+python3 -B scripts/roadmap_support.py --source "$source" \
+  --evidence-dir "$evidence" --index "$reviewed_index" \
+  --roadmap docs/ROADMAP.md --output "$new_private_report"
+```
+
+The custody verifier rejects changed receipt bytes, foreign selections or
+companions, missing cleanup and calibration, and malformed or oversized
+files. A complete unsealed package can reach `pending-review` with all five
+identities pinned in the index. Sealed user-session provenance continues to
+require authorized review. Explicit operator decisions still bind separately
+to a candidate report hash. See the
+[focused custody controls](../../scripts/tests/test_pilot_evidence_custody.py).
