@@ -1319,7 +1319,15 @@ where
                                     Some(server_profile::PathRefusal::Spelling) => PATH_SPELLING_MESSAGE,
                                     None => "MCP arguments violate the selected input profile",
                                 };
-                                write(host, &error(request_id, -32602, message)).await?;
+                                let rejected = error(request_id, -32602, message);
+                                if crate::mcp::verified_git::supports_profile(format) {
+                                    diagnostic!("{}", json!({"event":"mcp_call_outcome","version":1,
+                                        "stage":"input_profile","request_sha256":sha(&raw),
+                                        "host_call_sha256":sha(canonical(request_id).to_string().as_bytes()),
+                                        "response_sha256":sha(&rejected),"accepted":false,
+                                        "authority":false}));
+                                }
+                                write(host, &rejected).await?;
                                 continue;
                             }
                         };

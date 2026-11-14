@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 import json
 import re
 import ast
@@ -46,8 +47,8 @@ def failure_boundaries(rows):
                 failures.add('original_tool_error')
         elif stage in ('call_admission', 'result_inspection') and row['released'] is False:
             failures.add(stage + '_refused')
-        elif stage == 'profile_validation' and row['accepted'] is False:
-            failures.add('profile_validation_refused')
+        elif stage in ('input_profile', 'profile_validation') and row['accepted'] is False:
+            failures.add(stage + '_refused')
         elif stage == 'host_delivery' and row['written'] is False:
             failures.add('host_delivery_failed')
     return sorted(failures)
@@ -110,7 +111,9 @@ def project(row):
         fields.add('written')
         if type(row.get('written')) is not bool:
             return None
-    elif row.get('stage') == 'profile_validation':
+    elif row.get('stage') in ('input_profile', 'profile_validation'):
+        if row['stage'] == 'input_profile':
+            fields.remove('response')
         fields.add('accepted')
         if type(row.get('accepted')) is not bool:
             return None
@@ -131,7 +134,7 @@ def project(row):
     for key in ('request_sha256', 'host_call_sha256', 'response_sha256'):
         if not isinstance(row[key], str) or not re.fullmatch('[0-9a-f]{64}', row[key]):
             return None
-    if row['stage'] == 'host_delivery':
+    if row['stage'] in ('host_delivery', 'input_profile'):
         return row
     if row['stage'] == 'call_admission' and row['response'] is None:
         return row
