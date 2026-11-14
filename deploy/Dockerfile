@@ -2,7 +2,7 @@
 # Keep the builder on the same Debian/glibc generation as the runtime image.
 # A floating Rust tag moved to a newer base and produced binaries
 # requiring GLIBC_2.38, which cannot start in bookworm-slim (GLIBC_2.36).
-FROM rust:1.98-bookworm AS build
+FROM rust:1.99-bookworm AS build
 WORKDIR /src
 COPY . .
 RUN cargo build --locked --release -p llm-firewall
