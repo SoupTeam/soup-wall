@@ -292,6 +292,10 @@ class ResponseClassification(unittest.TestCase):
         for message in routed:
             self.assertIn(f'"{message}"', source)
         found |= routed
+        runtime_root_messages = re.findall(
+            r'error\(\s*&call\.id,\s*-32602,\s*if filesystem_roots\.is_some\(\)\s*'
+            r'\{\s*"([^"]+)"\s*\}\s*else\s*\{\s*"([^"]+)"\s*\}\s*\)', source)
+        found |= {message for pair in runtime_root_messages for message in pair}
         admission = (ROOT / "crates/agentfw/src/mcp/admission.rs").read_text(encoding="utf-8")
         self.assertIn("error(&call.id, -32603, limit.message())", source)
         limit = admission[admission.index("impl DaemonSizeLimit"):]
