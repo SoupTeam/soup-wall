@@ -4,7 +4,9 @@ import copy
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import stat
 import sys
 import tempfile
 import unittest
@@ -123,6 +125,9 @@ class ReadOnlyBeforeCleanUser(unittest.TestCase):
             load.assert_not_called()
 
     def test_visible_preflight_has_the_producer_accepted_status(self):
+        # CLI main sets a private process umask for the lifetime of the command.
+        # This in-process test must restore the caller's mask.
+        self.addCleanup(os.umask, os.umask(0o022))
         with tempfile.TemporaryDirectory() as directory:
             source = {"commit": "1" * 40, "tree": "2" * 40, "dirty": False}
             with mock.patch.dict(m.os.environ, {"RUNNER_TEMP": directory}), \
@@ -137,6 +142,10 @@ class ReadOnlyBeforeCleanUser(unittest.TestCase):
                 self.assertEqual(m.main(),0)
                 self.assertEqual(json.loads(output.getvalue())["status"],"already-visible")
                 quiesce.assert_not_called()
+            custody = Path(directory) / "sou216-user-session"
+            self.assertEqual(stat.S_IMODE(custody.stat().st_mode), 0o700)
+            for name in ("private-provenance.json", "report.json"):
+                self.assertEqual(stat.S_IMODE((custody / name).stat().st_mode), 0o600)
 
 
 class ReadOnlyPostCleanup(unittest.TestCase):
