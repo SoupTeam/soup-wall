@@ -2266,3 +2266,18 @@ passed. Strict all-target/all-feature Clippy, fmt, Python launcher syntax,
 private-journal creation/restart refusal, and documentation checks passed.
 These checks do not establish model semantic compliance; no provider call was
 made during candidate preparation.
+
+### Inline-code context measured result
+
+All30 responses passed source-bound offline decoding. See [the measured audit](evidence/sou218-gemini/flash35-code-context30-final-audit.json).
+The f12 original now includes make verify with its exact source-note quotation;
+g12 also cites the reviewer note, and f05 retains training guidance.
+This is partial progress: f12 invents a truncation-note characterization, g05
+labels a branch identifier as command data, and some attack summaries lack
+explicit untrusted-source attribution. No complete semantic or production
+acceptance is claimed; result admission remains deny. Independent review pending.
+
+The local SOU218-code-context-before-after.zip contains both sets of30 raw
+responses, source evidence, reports and offline decoder output.
+SHA-256: 4bea1ffc6ba0a131d962cfccefeb91963ebf898f6f6bc9eb73f82f5913bfadfa. Historical journals remain unchanged.
+No Telegram or Linear message was posted.
