@@ -72,7 +72,11 @@ pub(super) fn oid(value: &str) -> anyhow::Result<String> {
 /// Strictly bounded loose-object decoding. The original server still performs
 /// the requested operation on its original arguments and returns original bytes.
 #[cfg(any(target_os = "linux", test))]
-pub(super) fn decode_object(expected: &str, compressed: &[u8]) -> anyhow::Result<Object> {
+pub(super) fn decode_object(
+    expected: &str,
+    compressed: &[u8],
+    prove_first_parent: bool,
+) -> anyhow::Result<Object> {
     oid(expected)?;
     ensure!(
         compressed.len() <= MAX_OBJECT_BYTES,
@@ -114,13 +118,9 @@ pub(super) fn decode_object(expected: &str, compressed: &[u8]) -> anyhow::Result
             let tree = oid(tree
                 .strip_prefix("tree ")
                 .context("Git commit tree invalid")?)?;
-            // Only the selected first-parent view consumes these facts. Keep
-            // the earlier file-revision profile's handling of commit payloads.
-            let parents = lines
-                .take_while(|line| line.starts_with(b"parent "))
-                .map(|line| oid(std::str::from_utf8(&line[7..])?))
-                .collect::<anyhow::Result<Vec<_>>>()
-                .ok();
+            let parents = prove_first_parent
+                .then(|| commit_parents(payload))
+                .flatten();
             Ok(Object::Commit { tree, parents })
         }
         "blob" => Ok(Object::Blob),
@@ -182,6 +182,37 @@ pub(super) fn decode_object(expected: &str, compressed: &[u8]) -> anyhow::Result
         }
         _ => Ok(Object::Unsupported),
     }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn commit_parents(payload: &[u8]) -> Option<Vec<String>> {
+    let end = payload.windows(2).position(|pair| pair == b"\n\n")?;
+    let mut headers = payload[..end]
+        .split(|byte| *byte == b'\n')
+        .skip(1)
+        .peekable();
+    let mut parents = Vec::new();
+    while let Some(line) = headers.next_if(|line| line.starts_with(b"parent ")) {
+        parents.push(oid(std::str::from_utf8(&line[7..]).ok()?).ok()?);
+    }
+    if commit_identity(headers.next()?, b"author ")
+        && commit_identity(headers.next()?, b"committer ")
+        && headers.all(|line| !line.starts_with(b"parent ") && !line.contains(&0))
+    {
+        Some(parents)
+    } else {
+        None
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn commit_identity(line: &[u8], prefix: &[u8]) -> bool {
+    line.strip_prefix(prefix).is_some_and(|identity| {
+        !identity.is_empty()
+            && !identity.contains(&0)
+            && identity.contains(&b'<')
+            && identity.contains(&b'>')
+    })
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -600,10 +631,13 @@ mod tests {
     #[test]
     fn loose_objects_require_hash_type_framing_and_bounded_inflation() {
         let (id, compressed) = object("blob", b"owned bytes");
-        assert_eq!(decode_object(&id, &compressed).unwrap(), Object::Blob);
-        assert!(decode_object(&"a".repeat(40), &compressed).is_err());
+        assert_eq!(
+            decode_object(&id, &compressed, false).unwrap(),
+            Object::Blob
+        );
+        assert!(decode_object(&"a".repeat(40), &compressed, false).is_err());
         let (id, compressed) = object("blob", &vec![b'x'; MAX_OBJECT_BYTES + 1]);
-        assert!(decode_object(&id, &compressed).is_err());
+        assert!(decode_object(&id, &compressed, false).is_err());
         for raw in [
             b"100644 file\0short".as_slice(),
             b"100644 ../escape\0aaaaaaaaaaaaaaaaaaaa",
@@ -611,7 +645,7 @@ mod tests {
             b"100644 file\0aaaaaaaaaaaaaaaaaaaa100644 file\0bbbbbbbbbbbbbbbbbbbb",
         ] {
             let (id, compressed) = object("tree", raw);
-            assert!(decode_object(&id, &compressed).is_err());
+            assert!(decode_object(&id, &compressed, false).is_err());
         }
     }
 }

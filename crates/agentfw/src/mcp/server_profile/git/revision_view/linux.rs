@@ -289,6 +289,7 @@ struct Capture {
     images: Vec<(PathBuf, File)>,
     objects: File,
     object_cache: BTreeMap<String, Object>,
+    prove_first_parent: bool,
     bytes: usize,
 }
 
@@ -388,7 +389,7 @@ impl Capture {
         let prefix = child(&self.objects, &id[..2], true)?;
         self.source.watch(&prefix)?;
         let bytes = self.read(child(&prefix, &id[2..], false)?, MAX_OBJECT_BYTES)?;
-        let object = decode_object(id, &bytes)?;
+        let object = decode_object(id, &bytes, self.prove_first_parent)?;
         self.image(
             Path::new(ROOT)
                 .join("objects")
@@ -536,6 +537,7 @@ impl View {
             images: Vec::new(),
             objects,
             object_cache: BTreeMap::new(),
+            prove_first_parent: first_parent,
             bytes: 0,
         };
         capture.directory(format!("{ROOT}/objects"))?;
@@ -900,8 +902,22 @@ mod tests {
             &format!("parent {first}\nparent malformed\n"),
             "bad merge",
         );
+        let invalid_commit = write_object(&git, "commit", format!("tree {tree}\n").as_bytes());
+        let invalid_parent = write_commit(
+            &git,
+            &tree,
+            &format!("parent {invalid_commit}\n"),
+            "invalid commit parent",
+        );
         let workspace = File::open(root.path()).unwrap();
-        for head in [root_commit, missing, malformed, wrong_kind, bad_merge] {
+        for head in [
+            root_commit,
+            missing,
+            malformed,
+            wrong_kind,
+            bad_merge,
+            invalid_parent,
+        ] {
             std::fs::write(&branch, format!("{head}\n")).unwrap();
             let view = View::capture_first_parent(&workspace).unwrap();
             assert!(view
