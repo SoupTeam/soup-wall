@@ -73,7 +73,7 @@ case "$phase" in
         run_as_user /usr/bin/git -C "$source" checkout -q --detach "$GITHUB_SHA"
         test "$(run_as_user /usr/bin/git -C "$source" rev-parse HEAD)" = "$GITHUB_SHA"
         test -z "$(run_as_user /usr/bin/git -C "$source" status --porcelain)"
-        run_as_user /usr/bin/python3.12 -I -B "$source/scripts/ci_pilot_user_session.py" --recipient sou243
+        run_as_user /usr/bin/python3.12 -I -B "$source/scripts/ci_pilot_user_session.py" --before-clean-user --recipient sou243
         ;;
     qualify)
         run_as_user /usr/bin/python3.12 -I -B "$source/scripts/qualify-installed-front-door.py" \

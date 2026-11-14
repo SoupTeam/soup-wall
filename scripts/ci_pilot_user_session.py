@@ -254,6 +254,8 @@ def main():
     operation = parser.add_mutually_exclusive_group()
     operation.add_argument('--quiesce', action='store_true')
     operation.add_argument('--after-cleanup', action='store_true', help='read-only snapshot after the installed-host attempt')
+    operation.add_argument('--before-clean-user', action='store_true',
+                           help='require readable evidence before an ordinary-user run, without session control')
     parser.add_argument('--recipient', choices=('sou216', 'sou243'), default='sou216',
                         help='pinned public certificate for this new snapshot')
     args = parser.parse_args()
@@ -276,9 +278,10 @@ def main():
             quiesce(report, private)
         else:
             report['after'] = H.process_observation()
-            require(not args.quiesce or not report['after']['unavailable'], 'session_visibility_unavailable')
+            require(not (args.quiesce or args.before_clean_user) or not report['after']['unavailable'],
+                    'session_visibility_unavailable')
             require(not args.after_cleanup or not report['after']['unavailable'], 'post_cleanup_process_visibility_unavailable')
-            report['status'] = 'observed' if not args.quiesce else 'already-visible'
+            report['status'] = 'already-visible' if args.quiesce or args.before_clean_user else 'observed'
         private['after'] = kernel_snapshot()
     except Exception as error:
         message = str(error)
