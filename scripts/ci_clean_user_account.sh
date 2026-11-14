@@ -39,12 +39,14 @@ test "$(id -G "$account")" = "$gid"
 if [[ "$phase" == setup ]]; then
     # The native workspace validator opens each ancestor read-only, including
     # this outer directory. All actual sources and evidence remain private.
-    sudo -n /usr/bin/install -d -m 0755 -o "$runner_uid" -g "$(id -g)" -- "$base"
+    sudo -n /usr/bin/install -d -m 0755 -o 0 -g 0 -- "$base"
     sudo -n /usr/bin/install -d -m 0700 -o "$uid" -g "$gid" -- "$owned" "$owned/home" "$evidence" "$inputs"
     # The runner can feed already selected bytes without granting the fixture
     # account access to its worktree, checkout credentials or other job files.
-    /usr/bin/git -C "$SOU216_RUNTIME_SOURCE" bundle create "$base/source.bundle" HEAD
-    sudo -n /usr/bin/chown "$uid:$gid" -- "$base/source.bundle"
+    bundle="$(mktemp "$RUNNER_TEMP/sw216-source.XXXXXX")"
+    trap 'rm -f -- "$bundle"' EXIT
+    /usr/bin/git -C "$SOU216_RUNTIME_SOURCE" bundle create "$bundle" HEAD
+    sudo -n /usr/bin/install -m 0400 -o "$uid" -g "$gid" -- "$bundle" "$inputs/source.bundle"
     sudo -n /usr/bin/install -m 0400 -o "$uid" -g "$gid" -- "$SOU216_SOURCE_RECEIPT" "$inputs/receipt.json"
     sudo -n /usr/bin/install -m 0400 -o "$uid" -g "$gid" -- "$RUNNER_TEMP/sou111-assets/node.tar.xz" "$inputs/node.tar.xz"
     sudo -n /usr/bin/install -m 0500 -o "$uid" -g "$gid" -- "$SOU119_AGENTFW" "$inputs/agentfw"
@@ -71,10 +73,32 @@ run_as_user() {
 case "$phase" in
     setup)
         run_as_user /usr/bin/git init -q "$source"
-        run_as_user /usr/bin/git -C "$source" fetch -q --no-tags -- "$base/source.bundle" HEAD
+        run_as_user /usr/bin/git -C "$source" fetch -q --no-tags -- "$inputs/source.bundle" HEAD
         run_as_user /usr/bin/git -C "$source" checkout -q --detach "$GITHUB_SHA"
         test "$(run_as_user /usr/bin/git -C "$source" rev-parse HEAD)" = "$GITHUB_SHA"
         test -z "$(run_as_user /usr/bin/git -C "$source" status --porcelain)"
+        run_as_user /usr/bin/python3.12 -I -B - "$source" "$inputs" "$SOU111_BWRAP" <<'CHECK'
+import os
+from pathlib import Path
+import sys
+
+source, inputs, bwrap = map(Path, sys.argv[1:])
+sys.path.insert(0, str(source / "scripts"))
+import pilot_update as update
+
+paths = (
+    source / "rule_baseline/rule_baseline.py", source / "scripts/pilot.py",
+    source / "scripts/pilot_maintenance_launch.py", bwrap, Path("/usr/bin/python3.12"),
+    *(inputs / name for name in ("agentfw", "git-launcher", "sandbox-tests", "git", "claude",
+                                 "receipt.json", "node.tar.xz")),
+)
+for path in paths:
+    update.read_file(path.resolve(strict=True), 512 * 1024 * 1024)
+    if path.name not in ("receipt.json", "node.tar.xz", "rule_baseline.py", "pilot.py",
+                         "pilot_maintenance_launch.py"):
+        assert os.access(path, os.X_OK), "selected runtime is not executable"
+print("Dedicated user verified source and runtime owner/mode with the product reader.")
+CHECK
         run_as_user /usr/bin/python3.12 -I -B "$source/scripts/ci_pilot_user_session.py" --before-clean-user --recipient sou243
         ;;
     qualify)
