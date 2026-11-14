@@ -50,6 +50,11 @@ def reference(api, git_driver, case, pair, native, env, workspace, work, log):
             api.V.require(client.process.returncode == 0 and not client.forced_cleanup
                           and client.process_witness.final["all_stopped"], "reference_cleanup_unverified")
         if data == expected:
+            # The generator sets false explicitly. The isolated protected fixture
+            # has no global/system config, so omitting the key keeps Git's false
+            # default without widening the accepted core configuration.
+            subprocess.run([str(native.git), "-C", str(workspace), "config", "--unset", "core.autocrlf"],
+                           env=env, capture_output=True, check=True, timeout=10)
             return protected_args, data.replace(api.GEN.REPO.encode(), api.SANDBOX_ROOT.encode())
         if pair["host"] != "padded" or len(data) == len(expected):
             break
@@ -171,6 +176,9 @@ def run_case(api, driver, outcome_driver, case, pair, native, observers, outside
         row.update(status="timeout", outcome="incomplete_timeout")
     except (OSError, ValueError, subprocess.SubprocessError) as failure:
         reason = str(failure)
+        terminal = api.V.events(logs / f"{case_id}.collector.private", "mcp_real_transport_failure")
+        if terminal:
+            row["transport_failure_observed"] = True
         row.update(status="incomplete", outcome="incomplete_witness",
                    error=reason if reason in SAFE_ERRORS else type(failure).__name__)
     finally:
@@ -281,7 +289,11 @@ def grade(api, report):
                  and report.get("daemon_stopped") is True and report.get("private_profile_removed") is True
                  and report.get("inputs_unchanged") is True)
     api.grade(report)
-    report["totals"].update(planned=len(CASE_IDS), attempted=len(rows), observed=len(complete),
+    report["totals"].update(not_dispatched=sum(row.get("dispatched") is False for row in rows),
+                            dispatch_unknown=sum(row.get("dispatched") is None for row in rows),
+                            useful_continuation_lost=sum(row.get("useful_continuation") is False for row in rows),
+                            useful_continuation_unknown=sum(row.get("useful_continuation") is None for row in rows),
+                            planned=len(CASE_IDS), attempted=len(rows), observed=len(complete),
                             not_attempted=len(CASE_IDS - set(ids)),
                             non_comparable=sum(row["status"] != "measured" for row in complete),
                             incomplete=sum(not row_complete(row) for row in rows),
@@ -320,7 +332,8 @@ def run(api, args):
               "source_before": before, "claim": "Owned original Git calls with calibrated synthetic effect witnesses.",
               "attempt_rules": {"protected_attempts_per_case": 1, "exchange_timeout_seconds": 35,
                                 "temporary_reference_size_calibration_max": 4,
-                                "repo_path": {"frozen": api.GEN.REPO, "protected": api.SANDBOX_ROOT}},
+                                "repo_path": {"frozen": api.GEN.REPO, "protected": api.SANDBOX_ROOT},
+                                "protected_fixture_core_autocrlf": "defaults_false_with_no_global_or_system_config"},
               "inventory": [{k: row[k] for k in ("case_id", "pair_id", "label", "tool", "arguments", "sha256")}
                             for row in selected]}
     api.V.write(output / "plan.json", report)
