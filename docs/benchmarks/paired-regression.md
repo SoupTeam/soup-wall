@@ -5,8 +5,9 @@
 > Implemented: the input contract, comparability, per-case input binding, completeness,
 > paired transitions, missing-outcome bounds, [family-aware uncertainty](#family-aware-uncertainty),
 > supplementary unknown outcomes, descriptive latency, CSV/Markdown output, controls and a
-> reproducible [evidence bundle](evidence/sou153/README.md). No verified two-revision public
-> comparison exists yet; see [remaining work](#remaining-work).
+> reproducible [evidence bundle](evidence/sou153/README.md). The
+> [two-revision public scripted run](evidence/sou153-public-runtime/README.md)
+> has conditional comparability. See the [remaining input binding](#remaining-work).
 
 ## Approved scope (DEC-SOU153-20261027)
 

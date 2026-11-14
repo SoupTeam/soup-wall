@@ -31,8 +31,12 @@ DEC-SOU153-20261028 remains open for the missing per-case and family binding.
 
 ## Replay
 
-With the retained `inputs.json` from the operator evidence bundle, use the
-unchanged comparator from the repository root:
+Recover `inputs.json` from the evidence bundle or regenerate it with the
+[loopback runner](../../../../scripts/benchmarks/run-public-agentdojo-pair.py). The
+runner requires the two clean checkouts named `baseline` and `candidate`, plus
+their adjacent `baseline-agentfw` and `candidate-agentfw` binaries built as
+recorded in the receipt. Its Python environment uses the pinned requirements
+from the candidate checkout. Run the unchanged comparator from the repository root:
 
 ```sh
 E=docs/benchmarks/evidence/sou153-public-runtime
@@ -44,4 +48,4 @@ python3 -B scripts/benchmarks/paired_regression.py \
 
 [Run receipt](run-receipt.json) binds the measured source/tree, toolchain,
 binary, policy, plans and reports. The run can be reproduced from the pinned
-public AgentDojo revision and the checkout pair with the [recorded loopback runner](../../../../scripts/benchmarks/run-public-agentdojo-pair.py). The published aggregate remains qualified by the gaps above.
+public AgentDojo revision and the checkout pair. The published aggregate remains qualified by the gaps above.
