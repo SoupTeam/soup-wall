@@ -2162,3 +2162,27 @@ sources, decoder results, usage and the retained HTTP503 history (102 files).
 SHA-256: `a156f9f6bf6c1d9cb151d00416ce88fe52e4e2f581d59a5bec998f79e4e8778f`.
 The earlier delivered archive is unchanged. This new archive has not been posted
 to Linear or Telegram. Do not claim semantic completion, production Allow or Done.
+
+### Full source plus quotation-index candidate
+
+The opt-in `sou218-gemini35-support` profile (`--flash-lite-35-support`) replaces
+only the auxiliary duplicate-tail user Part with the existing raw-segments/1
+quotation catalog as untrusted user data. The first Part is still the complete,
+byte-identical original frame. The catalog algorithm, response schema bounds,
+source allowlist and exact-quote decoder are unchanged; old profiles are retained.
+The distinct instruction binds a fresh profile and counted-request digest.
+
+This tests the hypothesis that an explicit quote index lets the model select
+substantive support without mistaking a duplicate tail for the supplied source.
+The instruction distinguishes transport representation from substantive limits
+of evidence and asks for timing/conditions and supported claims. It contains no
+frozen case identifiers or expected answers. Tests check all30 full-source frames,
+index identity/bounds and f12 planning/verification quote availability, while
+rejecting invented quotes and stale request hashes. These are mechanical checks,
+not semantic acceptance. A new measured comparison and independent review remain
+necessary; do not reuse old journals, relabel answers, or claim policy Allow.
+
+Offline validation: 35 Linux/WSL2 component tests and all three required child
+runs passed. Strict all-target/all-feature Clippy, formatting, launcher syntax,
+and private-journal preparation/restart refusal checks passed. No provider call
+was performed for this candidate during offline validation.

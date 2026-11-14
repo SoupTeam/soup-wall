@@ -15,6 +15,7 @@ sou218-gemini35-compact = ["sou218-gemini35-lite"]
 sou218-gemini35-catalog = ["sou218-gemini35-lite"]
 sou218-gemini35-coverage = ["sou218-gemini35-catalog"]
 sou218-gemini35-evidence = ["sou218-gemini35-coverage"]
+sou218-gemini35-support = ["sou218-gemini35-catalog"]
 
 [lib]
 name = "agentfw"
