@@ -2308,53 +2308,43 @@ jobs:
             ${{ runner.temp }}/installed-linked-worktrees.log
           if-no-files-found: warn
           retention-days: 30
-      - name: Quiesce an empty owned CI user session before pilot execution
+      - name: Prepare a dedicated ordinary user for installed pilot qualification
         if: github.event.inputs.installed_focus == 'clean-user'
         shell: bash
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          SOU216_CLEAN_USER_FOCUS: ${{ github.event.inputs.installed_focus }}
+          SOU216_NATIVE_PREPARATION: ${{ github.event.inputs.native_preparation_only }}
         run: |
           set -euo pipefail
-          python3 -I -B scripts/ci_pilot_user_session.py --quiesce --recipient sou243
+          export SOU216_SOURCE_RECEIPT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["receipt"])' "$RUNNER_TEMP/sou111-assets/source-first.json")"
+          bash scripts/ci_clean_user_account.sh setup
       - name: Qualify pinned installed pilot in a clean ordinary-user environment
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'clean-user' && github.event.inputs.native_preparation_only == 'true'
         shell: bash
         env:
-          SOU216_CI_USER_SESSION_REPORT: ${{ runner.temp }}/sou216-user-session/report.json
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          SOU216_CLEAN_USER_FOCUS: ${{ github.event.inputs.installed_focus }}
+          SOU216_NATIVE_PREPARATION: ${{ github.event.inputs.native_preparation_only }}
         run: |
           set -euo pipefail
-          asset="$RUNNER_TEMP/sou111-assets"
-          receipt="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["receipt"])' "$asset/source-first.json")"
-          python3 -B scripts/qualify-installed-front-door.py --run --clean-user-only \
-            --runtime-source "$SOU216_RUNTIME_SOURCE" --source-build-receipt "$receipt" \
-            --runtime-source-commit "$GITHUB_SHA" \
-            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou216-clean-user" \
-            --component-python /usr/bin/python3.12 --strace "$(command -v strace)" \
-            --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
-            --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
-            --sandbox-tests "$SOU119_SANDBOX_TESTS" --node-archive "$asset/node.tar.xz" \
-            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python /usr/bin/python3.12 --allow-download \
-            2>&1 | tee "$RUNNER_TEMP/sou216-clean-user.log"
+          bash scripts/ci_clean_user_account.sh qualify 2>&1 | tee "$RUNNER_TEMP/sou216-clean-user.log"
       - name: Retain private process provenance after the installed-host attempt
         if: always() && github.event.inputs.installed_focus == 'clean-user'
         shell: bash
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
-        run: python3 -I -B scripts/ci_pilot_user_session.py --after-cleanup --recipient sou243
-      - name: Seal sou216-clean-user installed pilot custody
+          SOU216_CLEAN_USER_FOCUS: ${{ github.event.inputs.installed_focus }}
+          SOU216_NATIVE_PREPARATION: ${{ github.event.inputs.native_preparation_only }}
+        run: bash scripts/ci_clean_user_account.sh after
+      - name: Seal and retain the selected original clean-user records
         if: always() && github.event.inputs.installed_focus == 'clean-user'
         shell: bash
-        run: |
-          set -euo pipefail
-          umask 077
-          output="$RUNNER_TEMP/sou216-clean-user"
-          if test -d "$output/custody"; then
-            cert=scripts/fixtures/sou243-custody-recipient.crt
-            test "$(sha256sum "$cert" | cut -d ' ' -f1)" = 5de07c5f15b1f7c15970769001e527aadacf91a32a826f840932c5cc379db5b2
-            tar -C "$output" -cf - custody | openssl cms -encrypt -binary -aes-256-gcm \
-              -out "$output/installed-custody.cms" -outform DER "$cert"
-          fi
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          SOU216_CLEAN_USER_FOCUS: ${{ github.event.inputs.installed_focus }}
+          SOU216_NATIVE_PREPARATION: ${{ github.event.inputs.native_preparation_only }}
+        run: bash scripts/ci_clean_user_account.sh export
       - name: Retain original clean-user outcomes including failed and incomplete attempts
         if: always() && github.event.inputs.installed_focus == 'clean-user'
         uses: actions/upload-artifact@v7

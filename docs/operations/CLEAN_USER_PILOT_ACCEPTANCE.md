@@ -149,8 +149,14 @@ For a newly reviewed integration candidate, pass
 source-build receipt for that exact commit. The current focused CI path derives
 this value from its dispatched commit, checks the driver checkout against that
 identity before cloning, and verifies the runtime source again after execution.
-Retain the new source, environment and result alongside its own report. The
-default runtime commit remains the historical SOU-216 product candidate used by
+Retain the new source, environment and result alongside its own report.
+The focused lane prepares a dedicated ordinary account on the disposable
+host. It passes the exact build receipt and selected executable bytes into
+that account and observes the real host process namespace. The runner's
+service and mixed-credential processes remain visible to the product. The
+workload runs with no added capabilities. The CI helper exports only the
+listed reports and encrypted custody after the attempt. The default
+runtime commit remains the historical SOU-216 product candidate used by
 the frozen reproduction below.
 
 Check out frozen driver `9ecc23806afc8bf22bd06dca8761c50edec6662f` in a clean
