@@ -442,13 +442,8 @@ impl Session {
         } else if now.duration_since(self.touched) >= TTL {
             return true;
         }
-        if self
-            .authority_expires_at_ms
+        self.authority_expires_at_ms
             .is_some_and(|exp| now_ms >= exp)
-        {
-            return true;
-        }
-        false
     }
 
     fn event_at(&self, seq: u64, kind: EventKind) -> AgentEvent {
