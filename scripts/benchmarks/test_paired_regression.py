@@ -937,14 +937,22 @@ class TwoRevisionAvailability(unittest.TestCase):
                     and value.get("schema_version") == protocol.RUN_SCHEMA and "plan_sha256" in value:
                 bound.append((path.relative_to(controls.REPO).as_posix(), value["plan_sha256"]))
         self.assertNotIn(self.PLAN_SHA256, [sha for _, sha in bound])
-        # Apart from the SOU-153 synthetic control inputs, the only matched/1 run reports are the
-        # SOU-36 controlled runs of one revision.
-        synthetic = "docs/benchmarks/evidence/sou153/inputs/"
-        self.assertTrue(any(name.startswith(synthetic) for name, _ in bound))
-        self.assertEqual(sorted(name for name, _ in bound if not name.startswith(synthetic)),
-                         ["docs/benchmarks/evidence/sou36/controlled/development-run.json",
-                          "docs/benchmarks/evidence/sou36/controlled/fresh-run.json"])
-        # Those runs are a scripted fixture, not live AgentDojo runs.
+        # The original frozen plan remains blocked. Both later public
+        # measurements retained their own exact revision-specific plans.
+        public_runtime = "docs/benchmarks/evidence/sou153-public-runtime/"
+        tracked = {name: sha for name, sha in bound if name.startswith(public_runtime)}
+        expected = {public_runtime + directory + side + "-run.json"
+                    for directory in ("", "task-specific/") for side in ("baseline", "candidate")}
+        self.assertEqual(set(tracked), expected)
+        workspace_cases = json.loads(self.PLAN.read_bytes())["sets"]["development"]["cases"]
+        for path, sha in tracked.items():
+            with self.subTest(path=path):
+                plan = controls.REPO / path.replace("-run.json", "-plan.json")
+                self.assertEqual(protocol.digest(plan.read_bytes()), sha)
+                value = json.loads(plan.read_bytes())
+                self.assertEqual(value["sets"]["development"]["cases"], workspace_cases)
+                self.assertEqual(value["access"]["model_access"]["kind"], "local-fixture")
+        # The earlier SOU-36 runs exercised the neutral fixture.
         fixture = json.loads((controls.PUBLIC / "plan.json").read_text(encoding="utf-8"))
         self.assertEqual((fixture["upstream"]["suite"], fixture["identities"]["model"]["model_id"],
                           fixture["access"]["model_access"]["kind"], fixture["identities"]["candidate"]["source_revision"]),
