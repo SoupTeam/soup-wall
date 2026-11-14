@@ -105,7 +105,7 @@ pub(super) fn bind(
                 )?;
                 let prepared = prepare(
                     &source.frame,
-                    "offline-inherited-response-check",
+                    &crate::token::generate(),
                     Instant::now() + std::time::Duration::from_secs(30),
                     preflight,
                 )?;

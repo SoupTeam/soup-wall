@@ -136,7 +136,7 @@ fn manual_gemini_saved_batch_decode() {
         assert_eq!(hash(&response), row["response_sha256"].as_str().unwrap());
         let p = prepare(
             source,
-            "offline-audit",
+            &crate::token::generate(),
             Instant::now() + std::time::Duration::from_secs(30),
             preflight_for(source),
         )
@@ -166,7 +166,7 @@ fn gemini_compact_prompt_is_separately_bound_and_keeps_raw_quote_validation() {
         });
     let mut f = preflight();
     f.counted_request_sha256 = hash(&serde_json::to_vec(&other).unwrap());
-    assert!(prepare(&p.source, "wrong-prompt-count", p.deadline, f).is_err());
+    assert!(prepare(&p.source, &crate::token::generate(), p.deadline, f).is_err());
 
     // JSON-decoded text is not a raw-frame quote. Do not silently re-escape
     // provider output to make a historical invalid response pass.
