@@ -54,11 +54,11 @@ rustc --version > "$proof/evidence/toolchain.txt"
 # No host kernel/AppArmor setting is changed. Compilation/tests run as the runner
 # UID in a read-only container with no external network and no capabilities.
 cat > "$proof/Dockerfile" <<'DOCKERFILE'
-FROM rust:1-bookworm
+FROM rust:1.99.1-bookworm@sha256:e6f2cff35d0f309acf8433b4f05878ed77092602c5065cc81801177da0bb3a9c
 RUN apt-get update && apt-get install --no-install-recommends -y python3 cmake bubblewrap && rm -rf /var/lib/apt/lists/*
 RUN rustup component add clippy rustfmt
-# The repository asks for stable. Link the image's installed toolchain under a
-# custom name so rustup never tries to refresh it inside the read-only container.
+# Link the pinned image toolchain under a custom name because rustup state
+# cannot be changed inside the read-only test container.
 RUN rustup toolchain link sou78 "$(rustc --print sysroot)"
 ENV RUSTUP_TOOLCHAIN=sou78
 DOCKERFILE
