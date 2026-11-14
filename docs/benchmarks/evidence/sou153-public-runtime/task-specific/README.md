@@ -65,18 +65,20 @@ report, and rechecks the upstream inventory after measurement. The
 current public checkout cannot supply that file at its pinned revision.
 A development-only manifest covers the 16 measured public cases. A
 plan-check without a selected set still checks coverage of every frozen set.
-A reviewed upstream revision containing that manifest, an explicit update to
-the producer's upstream pin, and two fresh matched runs are required for a
-fully bound comparator report. The historic pinned
-runs above keep their original bytes and attribution.
+The source-shipped manifest route would require a reviewed upstream
+revision containing that manifest, an explicit producer pin update and
+new matched runs. The original pinned runs retain their bytes and
+attribution. The project-pinned route below verifies this exact historical
+pair against the existing upstream inventory.
 
 The project also records an AI-assisted development annotation in
 [project-development-cases.json](project-development-cases.json). It is
 pinned by the comparator and tied to these exact original reports. It
 checks the immutable upstream inventory, each case and its source file
 hashes, the injection hashes, and both original plan, producer and report
-identities. The producers did not emit family labels. The outcomes and
-denominators are identical to the original comparison. The separate
+identities. The historical producers did not emit family labels. Matching
+hashes verify input identity. They do not attest execution or evaluator
+behavior. The outcomes and denominators match the original comparison. The separate
 [project-bound result](project-report.md) reports 16 comparable cases and
 insufficient clusters for each interval (1.28 effective clusters).
 
