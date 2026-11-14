@@ -402,7 +402,10 @@ def capture_mixed_process_credentials(output, report, condition, custody):
     if not any(row["ownership"] == "mixed" for row in condition.get("process_refusals", [])):
         return
     observer = load(DRIVER, "sou243_session_metadata", "ci_pilot_user_session.py")
-    snapshot = observer.kernel_snapshot()
+    def read_identity(pid):
+        return observer.raw_process(pid, observe_executable=True)
+
+    snapshot = observer.kernel_snapshot(reader=read_identity)
     uid = os.getuid()
     rows = {pid: row for pid, row in snapshot.items() if uid in row["uids"] and row["uids"] != [uid] * 4}
     ancestors = {}
@@ -412,11 +415,15 @@ def capture_mixed_process_credentials(output, report, condition, custody):
             if not parent or str(parent) in ancestors:
                 break
             try:
-                record = observer.raw_process(parent)
+                record = read_identity(parent)
             except (FileNotFoundError, ProcessLookupError):
                 break
             ancestors[str(parent)] = record
             parent = record["parent"]
+    for record in (*rows.values(), *ancestors.values()):
+        latest = read_identity(record["pid"])
+        for key in ("start_ticks", "parent", "uids", "executable"):
+            require(record[key] == latest[key], "mixed_process_identity_changed")
     require(len(rows) + len(ancestors) <= 64, "mixed_process_custody_bound")
     original = {"source": report["source_before"], "boot_identity_sha256": report["environment"]["boot_identity_sha256"],
                 "uid": uid, "authorization": False, "rows": rows, "ancestors": ancestors}

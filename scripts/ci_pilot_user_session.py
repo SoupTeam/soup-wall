@@ -48,7 +48,7 @@ def raw_bytes(path, cap=65536):
     return value
 
 
-def raw_process(pid):
+def raw_process(pid, *, observe_executable=False):
     path = Path('/proc') / str(pid)
     before = raw_bytes(path / 'stat', 8192).rsplit(b')', 1)[1].split()
     status = dict(line.split(b':', 1) for line in raw_bytes(path / 'status').splitlines() if b':' in line)
@@ -65,8 +65,18 @@ def raw_process(pid):
         try: value = str((path / 'ns' / kind).readlink())
         except OSError as error: value = {'errno': error.errno}
         result['namespaces'][kind] = value
+    if observe_executable:
+        try:
+            link = os.fsencode((path / 'exe').readlink())
+            executable = (path / 'exe').stat()
+            require(len(link) <= 8192, 'session_process_executable_bound')
+            result['executable'] = {'link_sha256': hashlib.sha256(link).hexdigest(),
+                'device': executable.st_dev, 'inode': executable.st_ino, 'mode': executable.st_mode,
+                'owner': executable.st_uid}
+        except OSError as error:
+            result['executable'] = {'errno': error.errno}
     after = raw_bytes(path / 'stat', 8192).rsplit(b')', 1)[1].split()
-    require(before[19] == after[19], 'session_process_identity_changed')
+    require(before[19] == after[19] and before[1] == after[1], 'session_process_identity_changed')
     return result
 
 
