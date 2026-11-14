@@ -453,3 +453,9 @@ the twelve frozen diff cases. With `--run` and the pinned offline runtime
 inputs, the report records original response, inspection, host delivery,
 continuation and effect witnesses. Benign result refusals remain false
 interruptions in the acceptance totals.
+
+Run `scripts/verify-sou244-git-first-parent.py` with the same pinned runtime
+binaries and `--expected-commit`. Supply `--python-archive` and `--wheelhouse`
+for offline runs or use `--allow-download` to resolve the reviewed installation
+pins. The standalone and reusable Linux Git jobs retain the report and logs
+under `sou244-first-parent` and fail unless all sixteen native controls complete.
