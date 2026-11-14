@@ -16,17 +16,17 @@ import stat
 import subprocess
 import sys
 
-ACCEPTED = '04efdf1d959599238a0a9a3eb42cbe26b3531b74'
+ACCEPTED = '69cea163935783f54ebfbc999ceca77bd5bfe11a'
 HOST_SHA = 'fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7'
 DOWNLOADS = {
-    'node': ('https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz',
-             '9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37', 'xz'),
-    'git': ('https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz',
-            '233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3', 'xz'),
+    'node': ('https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz',
+             'cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8', 'xz'),
+    'git': ('https://www.kernel.org/pub/software/scm/git/git-2.51.3.tar.xz',
+            '8e6ff1adf702c26e75de1846498d00575ff7e9919305b38b4e27c5514062b13d', 'xz'),
     'bwrap': ('https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz',
               '0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d', 'xz'),
-    'python': ('https://github.com/astral-sh/python-build-standalone/releases/download/20251014/cpython-3.11.14%2B20251014-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz',
-               '91ab434738647ab45d630aaa02e3808bb516239beeb52f7799c12a12d1557a38', 'gz'),
+    'python': ('https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.11.18%2B20261026-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz',
+               '17c4978a36c496dc53c08899ef8dad1ad2734f6325f08d6033a1e66419e0af26', 'gz'),
 }
 
 
@@ -38,6 +38,31 @@ def sha(path):
 def require(value, reason):
     if not value:
         raise RuntimeError(reason)
+
+
+def accepted_inputs(source, names, git):
+    """Return only accepted bytes after checking the entire candidate input set."""
+    accepted = {}
+    for name in names:
+        data = git('show', ACCEPTED + ':' + name)
+        require((source / name).read_bytes() == data, 'accepted_setup_input_changed')
+        accepted[name] = data
+    return accepted
+
+
+def stage_wheel_inputs(accepted, output):
+    """Use accepted snapshots even if candidate files later change."""
+    paths = {}
+    for role, name, source in (
+        ('helper', 'accepted-wheelhouse.py', 'scripts/pilot_wheelhouse.py'),
+        ('manifest', 'accepted-wheels.lock.json', 'profiles/mcp/git-readonly-v1/wheels.lock.json'),
+        ('requirements', 'accepted-git-requirements.lock', 'profiles/mcp/git-readonly-v1/requirements.lock'),
+    ):
+        path = output / name
+        with path.open('xb') as stream:
+            stream.write(accepted[source])
+        paths[role] = path
+    return paths
 
 
 def main():
@@ -119,7 +144,8 @@ def main():
                     'sandbox_tests': str(tests[0]), 'python': str(Path(sys.executable).resolve(strict=True))}
         for role, name in [('agentfw', 'agentfw'), ('git_launcher', 'agentfw-git-sandbox')]:
             require(sha(selected[role]) == first['binary_sha256'][name], 'native_binary_identity_changed')
-        # Guard only the exact data consumed by networked setup, not candidate code.
+        # Every networked setup input and the stdlib downloader must match
+        # accepted main before any accepted helper is copied or executed.
         guarded = [
             'profiles/mcp/filesystem-readonly-v1/package.json',
             'profiles/mcp/filesystem-readonly-v1/package-lock.json',
@@ -127,12 +153,14 @@ def main():
             'profiles/mcp/filesystem-readonly-v1/claude-host/package.json',
             'profiles/mcp/filesystem-readonly-v1/claude-host/package-lock.json',
             'profiles/mcp/git-readonly-v1/requirements.lock',
+            'profiles/mcp/git-readonly-v1/wheels.lock.json',
             'profiles/mcp/git-readonly-v1/upstream-identity.json',
             'scripts/ci_bwrap_userns.py',
+            'scripts/pilot_wheelhouse.py',
         ]
-        for name in guarded:
-            require((src / name).read_bytes() == git('show', ACCEPTED + ':' + name), 'accepted_setup_input_changed')
-        (out / 'accepted-ci-bwrap.py').write_bytes(git('show', ACCEPTED + ':scripts/ci_bwrap_userns.py'))
+        accepted = accepted_inputs(src, guarded, git)
+        (out / 'accepted-ci-bwrap.py').write_bytes(accepted['scripts/ci_bwrap_userns.py'])
+        wheel_inputs = stage_wheel_inputs(accepted, out)
         assets = out / 'assets'
         for name, (url, digest, compression) in DOWNLOADS.items():
             archive = assets / (name + '.tar.' + compression)
@@ -190,15 +218,11 @@ def main():
                 '--userconfig=' + str(user_npmrc), '--globalconfig=' + str(global_npmrc), '--cache', out / 'npm-cache',
                 '--prefix', directory], selected_env=node_env)
         python = assets / 'python/bin/python3.11'
-        run('cache-git-wheels', [python, '-I', '-m', 'pip', '--isolated', 'download', '--require-hashes',
-             '--only-binary=:all:', '--disable-pip-version-check', '--dest', out / 'wheelhouse',
-             '-r', src / 'profiles/mcp/git-readonly-v1/requirements.lock'])
-        requirements = (src / 'profiles/mcp/git-readonly-v1/requirements.lock').read_text().splitlines()
-        allowed = set(re.findall(r'--hash=sha256:([0-9a-f]{64})', '\n'.join(requirements)))
+        run('cache-git-wheels', [python, '-I', wheel_inputs['helper'],
+             '--manifest', wheel_inputs['manifest'],
+             '--requirements', wheel_inputs['requirements'],
+             '--destination', out / 'wheelhouse', '--allow-download'], timeout=300)
         wheels = list((out / 'wheelhouse').glob('*.whl'))
-        require(len(wheels) == len([row for row in requirements if row.strip()]) == 33,
-                'complete_pinned_wheelhouse_required')
-        require(all(sha(path) in allowed for path in wheels), 'wheelhouse_digest_unreviewed')
         selected.update(node_archive=str(assets / 'node.tar.xz'), python_archive=str(assets / 'python.tar.gz'),
                         node=str(assets / 'node/bin/node'), npm=str(assets / 'node/bin/npm'),
                         bwrap_source=str(assets / 'bwrap-build/bwrap'), git=str(assets / 'git/git'),

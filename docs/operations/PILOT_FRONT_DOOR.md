@@ -17,6 +17,22 @@ Each step keeps its own verification, receipts, transactions and failure codes.
 Supported platform: native Ubuntu 24.04 x86_64, as an ordinary (non-root) user.
 WSL and other platforms are not supported by this flow.
 
+## Frozen v1 scope
+
+Add `--scope linux-v1` to `preview` and `prepare` (and optionally to `run`) to select the frozen
+[v1 pilot scope](PILOT_V1_SCOPE.md). It is opt-in; without it behavior and reports are unchanged and
+`status` says `scope.state: unselected`. When selected, `--git-profile` other than `git-readonly-v1`,
+`--git-worktree-binding`, `--filesystem-roots-binding` and `--workspace-snapshot` refuse with
+`scope_excludes_capability` before any step, and a selection outside the scope refuses before every run.
+The scope grants nothing and certifies nothing.
+
+Before preparation, `pilot.py preflight --json` reports current setup,
+protected-run and removal prerequisites separately. Preview/prepare include the
+same bounded diagnosis; `--require-removal-eligible` makes removal prerequisites
+an explicit preparation requirement. See the
+[installed lifecycle preflight](PILOT_INSTALLED_FRONT_DOOR.md#read-only-lifecycle-preflight)
+for phase meanings, privacy, limits and unchanged removal rechecks.
+
 ## 1. Preview (no effects)
 
 Use a clean reviewed checkout and an absolute private prefix outside the
@@ -53,7 +69,7 @@ All runtime inputs are explicit; nothing is chosen from `PATH`.
 | --- | --- |
 | `--git PATH --bwrap PATH` | built by the native step into `PREFIX/native` (needs `--git-archive`/`--bwrap-archive` or `--allow-download`) |
 | `--agentfw --git-launcher --sandbox-tests` | built from this commit by the Agent step into `PREFIX/agent` (exact Rust 1.94.1, installed in advance; never auto-installed) |
-| `--node-archive TAR_XZ` or `--node --npm` | pinned Node 22.22.0 archive downloaded with `--allow-download` and digest-checked |
+| `--node-archive TAR_XZ` or `--node --npm` | pinned Node 22.23.5 archive downloaded with `--allow-download` and digest-checked |
 | `--claude PATH` | locked Claude Code 2.1.251 installed with `npm ci --ignore-scripts`, using only npm from the pinned Node archive this command verified (needs `--allow-download`) |
 | `--python PATH` | the interpreter that runs `pilot.py`, resolved and recorded |
 | `--python-archive --npm-cache --wheelhouse` | offline inputs; otherwise `--allow-download` |
@@ -121,6 +137,9 @@ python3 -B "$repo/scripts/pilot.py" status --prefix "$prefix"
 | `unknown` | state could not be read safely |
 | `not-configured` | nothing prepared under this prefix |
 
+`status` also reports `scope.state`, `scope.mode` (`enforce` only for the authenticated live case above; shadow is never
+protection) and `scope.qualification: unqualified`.
+
 A live run of another prefix, selection, policy or project root is counted as
 `unrelated_owned_runs` and never reported as protection for this prefix.
 The selection is shown as `configured`, `stale` (with the reason) or `missing`.
@@ -161,6 +180,9 @@ approval. `stop` revokes both collectors and stops the exact owned launcher; see
 | `pilot_cancelled`, `pilot_timeout` | the run stopped and cleaned up its own processes |
 | `owned_process_cleanup_failed` | follow the [storage recovery runbook](PILOT_STORAGE_RECOVERY.md) |
 | `missing_inputs` (prepare) | run `preview` and supply the listed items |
+| `scope_excludes_capability` | remove the excluded option listed in the preview's `scope.refused`, or prepare a separate prefix without `--scope` |
+| `scope_selection_nonconforming`, `scope_document_changed`, `scope_binding_changed` | the selection, descriptor or an accepted source no longer matches the v1 scope: use the reviewed commit and prepare again inside the scope |
+| `scope_not_selected` | `run --scope linux-v1` on a prefix prepared without it: prepare a new prefix with the scope |
 | a step name with its own reason (prepare) | see that step's guide; earlier selections are unchanged |
 
 ## Qualification

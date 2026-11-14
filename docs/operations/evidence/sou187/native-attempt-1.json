@@ -1,0 +1,714 @@
+{
+  "agentfw_sha256": "2bfa9934a722f1c086866807996a69dc9783b464375cdb75e0e33487e95179cd",
+  "all_owned_stopped": true,
+  "cases": [
+    {
+      "attempted": true,
+      "id": "installed-closure",
+      "installed_outside_checkout": true,
+      "status": "passed"
+    },
+    {
+      "actual_native_approvals": 1,
+      "application_receipt_sha256": "90612e898c0ed0d48053a2d353114566d4d98cbc911f8dc90927f2b0d42bce97",
+      "apply_readback": true,
+      "attempted": true,
+      "genuine_host_readback": true,
+      "id": "genuine-create-apply-revert",
+      "independent_cleanup": true,
+      "inspect_observations": [
+        {
+          "binding_sha256": "7510c5c19202548900605746305bfe2d2d0cd305381422aaaef4159961f152d8",
+          "exit_code": 0,
+          "pending_id_sha256": "cc793e993f1d8d48da8d91bae7fb0700277fd620b9124c891b2efddf79ef8c17",
+          "raw_retained": false,
+          "reason": "ok",
+          "redaction": "passed",
+          "stderr_bytes": 0,
+          "stdout_bytes": 1119,
+          "stdout_sha256": "507512ac5e85d7fc09c68a710aae1b471cfa0c7140d09f428aba3ee6a49ec094",
+          "verdict": "ask"
+        }
+      ],
+      "last_operator": {
+        "exit_code": 0,
+        "raw_retained": false,
+        "reason": "ok",
+        "stderr_bytes": 0,
+        "stdout_bytes": 369,
+        "stdout_sha256": "39a896f80361baed4c195d5ceeab91b86ea12984017706debfe47d254d92308f"
+      },
+      "plan_sha256": "4d6498de9ce6c6a418a14f3c9f378e905c83fd3d708840400fe723d3b3b87261",
+      "provider_requests": 4,
+      "revert_readback": true,
+      "revert_receipt_sha256": "29f197a9f2dee318d8680d6206c23ba55def5b73d5b998e95fa8fa6354a4fb7d",
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "actual_native_approvals": 1,
+      "application_receipt_sha256": "495274448a4d7ab5f626977a11f019e8ebcdc807833842b07357c27eaf2e2603",
+      "apply_readback": true,
+      "attempted": true,
+      "genuine_host_readback": true,
+      "id": "genuine-replace-apply-revert",
+      "independent_cleanup": true,
+      "inspect_observations": [
+        {
+          "binding_sha256": "f18af29e991cfcb9f91c421f85553ae3eb6ea32ee635008daeed47ef1228a15f",
+          "exit_code": 0,
+          "pending_id_sha256": "7c11bdf62bfa5b75cdc0e7a1ea262a098e3eed41a0656b9e9f236df7005ffc4b",
+          "raw_retained": false,
+          "reason": "ok",
+          "redaction": "passed",
+          "stderr_bytes": 0,
+          "stdout_bytes": 1569,
+          "stdout_sha256": "4ff44eed50edbabd3b005daec3dff0e4773c1c8b2417b02b0089d1e62eb523d8",
+          "verdict": "ask"
+        }
+      ],
+      "last_operator": {
+        "exit_code": 0,
+        "raw_retained": false,
+        "reason": "ok",
+        "stderr_bytes": 0,
+        "stdout_bytes": 369,
+        "stdout_sha256": "319690b32f74ad4017c1732d7d4ce55dcfe79a30c55f590c50893a817deb68da"
+      },
+      "plan_sha256": "b48b6c59999adafddea52580041bc6fc3aafc4dd877ecaae248f4e439fbc532d",
+      "provider_requests": 4,
+      "revert_readback": true,
+      "revert_receipt_sha256": "51736075a4f69908f77f42887384ec2b72956ac8be50958d02b2a8913dc2b61b",
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "all_inputs_unchanged": true,
+      "attempted": true,
+      "id": "read-only-preview",
+      "last_operator": {
+        "exit_code": 0,
+        "raw_retained": false,
+        "reason": "ok",
+        "stderr_bytes": 0,
+        "stdout_bytes": 2997,
+        "stdout_sha256": "5d49a3703918d507b7139ffdba1c6768ba830a4556c8296e41488793c964c58d"
+      },
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "missing-consents",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_explicit_operator_consent_required",
+        "stderr_bytes": 73,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "refused_forms": 3,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "stale-confirmation",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_stale_confirmation",
+        "stderr_bytes": 57,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "changed-target",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_stale_confirmation",
+        "stderr_bytes": 57,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "changed-output",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_stale_confirmation",
+        "stderr_bytes": 57,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "duplicate-application",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_journal_exists_no_retry",
+        "stderr_bytes": 62,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "refused": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "changed_and_restored_bytes_refused": true,
+      "id": "later-user-edit",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_target_changed",
+        "stderr_bytes": 53,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "stale-revert",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_target_changed",
+        "stderr_bytes": 53,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "refused": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "backup-damage",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_backup_changed",
+        "stderr_bytes": 53,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "refused": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "journal-damage",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "selected_json_malformed_or_duplicate",
+        "stderr_bytes": 64,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "refused": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "target-symlink",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "selected_state_type_owner_or_bound_unsafe",
+        "stderr_bytes": 69,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "target-hardlink",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "selected_state_type_owner_or_bound_unsafe",
+        "stderr_bytes": 69,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "target-fifo",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "selected_state_type_owner_or_bound_unsafe",
+        "stderr_bytes": 69,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "target-oversize",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "selected_state_type_owner_or_bound_unsafe",
+        "stderr_bytes": 69,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "target-mode",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "selected_state_type_owner_or_bound_unsafe",
+        "stderr_bytes": 69,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "output-symlink",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "selected_state_type_owner_or_bound_unsafe",
+        "stderr_bytes": 69,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "output-hardlink",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "selected_state_type_owner_or_bound_unsafe",
+        "stderr_bytes": 69,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "output-fifo",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "selected_state_type_owner_or_bound_unsafe",
+        "stderr_bytes": 69,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "missing-output",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_text_output_required",
+        "stderr_bytes": 59,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "run-profile-change",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "selected_state_schema_invalid",
+        "stderr_bytes": 57,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "foreign-run",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "unsafe_or_unavailable_selected_state",
+        "stderr_bytes": 64,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "source-plan-overlap",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_protected_overlap",
+        "stderr_bytes": 56,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "output-overlap",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_protected_overlap",
+        "stderr_bytes": 56,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "journal-overlap",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_protected_overlap",
+        "stderr_bytes": 56,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "parent-redirection",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "selected_state_unavailable_or_unsafe",
+        "stderr_bytes": 64,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "root-substitution",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_stale_confirmation",
+        "stderr_bytes": 57,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_publication": true,
+      "refused": true,
+      "sentinel_preserved": true,
+      "source_unchanged": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "unknown-record-fields",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_record_schema",
+        "stderr_bytes": 52,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "refused": true,
+      "status": "passed"
+    },
+    {
+      "actual_live_owner": true,
+      "attempted": true,
+      "id": "active-run",
+      "inspect_observations": [
+        {
+          "binding_sha256": "6ed11c6248e5e7f842140d1e7abc3d3ac576b8256104b8a74d4bd6b37633940d",
+          "exit_code": 0,
+          "pending_id_sha256": "d070f20f1286eb19da01845a965e6777e5601226333b375e84b53e04b1361bca",
+          "raw_retained": false,
+          "reason": "ok",
+          "redaction": "passed",
+          "stderr_bytes": 0,
+          "stdout_bytes": 1119,
+          "stdout_sha256": "0e694293663eb0c8be56a70b4b7c96c91f315c8bcacc033e366b608ce1f86028",
+          "verdict": "ask"
+        }
+      ],
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_review_record_missing",
+        "stderr_bytes": 54,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "refused": true,
+      "status": "passed"
+    },
+    {
+      "actual_syscall_fault": true,
+      "attempted": true,
+      "evidence_retained": true,
+      "fault_exit": -9,
+      "id": "before-publication",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_no_complete_receipt",
+        "stderr_bytes": 58,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_retry": true,
+      "original_output_preserved": true,
+      "recovery_indeterminate": true,
+      "status": "passed",
+      "target_verified": true
+    },
+    {
+      "actual_syscall_fault": true,
+      "attempted": true,
+      "evidence_retained": true,
+      "fault_exit": -9,
+      "id": "after-publication",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_no_complete_receipt",
+        "stderr_bytes": 58,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_retry": true,
+      "original_output_preserved": true,
+      "recovery_indeterminate": true,
+      "status": "passed",
+      "target_verified": true
+    },
+    {
+      "actual_syscall_fault": true,
+      "attempted": true,
+      "evidence_retained": true,
+      "fault_exit": 1,
+      "id": "target-directory-sync",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_interrupted_or_uncertain",
+        "stderr_bytes": 63,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_retry": true,
+      "original_output_preserved": true,
+      "recovery_indeterminate": true,
+      "status": "passed",
+      "target_verified": true
+    },
+    {
+      "actual_syscall_fault": true,
+      "attempted": true,
+      "evidence_retained": true,
+      "fault_exit": 1,
+      "id": "receipt-sync",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_interrupted_or_uncertain",
+        "stderr_bytes": 63,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_retry": true,
+      "original_output_preserved": true,
+      "recovery_indeterminate": true,
+      "status": "passed",
+      "target_verified": true
+    },
+    {
+      "actual_syscall_fault": true,
+      "attempted": true,
+      "evidence_retained": true,
+      "fault_exit": -9,
+      "id": "after-receipt-sync",
+      "last_operator": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "edit_apply_successful_command_ack_required",
+        "stderr_bytes": 70,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "no_retry": true,
+      "original_output_preserved": true,
+      "recovery_indeterminate": true,
+      "status": "passed",
+      "target_verified": true
+    }
+  ],
+  "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+  "component_sha256": "0ddcea85780244fa6398f76ace39c17429cddf77838b91d77ab42f3b7dcbe6d9",
+  "expected": [
+    "installed-closure",
+    "genuine-create-apply-revert",
+    "genuine-replace-apply-revert",
+    "read-only-preview",
+    "missing-consents",
+    "stale-confirmation",
+    "changed-target",
+    "changed-output",
+    "duplicate-application",
+    "later-user-edit",
+    "stale-revert",
+    "backup-damage",
+    "journal-damage",
+    "target-symlink",
+    "target-hardlink",
+    "target-fifo",
+    "target-oversize",
+    "target-mode",
+    "output-symlink",
+    "output-hardlink",
+    "output-fifo",
+    "missing-output",
+    "run-profile-change",
+    "foreign-run",
+    "source-plan-overlap",
+    "output-overlap",
+    "journal-overlap",
+    "parent-redirection",
+    "root-substitution",
+    "unknown-record-fields",
+    "active-run",
+    "before-publication",
+    "after-publication",
+    "target-directory-sync",
+    "receipt-sync",
+    "after-receipt-sync"
+  ],
+  "fault_sha256": "5db2ac006991f604931184650b7ce3edc51faec7afadbff0a50a8348a262eb9a",
+  "format": "sw-installed-edit-application-qualification/1",
+  "helper_sha256": "33bbea13647db9c40bb47babffed4bf7d7cd51972457305560794ddd7ff886b7",
+  "inventory": {
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 36
+  },
+  "last_cli": {
+    "exit_code": 0,
+    "raw_retained": false,
+    "reason": "ok",
+    "stderr_bytes": 0,
+    "stdout_bytes": 3,
+    "stdout_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+  },
+  "operator_state_checks": 103,
+  "operator_tool_requests": 0,
+  "paid_inference": false,
+  "provider_requests_during_operator": 0,
+  "sentinel_preserved": true,
+  "source_commit": "e03da1c5f08365528f3783476423a5e15b15de88",
+  "source_tree": "191adbc667677f347171bf20526930e3fc10b02e",
+  "status": "passed"
+}

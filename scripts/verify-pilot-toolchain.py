@@ -481,7 +481,7 @@ def main():
     parser.add_argument("--expected-commit", help="full 40-hex commit the checkout must be at")
     parser.add_argument("--python", help="absolute path of the interpreter to attest (never chosen silently)")
     parser.add_argument("--python-role", choices=("classifier", "git_runtime"), default="classifier")
-    parser.add_argument("--git-archive", help="absolute path of a locally supplied git-2.51.2.tar.xz to digest-check")
+    parser.add_argument("--git-archive", help="absolute path of a locally supplied git-2.51.3.tar.xz to digest-check")
     parser.add_argument("--python-archive", help="absolute path of the supplied pinned CPython archive to digest-check")
     parser.add_argument("--allow-dirty", action="store_true", help="development only: accept uncommitted changes")
     parser.add_argument("--output", type=Path, help="write the full report to a new absolute path")

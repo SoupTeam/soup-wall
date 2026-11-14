@@ -13,13 +13,86 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-from ci_components import blocks, generated, TARGET
+from ci_components import blocks, generated, inventory, TARGET
 import ci_components
-from ci_impact import WORKFLOW_JOBS
+from ci_impact import WORKFLOW_JOBS, BUILD_CONSUMERS
 from ci_admission import component_names
 
 
 class SharedComponents(unittest.TestCase):
+
+    @unittest.skipUnless(shutil.which("bash"), "Bash is required for Ubuntu mirror controls")
+    def test_archive_dns_fallback_preserves_signed_repository_configuration(self):
+        command = textwrap.dedent(ci_components.UBUNTU_MIRROR_STEP.split("        run: |\n", 1)[1])
+        original = (
+            "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] "
+            "http://azure.archive.ubuntu.com/ubuntu noble main\n"
+            "URIs: https://security.ubuntu.com/ubuntu/\n"
+            "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n"
+            "deb https://archive.ubuntu.com.evil.example/ubuntu stable main\n"
+            "deb https://unrelated.example/debian stable main\n"
+        )
+        for dns_status in (0, 1):
+            with self.subTest(dns_status=dns_status), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "sources.list.d").mkdir()
+                sources = root / "sources.list.d/ubuntu.sources"
+                sources.write_text(original)
+                script = ('timeout() { return "$FIXTURE_DNS_STATUS"; }\n'
+                          'sudo() { "$@"; }\n' + command.replace("/etc/apt", str(root)))
+                result = subprocess.run([shutil.which("bash"), "-c", script],
+                    env={**os.environ, "FIXTURE_DNS_STATUS": str(dns_status)},
+                    capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                expected = original
+                if dns_status:
+                    expected = expected.replace("http://azure.archive.ubuntu.com/ubuntu",
+                                                "https://mirrors.edge.kernel.org/ubuntu")
+                    expected = expected.replace("https://security.ubuntu.com/ubuntu/",
+                                                "https://mirrors.edge.kernel.org/ubuntu/")
+                self.assertEqual(sources.read_text(), expected)
+                self.assertNotIn("trusted=yes", sources.read_text())
+
+    @unittest.skipUnless(shutil.which("bash"), "Bash is required for pinned shell downloads")
+    def test_pinned_shell_download_fallback_retains_hash_refusal(self):
+        import hashlib
+        source = (ROOT / "scripts/qualify-command-shells.sh").read_text()
+        fetch = source[source.index("fetch() {"):source.index("\nfetch main/")]
+        mocks = r"""
+        curl() {
+            printf '%s\n' "$*" >> "$FIXTURE_URL_LOG"
+            local output=${@: -1}
+            if [[ "$*" == *archive.ubuntu.com* && "$FIXTURE_PRIMARY" == failure ]]; then
+                printf partial > "$output"
+                return 6
+            fi
+            if [[ "$FIXTURE_PRIMARY" == tamper ||
+                  ("$*" == *mirrors.edge.kernel.org* && "$FIXTURE_BAD_MIRROR" == 1) ]]; then
+                printf corrupted > "$output"
+            else
+                printf 'package fixture' > "$output"
+            fi
+        }
+        dpkg-deb() { printf extracted >> "$FIXTURE_EXTRACT_LOG"; }
+        """
+        for primary, bad_mirror, passed, downloads in (
+            ("success", "0", True, 1), ("failure", "0", True, 2),
+            ("tamper", "0", False, 1), ("failure", "1", False, 2),
+        ):
+            with self.subTest(primary=primary, bad_mirror=bad_mirror), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                digest = hashlib.sha256(b"package fixture").hexdigest()
+                script = ('set -euo pipefail\nroot="$FIXTURE_ROOT"\n' + textwrap.dedent(mocks)
+                          + fetch + '\nfetch main/f/fixture fixture.deb "$FIXTURE_DIGEST"\n')
+                result = subprocess.run([shutil.which("bash"), "-c", script],
+                    env={**os.environ, "FIXTURE_ROOT": str(root), "FIXTURE_DIGEST": digest,
+                         "FIXTURE_PRIMARY": primary, "FIXTURE_BAD_MIRROR": bad_mirror,
+                         "FIXTURE_URL_LOG": str(root / "urls"),
+                         "FIXTURE_EXTRACT_LOG": str(root / "extracted")},
+                    capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode == 0, passed, result.stderr)
+                self.assertEqual(len((root / "urls").read_text().splitlines()), downloads)
+                self.assertEqual((root / "extracted").exists(), passed)
     def test_generator_writes_stable_lf_output_on_every_platform(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "components.yml"
@@ -38,6 +111,18 @@ class SharedComponents(unittest.TestCase):
         self.assertIn("gateway-sdk--official-sdk", actual)
         self.assertIn("mcp-https-post--linux-https-post", actual)
         self.assertIn("mcp-real-filesystem--native-ubuntu-2404", actual)
+
+    def test_full_workspace_jobs_keep_the_supported_system_python_and_image_cache(self):
+        jobs = blocks((ROOT / ".github/workflows/ci.yml").read_text())
+        for name in ("test", "all-features"):
+            with self.subTest(job=name):
+                job = jobs[name]
+                self.assertIn("    runs-on: ubuntu-24.04\n", job)
+                cache = re.search(r"(?m)^          shared-key: (.+)$", job)
+                self.assertIsNotNone(cache)
+                self.assertIn("ubuntu2404", cache[1])
+                command = "cargo test --workspace --all-features" if name == "all-features" else "python3 scripts/verify_policy_composition.py"
+                self.assertIn(command, job)
 
     def test_existing_filesystem_lane_keeps_its_qualified_runner(self):
         source = blocks((ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text())
@@ -83,13 +168,49 @@ class SharedComponents(unittest.TestCase):
             for job_id in ids:
                 with self.subTest(workflow=wf, job=job_id):
                     old, new = source[job_id], central[f"{wf.removesuffix('.yml')}--{job_id}"]
-                    self.assertEqual(old.split("    steps:", 1)[1].rstrip(),
-                                     new.split("    steps:", 1)[1].rstrip())
+                    original_steps = old.split("    steps:", 1)[1].rstrip()
+                    mirrored_steps = new.split("    steps:", 1)[1].rstrip()
+                    if "apt-get" in old or "--with-deps" in old:
+                        prelude = "\n" + ci_components.UBUNTU_MIRROR_STEP
+                        self.assertTrue(mirrored_steps.startswith(prelude))
+                        self.assertEqual(mirrored_steps.count(ci_components.UBUNTU_MIRROR_STEP), 1)
+                        mirrored_steps = "\n" + mirrored_steps[len(prelude):]
+                    else:
+                        self.assertNotIn(ci_components.UBUNTU_MIRROR_STEP, mirrored_steps)
+                    self.assertEqual(original_steps, mirrored_steps)
                     for field in ("runs-on", "timeout-minutes", "strategy", "services", "container"):
                         pattern = rf"(?m)^    {field}:.*(?:\n(?!    [a-z-]+:|  [a-z-]+:).*)*"
                         self.assertEqual(re.findall(pattern, old), re.findall(pattern, new))
                     self.assertNotIn("needs.impact", new)
                     self.assertIn("fromJSON(inputs.plan).workflows['" + wf + "']", new)
+
+    def test_every_registered_component_has_source_runner_and_only_real_build_edges(self):
+        rows = inventory()["components"]
+        generated_jobs = blocks(generated())
+        self.assertEqual(len(rows), 47)
+        self.assertEqual({row["component_job"] for row in rows}, set(generated_jobs))
+        for row in rows:
+            source = blocks((ROOT / ".github/workflows" / row["source_workflow"]).read_text(
+                encoding="utf-8-sig"))[row["source_job"]]
+            mirror = generated_jobs[row["component_job"]]
+            with self.subTest(component=row["component_job"]):
+                self.assertIn("    runs-on: " + row["runs_on"] + "\n", source)
+                self.assertIn("    runs-on: " + row["runs_on"] + "\n", mirror)
+                condition = re.search(r"(?m)^    if: >-\n      ([^\n]+)$", mirror)
+                self.assertIsNotNone(condition)
+                self.assertTrue(condition[1].startswith("!cancelled() && ("))
+                self.assertTrue(condition[1].endswith(")"))
+                expected = row["source_job"] in BUILD_CONSUMERS.get(row["source_workflow"], ())
+                self.assertEqual(bool(row["build_producer"]), expected)
+                if expected:
+                    self.assertIn("    needs: " + row["build_producer"] + "\n", mirror)
+                else:
+                    self.assertNotIn("    needs: ", mirror.split("    steps:", 1)[0])
+        # These source conditions contain top-level OR branches. Cancellation
+        # must guard the whole expression, not only its first branch.
+        for job in ("sou86-crash-supervision--required-disposable-linux-crash-supervision",
+                    "mcp-real-filesystem--native-ubuntu-2404"):
+            self.assertIn("!cancelled() && (", generated_jobs[job])
 
     def test_shared_workflow_cannot_be_triggered_independently_or_allocate_planners(self):
         text = TARGET.read_text()
@@ -111,22 +232,66 @@ class SharedComponents(unittest.TestCase):
         central = blocks(generated())
         producer = "ci-builds--agent-default-ubuntu2404"
         self.assertIn(producer, central)
-        for job in ("linux-create-file", "linux-installed-edit"):
-            body = central["mcp-create-file--" + job]
-            self.assertIn("    needs: " + producer, body)
-            self.assertIn("    if: always() && contains(", body)
-            self.assertIn("      SOU166_MODE: shared", body)
-            self.assertIn("${{ needs." + producer + ".result }}", body)
-            self.assertIn("${{ needs." + producer + ".outputs.artifact_id }}", body)
-            self.assertNotIn("github.event.inputs.build_mode", body)
-            guard = body.index("ci_qualification_build.py guard")
-            self.assertLess(guard, body.index("uses: actions/download-artifact@"))
-            self.assertIn("artifact-ids: ${{ env.SOU166_ARTIFACT_ID }}", body)
-            self.assertNotIn("github-token:", body)
-            self.assertNotIn("run-id:", body)
+        for workflow, jobs in BUILD_CONSUMERS.items():
+            for job in jobs:
+                body = central[workflow.removesuffix('.yml') + "--" + job]
+                self.assertIn("    needs: " + producer, body)
+                self.assertIn("    if: >-\n      !cancelled() && (contains(", body)
+                self.assertIn("      SOU166_MODE: shared", body)
+                self.assertIn("${{ needs." + producer + ".result }}", body)
+                self.assertIn("${{ needs." + producer + ".outputs.artifact_id }}", body)
+                self.assertNotIn("github.event.inputs.build_mode", body)
+                guard = body.index("ci_qualification_build.py guard")
+                self.assertLess(guard, body.index("uses: actions/download-artifact@"))
+                self.assertIn("artifact-ids: ${{ env.SOU166_ARTIFACT_ID }}", body)
+                self.assertNotIn("github-token:", body)
+                self.assertNotIn("run-id:", body)
         separate = central["mcp-create-file--linux-replace-file"]
         self.assertNotIn("needs: " + producer, separate)
         self.assertIn("runs-on: ubuntu-22.04", separate)
+
+    def test_manual_shared_probe_includes_new_consumers_only_when_requested(self):
+        manual = (ROOT / ".github/workflows/mcp-create-file.yml").read_text()
+        body = manual.split("  reuse-plan:\n", 1)[1].split("  reuse-qualification:\n", 1)[0]
+        self.assertIn("SOU222_CONSUMERS: ${{ inputs.sou222_consumers }}", body)
+        self.assertIn("if os.environ['SOU222_CONSUMERS'] == 'true':", body)
+        for workflow, job in (("mcp-https-post.yml", "linux-https-post"),
+                              ("mcp-windows-create.yml", "linux-read-create-https-regressions")):
+            self.assertIn("selected['" + workflow + "'] = ['" + job + "']", body)
+        self.assertIn("default: false", manual.split("      sou222_consumers:\n", 1)[1].split("      edit_only:\n", 1)[0])
+
+    def test_doctor_get_comparison_only_selects_reviewed_producer_and_consumers(self):
+        manual = (ROOT / ".github/workflows/mcp-create-file.yml").read_text()
+        body = manual.split("  reuse-plan:\n", 1)[1].split("  reuse-qualification:\n", 1)[0]
+        self.assertIn("SOU229_CONSUMERS: ${{ inputs.sou229_consumers }}", body)
+        self.assertIn("if os.environ['SOU229_CONSUMERS'] == 'true':", body)
+        self.assertIn("selected['agent-doctor.yml'] = ['agent-doctor-linux']", body)
+        self.assertIn("selected['mcp-https-get.yml'] = ['linux-https-get']", body)
+        self.assertIn("if os.environ['SOU229_CONSUMERS'] != 'true':", body)
+        for workflow, job in (("agent-doctor.yml", "agent-doctor-linux"),
+                              ("mcp-https-get.yml", "linux-https-get")):
+            source = blocks((ROOT / ".github/workflows" / workflow).read_text())[job]
+            shared = blocks(generated())[workflow.removesuffix(".yml") + "--" + job]
+            self.assertIn("SOU166_MODE: source", source)
+            self.assertIn("SOU166_MODE: shared", shared)
+            self.assertIn("ci_qualification_build.py guard", shared)
+            self.assertIn("ci_qualification_build.py prepare", shared)
+            self.assertIn("ci_qualification_build.py binary", shared)
+            self.assertIn("-- clippy --locked --offline", shared)
+
+    def test_linux_compatibility_refuses_loader_override_without_changing_windows_python(self):
+        jobs = blocks((ROOT / ".github/workflows/mcp-windows-create.yml").read_text())
+        linux = jobs["linux-read-create-https-regressions"]
+        self.assertNotIn("actions/setup-python", linux)
+        self.assertIn("sys.version_info[:2] == (3, 12)", linux)
+        self.assertIn("LD_LIBRARY_PATH", linux)
+        self.assertIn("actions/setup-python@v7", jobs["native-windows-standard-user"])
+
+    def test_post_clippy_keeps_locked_source_dependencies_after_verified_download(self):
+        body = blocks((ROOT / ".github/workflows/mcp-https-post.yml").read_text())["linux-https-post"]
+        self.assertLess(body.index("ci_qualification_build.py prepare"), body.index("run: cargo fetch --locked"))
+        self.assertLess(body.index("run: cargo fetch --locked"), body.index("-- clippy --locked --offline"))
+        self.assertIn("cargo fetch --locked", body)
 
     def test_implicit_matrix_names_keep_each_required_platform_and_backend(self):
         text = TARGET.read_text()

@@ -1,0 +1,161 @@
+{
+  "format": "sw-sou187-local-checks/1",
+  "platform": "macOS aarch64",
+  "enclosure": "Read-only source, private scratch-only writes, loopback-only Seatbelt; no unsandboxed target fallback",
+  "snapshot_semantics": "source_sha256 identifies the selected file snapshot, not an asserted Git HEAD. Workspace test snapshot precedes Linux-only success-ack hardening; final lint/fmt/Python controls follow it.",
+  "workspace_test_inventory": {
+    "passed": 1926,
+    "failed": 0,
+    "ignored": 13,
+    "suites": 76
+  },
+  "attempts": [
+    {
+      "label": "startup-build",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "-p",
+        "agentfw",
+        "--bin",
+        "agentfw"
+      ],
+      "exit_code": 71,
+      "source_sha256": "86eac5ce96fe5c4456caf3d1613eec04fb2bc5d2a29c52eb3b49e5e77e6cec41",
+      "log_sha256": "d34a4e4359a4dc36526cf5b363da32f7b7594a3a09eea17cbdfd6425b052d93e",
+      "elapsed_seconds": 0.01
+    },
+    {
+      "label": "startup-build-enclosed",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "-p",
+        "agentfw",
+        "--bin",
+        "agentfw"
+      ],
+      "exit_code": 0,
+      "source_sha256": "86eac5ce96fe5c4456caf3d1613eec04fb2bc5d2a29c52eb3b49e5e77e6cec41",
+      "log_sha256": "57771923cae6ddfb538551bbd2caf877ec40ed33538abddf8ec7feb5f0113dac",
+      "elapsed_seconds": 78.12
+    },
+    {
+      "label": "platform-startup",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "agentfw",
+        "--test",
+        "edit_application_startup"
+      ],
+      "exit_code": 0,
+      "source_sha256": "bb71dd3e2ddfb33b5a2e56a31c1ea094bb23127c8ac21f07fcf1e0b03d61d267",
+      "log_sha256": "192c46314567a2e05b39b3feee1fe2d74331c87342b8c43c77e2d8baa5d6f02c",
+      "elapsed_seconds": 26.95
+    },
+    {
+      "label": "workspace-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--workspace"
+      ],
+      "exit_code": 0,
+      "source_sha256": "6db3cee6449d0173faeb9a6627f25f8860d54245ca16a0c79770b67bab7364a5",
+      "log_sha256": "0c2afed4b70590c68c6e93c096ae9cc28b1507a1e7395f877c38832919582764",
+      "elapsed_seconds": 292.4
+    },
+    {
+      "label": "final-workspace-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "--workspace",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "source_sha256": "c29ee7f8ffe361b0f36e1dda4392c98ff6547280cf00af37c5ff247e64e5a770",
+      "log_sha256": "aaee76fe0b7a94bb3a87c086ad27958d5e6b87520e54c22451f6fe23fab01074",
+      "elapsed_seconds": 43.45
+    },
+    {
+      "label": "final-fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "c29ee7f8ffe361b0f36e1dda4392c98ff6547280cf00af37c5ff247e64e5a770",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elapsed_seconds": 1.48
+    },
+    {
+      "label": "final-edit-regressions",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_edit*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "c29ee7f8ffe361b0f36e1dda4392c98ff6547280cf00af37c5ff247e64e5a770",
+      "log_sha256": "d8eeb7cdf5ef1292f53a1e32c76d6043b532918cc53cc9738c2e908f61cb48cf",
+      "elapsed_seconds": 1.04
+    },
+    {
+      "label": "final-ci-consistency",
+      "command": [
+        "python3",
+        "-B",
+        "scripts/ci_components.py",
+        "--check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "c29ee7f8ffe361b0f36e1dda4392c98ff6547280cf00af37c5ff247e64e5a770",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elapsed_seconds": 0.08
+    },
+    {
+      "label": "concurrency-grading",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_edit_application.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "8e0ed0952279386f0e77fc5920a135f1ab1997c90716bd3b83fc9851b4a63492",
+      "log_sha256": "6bfd36e4d4fc6003454e5bc5e680e8b4997bc4fca19390c6988752a19f1fa641",
+      "elapsed_seconds": 0.24
+    }
+  ]
+}

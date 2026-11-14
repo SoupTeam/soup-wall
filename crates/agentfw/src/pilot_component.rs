@@ -29,6 +29,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+pub mod removal;
+
 pub const COMPONENT_SCHEMA: &str = "sw-pilot-front-door-component/1";
 pub const POINTER_SCHEMA: &str = "sw-pilot-front-door-current/1";
 pub const SOURCE_FORMAT: &str = "sw-pilot-source-identity/1";
@@ -43,7 +45,9 @@ const TREE: &str = "tree";
 const DIR_NAME: &str = "pilot-front-door";
 const MAX_ARCHIVE: usize = 32 * 1024 * 1024;
 const MAX_FILE: u64 = 1024 * 1024;
-const MAX_FILES: usize = 128;
+// The full helper and runtime-notice closure contains 142 files. Archive,
+// manifest and individual-file byte budgets remain independently enforced.
+const MAX_FILES: usize = 160;
 const MAX_MANIFEST: usize = 64 * 1024;
 const MAX_NAME: usize = 100;
 const MAX_INTERPRETER: u64 = 256 * 1024 * 1024;
@@ -1216,13 +1220,30 @@ pub fn default_home() -> anyhow::Result<PathBuf> {
 /// signal disposition are the helper's own.
 pub fn exec_pilot(home: &Path, args: &[std::ffi::OsString]) -> i32 {
     use std::os::unix::process::CommandExt;
+
     let command = args
         .first()
         .and_then(|a| a.to_str())
         .filter(|a| {
             matches!(
                 *a,
-                "preview" | "prepare" | "run" | "status" | "provider" | "help"
+                "preview"
+                    | "preflight"
+                    | "prepare"
+                    | "run"
+                    | "status"
+                    | "maintenance"
+                    | "provider"
+                    | "configuration"
+                    | "project"
+                    | "policy-activation"
+                    | "budget-preset"
+                    | "worktree-selection"
+                    | "filesystem-roots"
+                    | "snapshot"
+                    | "demo"
+                    | "roadmap-support"
+                    | "help"
             )
         })
         .unwrap_or("help");
@@ -1258,6 +1279,43 @@ pub fn exec_pilot(home: &Path, args: &[std::ffi::OsString]) -> i32 {
     );
     eprintln!("agentfw pilot: the verified helper could not be started: {error}");
     2
+}
+
+/// Only this fixed entry can be selected by the edit self-test front door.
+pub fn exec_private_edit_self_test(home: &Path, args: &[std::ffi::OsString]) -> i32 {
+    const ENTRY: &str = "scripts/private_edit_self_test.py";
+    let verified = match Store::new(home).current() {
+        Ok(verified) => verified,
+        Err(_) => {
+            return crate::self_test::private_edit::unexecuted(
+                "incomplete",
+                "installed_component_unavailable",
+            );
+        }
+    };
+    if !verified
+        .manifest
+        .files
+        .iter()
+        .any(|file| file.path == ENTRY)
+    {
+        return crate::self_test::private_edit::unexecuted(
+            "unsupported",
+            "installed_component_has_no_edit_self_test",
+        );
+    }
+    let _error = exec_helper(&verified, ENTRY, args);
+    crate::self_test::private_edit::unexecuted("incomplete", "installed_helper_start_failed")
+}
+
+fn exec_helper(verified: &Verified, entry: &str, args: &[std::ffi::OsString]) -> std::io::Error {
+    use std::os::unix::process::CommandExt;
+    std::process::Command::new(&verified.python.path)
+        .arg("-I")
+        .arg("-B")
+        .arg(verified.tree.join(entry))
+        .args(args)
+        .exec()
 }
 
 #[cfg(test)]
@@ -1342,6 +1400,24 @@ mod tests {
         let package = parse(&archive()).unwrap();
         assert_eq!(package.manifest.files.len(), 3);
         assert_eq!(package.id(), sha(&package.manifest_bytes));
+    }
+
+    #[test]
+    fn complete_notice_capacity_remains_bounded() {
+        let mut list = files();
+        for index in 0..MAX_FILES - list.len() {
+            list.push((format!("notices/{index:03}.txt"), b"notice\n".to_vec()));
+        }
+        list.sort();
+        let bytes = serde_json::to_vec(&manifest_for(&list)).unwrap();
+        let package = parse(&archive_with(&bytes, &list)).unwrap();
+        assert_eq!(package.manifest.files.len(), MAX_FILES);
+
+        list.push(("notices/extra.txt".into(), b"notice\n".to_vec()));
+        list.sort();
+        let bytes = serde_json::to_vec(&manifest_for(&list)).unwrap();
+        let error = parse(&archive_with(&bytes, &list)).err().unwrap();
+        assert!(error.to_string().contains("manifest file count"));
     }
 
     #[test]

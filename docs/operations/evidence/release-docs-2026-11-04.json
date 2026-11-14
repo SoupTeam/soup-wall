@@ -1,0 +1,164 @@
+{
+  "format": "sw-release-docs-verification/1",
+  "observed_on_client_date": "2026-11-04",
+  "source_commit": "b7bd32132855f50ba9efc870a3f950ad14273008",
+  "accepted_base": "2a5bf6771c63c6ccf2c55d07dede512a72f26481",
+  "scope": "public-archive-documentation-and-structure-only",
+  "canonical_git_blob_sha256": {
+    ".github/workflows/ci.yml": "76bd8091dbdc3b6fa7be4cb3ba2907a68c92eafe2b788c1b7a190ac4d5ab25bb",
+    ".github/workflows/release.yml": "f386c1c1e6126ca3a40bdc266646b373feff047eb8d5cd1a318bf311435a8000",
+    "README.md": "3ff0c9ef481b08c3a5415407128f81b89e8cc5d8fdb107d19702be4b345e3f9d",
+    "deploy/release-docs-manifest.json": "0f04c938c2a0acd3a8e28963dcb00930650d80a714ca536e3be97077f1be756a",
+    "docs/RELEASE_ARCHIVE.md": "fd602091ffd1d6dbfe5a5c8f35cc2d5ce35a18bdcb822f874e57d400869392f7",
+    "scripts/release_docs.py": "b714ce6b1cc5395395f2e7c40412eff90493373c6f8d283b9e72cba05be1d5ad",
+    "scripts/tests/test_release_docs.py": "1308385184ea72796a4fa5af7a0ad2759b1b2b390fac062b8a31285fa0646d3b",
+    "scripts/check_docs.py": "d0115d30b8aab415bb84b36bdf9659e46e83a92d3af6dc2bab49a5fc1cdc757e"
+  },
+  "bundle": {
+    "explicit_documents_and_assets": 149,
+    "operator_guides": 136,
+    "classified_exact_source_references": 202,
+    "archive_files": 158,
+    "private_notes_evidence_caches_and_workspaces": "excluded"
+  },
+  "controls": [
+    {
+      "suite": "test_release_docs.py",
+      "host": "native-Windows",
+      "python": "3.12.14",
+      "command": "python.exe -B -m unittest discover -s scripts/tests -p test_release_docs.py -v",
+      "tests": 22,
+      "elapsed_seconds": 175.851,
+      "status": "passed",
+      "skipped": 0,
+      "output_sha256": "be9e32c986a83ae0c60f7e33966f78929a49b0af9eb2e3132a7dc37da655f9b4"
+    },
+    {
+      "suite": "test_release_docs.py",
+      "host": "WSL-Ubuntu-24.04-ext4",
+      "python": "3.12.3",
+      "command": "python3 -B -m unittest discover -s scripts/tests -p test_release_docs.py -v",
+      "tests": 22,
+      "elapsed_seconds": 53.583,
+      "status": "passed",
+      "skipped": 0,
+      "output_sha256": "6e4780df527fad0b41c2ace040cf282d3a209ac41cc248daddc763a11b59bfc7"
+    },
+    {
+      "suite": "test_check_docs.py",
+      "host": "native-Windows",
+      "python": "3.12.14",
+      "command": "python.exe -B -m unittest discover -s scripts/tests -p test_check_docs.py -v",
+      "tests": 30,
+      "elapsed_seconds": 59.565,
+      "status": "passed",
+      "skipped": 0,
+      "output_sha256": "e39b94023dd5e660690018f6db3dca7cb47f5aab7935f498104dbd359b4cf098"
+    },
+    {
+      "suite": "test_publication_readiness.py",
+      "host": "native-Windows",
+      "python": "3.12.14",
+      "command": "python.exe -B -m unittest discover -s scripts/tests -p test_publication_readiness.py -v",
+      "tests": 26,
+      "elapsed_seconds": 80.523,
+      "status": "passed",
+      "skipped": 0,
+      "output_sha256": "8f98f2ae102d3ec1c0f982a8bef41ded2af2a9c6f8a40446548f986495afb6d4"
+    }
+  ],
+  "archive_workflow_exercises": {
+    "implementation": "literal existing Stage (unix) and Stage (windows) blocks from .github/workflows/release.yml",
+    "supplied_binaries": "owned inert byte fixtures; never executed",
+    "windows": {
+      "shell": "Git Bash",
+      "archiver": "7-Zip 25.01",
+      "format": "zip"
+    },
+    "unix": {
+      "host": "WSL-Ubuntu-24.04-ext4",
+      "archiver": "GNU tar 1.35",
+      "format": "tar.gz"
+    },
+    "targets": [
+      {
+        "archive_format": "zip",
+        "archive_sha256": "0e285687fd15c422bd809b82b653b3b746d886ebbb297e474ae4c40152f87efc",
+        "documents": 149,
+        "files": 158,
+        "native_execution": "not performed",
+        "source_commit": "b7bd32132855f50ba9efc870a3f950ad14273008",
+        "status": "passed",
+        "target": "x86_64-pc-windows-msvc"
+      },
+      {
+        "archive_format": "tar.gz",
+        "archive_sha256": "f67c252ac2e7212915ac9db8792c78ca5ac647e477adae3814aa73b575eea40a",
+        "documents": 149,
+        "files": 158,
+        "native_execution": "not performed",
+        "source_commit": "b7bd32132855f50ba9efc870a3f950ad14273008",
+        "status": "passed",
+        "target": "x86_64-unknown-linux-gnu"
+      },
+      {
+        "archive_format": "tar.gz",
+        "archive_sha256": "3115a1490e4acccb2500a1f538c92b429e180223a9d36fc7f59c50c00eda9854",
+        "documents": 149,
+        "files": 158,
+        "native_execution": "not performed",
+        "source_commit": "b7bd32132855f50ba9efc870a3f950ad14273008",
+        "status": "passed",
+        "target": "aarch64-apple-darwin"
+      },
+      {
+        "archive_format": "tar.gz",
+        "archive_sha256": "dda5a9ccf3e17226b2455bb72c718fb37b07c59878208ea8288b18c89433e65b",
+        "documents": 149,
+        "files": 158,
+        "native_execution": "not performed",
+        "source_commit": "b7bd32132855f50ba9efc870a3f950ad14273008",
+        "status": "passed",
+        "target": "x86_64-apple-darwin"
+      }
+    ],
+    "tag_creation": false,
+    "publication": false
+  },
+  "documentation_links": {
+    "status": "passed",
+    "markdown_files": 425,
+    "local_links": 1370,
+    "errors": 0,
+    "command": "python.exe -B scripts/check_docs.py"
+  },
+  "regression_boundaries": [
+    "Missing assets and stale source/document hashes are refused.",
+    "Traversal, symlinks, hardlinks, duplicate/colliding entries, unsupported links, broken anchors and oversized archive metadata are refused.",
+    "Unix owner read/execute/traverse bits and raw case-sensitive archive path components are checked before reconstruction.",
+    "Canonical parsed JSON gives clean LF/CRLF source checkouts the same contract identity.",
+    "A forged self-manifest cannot hide changed canonical configuration/notices or a one-sided changed Gateway alias."
+  ],
+  "earlier_observations": [
+    {
+      "source_commit": "54b0b685bc45f9c79210b74091806f36200b09bc",
+      "status": "false-acceptance-reproduced-and-fixed",
+      "observation": "Matching forged self-manifest hashes hid altered firewall.yaml, NOTICE, cryptography LICENSE or one-sided Gateway alias; b7bd3213 adds known-source BASE and alias checks."
+    },
+    {
+      "status": "environment-retry-passed",
+      "observation": "The initial WSL start returned HCS ERROR_NO_SYSTEM_RESOURCES before verification; the subsequent final Linux suite and three Unix staging blocks passed."
+    },
+    {
+      "status": "verification-layout-corrected",
+      "observation": "The source docs checker initially scanned untracked extracted workflow copies (543 errors). Retaining those outputs under the ignored local checkpoint restored the canonical source check to zero errors."
+    }
+  ],
+  "not_performed": [
+    "native execution of the fixture binaries on any target",
+    "native Linux pilot, macOS or Windows binary qualification",
+    "release publication, tag creation, registry push, Ready transition or candidate admission",
+    "license/advisory clearance for separately supplied runtime assets"
+  ],
+  "reproduce_without_publication": "docs/RELEASE_ARCHIVE.md#verify-packaging-locally-without-publication"
+}

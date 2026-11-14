@@ -28,6 +28,9 @@ select the cgroup containing your shell, unrelated jobs, or a running pilot.
 Unavailable environments refuse the requested budget; they do not retry without it.
 The example describes a selection, not a portable delegation setup command.
 
+Installed pilots can keep these budgets as named, versioned presets instead of hand-edited files:
+see [PILOT_BUDGET_PRESETS.md](PILOT_BUDGET_PRESETS.md). The launch contract below is unchanged.
+
 ## Runtime contract
 
 Before daemon startup the prepared entry freezes input bytes in its private run
@@ -190,7 +193,7 @@ Keep previous red attempts and qualify the corrected source independently.
 
 The pressure phase prepares a fresh owned Git fixture with a real HEAD and
 30,000 identical small files in a supported eight-level index directory. This
-keeps normal status output small while exercising Git 2.51.2's own ordinary
+keeps normal status output small while exercising Git 2.51.3's own ordinary
 index-preload threads; it adds no worker executable, environment test switch,
 server patch or Git config setting. The existing eight MCP proposals and all
 resource limits remain unchanged. The memory case changes a genuinely tracked

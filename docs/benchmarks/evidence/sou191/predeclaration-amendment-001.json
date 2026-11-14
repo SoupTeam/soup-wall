@@ -1,0 +1,28 @@
+{
+ "schema": "soup-wall-result-inspection-predeclaration-amendment/1",
+ "issue": "SOU-191",
+ "sequence": 1,
+ "amends_sha256": "01e5e069795f262d6e92d2e810dfb97ef42cd4f07095932ed5e5bd4d23cad552",
+ "declared_at_utc": "2026-10-31T13:52:53Z",
+ "reason": "Baseline attempt-002 (68d8a597) failed during compilation: rustc, LLVM and cl.exe ran out of commit memory (os error 1455) under Cargo's default parallelism on an 8-thread host. This amendment limits Cargo to 2 parallel jobs for both revisions. It is declared before any attempt of either revision executed the adapter; no detector outcome of either revision has been observed. Baseline attempts 001-002 remain recorded under the original predeclaration; new attempts (baseline 003 onward, candidate 001 onward) are governed by this amendment.",
+ "changes": {
+  "build.argv": [
+   "cargo",
+   "+1.99.1",
+   "build",
+   "--jobs",
+   "2",
+   "--locked",
+   "-p",
+   "agentfw",
+   "--example",
+   "result_inspection_corpus",
+   "--message-format=json-render-diagnostics"
+  ]
+ },
+ "applies_to": [
+  "baseline",
+  "candidate"
+ ],
+ "not_claimed": "Not claimed: that the build will now succeed, or that binaries are identical to a build with other parallelism (debug MSVC builds are not expected to be bit-reproducible). --jobs is Cargo's scheduling of compilation units; the toolchain, target, profile, features, lock file, corpus, policy, timeout, outcome contract, grouping and attempt rule are unchanged, and the original predeclaration file is not edited."
+}

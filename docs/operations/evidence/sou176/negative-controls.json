@@ -1,0 +1,52 @@
+{
+  "controls": [
+    {
+      "archive_sha256": "6afe6cd2be5de562df79019257693c80b4e0db41e90e166ad3eff90e0ef46fcb",
+      "changed_members": [
+        {
+          "member": "sou176/results/installed/report.json",
+          "original_sha256": "322596934b4c514cd28fd43c21d147f010274c1231e30755fc200ce40c4dc65b",
+          "sha256": "5fd65c065dc92a7c6d3f988ca1150c8dac480b7bf63fa32af5eed871cbad60b5"
+        }
+      ],
+      "control": "altered-report",
+      "dossier_sha256": "fd073fdc5dd833a4090734c195f2003856ca294b7a32dfefda17905c1bc8fd6d",
+      "expected_rejection": "runtime_identity_mismatch",
+      "nature": "synthetic negative copy of immutable native evidence; no runtime executed",
+      "observed_blockers": [
+        "invalid_evidence:runtime_identity_mismatch"
+      ],
+      "original_archive_sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8",
+      "scopes_retained": 50,
+      "selection_sha256": "43066a82f3ee6f5ed1e7b1bc46f6b744bc023c514861c3a5416cf380e49bc078",
+      "status": "NOT_READY"
+    },
+    {
+      "archive_sha256": "e1cc86fd42a76ea100ffe0acc2b6f02c524d3a82d47f34af98c094e6fc8a588f",
+      "changed_members": [
+        {
+          "member": "sou176/results/execution.json",
+          "original_sha256": "54bff7434b10220f0bdf77fc759587a88cabac02f2bb8ad4ca75d0204268c670",
+          "sha256": "e7a456770290d42c40eee65dbfab5cb4a03dcefd99f13d9621ae9eb5ba60d5c2"
+        },
+        {
+          "member": "sou176/results/prepared-identities.json",
+          "original_sha256": "54ffc1df5d6f51dfc621522a490767edb81b24c2247fee4be98b8643da27a59d",
+          "sha256": "5b8b56e84d6e6b2f18ee172656e696f48663967c7bb27c4086b5a6e2dd20ed51"
+        }
+      ],
+      "control": "incomplete-cleanup",
+      "dossier_sha256": "851b3886f906ca1b5faf9aedb03862944d6ba9a4c1010ef92e747ef96e965ebc",
+      "expected_rejection": "runtime_custody_cleanup_unconfirmed",
+      "nature": "synthetic negative copy of immutable native evidence; no runtime executed",
+      "observed_blockers": [
+        "invalid_evidence:runtime_custody_cleanup_unconfirmed"
+      ],
+      "original_archive_sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8",
+      "scopes_retained": 50,
+      "selection_sha256": "f6ca517076fd3cc84a1945f204f1fdaf65dc1f5f1123be517d7f5389fb67c4e7",
+      "status": "NOT_READY"
+    }
+  ],
+  "format": "sw-sou176-negative-copies/1"
+}

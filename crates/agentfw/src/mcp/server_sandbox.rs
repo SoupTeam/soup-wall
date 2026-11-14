@@ -23,6 +23,8 @@ use tokio::process::Child;
 use tokio::process::Command;
 
 use super::server_profile::ProfileConfig;
+#[cfg(target_os = "linux")]
+pub(crate) mod exercise;
 #[cfg(all(test, target_os = "linux"))]
 #[path = "git_local_clone_sandbox_tests.rs"]
 mod git_local_clone_tests;
@@ -37,7 +39,13 @@ pub(crate) const SANDBOX_WORKSPACE: &str = "/workspace";
 pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap/1";
 
 pub(crate) fn profile_name(format: &str) -> &'static str {
-    if format == super::server_profile::git::FILE_READS_FORMAT {
+    if format == super::server_profile::git::linked_worktree::FORMAT {
+        "sw-mcp/git-linked-worktree-readonly/linux-bwrap-landlock/1"
+    } else if format == super::server_profile::filesystem_links::FORMAT {
+        "sw-mcp/filesystem-multi-root-file-links-readonly/linux-bwrap/1"
+    } else if format == super::server_profile::filesystem_roots::FORMAT {
+        "sw-mcp/filesystem-multi-root-readonly/linux-bwrap/1"
+    } else if format == super::server_profile::git::FILE_READS_FORMAT {
         "sw-mcp/git-readonly-file-revisions/linux-bwrap-landlock/1"
     } else if format == super::server_profile::git_tracked_symlinks::FORMAT {
         "sw-mcp/git-tracked-symlinks-readonly/linux-bwrap-landlock/1"
@@ -64,6 +72,7 @@ pub(crate) struct PreparedServerSandbox {
     _pins: Vec<File>,
     workspace: PathBuf,
     git_view: Option<Arc<super::server_profile::git::SelectedView>>,
+    filesystem_roots: Option<Arc<super::server_profile::filesystem_roots::Guard>>,
     #[cfg(target_os = "linux")]
     verified_git_snapshot: Option<Arc<super::server_profile::git::object_witness::Snapshot>>,
     #[cfg(target_os = "linux")]
@@ -77,6 +86,12 @@ pub(crate) struct PreparedServerSandbox {
 }
 
 impl PreparedServerSandbox {
+    pub(crate) fn filesystem_roots(
+        &self,
+    ) -> Option<Arc<super::server_profile::filesystem_roots::Guard>> {
+        self.filesystem_roots.clone()
+    }
+
     pub(crate) fn git_view(&self) -> Option<Arc<super::server_profile::git::SelectedView>> {
         self.git_view.clone()
     }
@@ -223,7 +238,8 @@ pub(crate) fn prepare_verified_git(
         "verified execution requires a supported Git profile"
     );
     // Validate constructed configs as strictly as operator file configs.
-    ProfileConfig::read(&serde_json::to_vec(profile)?)?;
+    ProfileConfig::read(&serde_json::to_vec(profile)?)
+        .context(super::verified_git::PreparationReason::Profile)?;
     anyhow::ensure!(
         std::env::var_os(crate::pilot_budget::BINDING_ENV).is_none(),
         "verified Git requires an explicit prepared pilot budget API; ambient binding unsupported"
@@ -408,7 +424,11 @@ fn hash_file(file: &File) -> anyhow::Result<String> {
 }
 
 #[cfg(target_os = "linux")]
-fn open_verified_file(path: &Path, expected: &str, executable: bool) -> anyhow::Result<File> {
+pub(super) fn open_verified_file(
+    path: &Path,
+    expected: &str,
+    executable: bool,
+) -> anyhow::Result<File> {
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 
     if !normalized_absolute(path) {
@@ -418,9 +438,11 @@ fn open_verified_file(path: &Path, expected: &str, executable: bool) -> anyhow::
     // descriptor pins the resolved regular file; the mount destination remains
     // the explicitly declared interpreter/library path.
     let canonical = path.canonicalize()?;
+    // Open special files without waiting for a peer, then reject them using
+    // the opened descriptor's metadata before reading any asset bytes.
     let file = std::fs::OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
         .open(canonical)?;
     let before = file.metadata()?;
     if !before.is_file() || (executable && before.permissions().mode() & 0o111 == 0) {
@@ -789,17 +811,13 @@ fn prepare_linux(
             None,
         );
     }
-    prepare_linux_command(
-        profile,
-        &[
-            format!("/mcp-server/{SERVER_ENTRYPOINT}"),
-            SANDBOX_WORKSPACE.to_owned(),
-        ],
-        selected,
-        false,
-        inherit_environment,
-        None,
-    )
+    let mut args = vec![format!("/mcp-server/{SERVER_ENTRYPOINT}")];
+    if let Some(binding) = &profile.filesystem_roots {
+        args.extend(binding.arguments());
+    } else {
+        args.push(SANDBOX_WORKSPACE.to_owned());
+    }
+    prepare_linux_command(profile, &args, selected, false, inherit_environment, None)
 }
 
 #[cfg(target_os = "linux")]
@@ -856,7 +874,10 @@ fn prepare_linux_command_inner(
     let guarded_profile = clone_profile || link_profile;
     if git_profile {
         let root = descriptor_path(&workspace_pin).join(".");
-        if link_profile {
+        if profile.format == super::server_profile::git::linked_worktree::FORMAT {
+            // The dedicated view validates the three explicit roots and freezes
+            // only their required metadata below. Legacy validators stay narrow.
+        } else if link_profile {
             super::server_profile::git_tracked_symlinks::validate_repository(&root)?;
         } else if clone_profile {
             super::server_profile::git_local_clone::validate_repository(&root)?;
@@ -871,7 +892,8 @@ fn prepare_linux_command_inner(
             super::server_profile::git::object_witness::Snapshot::capture(
                 &workspace_pin,
                 &profile.format,
-            )?,
+            )
+            .context(super::verified_git::PreparationReason::SnapshotCapture)?,
         )
     } else {
         None
@@ -879,8 +901,25 @@ fn prepare_linux_command_inner(
     let git_view = if verified_git {
         None
     } else {
-        super::server_profile::git::SelectedView::capture(&profile.format, &workspace_pin)?
+        super::server_profile::git::SelectedView::capture(
+            &profile.format,
+            &workspace_pin,
+            profile.linked_worktree.as_ref(),
+        )?
     };
+    let workspace_snapshot = profile
+        .workspace_snapshot
+        .as_ref()
+        .map(|binding| {
+            super::server_profile::workspace_snapshot::View::capture(binding, &profile.workspace)
+        })
+        .transpose()?;
+    let filesystem_roots = profile
+        .filesystem_roots
+        .as_ref()
+        .map(super::server_profile::filesystem_roots::Guard::capture)
+        .transpose()?
+        .map(Arc::new);
     // The trusted namespace PID 1 is this exact running Agent image, never a
     // separately resolved pathname or an executable from the server package.
     #[cfg(not(test))]
@@ -1041,6 +1080,12 @@ fn prepare_linux_command_inner(
     } else if let Some(view) = &git_view {
         view.mount(&mut command, &mut pins)?;
     }
+    if let Some(view) = &workspace_snapshot {
+        view.mount(&mut command, &mut pins)?;
+    }
+    if let Some(roots) = &filesystem_roots {
+        roots.mount(&mut command, &mut pins)?;
+    }
     let seccomp = if writable_owned_stage {
         network_filter_mode(git_profile, true)?
     } else {
@@ -1165,6 +1210,7 @@ fn prepare_linux_command_inner(
         _pins: pins,
         workspace,
         git_view,
+        filesystem_roots,
         verified_git_snapshot,
         budget,
         bwrap_fd,
@@ -1287,241 +1333,12 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     async fn git_sandbox_boundary(verified: bool) {
-        use std::io::{Read, Write};
-        use std::net::{TcpListener, TcpStream};
-        use std::os::fd::{AsRawFd, FromRawFd};
-        use std::os::unix::ffi::OsStrExt;
-        use std::os::unix::fs::OpenOptionsExt;
-        use tokio::io::AsyncReadExt;
-        let profile_path = std::env::var("SOU68_SANDBOX_TEST_PROFILE")
-            .expect("explicit Git sandbox profile required");
-        let profile = ProfileConfig::read(&std::fs::read(profile_path).unwrap()).unwrap();
-        assert!(super::super::server_profile::git_selected(&profile.format));
-        let owned = tempfile::tempdir().unwrap();
-        let outside = owned.path().join("outside-secret");
-        std::fs::write(&outside, b"outside unchanged").unwrap();
-        let host_file = File::open(&outside).unwrap();
-        let descriptor = unsafe { libc::fcntl(host_file.as_raw_fd(), libc::F_DUPFD, 3) };
-        assert!(descriptor >= 0);
-        let _ambient = unsafe { File::from_raw_fd(descriptor) };
-        let receiver = TcpListener::bind("127.0.0.1:0").unwrap();
-        receiver.set_nonblocking(true).unwrap();
-        let address = receiver.local_addr().unwrap();
-        let calibration = TcpStream::connect(address).unwrap();
-        let pair = receiver.accept().unwrap();
-        drop(calibration);
-        drop(pair);
-        let outside_json = serde_json::to_string(&outside).unwrap();
-        let script = format!(
-            r#"
-import asyncio, ctypes, errno, json, os, pathlib, socket, subprocess
-def denied(fn):
-    try:
-        fn()
-        return False
-    except OSError:
-        return True
-# The pinned portable Python build need not expose optional os wrappers.
-# Call the actual native syscalls; the Rust test supplies this architecture's
-# numbers rather than assuming an x86-64 ABI inside the Python fixture.
-native_libc = ctypes.CDLL(None, use_errno=True)
-native_libc.syscall.restype = ctypes.c_long
-def native_call(number, *arguments):
-    ctypes.set_errno(0)
-    result = native_libc.syscall(ctypes.c_long(number), *arguments)
-    if result == -1:
-        raise OSError(ctypes.get_errno(), 'owned syscall probe failed')
-    return result
-def memfd(flags):
-    return native_call({memfd_syscall}, ctypes.c_char_p(b'sou79-owned'), ctypes.c_uint(flags))
-def ordinary_memfd():
-    descriptor = memfd({memfd_cloexec})
-    os.close(descriptor)
-    return True
-class SchedulingParameter(ctypes.Structure):
-    _fields_ = [('sched_priority', ctypes.c_int)]
-def scheduler_change():
-    parameter = SchedulingParameter(0)
-    native_call({scheduler_syscall}, ctypes.c_int(0), ctypes.c_int({normal_scheduler}), ctypes.byref(parameter))
-def denied_by_filter(fn):
-    try:
-        descriptor = fn()
-        if type(descriptor) is int:
-            os.close(descriptor)
-        return False
-    except OSError as error:
-        return error.errno == errno.EACCES
-def descriptors():
-    result = []
-    for entry in pathlib.Path('/proc/self/fd').iterdir():
-        try: result.append(os.readlink(entry))
-        except OSError: pass
-    return result
-def null_open():
-    fd = os.open('/dev/null', os.O_RDWR)
-    os.close(fd)
-    return True
-git = subprocess.run(['/mcp-runtime/git', 'status', '--porcelain'], cwd='/workspace', capture_output=True, timeout=5)
-loop = asyncio.new_event_loop()
-assert loop.run_until_complete(asyncio.wait_for(asyncio.to_thread(lambda: 42), 3)) == 42
-loop.close()
-result = {{
- 'asyncio_ready': True,
- 'null_open_allowed': null_open(),
- 'git_read': git.returncode == 0,
- 'ordinary_memfd_allowed': ordinary_memfd(),
- 'hugetlb_creation_denied': denied_by_filter(lambda: memfd({memfd_hugetlb})),
- 'scheduler_change_denied': denied_by_filter(scheduler_change),
- 'git_exit': git.returncode,
- 'git_error': git.stderr[-2000:].decode('utf-8', 'replace'),
- 'workspace_write_denied': denied(lambda: pathlib.Path('/workspace/sandbox-forbidden').write_text('denied')),
- 'runtime_write_denied': denied(lambda: pathlib.Path('/mcp-runtime/git').open('wb')),
- 'tmp_write_denied': denied(lambda: pathlib.Path('/tmp/forbidden').write_text('denied')),
- 'other_device_write_denied': denied(lambda: pathlib.Path('/dev/zero').open('wb')),
- 'fifo_write_denied': denied(lambda: os.open('/workspace/.sou68-runtime-probe.fifo', os.O_WRONLY | os.O_NONBLOCK)),
- 'outside_read_denied': denied(lambda: pathlib.Path({outside_json}).read_bytes()),
- 'outside_write_denied': denied(lambda: pathlib.Path({outside_json}).write_bytes(b'denied')),
- 'egress_denied': denied(lambda: socket.create_connection(('127.0.0.1', {port}), 1)),
- 'unix_socket_denied': denied(lambda: socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)),
- 'ambient_env_absent': 'SOU68_INHERITED_SECRET' not in os.environ,
- 'home_absent': not pathlib.Path('/home').exists() and not pathlib.Path('/root').exists(),
- 'descriptor_targets': descriptors(),
- 'net_namespace': os.readlink('/proc/self/ns/net'),
- 'pid_namespace': os.readlink('/proc/self/ns/pid'),
-}}
-print(json.dumps(result))
-"#,
-            port = address.port(),
-            memfd_syscall = libc::SYS_memfd_create,
-            scheduler_syscall = libc::SYS_sched_setscheduler,
-            memfd_cloexec = libc::MFD_CLOEXEC,
-            memfd_hugetlb = libc::MFD_HUGETLB,
-            normal_scheduler = libc::SCHED_OTHER,
-        );
-        let args = vec!["-I".into(), "-B".into(), "-c".into(), script];
-        let mut prepared = if verified {
-            assert!(super::super::verified_git::supports_profile(
-                &profile.format
-            ));
-            prepare_linux_command_inner(&profile, &args, None, false, true, None, true).unwrap()
-        } else {
-            prepare_linux_command(&profile, &args, None, false, true, None).unwrap()
-        };
-        // Add an owned FIFO after repository validation to prove that read-only
-        // mounts alone are insufficient, and that Landlock still blocks IPC.
-        let fifo_path = profile.workspace.join(".sou68-runtime-probe.fifo");
-        assert!(!fifo_path.exists());
-        let fifo_name = std::ffi::CString::new(fifo_path.as_os_str().as_bytes()).unwrap();
-        assert_eq!(unsafe { libc::mkfifo(fifo_name.as_ptr(), 0o600) }, 0);
-        let mut fifo_reader = std::fs::OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NONBLOCK)
-            .open(&fifo_path)
-            .unwrap();
-        let mut calibration = std::fs::OpenOptions::new()
-            .write(true)
-            .custom_flags(libc::O_NONBLOCK)
-            .open(&fifo_path)
-            .unwrap();
-        calibration.write_all(b"calibrate").unwrap();
-        let mut marker = [0_u8; 9];
-        fifo_reader.read_exact(&mut marker).unwrap();
-        assert_eq!(&marker, b"calibrate");
-        drop(calibration);
-        prepared
-            .command
-            .env("SOU68_INHERITED_SECRET", "must-not-reach-server");
-        let (mut child, mut budget, mut owner, _sandbox_pid) = prepared.spawn().await.unwrap();
-        let mut stdout = child.stdout.take().unwrap();
-        let mut stderr = child.stderr.take().unwrap();
-        drop(child.stdin.take());
-        let collected = tokio::time::timeout(std::time::Duration::from_secs(15), async {
-            let mut output = Vec::new();
-            let mut errors = Vec::new();
-            let (out, err) = tokio::join!(
-                stdout.read_to_end(&mut output),
-                stderr.read_to_end(&mut errors),
-            );
-            out.unwrap();
-            err.unwrap();
-            if let Some(budget) = budget.as_mut() {
-                budget.finish().await.unwrap();
-            }
-            owner.finish().await.unwrap();
-            (output, errors, child.wait().await.unwrap())
-        })
-        .await;
-        let budget_cleanup = if let Some(budget) = budget.as_mut() {
-            budget.finish().await
-        } else {
-            Ok(())
-        };
-        if collected.is_err() {
-            terminate(&mut child).await.unwrap();
-            panic!("real Git/Python sandbox timed out");
-        }
-        budget_cleanup.unwrap();
-        owner.finish().await.unwrap();
-        let (output, errors, status) = collected.unwrap();
-        let mut forbidden_bytes = [0_u8; 32];
-        assert_eq!(fifo_reader.read(&mut forbidden_bytes).unwrap(), 0);
-        std::fs::remove_file(fifo_path).unwrap();
-        assert!(status.success(), "{}", String::from_utf8_lossy(&errors));
-        let result: serde_json::Value = serde_json::from_slice(&output).unwrap();
-        for key in [
-            "null_open_allowed",
-            "asyncio_ready",
-            "git_read",
-            "ordinary_memfd_allowed",
-            "hugetlb_creation_denied",
-            "scheduler_change_denied",
-            "workspace_write_denied",
-            "runtime_write_denied",
-            "tmp_write_denied",
-            "other_device_write_denied",
-            "fifo_write_denied",
-            "outside_read_denied",
-            "outside_write_denied",
-            "egress_denied",
-            "unix_socket_denied",
-            "ambient_env_absent",
-            "home_absent",
-        ] {
-            assert_eq!(
-                result[key], true,
-                "Git boundary failed: {key}; owned probe: {result}"
-            );
-        }
-        for namespace in ["net", "pid"] {
-            let host = std::fs::read_link(format!("/proc/self/ns/{namespace}")).unwrap();
-            assert_ne!(
-                result[format!("{namespace}_namespace")].as_str().unwrap(),
-                host.to_str().unwrap()
-            );
-        }
-        for target in result["descriptor_targets"].as_array().unwrap() {
-            for path in [
-                &profile.workspace,
-                &profile.package_root,
-                &profile.runtime_path,
-                &owned.path().to_path_buf(),
-            ] {
-                assert!(
-                    !target.as_str().unwrap().starts_with(path.to_str().unwrap()),
-                    "ambient host descriptor leaked"
-                );
-            }
-        }
-        assert_eq!(std::fs::read(&outside).unwrap(), b"outside unchanged");
-        assert!(!profile.workspace.join("sandbox-forbidden").exists());
-        assert_eq!(
-            receiver.accept().unwrap_err().kind(),
-            std::io::ErrorKind::WouldBlock
-        );
+        let path =
+            std::env::var_os("SOU68_SANDBOX_TEST_PROFILE").expect("explicit Git profile required");
+        let profile = ProfileConfig::read(&std::fs::read(path).unwrap()).unwrap();
+        let result = super::exercise::git(profile, verified).await.unwrap();
         println!("SOU68_SANDBOX_POSITIVE {}", result);
         if verified {
-            // This is a syscall/confinement probe of the worker preparation
-            // branch; original tools/call bytes are qualified separately.
             println!("SOU146_VERIFIED_PREPARATION_POSITIVE");
         }
     }
@@ -1846,221 +1663,10 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}),probe({{path:'/workspace/eg
     #[tokio::test]
     #[ignore = "requires SOU62_SANDBOX_TEST_PROFILE and real Linux namespaces"]
     async fn selected_server_sandbox_isolates_real_node() {
-        use std::io::{Read, Write};
-        use std::net::{TcpListener, TcpStream};
-        use std::os::fd::{AsRawFd, FromRawFd};
-        use std::os::unix::ffi::OsStrExt;
-        use std::os::unix::fs::OpenOptionsExt;
-        use std::os::unix::net::{UnixListener, UnixStream};
-        use std::time::Duration;
-        use tokio::io::AsyncReadExt;
-
-        let config_path = std::env::var_os("SOU62_SANDBOX_TEST_PROFILE")
-            .expect("SOU62_SANDBOX_TEST_PROFILE is required for positive acceptance");
-        let mut profile = ProfileConfig::read(&std::fs::read(config_path).unwrap()).unwrap();
-        let owned = tempfile::tempdir().unwrap();
-        let workspace = owned.path().join("workspace");
-        std::fs::create_dir(&workspace).unwrap();
-        std::fs::write(workspace.join("allowed.txt"), b"allowed read").unwrap();
-        let outside = owned.path().join("outside-secret.txt");
-        std::fs::write(&outside, b"outside unchanged").unwrap();
-        let outside_new = owned.path().join("outside-created.txt");
-        profile.workspace = workspace.canonicalize().unwrap();
-        let receiver = TcpListener::bind("127.0.0.1:0").unwrap();
-        receiver.set_nonblocking(true).unwrap();
-        let address = receiver.local_addr().unwrap();
-        // Calibrate the independent egress witness on the host first.
-        let calibration = TcpStream::connect(address).unwrap();
-        let calibrated = loop {
-            match receiver.accept() {
-                Ok(pair) => break pair,
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                    std::thread::yield_now()
-                }
-                Err(error) => panic!("receiver calibration failed: {error}"),
-            }
-        };
-        drop(calibration);
-        drop(calibrated);
-        let unix_path = workspace.join("egress.sock");
-        let unix_receiver = UnixListener::bind(&unix_path).unwrap();
-        unix_receiver.set_nonblocking(true).unwrap();
-        let unix_calibration = UnixStream::connect(&unix_path).unwrap();
-        let unix_calibrated = unix_receiver.accept().unwrap();
-        drop(unix_calibration);
-        drop(unix_calibrated);
-        let fifo_path = workspace.join("egress.fifo");
-        let fifo_name = std::ffi::CString::new(fifo_path.as_os_str().as_bytes()).unwrap();
-        assert_eq!(unsafe { libc::mkfifo(fifo_name.as_ptr(), 0o600) }, 0);
-        let mut fifo_receiver = std::fs::OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NONBLOCK)
-            .open(&fifo_path)
-            .unwrap();
-        let mut fifo_calibration = std::fs::OpenOptions::new()
-            .write(true)
-            .custom_flags(libc::O_NONBLOCK)
-            .open(&fifo_path)
-            .unwrap();
-        fifo_calibration.write_all(b"calibrated").unwrap();
-        let mut calibrated_bytes = [0_u8; 10];
-        fifo_receiver.read_exact(&mut calibrated_bytes).unwrap();
-        assert_eq!(&calibrated_bytes, b"calibrated");
-        drop(fifo_calibration);
-        // Deliberately supply one non-CLOEXEC host descriptor. The child-wide
-        // close_range(CLOEXEC) must prevent this independent source from leaking.
-        let host_file = File::open(&outside).unwrap();
-        let ambient_fd = unsafe { libc::fcntl(host_file.as_raw_fd(), libc::F_DUPFD, 3) };
-        assert!(ambient_fd >= 0);
-        let _ambient = unsafe { File::from_raw_fd(ambient_fd) };
-        let outside_json = serde_json::to_string(&outside).unwrap();
-        let outside_new_json = serde_json::to_string(&outside_new).unwrap();
-        let script = format!(
-            r#"
-const fs = require('node:fs');
-const net = require('node:net');
-const refused = (fn) => {{ try {{ fn(); return false; }} catch {{ return true; }} }};
-const result = {{
-  allowed: fs.readFileSync('/workspace/allowed.txt', 'utf8') === 'allowed read',
-  workspaceWriteDenied: refused(() => fs.writeFileSync('/workspace/new.txt', 'denied')),
-  workspaceReplaceDenied: refused(() => fs.writeFileSync('/workspace/allowed.txt', 'denied')),
-  fifoWriteDenied: refused(() => {{ const fd=fs.openSync('/workspace/egress.fifo', fs.constants.O_WRONLY|fs.constants.O_NONBLOCK); try {{ fs.writeSync(fd,'host FIFO write'); }} finally {{ fs.closeSync(fd); }} }}),
-  outsideReadDenied: refused(() => fs.readFileSync({outside_json})),
-  outsideWriteDenied: refused(() => fs.writeFileSync({outside_json}, 'denied')),
-  outsideCreateDenied: refused(() => fs.writeFileSync({outside_new_json}, 'denied')),
-  hostHomeAbsent: !fs.existsSync('/home') && !fs.existsSync('/root'),
-  inheritedSecretAbsent: process.env.SOU62_INHERITED_SECRET === undefined,
-  cleanEnv: Object.keys(process.env).sort().join(',') === 'HOME,LANG,PATH,PWD,UV_THREADPOOL_SIZE',
-  netNamespace: fs.readlinkSync('/proc/self/ns/net'),
-  pidNamespace: fs.readlinkSync('/proc/self/ns/pid'),
-  descriptorTargets: fs.readdirSync('/proc/self/fd').flatMap(fd => {{ try {{ return [fs.readlinkSync('/proc/self/fd/'+fd)]; }} catch {{ return []; }} }})
-}};
-const probe = options => new Promise(resolve => {{
-  let done = false, socket;
-  const finish = denied => {{ if(done) return; done=true; if(socket) socket.destroy(); resolve(denied); }};
-  try {{
-    socket = net.connect(options);
-    socket.on('connect', () => finish(false));
-    socket.on('error', () => finish(true));
-    socket.setTimeout(500, () => finish(true));
-  }} catch {{ finish(true); }}
-}});
-Promise.all([probe({{host:'127.0.0.1',port:{port}}}), probe({{path:'/workspace/egress.sock'}})]).then(([tcp,unix]) => {{
-  result.egressDenied=tcp;
-  result.unixSocketDenied=unix;
-  console.log(JSON.stringify(result));
-}});
-"#,
-            port = address.port()
-        );
-        let mut prepared = prepare_linux_command(
-            &profile,
-            &["-e".to_owned(), script],
-            None,
-            false,
-            true,
-            None,
-        )
-        .unwrap();
-        prepared
-            .command
-            .env("SOU62_INHERITED_SECRET", "must-not-reach-server");
-        let (mut child, mut budget, mut owner, _sandbox_pid) = prepared.spawn().await.unwrap();
-        let mut stdout = child.stdout.take().unwrap();
-        let mut stderr = child.stderr.take().unwrap();
-        drop(child.stdin.take());
-        let collected = tokio::time::timeout(Duration::from_secs(10), async {
-            let mut output = Vec::new();
-            let mut errors = Vec::new();
-            let (read_out, read_err) = tokio::join!(
-                stdout.read_to_end(&mut output),
-                stderr.read_to_end(&mut errors),
-            );
-            read_out.unwrap();
-            read_err.unwrap();
-            if let Some(budget) = budget.as_mut() {
-                budget.finish().await.unwrap();
-            }
-            owner.finish().await.unwrap();
-            (output, errors, child.wait().await.unwrap())
-        })
-        .await;
-        let budget_cleanup = if let Some(budget) = budget.as_mut() {
-            budget.finish().await
-        } else {
-            Ok(())
-        };
-        if collected.is_err() {
-            terminate(&mut child).await.unwrap();
-            panic!("real Node sandbox positive acceptance timed out");
-        }
-        budget_cleanup.unwrap();
-        owner.finish().await.unwrap();
-        let (output, errors, status) = collected.unwrap();
-        assert!(
-            status.success(),
-            "sandbox failed: {}",
-            String::from_utf8_lossy(&errors)
-        );
-        let observed: serde_json::Value = serde_json::from_slice(&output).unwrap();
-        for key in [
-            "allowed",
-            "workspaceWriteDenied",
-            "workspaceReplaceDenied",
-            "fifoWriteDenied",
-            "outsideReadDenied",
-            "outsideWriteDenied",
-            "outsideCreateDenied",
-            "hostHomeAbsent",
-            "inheritedSecretAbsent",
-            "cleanEnv",
-            "egressDenied",
-            "unixSocketDenied",
-        ] {
-            assert_eq!(observed[key], true, "sandbox boundary failed: {key}");
-        }
-        for namespace in ["net", "pid"] {
-            let host = std::fs::read_link(format!("/proc/self/ns/{namespace}")).unwrap();
-            assert_ne!(
-                observed[format!("{namespace}Namespace")].as_str().unwrap(),
-                host.to_str().unwrap()
-            );
-        }
-        for target in observed["descriptorTargets"].as_array().unwrap() {
-            let target = target.as_str().unwrap();
-            for host_path in [
-                profile.workspace.as_path(),
-                profile.package_root.as_path(),
-                profile.runtime_path.as_path(),
-                owned.path(),
-            ] {
-                assert!(
-                    !target.starts_with(host_path.to_str().unwrap()),
-                    "host descriptor leaked into server"
-                );
-            }
-        }
-        assert_eq!(
-            std::fs::read(workspace.join("allowed.txt")).unwrap(),
-            b"allowed read"
-        );
-        assert!(!workspace.join("new.txt").exists());
-        assert_eq!(std::fs::read(&outside).unwrap(), b"outside unchanged");
-        assert!(!outside_new.exists());
-        assert_eq!(
-            receiver.accept().unwrap_err().kind(),
-            std::io::ErrorKind::WouldBlock
-        );
-        assert_eq!(
-            unix_receiver.accept().unwrap_err().kind(),
-            std::io::ErrorKind::WouldBlock
-        );
-        let mut unexpected_fifo_bytes = [0_u8; 64];
-        assert_eq!(
-            fifo_receiver.read(&mut unexpected_fifo_bytes).unwrap(),
-            0,
-            "host FIFO receiver observed a write"
-        );
+        let path = std::env::var_os("SOU62_SANDBOX_TEST_PROFILE")
+            .expect("explicit filesystem profile required");
+        let profile = ProfileConfig::read(&std::fs::read(path).unwrap()).unwrap();
+        super::exercise::filesystem(profile).await.unwrap();
         println!("SOU62_SANDBOX_POSITIVE profile={SANDBOX_PROFILE} allowed_read=true workspace_write_denied=true outside_read_denied=true outside_write_denied=true egress_witness_calibrated=true egress_denied=true pathname_unix_socket_denied=true fifo_witness_calibrated=true fifo_write_denied=true inherited_env_absent=true host_descriptors_absent=true private_net_pid=true");
     }
 }

@@ -140,13 +140,16 @@ PROVIDER_TRACE_STRING_BYTES = 131072  # Linux MAX_ARG_STRLEN, including NUL.
 
 
 def run_case(args, door, report, label, proposals, hold=False, cancel=None,
-             provider_setup=None, provider_trace=None):
+             provider_setup=None, provider_trace=None, model=None, close_model=True, after_useful=None, diagnostic_writes=False,
+             trace_events="execve,execveat", run_flags=()):
     """One protected run through `pilot.py run` with the owned scripted provider."""
-    model = BASE.DEMO.ScriptedModel([])
+    model = model if model is not None else BASE.DEMO.ScriptedModel([])
     offered, live = set(), {}
+    callback_done = False
     ready = threading.Event()
 
     def next_step(body):
+        nonlocal callback_done
         names = {tool.get("name") for tool in body.get("tools", [])}
         if not {"mcp__filesystem__read_text_file", "mcp__git__git_show"}.issubset(names):
             return [{"type": "text", "text": "Owned auxiliary request."}]
@@ -159,12 +162,15 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
             # Observe status while the protected host is active, for this
             # prefix and for a second prepared prefix that is not running.
             code, value, _ = door.call("status", "--state-root", str(args.state_root), inputs=False, timeout=60)
-            live.update(code=code, protection=value.get("protection"),
+            live.update(code=code, protection=value.get("protection"), scope=value.get("scope"),
                         runs=[{k: row.get(k) for k in ("protection", "run_ids")} for row in value.get("runs", [])])
             code, other, _ = door.call("status", "--state-root", str(args.state_root), inputs=False, timeout=60,
                                        prefix=args.other_prefix)
             live.update(other_prefix_protection=other.get("protection"),
                         other_prefix_unrelated_runs=other.get("unrelated_owned_runs"))
+        if after_useful is not None and model.results and not callback_done:
+            callback_done = True
+            after_useful(model)
         ready.set()
         if hold:
             time.sleep(30)
@@ -181,7 +187,8 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
     try:
         profile_values = provider_setup(model) if provider_setup is not None else None
     except BaseException:
-        model.close()
+        if close_model:
+            model.close()
         raise
     env = {key: value for key, value in door.env.items() if key not in (
         "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "HTTP_PROXY",
@@ -189,10 +196,10 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
         door.env, ANTHROPIC_BASE_URL=model.url, ANTHROPIC_API_KEY="owned-loopback-only",
         HTTP_PROXY="http://127.0.0.1:9", HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
     words = door.words("run", "--state-root", args.state_root, "--timeout-seconds", "120",
-                       "--prompt", "Read the project README and inspect Git history.", inputs=False)
+                       "--prompt", "Read the project README and inspect Git history.", *run_flags, inputs=False)
     if provider_trace is not None:
-        words = [str(args.strace), "-f", "-qq", "-v", "-s", str(PROVIDER_TRACE_STRING_BYTES),
-                 "-e", "trace=execve,execveat",
+        words = [str(args.strace), "-f", "-qq", "-v", "-s", str(2048 if diagnostic_writes else PROVIDER_TRACE_STRING_BYTES),
+                 "-e", "trace=execve,execveat,write,writev" if diagnostic_writes else "trace=" + trace_events,
                  "-o", str(provider_trace), *words]
     started = time.monotonic()
     try:
@@ -206,7 +213,8 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
         stdout, stderr = process.communicate(timeout=240)
         cleanup = witness.finish()
     finally:
-        model.close()
+        if close_model:
+            model.close()
     if profile_values is not None:
         require(not any(value.encode() in stdout + stderr for value in profile_values.values() if value),
                 "provider_canary_in_public_output")
@@ -215,7 +223,8 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
     row = {"case": label, "exit": process.returncode, "status": outcome.get("status"), "reason": outcome.get("reason"),
            "cleanup": outcome.get("cleanup"), "live_status": live, "elapsed_seconds": round(time.monotonic() - started, 3),
            "process_cleanup": {"all_stopped": cleanup["all_stopped"], "descendants": cleanup["descendant_count"]},
-           "stderr_hint": stderr.decode("utf-8", "replace").strip().splitlines()[-1:] if stderr else [],
+           "stderr_hint": (stderr.decode("utf-8", "replace").strip().splitlines()[-1:]
+                           if stderr and profile_values is None else []),
            "results": {key: {"is_error": value["is_error"],
                              "content_sha256": hashlib.sha256(json.dumps(value["content"]).encode()).hexdigest()}
                        for key, value in model.results.items()}}

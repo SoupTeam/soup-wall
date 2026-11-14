@@ -96,11 +96,22 @@ def tls_edge(stack, temp, upstream):
             headers = {k: v for k, v in self.headers.items() if k.lower() in ("authorization", "content-type")}
             connection = http.client.HTTPConnection("127.0.0.1", upstream, timeout=10)
             try:
-                connection.request(self.command, self.path, body=body, headers=headers)
+                try:
+                    connection.request(self.command, self.path, body=body, headers=headers)
+                except OSError:
+                    # Console stopped on purpose: answer like an unavailable upstream.
+                    self.send_response(502)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
                 response = connection.getresponse()
                 data = response.read(256_000)
                 self.send_response(response.status)
                 self.send_header("Content-Type", response.getheader("Content-Type", "application/json"))
+                # Preserve authenticated public scope metadata; never forward secrets.
+                for name in ("x-soup-agent-tenant", "x-soup-agent-id"):
+                    if response.getheader(name) is not None:
+                        self.send_header(name, response.getheader(name))
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
@@ -310,10 +321,10 @@ def main():
                 def start(name):
                     page.locator("#rollout-start-revision").select_option(name)
                     page.get_by_role("button", name="Start pilot deployment").click()
-                    expect(page.locator("#rollout-confirm")).to_contain_text("Preview pilots: pilot")
-                    expect(page.locator("#rollout-confirm")).to_contain_text("Preview workers: worker-1, worker-2")
+                    expect(page.locator("#rollout-confirm")).to_contain_text("Server preview pilots: pilot")
+                    expect(page.locator("#rollout-confirm")).to_contain_text("Server preview workers: worker-1, worker-2")
                     confirm(name)
-                    status_has(f"Start {name}: accepted by the server. The frozen cohort matches your preview.")
+                    status_has(f"Start {name}: accepted by the server. The frozen cohort is exactly the server preview you confirmed.")
 
                 # 1. Baseline to all three through the browser; the gate opens on real ACKs.
                 revision("baseline", BASELINE)

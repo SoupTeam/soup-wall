@@ -1,5 +1,9 @@
 # Agent self-test (`agentfw self-test`)
 
+For the separately selected Linux private-output edit mode, see the explicit
+[installed private-edit self-test](private-edit-self-test.md). The fixture
+profile below keeps its existing arguments and behavior.
+
 One command checks an already installed Agent end to end and writes a
 versioned JSON report. It runs a small, safe MCP exercise in a temporary
 workspace that it creates, owns and removes. It is a supported product command

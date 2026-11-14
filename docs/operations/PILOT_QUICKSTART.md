@@ -12,6 +12,10 @@ The real Claude Code host talks to an owned local scripted provider; no model
 account, API key or real credentials are needed. Do not export personal provider
 credentials for this walkthrough.
 
+The supported configuration is frozen as the [v1 scope](PILOT_V1_SCOPE.md). With the guided command,
+add `--scope linux-v1` to `preview` and `prepare`: excluded options refuse before execution and the
+selection is checked against the scope before every run. Without it nothing is claimed.
+
 ## Prerequisites
 
 An administrator supplies Python 3.11+, Git, a C/C++ compiler, make, meson,
@@ -70,12 +74,12 @@ lockfile integrity and disables install scripts:
 
 ```bash
 curl --fail --location --proto '=https' --tlsv1.2 \
-  https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz \
+  https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz \
   --output "$assets/node.tar.xz"
-printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 \
+printf '%s  %s\n' cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8 \
   "$assets/node.tar.xz" | sha256sum --check
 tar -xJf "$assets/node.tar.xz" -C "$assets"
-export PATH="$assets/node-v22.22.0-linux-x64/bin:/usr/bin:/bin"
+export PATH="$assets/node-v22.23.5-linux-x64/bin:/usr/bin:/bin"
 mkdir -m 700 "$assets/claude"
 cp "$repo"/profiles/mcp/filesystem-readonly-v1/claude-host/package*.json "$assets/claude/"
 npm ci --ignore-scripts --no-audit --no-fund --prefix "$assets/claude"
@@ -105,7 +109,7 @@ python3 -B "$repo/scripts/prepare-installed-pilot.py" "${prep_args[@]}"
 selection="$(field "$assets/prepared-result.json" selection)"
 ```
 
-This prepares original filesystem and Git MCP packages, Python 3.11.14 and
+This prepares original filesystem and Git MCP packages, Python 3.11.18 and
 separate private workspaces. It writes receipts and a selection manifest with
 source and input hashes. Nothing is enforcing yet. Repeating `--prepare` verifies
 and reuses the selected generation; changed bytes fail closed.

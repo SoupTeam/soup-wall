@@ -99,10 +99,23 @@ def state(private):
         return {"state": "unavailable", "verification": "unknown"}
 
 
+def maintenance_reference(value):
+    # Non-secret attribution, not permission or proof of execution/cleanup.
+    require(type(value) is dict and set(value) == {"format", "home", "owner", "run_id"}
+            and value["format"] == "sw-pilot-maintenance-run/1"
+            and type(value["home"]) is str and len(value["home"]) <= 4096
+            and Path(value["home"]).is_absolute()
+            and all(type(value[k]) is str and re.fullmatch(r"[0-9a-f]{32}", value[k])
+                    for k in ("owner", "run_id")))
+
+
 def verify_cleanup(private):
     """A completed ordinary run retains only bounded evidence, never credentials."""
-    require({entry.name for entry in private.iterdir()} ==
-            {"audit", "audit-run.json", "audit-finished.json"})
+    names = {entry.name for entry in private.iterdir()}
+    require(names in ({"audit", "audit-run.json", "audit-finished.json"},
+                      {"audit", "audit-run.json", "audit-finished.json", "maintenance-owner.json"}))
+    if "maintenance-owner.json" in names:
+        maintenance_reference(private_json(private / "maintenance-owner.json"))
     receipt = private_json(private / "audit-run.json")
     require(private_json(private / "audit-finished.json") ==
             {"format": FORMAT, "run_id": receipt["run_id"], "owned_processes_stopped": True})

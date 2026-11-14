@@ -1,0 +1,130 @@
+{
+  "cases": [
+    {
+      "attempted": true,
+      "id": "create-read",
+      "reason": "self_test_prepare_failed",
+      "status": "failed"
+    },
+    {
+      "attempted": false,
+      "id": "replace-read",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "ask-reject-replay",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "aggregate-quota",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "exact-run-stop",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "stopped-authority",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "daemon-loss",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "fresh-run-recovery",
+      "status": "incomplete"
+    }
+  ],
+  "cleanup": {
+    "all_owned_processes_stopped": true,
+    "keep_workspace_requested": false,
+    "process_groups": [
+      {
+        "all_stopped": true,
+        "observed": []
+      }
+    ],
+    "workspace_removed": true,
+    "workspace_retained": false
+  },
+  "effects_of_interrupted_runs": "indeterminate; no automatic retry or mutation replay",
+  "executed": true,
+  "expected": [
+    "create-read",
+    "replace-read",
+    "ask-reject-replay",
+    "aggregate-quota",
+    "exact-run-stop",
+    "stopped-authority",
+    "daemon-loss",
+    "fresh-run-recovery"
+  ],
+  "failure_observation": {
+    "helper_function": "prepare",
+    "helper_line": 596,
+    "kind": "ValueError"
+  },
+  "format": "sw-private-edit-self-test/1",
+  "identities": {
+    "component_sha256": "2edf27e98692020e192c1c5cbf327f84897a035690e22b95bb44a8f6134fef9d",
+    "helper_python_sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+    "installed_sha256": {
+      "agentfw": "f886d656b0743eff017737959ee1f4af5f597cc94e4dacc0664a950eef6feb57",
+      "bwrap": "512dce810f536fca22b96c4765ed3737fd3de617a1d8ca487cc4138e31aba73d",
+      "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+      "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+      "git": "7f3afdf6bda38007e65759a4febc43dfafa19bc80ccafb49ec26ee34ff0c08cd",
+      "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+      "git_launcher": "666f69f9507fee6c2a56b9a0997f80a74860bfc9e92eef9a6a4ac8cd1e01553f",
+      "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+      "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+      "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+      "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+      "sandbox_tests": "e028e9eb01a2c088aef7eaa1f131c3abcc8231d59cb6e34fe50b6600cf488a26"
+    },
+    "selection_sha256": "a35608b182241de331f508039e01ae76d65d6ad1b6a6a1414dc14edc0e31e295",
+    "source_commit": "23db5b6d55d62d6545dd7bee222e4a453f98ac6f",
+    "source_tree": "16131804dc19067bf1b68f4368a4383e42c48a76"
+  },
+  "inventory": {
+    "attempted": 1,
+    "expected": 8,
+    "failed": 1,
+    "incomplete": 7,
+    "passed": 0,
+    "unsupported": 0
+  },
+  "last_command": {
+    "exit_code": 1,
+    "stderr_bytes": 27,
+    "stderr_sha256": "c5f2a627b462b370b531f137d7fe177ae826dfbd6fdd6592b836623373a94baa",
+    "stdout_bytes": 0,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "original_filesystem_git": "selected-runtime-pins-validated; private-output edits use the accepted native edit API",
+  "paid_inference": false,
+  "platform": {
+    "id": "wsl2-linux-x86_64",
+    "supported": true
+  },
+  "preservation": {
+    "installed_state_unchanged": true,
+    "original_projects_unchanged": true,
+    "unrelated_sentinel_unchanged": true
+  },
+  "reason": "self_test_prepare_failed",
+  "scope": "selected-genuine-Claude-owned-scripted-provider-native-private-output",
+  "status": "failed",
+  "wsl_preflight": {
+    "path_checks": "passed",
+    "report_sha256": "a45a6d1d3296f086c9c1f872837329daaa142fc2ef6ea73fde21998798296491",
+    "runtime_checks": "ready"
+  }
+}

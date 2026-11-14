@@ -49,7 +49,7 @@ rename. Files are mode 0400 and directories 0700 under
 ## 3. Use
 
 ```bash
-agentfw pilot preview --prefix "$HOME/soup-wall-pilot" --agentfw ... --git-launcher ... --sandbox-tests ... [inputs]
+agentfw pilot preview --prefix "$HOME/soup-wall-pilot" --agentfw ... --git-launcher ... [inputs]
 agentfw pilot prepare --apply --prefix "$HOME/soup-wall-pilot" [same inputs]
 agentfw pilot run --prefix "$HOME/soup-wall-pilot" --prompt '...'
 agentfw pilot status --prefix "$HOME/soup-wall-pilot"
@@ -64,12 +64,326 @@ download. The helpers report the component's recorded commit as their source,
 so a selection prepared from that commit (by `agentfw pilot` or by
 `scripts/pilot.py` in the reviewed checkout) is used unchanged.
 
-The installed command never builds from source: supply `--agentfw`,
-`--git-launcher` and `--sandbox-tests` built from the same commit (for example
-with `scripts/build-native-pilot-inputs.py` in the checkout). Native Git and
+The installed command never builds from source. The Linux candidate archive
+supplies `agentfw`, `agentfw-git-sandbox`, `pilot-front-door.tar`,
+`pilot-binaries.json` and `pilot-source.json` from one clean source. After verifying
+the outer archive against its independently retained checksum, install that
+component with the recorded archive SHA-256 and an explicit CPython 3.11–3.13.
+From the extracted directory, select its receipt for preparation:
+
+```sh
+./agentfw pilot preview --prefix "$HOME/soup-wall-pilot" --scope linux-v1 \
+  --candidate-receipt "$PWD/pilot-binaries.json" [declared runtime inputs]
+./agentfw pilot prepare --apply --prefix "$HOME/soup-wall-pilot" --scope linux-v1 \
+  --candidate-receipt "$PWD/pilot-binaries.json" [same inputs]
+```
+
+The receipt selects the two production binaries. It verifies their actual bytes
+and modes, the component manifest and source identity before a preparation
+subprocess starts. Preparation retains that custody result; later runs recheck
+it before starting a daemon or host. Keep the extracted inputs at their selected
+paths. No source checkout, Cargo, compiler or libtest executable is needed by
+these installed commands. Existing explicit `--agentfw`/`--git-launcher` inputs
+remain supported. The old `--sandbox-tests` argument and selection field remain
+for migration; when omitted the field aliases Agent and is never executed as
+libtest. The source builder's original v1 receipts and native test selectors
+remain supported separately.
+
+The candidate receipt v2 records the **release Rust 1.99.1** lane, target,
+compiler identities, source tree/tracked-byte digest and binary hashes. The
+older native source builder still explicitly selects Rust 1.94.1. Neither lane
+substitutes for qualification of the actual staged bytes. The candidate excludes
+the SOU-87 private offline kit; SOU-130 license/advisory clearance remains a
+separate handoff. Native Git and
 bubblewrap preparation, Node, Claude Code and the selection step work as in the
 checkout. A component install, `verify` or a file hash never reports
 protection; only `agentfw pilot status` reports it, with the same meanings.
+
+## Explicit installed sandbox exercise
+
+`doctor` remains read-only. To execute the bounded common sandbox exercise with
+selected installed runtime/package/library pins, explicitly supply a profile and
+its SHA-256:
+
+```sh
+./agentfw sandbox-exercise --execute --kind filesystem \
+  --profile /absolute/filesystem-profile/profile.json --profile-sha256 PROFILE_SHA256
+./agentfw sandbox-exercise --execute --kind git \
+  --profile /absolute/git-profile/profile.json --profile-sha256 PROFILE_SHA256
+```
+
+Both commands create owned fixtures; the Git exercise creates its own repository.
+The selected Node or Python/Git actually runs. Calibrated TCP/Unix/FIFO receivers,
+outside-file and inherited-descriptor witnesses check denied effects alongside
+useful reads, environment isolation, private network/PID namespaces and the
+existing authenticated owner cleanup. The exercised common read-only profile is
+named separately from the supplied profile; this does not qualify advanced
+profile-specific operations. Existing ignored native tests call the same shared
+implementation and retain their selectors and positive markers.
+
+Stdout is a versioned `sw-linux-sandbox-exercise/1` JSON object. Exit 0 means the
+exercise passed; 3 means refusal/failure; 5 means unsupported platform. Profile
+input is capped at 64 KiB, each runtime output stream at 64 KiB, calibration at
+5 seconds and sandbox collection at 15 seconds, with the existing owner's finite
+cleanup deadline. Missing prerequisites, malformed/mismatched inputs, failed
+calibration, timeout, interruption and unconfirmed cleanup fail visibly. SIGTERM
+or Ctrl-C after sandbox startup requests owned cleanup; a failed interrupted run
+can report confirmed cleanup without becoming a pass. The report always sets
+`active_protection: false`: only a live protected host can supply that status.
+
+## Frozen v1 scope
+
+`agentfw pilot preview|prepare|run|status` accept `--scope linux-v1` exactly as the checkout command does; see the
+[v1 scope](PILOT_V1_SCOPE.md). The descriptor and its helper are part of the verified component, so the same bindings
+are recomputed from the installed files, and a component whose descriptor differs from a prefix's recorded scope
+refuses before any launch.
+
+## Read-only lifecycle preflight
+
+Before acquiring or compiling pilot inputs, inspect the current environment:
+
+```bash
+agentfw doctor --lifecycle --json
+agentfw pilot preflight --json
+# Optional: require the current environment prerequisites for later removal.
+agentfw doctor --lifecycle --require-removal-eligible --json
+agentfw pilot preflight --require-removal-eligible --json
+```
+
+`doctor --lifecycle` needs no component, configured home or selected project.
+`pilot preflight` runs the same pre-build diagnosis from the verified installed
+component, outside a checkout. The additive `lifecycle` field also accompanies
+`doctor --pilot`; existing report schemas and protection meanings remain intact.
+The new nested schema is `sw-pilot-lifecycle-preflight/1`.
+
+The report distinguishes three phases using `satisfied`, `blocked` and `unknown`:
+
+- `setup`: native Ubuntu 24.04 x86-64, ordinary operator and observable static
+  user-namespace controls. A disabled namespace limit blocks preparation; missing
+  or inconsistent required setup evidence refuses before preparation effects.
+- `protected_run`: the exact selected namespace/runtime admission remains
+  **unknown** until the existing protected-launch checks run. A readable sysctl,
+  successful setup or preflight is not proof of bubblewrap admission, active
+  protection or an AppArmor exception. Existing runtime checks remain required.
+- `removal`: current host-user-namespace and same-UID process-evidence
+  prerequisites. EACCES is `blocked`; hidden/inaccessible inventory, PID reuse,
+  inconsistent identity and exhausted inspection limits cannot be positive.
+  This does not inspect selected retained-run inactivity or issue consent.
+
+Preview and preparation expose this report before downloads, compilation or
+selected-runtime execution. Setup prerequisites are required for preparation.
+An environment limitation confined to removal is reported separately and does
+not relabel every protected run as unsupported. To require removal prerequisites
+before spending preparation resources, select the explicit option:
+
+```bash
+agentfw pilot prepare --apply --prefix /absolute/private/pilot \
+  --require-removal-eligible [same pinned inputs]
+# Direct existing preparation entry has the same explicit option.
+python3 -B scripts/prepare-installed-pilot.py --prepare \
+  --require-removal-eligible [same preparation inputs]
+```
+
+A required-prerequisite refusal occurs before state creation, downloads,
+compilation or selected-runtime execution. An installed invocation still
+verifies its component and execs its recorded interpreter. The inspection itself
+launches no child. It reads at most 4096 processes, 1024 fds per process, 1 MiB
+per content read (8 KiB stat and 16 KiB status records), 64 MiB total content/link bytes and
+checks a ten-second inspection budget between kernel operations. Reports and
+support exports contain fixed phase/reason codes and guidance, never raw PIDs,
+argv, environment values, maps, project paths or credentials.
+
+The scan checks bounded kernel UID records as well as directory identities:
+[Linux proc ownership can change with dumpability](https://www.man7.org/linux/man-pages/man5/proc_pid.5.html),
+so a root-owned proc object alone does not establish an unrelated process.
+For same-UID EACCES, privately review the operator-owned session/services or use
+a clean environment with complete process visibility. Diagnosis stops nothing
+and changes no credentials, namespace, permissions, ptrace/AppArmor settings or
+host configuration. Do not ignore unreadable processes or use sudo to manufacture
+a positive result. A good result is a point-in-time prerequisite observation:
+removal still independently rechecks its exact current scope, process evidence,
+retained runs, fresh confirmation and journal before applying anything.
+
+The explicit WSL2 preparation path retains its existing opt-in validation and
+qualification boundary. Native Linux observations do not qualify WSL2. This
+feature uses no SOU-216 CI session-preparation helper and adds no service control.
+The opt-in workflow focus `lifecycle-preflight` runs ordinary and installed
+observations in separate disposable native jobs; only sanitized original reports
+are uploaded. [Exact-source observations and original failed attempts,
+2026-11-04](evidence/LINUX_LIFECYCLE_PREFLIGHT_2026-11-04.md) retain the conditional
+results: seven diagnosis/refusal cases passed, while removal stayed blocked. The
+disposable installed-component environment does not qualify a fully prepared
+protected MCP runtime, applying removal, live inference or WSL2.
+
+## Named project presets
+
+`agentfw pilot project` keeps up to 16 explicit operator shortcuts under the
+private Agent home. A preset references an existing prepared selection and an
+explicit current version of a named provider profile; it carries no permission,
+credential, session, grant or workspace content. Use the accepted
+[provider version workflow](PILOT_PROVIDER_PROFILES.md) first; legacy unversioned
+profiles and ambient environment fallback are not selected by this interface.
+The installed component and prepared selection must name the same clean source.
+
+Choose an existing owner-only state parent outside both project roots. Preview
+and check only read the selected receipts, runtime/profile identities and roots;
+they never download, prepare, start a daemon/host/server or create state:
+
+```bash
+agentfw pilot project create --name research \
+  --selection /absolute/preparation/generations/ID/selection.json \
+  --provider-name local --provider-version VERSION_FROM_PROVIDER_PREVIEW \
+  --state-root /absolute/private/runs
+# Repeat the same command with --apply to save this exact binding.
+agentfw pilot project inspect
+agentfw pilot project check --name research
+agentfw pilot project run --name research --expected-version DIGEST_FROM_CHECK --apply
+```
+
+`create` and `update` preview by default. Both take the complete explicit input
+set; `update --apply` additionally needs the current record digest through
+`--expected-version`. `remove --name research --expected-version DIGEST` previews;
+add `--apply` to remove that record. A changed record refuses stale confirmations,
+including a record removed and recreated with identical inputs. Concurrent writes
+serialize against the private store; only one can consume a given record digest.
+Removing a shortcut does not stop an existing run. Use the accepted exact-run
+stop interface for that run.
+
+An optional `--linux-budget /absolute/private/budget.json` references the accepted
+[Linux budget contract](PREPARED_PILOT_LINUX_BUDGETS.md). Check labels it
+`selected-not-validated`; controller admission belongs to the existing launcher.
+Run pins those exact bytes and never retries without the requested budget.
+Omitting the option deliberately creates an unbudgeted binding.
+
+A named Linux budget (see [PILOT_BUDGET_PRESETS.md](PILOT_BUDGET_PRESETS.md)) can be selected instead with
+`--budget-preset NAME`; the project stores its exact digest and every run resolves it again.
+
+Every check and real run revalidates the full selection, source/runtime/profile
+identities, root device/inode/owner, provider version and budget reference.
+The existing supervisor independently checks selection, provider, state parent
+and budget bindings again before host startup. A moved root, altered last input,
+rotated provider, stale generation or unsupported schema refuses with a finite
+reason. Inspect the exact inputs and explicitly update the preset; a check is
+configured evidence, never observed protection or execution admission.
+
+Records use a bounded 128 KiB canonical catalog, private atomic replacement and
+no-follow reads. Unknown fields, extra/interrupted store entries, links, foreign
+ownership and missing/corrupt catalogs refuse. There is no automatic adoption,
+repreparation, profile switch or repair. Retain the failed outcome and restore
+only operator-selected known-good state before retrying.
+
+Native support remains Ubuntu 24.04 x86_64. macOS/Windows are unsupported.
+The focused `project_presets_only` plus `native_preparation_only` workflow mode
+uses two owned synthetic projects, genuine pinned hosts and separate owned
+scripted providers outside checkout. `qualify-project-presets.py` checks fixed
+refusal controls, concurrent updates, useful independent reads, frozen settings,
+one-project cancellation and sibling continuation, provider execution traces,
+source preservation and complete owned cleanup. Failed/incomplete evidence is
+retained. It does not replace TL-owned final Ready qualification and admission.
+
+## Private export and guarded recovery of project presets
+
+`agentfw pilot project export` backs up the declarative project catalog, separately
+from [configuration recovery](PILOT_CONFIGURATION_RECOVERY.md), which excludes it.
+The private archive contains selection/provider/budget references, workspace and
+state-root identities, source digests and the original record versions as identity
+metadata. Paths and project names can be sensitive: use an existing owner-private
+0700 export directory outside the Agent home, selections, workspaces and run roots.
+Export requires explicit consent, publishes one new 0600 file and never overwrites
+an existing archive. Every export parent component must be canonical; symlink
+ancestors refuse even when the final directory is private. The destination is
+pinned by descriptor and checked again immediately before publication.
+It does not copy credentials, provider bodies, grants,
+approvals, run/session state, workspace contents or executable/configuration bodies.
+
+```bash
+agentfw pilot --home /absolute/source-home project export \
+  --archive /absolute/private-export/projects.tar --consent
+```
+
+The uncompressed canonical USTAR archive has exactly `manifest.json` and
+`projects.json`, at most 512 KiB total and 128 KiB per JSON member, with at most
+16 records. Malformed, oversized, linked, duplicate, noncanonical or traversal
+members refuse without extraction. Project catalogs use their own 128 KiB limit;
+the smaller provider-secret limit is unchanged.
+
+Install and verify the current component in an existing fresh private Agent home
+(section 2), supply provider credentials through the existing explicit provider
+workflow, and prepare current selections if necessary. The archive supplies no
+provider credentials and imports no provider profile or budget preset. Privately
+create a 0600 binding file for **each** archived name:
+
+```json
+{"format":"sw-pilot-project-import-bindings/1","projects":{"one":{
+  "selection":"/absolute/current-prefix/selection.json",
+  "provider_name":"owned-provider","provider_version":"<current 32-hex version>",
+  "state_root":"/absolute/existing-private-run-root",
+  "linux_budget":null,"budget_preset":null
+}}}
+```
+
+Repeat the entry for `two` when both records were exported. Select either an
+explicit `linux_budget` file or a current named `budget_preset`, or leave both
+null for an explicitly unbudgeted binding. Use the existing provider/budget
+inspect flows to obtain exact versions; credentials never go into this file.
+
+```bash
+agentfw pilot --home /absolute/fresh-home project import-preview \
+  --archive /absolute/private-export/projects.tar \
+  --bindings /absolute/private-export/bindings.json
+agentfw pilot --home /absolute/fresh-home project import \
+  --archive /absolute/private-export/projects.tar \
+  --bindings /absolute/private-export/bindings.json \
+  --confirm-plan <reviewed-plan-sha256> --apply
+```
+
+Preview is read-only, including when the destination has no project catalog.
+Without a binding file it diagnoses archived references but leaves every entry
+unresolved. It reports changed/unavailable selection, provider, budget, workspace,
+state-root and current-source evidence, name conflicts and capacity. Import is
+all-or-nothing: every entry needs an explicit binding that passes the existing
+current-source selection/provider/budget/workspace checks. Resolve duplicates
+through the existing explicit project workflow and obtain a new plan; import
+never overwrites an existing name.
+
+Apply binds the exact archive/binding bytes and identities, destination path/home
+identity, catalog/store version and resolved current inputs. Under the existing
+catalog lock it repeats validation and atomically publishes the complete merged
+catalog. Existing entries, provider/component files, sibling state and projects
+stay intact. New record versions derive from the reviewed plan and replace the
+source versions; they are CAS identifiers, never bearer authority. Imported
+records still require `project check` and explicit `project run` confirmation;
+the accepted launcher independently revalidates inputs and creates fresh authority.
+Import itself starts no host or selected runtime and claims no observed protection.
+
+An interruption can leave the original catalog or the complete new catalog, plus
+an exact `.import-next-<plan>` staged catalog before publication. Ordinary catalog
+commands refuse unknown/interrupted inventory. With the same trusted archive,
+binding file and plan, explicitly run:
+
+```bash
+agentfw pilot --home /absolute/fresh-home project import-recover \
+  --archive /absolute/private-export/projects.tar \
+  --bindings /absolute/private-export/bindings.json \
+  --confirm-plan <same-reviewed-plan-sha256> --apply
+```
+
+Recovery validates the complete staged bytes or an already published result and
+rechecks current bindings/CAS before completing. A missing, altered or substituted
+input, changed catalog, unsafe stage or unrelated extra file refuses; preserve
+that state for private inspection. It never silently drops or adopts altered
+files. This operation does not inspect/stop a running host or authorize removal.
+SOU-225 retains its separate early-diagnostics qualification.
+
+Native reproduction: dispatch `mcp-real-filesystem.yml` on the exact Draft source
+with `installed_focus=project-recovery`, `project_presets_only=true` and
+`native_preparation_only=true`; leave other modes off. The existing installed
+two-project qualifier exports/rebinds/imports into a fresh home, observes staged
+catalog fsync and SIGKILLs its owned invocation before publication, recovers, then
+exercises both real protected reads, independent authority, sibling continuation
+and owned cleanup. The [5 November native evidence](evidence/PROJECT_PRESET_RECOVERY_2026-11-05.md)
+retains the measured sources and original reports, including the 33-control
+installed review follow-up with zero archives created through ancestor aliases. A local archive/control fixture is not a protected-run qualification.
 
 ## 4. Update, roll back, recover, remove
 
@@ -113,3 +427,7 @@ between verification and use is outside this boundary; the next call refuses.
 Qualification: `scripts/qualify-installed-front-door.py` (native CI job,
 `mcp-real-filesystem.yml`). Evidence:
 [installed first use, 2026-10-27](evidence/PILOT_INSTALLED_FRONT_DOOR_2026-10-27.md).
+
+For the separately pinned current-source, two-clean-user measurement, see
+[clean-user acceptance](CLEAN_USER_PILOT_ACCEPTANCE.md). Historical results above
+are not relabeled as new acceptance.

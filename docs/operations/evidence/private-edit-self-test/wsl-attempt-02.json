@@ -1,0 +1,60 @@
+{
+  "format": "sw-private-edit-self-test-platform-attempt/1",
+  "date": "2026-10-29",
+  "platform": "wsl2-ubuntu-24.04-x86_64",
+  "source_commit": "23db5b6d55d62d6545dd7bee222e4a453f98ac6f",
+  "source_tree": "16131804dc19067bf1b68f4368a4383e42c48a76",
+  "status": "failed",
+  "runtime_executed": true,
+  "archive_sha256": "0a9a7627bda7d97f54447aa8de3ff33b7c0e68492997bbb23a11a2ff407a7aeb",
+  "transfer_sha256_verified": true,
+  "zip_crc_verified": true,
+  "strict_report_validator_passed": false,
+  "product_cases": {
+    "attempted": 1,
+    "expected": 8,
+    "failed": 1,
+    "incomplete": 7,
+    "passed": 0,
+    "unsupported": 0
+  },
+  "qualification_controls": {
+    "attempted": 4,
+    "expected": 5,
+    "failed": 1,
+    "incomplete": 1,
+    "passed": 3
+  },
+  "checks": {
+    "preparation_tests_passed": 27,
+    "helper_tests_passed": 34,
+    "qualification_validator_tests_passed": 9,
+    "component_tests_passed": 6,
+    "wsl_preflight_tests_passed": 8,
+    "expected_non_wsl_refusal_skips": 1,
+    "rust_cli_tests_passed": 3,
+    "clippy_agentfw_all_targets": "passed",
+    "cargo_fmt_all_check": "passed"
+  },
+  "preflight_status": "ready",
+  "host_security_settings_unchanged": true,
+  "temporary_host_resource_limits": {
+    "memory_gib": 4,
+    "processors": 4,
+    "explicitly_user_authorized": true,
+    "restoration_receipt": "wsl-host-restoration.json",
+    "original_configuration_restored": true
+  },
+  "all_owned_processes_stopped": true,
+  "workspace_removed": true,
+  "installed_state_unchanged": true,
+  "original_projects_unchanged": true,
+  "unrelated_sentinel_unchanged": true,
+  "report_sha256": "e7095484590b128cb5ab9b9dddb1a8a2125f34b89d89be57ea8f23e4f06050a9",
+  "qualification_sha256": "687f36bc6262fc6584b6e3e97281b153a7a8b68d1264ced8edc254db6019247f",
+  "source_checks_sha256": "76e29d3c8e137ea41507fb620615931db817c485cef79c9e031de01c9d247ff8",
+  "paid_inference": false,
+  "final_ready_codeql_admission_merge": "maintainer-owned; not inferred from this focused run",
+  "failure": "The setup selected the Cargo build-output Agent with two hard links; edit-session correctly refused edit_input_metadata before useful work. Cleanup and preservation passed.",
+  "correction": "Install separate single-link copies of the exact built binaries with unchanged SHA-256 values, prepare a new accepted generation, and repeat in a new output directory. No product guard or acceptance threshold changed."
+}

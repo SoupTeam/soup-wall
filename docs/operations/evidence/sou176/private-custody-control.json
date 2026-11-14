@@ -1,0 +1,11 @@
+{
+  "format": "sw-sou176-private-custody-control/1",
+  "roundtrip_members": 4,
+  "hashes_match": true,
+  "tampered_envelope_rejected": true,
+  "tampered_plaintext_discarded": true,
+  "cipher": "CMS AES-256-GCM / RSA-OAEP-SHA256",
+  "recipient_certificate_sha256": "f8eb6d0cbeb61cc180080b6554a293a7802e0fca1e2e5cf200f18a83f67db4b1",
+  "private_key": "local only; not committed or transmitted",
+  "enclosure": "read-only source; scratch-only writes; loopback-only Seatbelt"
+}

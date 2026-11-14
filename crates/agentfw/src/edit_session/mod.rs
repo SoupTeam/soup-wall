@@ -10,9 +10,15 @@ mod profile;
 pub(crate) mod quota;
 pub(crate) use profile::Profile;
 #[cfg(target_os = "linux")]
+mod application;
+#[cfg(target_os = "linux")]
+mod batch;
+#[cfg(target_os = "linux")]
 mod control;
 #[cfg(target_os = "linux")]
 mod control_io;
+#[cfg(target_os = "linux")]
+mod inventory;
 #[cfg(target_os = "linux")]
 mod launch;
 #[cfg(target_os = "linux")]
@@ -23,6 +29,10 @@ mod refresh;
 mod review;
 #[cfg(target_os = "linux")]
 mod runtime;
+#[cfg(target_os = "linux")]
+pub(crate) fn removal_inactive(run: &std::path::Path) -> Result<()> {
+    review::removal_inactive(run)
+}
 pub(crate) mod transport;
 
 pub const FORMAT: &str = "sw-installed-edit-session/1";
@@ -37,6 +47,27 @@ pub struct Cli {
 }
 #[derive(Subcommand, Debug)]
 enum Action {
+    /// List bounded retained run identities without executing tools or changing state.
+    #[cfg(target_os = "linux")]
+    Inventory(inventory::Args),
+    /// Hand one rechecked inventory selection to an explicitly requested existing action.
+    #[cfg(target_os = "linux")]
+    WithRun(inventory::WithRun),
+    /// Preview or atomically publish an explicitly selected private result set.
+    #[cfg(target_os = "linux")]
+    ExportSet(review::export_set::Args),
+    /// Explicit local application of one reviewed output; never an MCP grant.
+    #[cfg(target_os = "linux")]
+    Apply {
+        #[command(subcommand)]
+        action: application::Action,
+    },
+    /// Guarded finite batch publication and explicit recovery; never MCP authority.
+    #[cfg(target_os = "linux")]
+    Batch {
+        #[command(subcommand)]
+        action: batch::Action,
+    },
     /// Review exact completed-run outputs; private content needs explicit consent.
     #[cfg(target_os = "linux")]
     Review(review::Args),
@@ -232,6 +263,7 @@ fn status(args: diagnostic::Args) -> Result<()> {
             scope: "selected_edit_session_read_only_diagnosis",
             checks: vec![],
             pilot: None,
+            lifecycle: None,
         };
         crate::support_bundle::export_edit(&wrapper, Some(&report), destination)
             .map_err(|_| anyhow::anyhow!("edit_status_support_export_failed"))?;
@@ -244,4 +276,64 @@ fn status(args: diagnostic::Args) -> Result<()> {
         println!("{}", diagnostic::text(&report));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod grammar_tests {
+    use super::*;
+    use clap::{CommandFactory, Parser};
+    #[derive(Parser)]
+    struct Command {
+        #[command(flatten)]
+        edit: Cli,
+    }
+    #[test]
+    fn installed_inventory_types_follow_the_executor_platform_boundary() {
+        Command::command().debug_assert();
+        let command = Command::command();
+        assert!(command.find_subcommand("status").is_some());
+        for name in ["inventory", "with-run"] {
+            assert_eq!(
+                command.find_subcommand(name).is_some(),
+                cfg!(target_os = "linux")
+            );
+        }
+        assert!(Command::try_parse_from([
+            "edit-session",
+            "status",
+            "--run",
+            "/owned/run",
+            "--json"
+        ])
+        .is_ok());
+    }
+    #[derive(Parser)]
+    struct Grammar {
+        #[command(flatten)]
+        cli: Cli,
+    }
+    #[test]
+    fn result_set_types_follow_the_executor_platform_boundary() {
+        Grammar::command().debug_assert();
+        assert!(
+            Grammar::try_parse_from(["agentfw", "status", "--run", "/private/run", "--json"])
+                .is_ok()
+        );
+        let parsed = Grammar::try_parse_from([
+            "agentfw",
+            "export-set",
+            "--run",
+            "/private/run",
+            "--sha256",
+            &"a".repeat(64),
+            "--include",
+            "a.txt",
+            "--include",
+            "b.txt",
+            "--out",
+            "/private/new",
+            "--consent-private-content",
+        ]);
+        assert_eq!(parsed.is_ok(), cfg!(target_os = "linux"));
+    }
 }

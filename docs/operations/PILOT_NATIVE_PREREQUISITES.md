@@ -3,7 +3,7 @@
 `scripts/prepare-native-pilot-prerequisites.py` replaces the two manual source
 builds needed before [pilot runtime preparation](PILOT_RUNTIME_PREPARATION.md).
 Concurrent calls use the [owned preparation protocol](PILOT_PREPARATION_COORDINATION.md).
-It builds only Git 2.51.2 and bubblewrap 0.13.1 for native Ubuntu 24.04 x86_64.
+It builds only Git 2.51.3 and bubblewrap 0.13.1 for native Ubuntu 24.04 x86_64.
 It does not install packages, alter the host, grant user namespace permission,
 start the daemon, or claim active protection.
 
@@ -16,7 +16,7 @@ build, or explicitly add `--allow-download`. The only download targets are:
 
 | Input | Exact URL | SHA-256 |
 | --- | --- | --- |
-| Git 2.51.2 | `https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz` | `233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3` |
+| Git 2.51.3 | `https://www.kernel.org/pub/software/scm/git/git-2.51.3.tar.xz` | `8e6ff1adf702c26e75de1846498d00575ff7e9919305b38b4e27c5514062b13d` |
 | bubblewrap 0.13.1 | `https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz` | `0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d` |
 
 The plan inventories `cc`, `make`, Meson, Ninja, `pkg-config`, `ar`, `ranlib`,
@@ -32,7 +32,7 @@ the [native CI lane](../../.github/workflows/mcp-real-filesystem.yml).
 ```sh
 commit="$(git rev-parse HEAD)"
 archive_args=(
-  --git-archive /absolute/git-2.51.2.tar.xz
+  --git-archive /absolute/git-2.51.3.tar.xz
   --bwrap-archive /absolute/bubblewrap-0.13.1.tar.xz
 )
 args=(--output "$HOME/private-native-prerequisites" --expected-commit "$commit" "${archive_args[@]}")
@@ -49,6 +49,69 @@ per member, 1 MiB per private build log, 10 minutes for Git and 7 minutes
 for bubblewrap setup/compile. The build environment passes only selected tool
 paths and a small fixed set of variables. On timeout or cancellation it stops
 the owned process group.
+
+### Private offline download exchange (SOU-194)
+
+An explicit exchange moves only the two exact source archives above. The
+uncompressed `sw-pilot-prerequisite-download-exchange/1` tar contains exactly
+`manifest.json`, `git.tar.xz` and `bwrap.tar.xz`. The manifest binds each
+version, accepted URL, SHA-256 and byte count. The importer checks the complete
+inventory, member types, sizes, digest and the *current* repository pins before
+publishing a selected cache. This is a source cache, not a built binary, sandbox
+permission, selected runtime or active-protection claim. Compiler, Meson,
+libcap and other native build dependencies remain separate host inputs.
+
+Run these commands as a non-root operator from the same clean, reviewed source
+commit on native Ubuntu 24.04 x86_64. Replace paths with owned private `0700`
+directories outside the checkout. The online preparation uses the existing
+download/build verifier; all other exchange operations require explicit flags.
+
+```sh
+commit="$(git rev-parse HEAD)"
+online="$HOME/private-online-prerequisites"
+fresh="$HOME/private-offline-prerequisites"
+bundle_dir="$HOME/private-transfer"
+mkdir -m 700 "$bundle_dir"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-preview \
+  --output "$online" --expected-commit "$commit"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --allow-download \
+  --output "$online" --expected-commit "$commit"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-export "$bundle_dir/pinned.tar" \
+  --output "$online" --expected-commit "$commit"
+# Transfer pinned.tar through the approved private channel; keep it owner-only.
+python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-import "$bundle_dir/pinned.tar" \
+  --output "$fresh" --expected-commit "$commit"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-preview \
+  --output "$fresh" --expected-commit "$commit"
+python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --offline-import-cache \
+  --output "$fresh" --expected-commit "$commit"
+```
+
+Supply any required `--pkg-config-libdir`, `--pkg-config-sysroot` and
+`--meson-pythonpath` arguments to both preparation calls; the archive exchange
+does not supply them. The export destination must be absent, owner-private and
+outside the cache root. A previous valid import is never overwritten. An owner
+private filesystem must support unnamed `O_TMPFILE` creation and descriptor
+linking: export, direct-cache seed and import selection publish the verified
+inode through a pinned directory descriptor, without a replaceable named
+temporary. An unsupported filesystem refuses the operation. Import rechecks
+all staged member hashes after selecting the cache, and every later consumer
+checks them again. An owner
+interrupted before selection may retry the import: only known, private files
+from its unselected stage are removed under the existing same-root lock;
+unknown or unsafe entries cause refusal. A complete selected import is checked
+again before each offline archive copy. The offline consumer never invokes the
+download path, and a fresh root is required to demonstrate that it consumed
+the import instead of reusing an already prepared generation. Import refuses a
+root with an existing selected preparation. Keep the bundle
+private; it contains source bytes and is not a release artifact.
+
+The focused `cache_exchange_only` manual job in
+[`mcp-real-filesystem.yml`](../../.github/workflows/mcp-real-filesystem.yml)
+uses two private roots outside the checkout, records separate online/exchange/
+offline timings, and executes the offline preparation in a disposable network
+namespace. It retains finite JSON diagnostics for incomplete attempts. The
+normal required CI, CodeQL and trusted admission remain separate gates.
 
 ### Resumable bubblewrap download (SOU-173)
 
@@ -89,7 +152,7 @@ local Git archive:
 ```sh
 python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --rebuild \
   --offline-bwrap-cache --output "$HOME/private-native-prerequisites" \
-  --expected-commit "$commit" --git-archive /absolute/git-2.51.2.tar.xz
+  --expected-commit "$commit" --git-archive /absolute/git-2.51.3.tar.xz
 ```
 
 For an invalid or exhausted partial, inspect the bounded failure reason and
@@ -169,7 +232,7 @@ python3 -B scripts/prepare-installed-pilot.py --prepare \
   --agentfw "$PWD/target/debug/agentfw" \
   --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
   --sandbox-tests /absolute/agentfw-library-test-executable \
-  --node-archive /absolute/node-v22.22.0-linux-x64.tar.xz \
+  --node-archive /absolute/node-v22.23.5-linux-x64.tar.xz \
   --bwrap "$bwrap_path" --git "$git_path" \
   --claude /absolute/claude --python /absolute/python3 \
   --filesystem-classifier "$PWD/rule_baseline/rule_baseline.py" \

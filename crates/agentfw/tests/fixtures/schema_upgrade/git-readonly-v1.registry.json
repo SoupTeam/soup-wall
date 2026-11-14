@@ -1,0 +1,96 @@
+{
+  "contract_version": "sw-native/1",
+  "registry_id": "git-readonly-v1",
+  "tools": [
+    {
+      "name": "git_status",
+      "schema_sha256": "e3eb0910a0b7d725877173b42aa54849c5a978932a2192e3f814a9d92794db25",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/git-readonly/1"
+    },
+    {
+      "name": "git_diff_unstaged",
+      "schema_sha256": "f6d9cece66ac042e727f712545825c152c5d6dc39c944dc99c3319b3464bd5db",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/git-readonly/1"
+    },
+    {
+      "name": "git_diff_staged",
+      "schema_sha256": "edcbb5d9ac0831c9d613d55e28fc6e5a446313ce413a7bb6fba7ba11d5cc6d5b",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/git-readonly/1"
+    },
+    {
+      "name": "git_diff",
+      "schema_sha256": "3028417740cd7f02a8ada0da7f65571b0a98309b3b308c5226ad40dbeeea2eb0",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/git-readonly/1"
+    },
+    {
+      "name": "git_commit",
+      "schema_sha256": "292f379542fc33ea01f62648f50aab4b07518bb7614f79895e9a77639043f3c3",
+      "action_class": "destructive",
+      "result_provenance": "untrusted",
+      "egress": []
+    },
+    {
+      "name": "git_add",
+      "schema_sha256": "bcca48730b12740da64f7a0c898574eb9bb3aa7679dcf0bd8ac8b9889b6254fa",
+      "action_class": "destructive",
+      "result_provenance": "untrusted",
+      "egress": []
+    },
+    {
+      "name": "git_reset",
+      "schema_sha256": "5e4fc873d15789835f724f59e69d268a2d3cb614605712363eb16549ce0c6563",
+      "action_class": "destructive",
+      "result_provenance": "untrusted",
+      "egress": []
+    },
+    {
+      "name": "git_log",
+      "schema_sha256": "6a12081f35d8069ddca7d1e70de8c4181cbb0475098b23cb24b13f8ad385240e",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/git-readonly/1"
+    },
+    {
+      "name": "git_create_branch",
+      "schema_sha256": "a729d00b7ca12f742eace3e299d98df0290c382a2fa54033f487aaefa787b0ed",
+      "action_class": "destructive",
+      "result_provenance": "untrusted",
+      "egress": []
+    },
+    {
+      "name": "git_checkout",
+      "schema_sha256": "516dc2e905ce6d79254be1035b338c26992f1c8e66a4e5d88d7b6a7485833969",
+      "action_class": "destructive",
+      "result_provenance": "untrusted",
+      "egress": []
+    },
+    {
+      "name": "git_show",
+      "schema_sha256": "5ba0f464a65a0e4d67c6944e157bdf9fc35447b568ac17f11db31e7adc4716f4",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/git-readonly/1"
+    },
+    {
+      "name": "git_branch",
+      "schema_sha256": "57d04063c4a36858343773eb6928ffd7a2e52a4d95545a310845d8facdc0211c",
+      "action_class": "destructive",
+      "result_provenance": "untrusted",
+      "egress": []
+    }
+  ]
+}

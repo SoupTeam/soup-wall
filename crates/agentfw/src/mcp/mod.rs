@@ -26,6 +26,8 @@ pub mod profile_upgrade;
 pub mod proxy;
 pub mod replace_file;
 pub mod resources;
+pub mod sandbox_exercise;
+pub mod schema_upgrade;
 pub mod server_profile;
 pub mod server_sandbox;
 #[cfg(unix)]

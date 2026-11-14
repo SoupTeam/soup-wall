@@ -1,0 +1,16 @@
+{
+  "classification": null,
+  "contract": "sw-native-performance-comparison/1",
+  "rejection": {
+    "code": "published_distribution_not_reproduced",
+    "detail": "runs[2].summary.latency.git.p50_ms",
+    "role": "baseline"
+  },
+  "scope": [
+    "Engineering performance diagnostics for the recorded reports only.",
+    "Not a security or protection qualification, not task effectiveness, not product or pilot readiness.",
+    "No new budget or threshold is approved.",
+    "A same-report identity control proves the comparator, not a performance change between revisions."
+  ],
+  "status": "rejected"
+}

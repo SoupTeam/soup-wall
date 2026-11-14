@@ -1,0 +1,50 @@
+MCP original-tool schema upgrade review (offline, non-authoritative)
+Format: sw-mcp/schema-upgrade-report/1
+
+NOTICE: This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process.
+SNAPSHOT-ONLY MODE: no current operator declarations were supplied. Semantic review is UNAVAILABLE; action, resource and destination effects are unknown. This is not a semantic upgrade review.
+
+before: file upstream-tools-list.json raw_sha256 8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b (6022 bytes, 12 tools, mcp/tools-list-response)
+        discovery_sha256 0ebf2d0c147352d483aed19e6988749c8641a11258ac05a16e0a58639163489c
+after : file git-semantic.json raw_sha256 9c27adff206eaf6f58f90483c2ef541997976d63bf2daa635b53285ac49c188a (11307 bytes, 12 tools, mcp/tools-list-response)
+        discovery_sha256 ce57def326e848c641144288621216f7269931b4c633fd569dcb8a50c4854dd6
+before identity: verified upstream-identity.json raw_sha256 90fbf2f84db1fee38145914adaf851c35d9b8b3735dc4e78caf7820c507e09e4 (3 referenced files verified)
+current declarations: NONE SUPPLIED (semantics unknown)
+
+Outcome: review_required / unsupported_present (exit 5)
+Snapshots byte-identical: false; declaration findings: 0
+Tools: before 12 after 12; added 1 removed 1 changed 6 unchanged 5
+Findings: 10 (inert metadata 0, review required 8, unsupported 2, declaration requalification 0)
+Coverage complete: false; review-pack records: 13
+New UNACCEPTED tool identities (7): git_add, git_branch, git_commit, git_diff, git_log, git_push, git_show
+Accepted by this analyzer: nothing.
+
+Findings (tool / pointer / kind / nature):
+  [F-3a2faaf01c2bfff0] git_add /inputSchema/properties/files/minItems constraint_changed review_required -> examples 1
+      before (untrusted): 1
+      after  (untrusted): 0
+  [F-b4910c0758b2780a] git_branch /inputSchema schema_outside_runtime_subset unsupported -> examples 1
+  [F-49546f6f12412ed3] git_branch /inputSchema/properties/branch_type/enum enum_added review_required -> examples 2
+      after  (untrusted): ["local","remote","all"]
+  [F-9503789febb1cbc3] git_commit /annotations/readOnlyHint behavior_hint_changed review_required -> examples 1
+      before (untrusted): false
+      after  (untrusted): true
+  [F-3e0a6a9d227d049e] git_diff /inputSchema/properties/context_lines/type type_changed review_required -> examples 2
+      before (untrusted): integer
+      after  (untrusted): string
+  [F-f8153054803e62a7] git_log /inputSchema schema_outside_runtime_subset unsupported -> examples 1
+  [F-508d984f8cb3110c] git_log /inputSchema/properties/max_count/default default_changed review_required -> examples 2
+      before (untrusted): 10
+      after  (untrusted): 1000
+  [F-e9321dc6ffeeea68] git_push (tool) tool_added review_required -> examples 1
+      after  (untrusted): {"annotations":{"readOnlyHint":true},"description":"Read-only status helper (claim is untrusted).","inputSchema":{"properties":{"force":{"default":false,"type":"boolean"},"remote":{"type":"string"},"repo_path":{"type":"string"}},"required":…[76 more bytes]
+  [F-3a8f21fc41b04aa4] git_reset (tool) tool_removed review_required -> examples 1
+      before (untrusted): {"annotations":{"destructiveHint":true,"idempotentHint":true,"openWorldHint":false,"readOnlyHint":false},"description":"Unstages all staged changes","inputSchema":{"properties":{"repo_path":{"title":"Repo Path","type":"string"}},"required":…[69 more bytes]
+  [F-e8f657514769119f] git_show /inputSchema/required required_removed review_required -> examples 1
+      before (untrusted): revision
+
+Coverage gaps:
+  - {"effect":"semantic review unavailable: action/resource/destination semantics unknown; no declared-selector findings or declaration-grounded examples","gap":"no_current_declarations","mode":"snapshot_only"}
+  - {"entries":20,"gap":"unsupported_constructs_present"}
+  - {"gap":"examples_not_constructed","records":6}
+Unsupported constructs reported: 20

@@ -105,7 +105,7 @@ The new sealed closure contract has explicit bounds: 8192 entries and 256 MiB of
 captured input. Its private startup capsule is bounded to 1 MiB, 8998 arguments
 (plus the owner's info-fd pair, within the vendor's 9000-argument cap),
 768 KiB of argument text and 8256 descriptors. These bounds cover the measured
-locked closure (4077 archive files, 24,320,025 bytes, before runtime/libraries).
+locked closure (4109 pinned regular files, 25,017,373 bytes, before runtime/libraries).
 Legacy launch limits and the 64 KiB owner control/SCM protocols are unchanged.
 Descriptor exhaustion, unavailable sealing, kernel restrictions, unsupported
 bubblewrap or an unqualified platform refuse startup. There is no unsandboxed

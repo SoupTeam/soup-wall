@@ -1,5 +1,10 @@
 """Focused audit qualification must never replace the full prepared pilot gate."""
 import ast
+import json
+import os
+import textwrap
+from unittest.mock import patch
+import re
 from pathlib import Path
 import unittest
 
@@ -28,6 +33,11 @@ def enabled(body, **overrides):
         "github.event.inputs.capacity_only": "",
         "github.event.inputs.prepared_operations_only": "",
         "github.event.inputs.coordinated_update_only": "",
+        "github.event.inputs.private_edit_self_test_only": "",
+        "github.event.inputs.provider_ca_only": "",
+        "github.event.inputs.native_preparation_only": "",
+        "github.event.inputs.project_presets_only": "",
+        "github.event.inputs.installed_focus": "",
     }
     values.update(overrides)
     condition = next(line.strip()[4:] for line in body.splitlines() if line.strip().startswith("if: "))
@@ -58,6 +68,261 @@ def enabled(body, **overrides):
 
 
 class PreparedQualificationCoverage(unittest.TestCase):
+    def test_manual_workflow_stays_within_github_dispatch_input_limit(self):
+        text = (ROOT / '.github/workflows/mcp-real-filesystem.yml').read_text()
+        inputs = text.split('    inputs:\n', 1)[1].split('\npermissions:', 1)[0]
+        names = re.findall(r'^      ([a-z][a-z_]+):$', inputs, re.M)
+        self.assertLessEqual(len(names), 25)
+        self.assertEqual(len(names), len(set(names)))
+        self.assertIn('installed_focus', names)
+        for obsolete in ('linked_worktrees_only', 'filesystem_roots_only',
+                         'proxy_preflight_only', 'configuration_recovery_only'):
+            self.assertNotIn(obsolete, names)
+        for value in ('linked-worktrees', 'filesystem-roots', 'proxy-preflight', 'configuration-recovery'):
+            self.assertIn(value, inputs)
+
+    def test_configuration_recovery_is_explicit_and_never_claims_full_runtime(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.installed_focus": "configuration-recovery",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers",
+                              "Run the first-use demo through the prepared original host",
+                              "Qualify terminal Ask inbox through the original Claude host",
+                              "Qualify reused bounded audit engine restart and fail-safe retention"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                focused = step(text, "Qualify installed declarative configuration backup and restore")
+                self.assertTrue(enabled(focused, **context))
+                self.assertFalse(enabled(focused))
+                for missing in ("installed_focus", "native_preparation_only"):
+                    self.assertFalse(enabled(focused, **{**context, "github.event.inputs." + missing: ""}))
+                self.assertIn("qualify-configuration-backup.py --run", focused)
+                self.assertIn("configuration-backup-qualification/report.json", text)
+
+    def test_linked_worktree_dispatch_is_separate_from_full_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.installed_focus": "linked-worktrees",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers",
+                              "Run the first-use demo through the prepared original host",
+                              "Qualify terminal Ask inbox through the original Claude host",
+                              "Qualify reused bounded audit engine restart and fail-safe retention"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                body = step(text, "Qualify installed linked worktrees through original servers")
+                self.assertTrue(enabled(body, **context))
+                self.assertFalse(enabled(body))
+                for missing in ("installed_focus", "native_preparation_only"):
+                    self.assertFalse(enabled(body, **{
+                        **context, "github.event.inputs." + missing: "",
+                    }))
+                self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
+                self.assertIn("--linked-worktrees-only", body)
+
+
+    def test_filesystem_roots_dispatch_is_separate_from_full_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.installed_focus": "filesystem-roots",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers",
+                              "Run the first-use demo through the prepared original host",
+                              "Qualify terminal Ask inbox through the original Claude host",
+                              "Qualify reused bounded audit engine restart and fail-safe retention"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                body = step(text, "Qualify installed filesystem roots through original servers")
+                self.assertTrue(enabled(body, **context))
+                self.assertFalse(enabled(body))
+                for missing in ("installed_focus", "native_preparation_only"):
+                    self.assertFalse(enabled(body, **{
+                        **context, "github.event.inputs." + missing: "",
+                    }))
+                self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
+                self.assertIn("--filesystem-roots-only", body)
+
+
+    def test_project_presets_dispatch_is_separate_from_full_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.project_presets_only": "true",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers",
+                              "Run the first-use demo through the prepared original host",
+                              "Qualify terminal Ask inbox through the original Claude host",
+                              "Qualify reused bounded audit engine restart and fail-safe retention"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                body = step(text, "Qualify installed project presets through two owned projects")
+                self.assertTrue(enabled(body, **context))
+                self.assertFalse(enabled(body))
+                for missing in ("project_presets_only", "native_preparation_only"):
+                    self.assertFalse(enabled(body, **{
+                        **context, "github.event.inputs." + missing: "",
+                    }))
+                self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
+                self.assertIn("--project-presets-only", body)
+
+    def test_actual_project_dispatch_guards_accept_normal_and_recovery_and_refuse_mixes(self):
+        def validate(body, inputs):
+            # Execute only the repository-owned Python guard, never input as code.
+            program=body.split("python3 -B - <<'PYCODE'\n",1)[1].split('          PYCODE',1)[0]
+            with patch.dict(os.environ, {'DISPATCH_INPUTS':json.dumps(inputs)}):
+                exec(compile(textwrap.dedent(program), '<owned dispatch guard>', 'exec'), {})
+        baseline={'native_preparation_only':'true','project_presets_only':'true',
+                  'stability_mode':'off','provider_ca_only':'false','ask_series':''}
+        for workflow,text in self.workflows():
+            old=step(text,'Validate focused project preset dispatch')
+            new=step(text,'Validate focused project recovery dispatch')
+            for mode in ('off','project-recovery'):
+                inputs=dict(baseline,installed_focus=mode)
+                with self.subTest(workflow=workflow,mode=mode):
+                    validate(old,inputs)
+                    if mode=='project-recovery':validate(new,inputs)
+            for changed in ({'native_preparation_only':'false'},{'stability_mode':'soak'},
+                            {'provider_ca_only':'true'},{'ask_series':'cold,warm'},
+                            {'installed_focus':'maintenance'}):
+                inputs=dict(baseline,installed_focus='project-recovery');inputs.update(changed)
+                with self.subTest(workflow=workflow,conflict=changed):
+                    with self.assertRaises(AssertionError):validate(old,inputs)
+            with self.assertRaises(AssertionError):
+                validate(new,dict(baseline,installed_focus='project-recovery',project_presets_only='false'))
+
+    def test_provider_ca_dispatch_is_separate_from_full_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.provider_ca_only": "true",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers",
+                              "Run the first-use demo through the prepared original host",
+                              "Qualify terminal Ask inbox through the original Claude host",
+                              "Qualify reused bounded audit engine restart and fail-safe retention"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                body = step(text, "Qualify installed provider CA custody through owned HTTPS")
+                self.assertTrue(enabled(body, **context))
+                self.assertFalse(enabled(body))
+                for missing in ("provider_ca_only", "native_preparation_only"):
+                    self.assertFalse(enabled(body, **{
+                        **context, "github.event.inputs." + missing: "",
+                    }))
+                self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
+                self.assertIn("--provider-ca-only", body)
+
+    def test_maintenance_dispatch_is_separate_from_full_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.installed_focus": "maintenance",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                body = step(text, "Qualify owned installed maintenance with original host")
+                self.assertTrue(enabled(body, **context))
+                self.assertFalse(enabled(body))
+                for missing in ("installed_focus", "native_preparation_only"):
+                    self.assertFalse(enabled(body, **{
+                        **context, "github.event.inputs." + missing: "",
+                    }))
+                self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
+                self.assertIn("--maintenance-only", body)
+
+    def test_policy_activation_dispatch_is_separate_from_full_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.installed_focus": "policy-activation",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                body = step(text, "Qualify installed policy-candidate activation with original host")
+                self.assertTrue(enabled(body, **context))
+                self.assertFalse(enabled(body))
+                for missing in ("installed_focus", "native_preparation_only"):
+                    self.assertFalse(enabled(body, **{
+                        **context, "github.event.inputs." + missing: "",
+                    }))
+                self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
+                self.assertIn("--policy-activation-only", body)
+
+    def test_budget_preset_dispatch_is_separate_from_full_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.installed_focus": "budget-presets",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                body = step(text, "Qualify installed Linux budget presets with original host")
+                self.assertTrue(enabled(body, **context))
+                self.assertFalse(enabled(body))
+                for missing in ("installed_focus", "native_preparation_only"):
+                    self.assertFalse(enabled(body, **{
+                        **context, "github.event.inputs." + missing: "",
+                    }))
+                self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
+                self.assertIn("--budget-presets-only", body)
+                self.assertIn("Delegate=cpu memory pids", body)
+                self.assertIn('--budget-unit "$unit.service"', body)
+
+    def test_pilot_scope_dispatch_is_separate_from_full_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.installed_focus": "pilot-scope",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                body = step(text, "Qualify the frozen v1 pilot scope through installed commands")
+                self.assertTrue(enabled(body, **context))
+                self.assertFalse(enabled(body))
+                for missing in ("installed_focus", "native_preparation_only"):
+                    self.assertFalse(enabled(body, **{
+                        **context, "github.event.inputs." + missing: "",
+                    }))
+                self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
+                self.assertIn("--pilot-scope-only", body)
+                self.assertIn("scripts/qualify-installed-pilot.py --run --selection", body)
+                self.assertIn("scripts/pilot-demo.py", body)
+
     def test_update_dispatch_is_targeted_and_does_not_replace_existing_qualification(self):
         context = {"github.event_name": "workflow_dispatch",
                    "github.event.inputs.coordinated_update_only": "true"}
@@ -151,6 +416,28 @@ class PreparedQualificationCoverage(unittest.TestCase):
     def test_unknown_input_still_requires_review(self):
         with self.assertRaisesRegex(AssertionError, "Unreviewed qualification condition"):
             enabled("if: github.event.inputs.unreviewed_input == 'true'")
+
+    def test_private_edit_self_test_dispatch_does_not_claim_full_pilot_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.private_edit_self_test_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT, OPERATIONS,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify bounded storage faults and fresh-authority recovery"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                private = step(text, "Verify installed private-edit self-test outside the checkout")
+                self.assertTrue(enabled(private, **context))
+                self.assertTrue(enabled(private))
+                self.assertIn("scripts/qualify-private-edit-self-test.py", private)
+                self.assertIn("--verify-existing", private)
+                self.assertIn('"$SOU119_SANDBOX_TESTS" self_test::tests', private)
+                self.assertIn('if [[ "${{ github.event.inputs.private_edit_self_test_only }}" == true ]]; then', private)
+                self.assertIn('cargo test --locked -p agentfw --lib self_test::tests', private)
+                self.assertIn('else\n            "$SOU119_SANDBOX_TESTS" self_test::tests\n          fi', private)
+                self.assertIn("cargo clippy --locked -p agentfw --all-targets", private)
+                self.assertIn("cargo fmt --all --check", private)
 
     def test_storage_faults_are_explicit_manual_evidence_with_separate_output(self):
         for name, text in self.workflows():

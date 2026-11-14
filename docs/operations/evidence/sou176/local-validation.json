@@ -1,0 +1,239 @@
+{
+  "checks": {
+    "actual_partial_identity_compatibility": {
+      "command": [
+        "python3",
+        "-B",
+        "-c",
+        "import sys,zipfile;from pathlib import Path;sys.path.insert(0,\"scripts\");import pilot_dossier as d,pilot_runtime_identity as r;z=zipfile.ZipFile(\"PRIVATE_REVIEW/attempt-2.zip\");p=r.parse(z.read(\"sou176/results/runtime-plan.json\"));s=dict(p[\"source\"]);s[\"files_sha256\"]=d.git_files_digest(Path.cwd(),s[\"commit\"]);r.verify_plan(p,s,lambda n:d.git_bytes(Path.cwd(),s[\"commit\"],n));c=d.parse(z.read(\"sou176/results/execution.json\"));total=0\nfor row in c[\"stages\"]:\n if row[\"status\"]!=\"executed\":continue\n raw=z.read(\"sou176/results/\"+row[\"report\"]);w=r.parse(z.read(\"sou176/results/\"+row[\"identity_report\"]));ids=r.verify_stage(p,row[\"id\"],w,d.parse(raw),d.sha(raw),row[\"independent_namespace_cleanup\"]);total+=len(ids);print(row[\"id\"]+\": \"+str(len(ids))+\" independently recomputed scopes\")\nassert total==38;print(\"Historical partial run only: 38 scoped identities verified against exact old Git source; final complete run still required\")"
+      ],
+      "elapsed_seconds": 0.48,
+      "exit_code": 0,
+      "historical_partial_only": true,
+      "log_sha256": "55dfb58f905886e0175359c029bf0002a82641f47a518f39bc6edfb7343485a8",
+      "source_sha256": "6de3259cea0b68d30845b7ecc1d7c379033b0ecf1e689c25cddf92af00a614c8"
+    },
+    "actual_partial_report_compatibility": {
+      "command": [
+        "python3",
+        "-B",
+        "-c",
+        "import sys,zipfile;from pathlib import Path;sys.path.insert(0,\"scripts\");import pilot_dossier as d;w=d.parse(Path(\"scripts/benchmarks/installed-pilot-workload-v2.json\").read_bytes());names=[\"installed/report.json\",\"matched/report.json\",\"ask/qualification.json\",\"prepared/report.json\",\"docs-code/report.json\"];z=zipfile.ZipFile(\"PRIVATE_REVIEW/attempt-2.zip\");[(d.project(d.parse(z.read(\"sou176/results/\"+n)),w),print(n.split(\"/\")[0]+\": original schema and outcome reconciliation passed\")) for n in names];print(\"Partial historical attempt only; not final source qualification\")"
+      ],
+      "elapsed_seconds": 0.08,
+      "exit_code": 0,
+      "historical_partial_only": true,
+      "log_sha256": "2874c848c4a744fe480d7df9ab431567177c1d5b2e8a750014cabf98d94bec96",
+      "source_sha256": "6de3259cea0b68d30845b7ecc1d7c379033b0ecf1e689c25cddf92af00a614c8"
+    },
+    "affected_regressions": {
+      "command": [
+        "python3",
+        "-B",
+        "-c",
+        "import sys,unittest;sys.path[:0]=[\"scripts/tests\",\"scripts\"];names=[\"test_pilot_runtime_identity\",\"test_pilot_dossier\",\"test_sou145_readiness\",\"test_pilot_front_door_component\",\"test_pilot_git_profiles\",\"test_prepared_stop_witness\",\"test_pilot_ask_scheduling\"];r=unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromNames(names));sys.exit(not r.wasSuccessful())"
+      ],
+      "elapsed_seconds": 7.8,
+      "exit_code": 0,
+      "log_sha256": "fabdeb31f97e6513bf841259cb25754706d30b115037f6de4910b7c289a09a81",
+      "source_sha256": "26dea6b6470aa3d30473bb4c5a4f806dee0bc86c2619a1d864e67f47fee6d74d"
+    },
+    "clippy": {
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "elapsed_seconds": 84.2,
+      "exit_code": 0,
+      "log_sha256": "4e97c5dd5fba3eab5f14a13ad3333f5c9083326da97bdec3384958ef2e4f1c64",
+      "source_sha256": "ea57b6002a14c4ce2c9d3430fd7a06c85d24130478e80aa325e366ae199aaba6"
+    },
+    "docs": {
+      "command": [
+        "python3",
+        "-B",
+        "scripts/check_docs.py"
+      ],
+      "elapsed_seconds": 1.59,
+      "exit_code": 0,
+      "log_sha256": "d3a78bb85d5848076e0819d07e014e12f2238da6f2ed9b50ee0445b755a94603",
+      "source_sha256": "b13c8514de27e3b2cb8c4fe84579c3333d070ff3af1ba13850845060c199e4af"
+    },
+    "exact_source_bytes": {
+      "command": [
+        "python3",
+        "-B",
+        "-c",
+        "import sys,importlib.util;sys.path.insert(0,\"scripts\");import pilot_dossier as d;s=importlib.util.spec_from_file_location(\"actual_installed_source\",\"scripts/qualify-installed-pilot.py\");m=importlib.util.module_from_spec(s);s.loader.exec_module(m);actual=m.source();assert not actual[\"dirty\"];assert actual[\"files_sha256\"]==d.git_files_digest(m.ROOT,actual[\"commit\"]);print(\"clean tracked-byte digest independently matches candidate Git blobs\")"
+      ],
+      "elapsed_seconds": 1.39,
+      "exit_code": 0,
+      "log_sha256": "bd778b43adf1c917ef07aeeeaaf3ce2c62288956fd4f32657cd78c06c9b7bd76",
+      "source_sha256": "5b1fc4dae2a8c76921d6a184b0893bedab83e3031491856eee26901983c78233"
+    },
+    "final_exact_source_bytes": {
+      "command": [
+        "python3",
+        "-B",
+        "-c",
+        "import sys,importlib.util;sys.path.insert(0,\"scripts\");import pilot_dossier as d;s=importlib.util.spec_from_file_location(\"actual_installed_source\",\"scripts/qualify-installed-pilot.py\");m=importlib.util.module_from_spec(s);s.loader.exec_module(m);a=m.source();assert a[\"commit\"]==\"69b88976f5a68db5ebb5781589c3ee8556317ad7\" and not a[\"dirty\"];assert a[\"files_sha256\"]==d.git_files_digest(m.ROOT,a[\"commit\"]);print(\"clean tracked-byte digest independently matches candidate Git blobs\")"
+      ],
+      "elapsed_seconds": 0.51,
+      "exit_code": 0,
+      "log_sha256": "d049b6090748e45b86da77dcaada42bc249d4fdb2c0bbbf12aed01e26e6662f9",
+      "source_sha256": "2bfc711565b401505ecf02aefb055a255a86b94ce3c9098963ed6908a801a901"
+    },
+    "final_reporter_regressions": {
+      "command": [
+        "python3",
+        "-B",
+        "-c",
+        "import sys,unittest;sys.path[:0]=[\"scripts/tests\",\"scripts\"];r=unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromNames([\"test_pilot_runtime_identity\",\"test_pilot_dossier\",\"test_sou145_readiness\"]));sys.exit(not r.wasSuccessful())"
+      ],
+      "elapsed_seconds": 3.12,
+      "exit_code": 0,
+      "log_sha256": "4cf2fa528b7606303cba390e3def4a26abc7a3662dbdbec96a64f01f5e635fc7",
+      "source_sha256": "f81d8fde4f1dfef8b07a9ed685a3618c78deeac8b64f47e4c786cefffe04da82"
+    },
+    "fmt": {
+      "command": [
+        "cargo",
+        "fmt",
+        "--check"
+      ],
+      "elapsed_seconds": 1.51,
+      "exit_code": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_sha256": "218359acb530c6046eebea4c5be79f5f5351051b49fca156ca43b897d7e18cf4"
+    },
+    "interrupted_custody_controls": {
+      "command": [
+        "python3",
+        "-B",
+        "-c",
+        "import sys,unittest;sys.path[:0]=[\"scripts/tests\",\"scripts\"];r=unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromNames([\"test_pilot_runtime_identity\",\"test_pilot_dossier\",\"test_sou145_readiness\",\"test_pilot_front_door_component\",\"test_pilot_git_profiles\"]));sys.exit(not r.wasSuccessful())"
+      ],
+      "elapsed_seconds": 7.81,
+      "exit_code": 0,
+      "log_sha256": "da9db9656c8a75d775d3d87068560ab5bc421e2b45e8e47765935407dd9f0e89",
+      "source_sha256": "2bfc711565b401505ecf02aefb055a255a86b94ce3c9098963ed6908a801a901"
+    },
+    "private_custody_docs": {
+      "command": [
+        "env",
+        "GIT_INDEX_FILE=PRIVATE_SCRATCH/docs-index",
+        "python3",
+        "-B",
+        "scripts/check_docs.py"
+      ],
+      "elapsed_seconds": 0.3,
+      "exit_code": 0,
+      "log_sha256": "d3a78bb85d5848076e0819d07e014e12f2238da6f2ed9b50ee0445b755a94603",
+      "source_sha256": "af4ed461626d31284f92b4d245424b700150781dab668de6703c7829b6af6c13"
+    },
+    "private_key_isolation": {
+      "command": [
+        "sandboxed Python check: opening public certificate in custody-key directory must raise PermissionError"
+      ],
+      "elapsed_seconds": 0.03,
+      "exit_code": 0,
+      "log_sha256": "d1b607653b57230857a404022c834067622259f94bf2145c93c94f458e7915c4",
+      "source_sha256": "6de3259cea0b68d30845b7ecc1d7c379033b0ecf1e689c25cddf92af00a614c8"
+    },
+    "rust_workspace": {
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "--workspace"
+      ],
+      "elapsed_seconds": 370.22,
+      "exit_code": 0,
+      "log_sha256": "4a95d8962789d55634734c2dd9bd043f024957f9781a364cf0555152bdb07db8",
+      "source_sha256": "9865a903d2a89d765c87dcdf29d180bb6532b8bdb277ddb982b3d173213d273c"
+    },
+    "toolchain_controls": {
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_verify_pilot_toolchain.py",
+        "-v"
+      ],
+      "elapsed_seconds": 18.52,
+      "exit_code": 0,
+      "log_sha256": "9113f802628450737cf04e133d984ea09f37533e3bd938dda64b0217a1e95861",
+      "source_sha256": "26dea6b6470aa3d30473bb4c5a4f806dee0bc86c2619a1d864e67f47fee6d74d"
+    },
+    "final_evidence_docs": {
+      "command": [
+        "python3",
+        "-B",
+        "scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "91f93973ed92af865cf0dc11a6276498d78bf9574dfcb5b68dfda87d276ff59b",
+      "log_sha256": "0d537d30960589993dbab37e870140cbfd8a2cac2dc4e08339da0620888869b9",
+      "elapsed_seconds": 0.31,
+      "counts": {
+        "markdown_files": 342,
+        "local_links": 1198,
+        "errors": 0
+      }
+    }
+  },
+  "counts": {
+    "affected_regressions": {
+      "ran": 101,
+      "skipped": 2
+    },
+    "final_reporter_regressions": {
+      "ran": 63,
+      "skipped": 1
+    },
+    "interrupted_custody_controls": {
+      "ran": 80,
+      "skipped": 2
+    },
+    "rust_workspace": {
+      "failed": 0,
+      "ignored": 13,
+      "passed": 1924
+    },
+    "toolchain_controls": {
+      "ran": 25,
+      "skipped": 0
+    }
+  },
+  "earlier_broad_python_discovery": {
+    "errors": 10,
+    "failures": 20,
+    "log_sha256": "eff20177008211404ccacbc3df17a45127003f7d4bbd0ee79cf666f6d48a2b3a",
+    "meaning": "Not a passing full Python result. It exposed then-fixed component/import and synthetic fixture defects, Linux/procfs and missing dependency limitations, plus Apple xcrun stderr incorrectly observed as dirty Git status. Affected regressions and 25 toolchain controls were rerun successfully after repairs and direct CLT Git selection; the sandbox was not weakened.",
+    "ran": 1939,
+    "skipped": 185,
+    "status": "failed_snapshot_preserved_privately"
+  },
+  "enclosure": {
+    "network": "loopback only",
+    "source": "read-only through Seatbelt",
+    "writes": "isolated scratch only"
+  },
+  "environment": "macOS arm64",
+  "format": "sw-sou176-local-validation/1",
+  "publication": "Task-owned temporary command paths normalized; original receipts and logs retained privately.",
+  "rust_crates_identical_to_accepted_main": "7530c4c559b8f7fad95d6d8178f2816475184b17",
+  "rust_crates_tree": "a1d0e0468549b78a245d24570691360ed9e269da"
+}

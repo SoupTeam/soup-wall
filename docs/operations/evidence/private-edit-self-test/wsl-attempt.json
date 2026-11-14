@@ -1,0 +1,28 @@
+{
+  "format": "sw-private-edit-self-test-platform-attempt/1",
+  "date": "2026-10-29",
+  "platform": "wsl2-ubuntu-24.04-x86_64",
+  "observed_kernel": "6.18.54.1-microsoft-standard-WSL2",
+  "operator": "ordinary-non-root",
+  "status": "incomplete",
+  "stage": "installed-agent-build",
+  "runtime_executed": false,
+  "preceding_checks": {
+    "rust_cli_unit_tests": {
+      "passed": 3,
+      "failed": 0,
+      "scope": "initial Rust routing increment before later report-only and Python changes; not complete runtime acceptance"
+    },
+    "rust_toolchain": "cargo 1.94.1"
+  },
+  "attempted": [
+    "cargo build --locked --offline -p agentfw --bin agentfw using the existing dependency cache",
+    "subsequent read-only WSL availability probe"
+  ],
+  "failure": "Wsl/Service/CreateInstance/CreateVm/HCS/ERROR_NO_SYSTEM_RESOURCES",
+  "effect": "The WSL VM could no longer start; no new installed self-test runtime result was produced.",
+  "host_settings_changed": false,
+  "thresholds_changed": false,
+  "paid_inference": false,
+  "native_linux_qualification": "separate; never inherited by this WSL attempt"
+}

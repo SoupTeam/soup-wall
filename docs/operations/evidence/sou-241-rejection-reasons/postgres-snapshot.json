@@ -1,0 +1,282 @@
+{
+  "contract_version": "sw-agent-incident-snapshot/1",
+  "generated_at_unix": 1793998287,
+  "source": {
+    "api": "GET /admin/v1/tenants/{tenant}/agent-fleet/{agent}",
+    "contract_version": "sw-agent-fleet/1"
+  },
+  "scope": {
+    "tenant_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ",
+    "agent_id": "edge-reject"
+  },
+  "partial": false,
+  "completeness": {
+    "status": "complete_records",
+    "reasons": [
+      {
+        "code": "credential_rotations_not_recorded",
+        "detail": "The Console keeps no dated record of credential rotations; only enrollment and revocation times are known."
+      },
+      {
+        "code": "fetch_times_not_recorded",
+        "detail": "Fetch is recorded as a state without a timestamp."
+      }
+    ],
+    "contradictions": []
+  },
+  "coverage": {
+    "expected_deployments": 7,
+    "loaded_deployments": 7,
+    "loaded_sequence_ranges": [
+      [
+        1,
+        7
+      ]
+    ],
+    "missing_sequence_ranges": [],
+    "pages": [
+      {
+        "before_sequence": null,
+        "observed_at_unix": 1793998287,
+        "records": 7,
+        "malformed": 0,
+        "overlapping": 0
+      }
+    ],
+    "malformed_records_dropped": 0,
+    "bounds": {
+      "page_records": 50,
+      "max_pages": 8,
+      "max_page_bytes": 262144,
+      "max_total_bytes": 1048576,
+      "page_timeout_ms": 15000,
+      "max_build_ms": 60000
+    }
+  },
+  "time_bounds": {
+    "earliest_recorded_unix": 1793998260,
+    "latest_recorded_unix": 1793998280,
+    "first_page_observed_at_unix": 1793998287,
+    "last_page_observed_at_unix": 1793998287
+  },
+  "enrollment": {
+    "enrolled_at_unix": 1793998260,
+    "revoked_at_unix": null
+  },
+  "summary": {
+    "latest_issued": {
+      "sequence": "7",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "recorded_state": "rejected",
+      "issued_at_unix": 1793998280,
+      "reported_applied_at_unix": null,
+      "rejected_at_unix": null,
+      "rejection_code": null
+    },
+    "historical_last_reported_applied": {
+      "sequence": "5",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "recorded_state": "applied",
+      "issued_at_unix": 1793998270,
+      "reported_applied_at_unix": 1793998280
+    },
+    "current_protection": "unknown",
+    "current_liveness": "unknown",
+    "note": "Recorded Console evidence only. An applied acknowledgement is a past report, not runtime attestation."
+  },
+  "unresolved_event_ids": [],
+  "events": [
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/enrollment/enrolled",
+      "kind": "enrolled",
+      "at_unix": 1793998260,
+      "time_recorded": true,
+      "sequence": null,
+      "revision": null,
+      "policy_sha256": null,
+      "action": null,
+      "note": "Agent enrolled; first credential issued."
+    },
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/deployment/1/issued",
+      "kind": "issued",
+      "at_unix": 1793998260,
+      "time_recorded": true,
+      "sequence": "1",
+      "revision": "r1",
+      "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "action": "activate",
+      "note": "Activation issued."
+    },
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/deployment/1/applied",
+      "kind": "applied",
+      "at_unix": 1793998260,
+      "time_recorded": true,
+      "sequence": "1",
+      "revision": "r1",
+      "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "action": "activate",
+      "note": "Agent reported applied (historical report, not current protection)."
+    },
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/deployment/2/issued",
+      "kind": "issued",
+      "at_unix": 1793998260,
+      "time_recorded": true,
+      "sequence": "2",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "Activation issued."
+    },
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/deployment/2/rejected",
+      "kind": "rejected",
+      "at_unix": 1793998262,
+      "time_recorded": true,
+      "sequence": "2",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "Signed by an issuer key the Agent does not trust. Rejected candidate only: the Agent kept its previous policy. Next step: Deploy again with a trusted Console signing key, or update the Agent's pinned keyring through your normal change process.",
+      "rejection_code": "issuer_key_unknown",
+      "rejection_category": "trust",
+      "next_step": "Deploy again with a trusted Console signing key, or update the Agent's pinned keyring through your normal change process."
+    },
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/deployment/3/issued",
+      "kind": "issued",
+      "at_unix": 1793998262,
+      "time_recorded": true,
+      "sequence": "3",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "Activation issued."
+    },
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/deployment/3/rejected",
+      "kind": "rejected",
+      "at_unix": 1793998262,
+      "time_recorded": true,
+      "sequence": "3",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "Bundle had expired when the Agent checked it. Rejected candidate only: the Agent kept its previous policy. Next step: Check the Agent host clock, then redeploy to issue a fresh bundle.",
+      "rejection_code": "bundle_expired",
+      "rejection_category": "expiry",
+      "next_step": "Check the Agent host clock, then redeploy to issue a fresh bundle."
+    },
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/deployment/4/issued",
+      "kind": "issued",
+      "at_unix": 1793998270,
+      "time_recorded": true,
+      "sequence": "4",
+      "revision": "r-invalid",
+      "policy_sha256": "6ab6b46ad5288f9f7a64b3cd463bdfdaf246557118a3d81de456e33280eeba17",
+      "action": "activate",
+      "note": "Activation issued."
+    },
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/deployment/4/rejected",
+      "kind": "rejected",
+      "at_unix": 1793998270,
+      "time_recorded": true,
+      "sequence": "4",
+      "revision": "r-invalid",
+      "policy_sha256": "6ab6b46ad5288f9f7a64b3cd463bdfdaf246557118a3d81de456e33280eeba17",
+      "action": "activate",
+      "note": "Policy failed the Agent's validation. Rejected candidate only: the Agent kept its previous policy. Next step: Fix the policy as a new revision, approve it and deploy that revision.",
+      "rejection_code": "policy_invalid",
+      "rejection_category": "policy",
+      "next_step": "Fix the policy as a new revision, approve it and deploy that revision."
+    },
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/deployment/5/issued",
+      "kind": "issued",
+      "at_unix": 1793998270,
+      "time_recorded": true,
+      "sequence": "5",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "Activation issued."
+    },
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/deployment/5/applied",
+      "kind": "applied",
+      "at_unix": 1793998280,
+      "time_recorded": true,
+      "sequence": "5",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "Agent reported applied (historical report, not current protection)."
+    },
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/deployment/6/issued",
+      "kind": "issued",
+      "at_unix": 1793998280,
+      "time_recorded": true,
+      "sequence": "6",
+      "revision": "r1",
+      "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "action": "activate",
+      "note": "Activation issued."
+    },
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/deployment/6/rejected",
+      "kind": "rejected",
+      "at_unix": 1793998280,
+      "time_recorded": true,
+      "sequence": "6",
+      "revision": "r1",
+      "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "action": "activate",
+      "note": "Rejected; this Agent did not report a reason. Rejected candidate only: the Agent kept its previous policy. Next step: Upgrade the Agent to report reasons, or inspect its local status, then redeploy.",
+      "rejection_code": null,
+      "rejection_category": "unknown",
+      "next_step": "Upgrade the Agent to report reasons, or inspect its local status, then redeploy."
+    },
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/deployment/7/issued",
+      "kind": "issued",
+      "at_unix": 1793998280,
+      "time_recorded": true,
+      "sequence": "7",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "Activation issued."
+    },
+    {
+      "event_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ/edge-reject/deployment/7/rejected",
+      "kind": "rejected",
+      "at_unix": 1793998280,
+      "time_recorded": true,
+      "sequence": "7",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "Rejected; this Agent did not report a reason. Rejected candidate only: the Agent kept its previous policy. Next step: Upgrade the Agent to report reasons, or inspect its local status, then redeploy.",
+      "rejection_code": null,
+      "rejection_category": "unknown",
+      "next_step": "Upgrade the Agent to report reasons, or inspect its local status, then redeploy."
+    }
+  ],
+  "excluded": [
+    "credentials and tokens",
+    "prompts",
+    "tool payloads",
+    "raw policy bodies",
+    "request auth headers",
+    "private host paths"
+  ]
+}

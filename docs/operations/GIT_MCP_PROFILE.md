@@ -106,7 +106,7 @@ closed; Windows is not a positive isolation result.
 ## Prepare a private installation
 
 Preparation downloads are opt-in; protected startup is offline. Supply a
-separately verified Git 2.51.2 executable and bubblewrap 0.13.1 with
+separately verified Git 2.51.3 executable and bubblewrap 0.13.1 with
 `--ro-bind-fd`, Linux Landlock ABI >= 3, and the `agentfw-git-sandbox` binary built
 from the same reviewed source. The [Linux workflow](../../.github/workflows/mcp-real-git.yml)
 builds these from pinned official sources without changing host security policy.
@@ -213,7 +213,7 @@ run; preserve the original artifact and qualify the exact candidate separately.
 ## Pinned SDK cancellation compatibility
 
 The original `mcp-server-git 2026.10.10` uses `mcp 1.29.0` and `anyio 4.15.1`
-on pinned Python 3.11.14. These versions satisfy their declared dependency
+on pinned Python 3.11.18. These versions satisfy their declared dependency
 constraints. Under response backpressure, however, `RequestResponder.__exit__`
 discards the Boolean result of `CancelScope.__exit__`. Cancellation escapes the
 request task, cancels sibling handlers and the session receive loop, and leaves

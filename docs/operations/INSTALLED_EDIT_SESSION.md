@@ -345,6 +345,75 @@ For another operation on the same declared targets, use the explicit
 [plan refresh preview and confirmation](INSTALLED_EDIT_PLAN_REFRESH.md).
 Refresh never infers previous success, retries a call or approves the next Ask.
 
+## Retained run inventory and exact selection
+
+The installed Linux CLI can list retained runs directly beneath an explicitly
+selected owner-private state directory. It verifies the helper component under
+the explicit Agent home, then reuses native exact-run, profile, terminal and
+descriptor readers. It does not execute the helper, start a daemon, query a
+provider, inspect output files or follow descriptive executable/plan paths.
+
+```sh
+agentfw edit-session inventory --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --json
+agentfw edit-session inventory --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --run-id RUN_UUID --json
+```
+
+`RUN_UUID` is the exact lowercase UUID displayed by inventory, without the
+`edit-` directory prefix. Prefixes, paths, wildcards and option-like identifiers
+refuse. JSON and text show safe IDs, profile/source/component hashes, declared
+target counts, recorded host outcomes and owner-identity observations. Arbitrary
+entry names are represented only by their hash. Paths, prompts, target names and
+contents, tokens, receipts and grants are omitted. Recorded completion is not
+execution, delivery or inactivity proof. A missing terminal, absent PID or old
+boot stays explicit; inventory does not infer Ask acceptance/rejection or tool
+success from host completion. Use exact status for those separate observations.
+
+The fixed listing limits are 32 entries, 512 bounded file reads, 2 MiB of record
+bytes and a cooperative 10-second read/iteration deadline. Enumeration has one
+directory level; only the five exact run-local binding/terminal files are read.
+The existing protected absolute-ancestry limit is 128 components / 4096 bytes.
+The selected helper has its independent existing manifest/file verification
+bounds. Blocking filesystem/kernel stalls are not a hard real-time guarantee.
+The 33rd entry establishes capacity exhaustion without being inspected. Exact
+ID selection does not scan peers and can resolve a known ID beyond that cap.
+
+Malformed, inaccessible, linked, foreign, vanished or changed records produce
+unknown rows and an incomplete listing with nonzero exit status. Unsafe or
+redirected roots produce an unknown result. A partial listing is not a complete
+history or an atomic snapshot. No state is cleaned or repaired.
+
+After reviewing one row, pass its current `selection_sha256` to an explicit
+existing operation:
+
+```sh
+agentfw edit-session with-run --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --run-id RUN_UUID \
+  --selection-sha256 SELECTION_SHA256 -- status --json
+agentfw edit-session with-run --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --run-id RUN_UUID \
+  --selection-sha256 SELECTION_SHA256 -- review --sha256 PROFILE_SHA256
+agentfw edit-session with-run --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --run-id RUN_UUID \
+  --selection-sha256 SELECTION_SHA256 -- stop --output json-v1
+```
+
+The selector binds the explicit root, exact run inode, profile/context/run files
+and terminal observation, rechecks their identities immediately before handoff,
+and keeps the descriptors open. The existing command independently revalidates
+its selected run. Changed metadata requires a fresh inventory and review; the
+digest is descriptive and grants no execution, export or cleanup authority.
+`with-run` accepts only explicit status/review/stop, injects its verified exact
+`--run`, and rejects another `--run` or recursive/arbitrary commands. Existing
+review/export consent and Stop validation still apply. Inventory alone never
+performs one of these actions. The original direct `--run` grammar is preserved.
+
+This slice uses accepted main's status/review/Stop contracts. It does not depend
+on an open archival PR; archive integration can be added after that command is
+delivered. New inventory/selector CLI types share their Linux executor boundary;
+other platforms retain their existing commands and unsupported behavior.
+
 ## Qualification
 
 `python3 -B scripts/qualify-installed-edit.py` is inert. The explicit `--run`

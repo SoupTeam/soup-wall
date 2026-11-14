@@ -1,0 +1,221 @@
+{
+  "accepted_main": null,
+  "candidate": {
+    "commit": "69b88976f5a68db5ebb5781589c3ee8556317ad7",
+    "tree": "e0a0adfca8907ab3b8c0fa48a9c0df03d165f573"
+  },
+  "environment": {
+    "architecture": "x86_64",
+    "distribution": "Ubuntu 24.04.5 LTS",
+    "host": "Claude Code 2.1.251",
+    "kernel_release": "7.0.0-1017-azure",
+    "platform": "linux",
+    "provider": "owned-scripted-loopback",
+    "transport": "stdio"
+  },
+  "evidence": [
+    {
+      "context": {
+        "member": "sou176/results/execution.json",
+        "member_sha256": "54bff7434b10220f0bdf77fc759587a88cabac02f2bb8ad4ca75d0204268c670",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "file": {
+        "member": "sou176/results/installed/report.json",
+        "member_sha256": "322596934b4c514cd28fd43c21d147f010274c1231e30755fc200ce40c4dc65b",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "id": "installed",
+      "identity_context": {
+        "member": "sou176/results/installed-identities.json",
+        "member_sha256": "ee8692a34b4fd19493dc001d26e0a2984a3f6906e3618f611610a48ec8dd474e",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "owner": "nariman",
+      "role": "candidate",
+      "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+      "stage": "installed"
+    },
+    {
+      "context": {
+        "member": "sou176/results/execution.json",
+        "member_sha256": "54bff7434b10220f0bdf77fc759587a88cabac02f2bb8ad4ca75d0204268c670",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "file": {
+        "member": "sou176/results/matched/report.json",
+        "member_sha256": "7264b4ce0ecf25b4f512dce388e4cc0d18d11da8f09d17106a1cdaaaa23a627d",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "id": "matched",
+      "identity_context": {
+        "member": "sou176/results/matched-identities.json",
+        "member_sha256": "ee6ef244f048482012f387cb39766fe62cdc4d065f203728f36b186612aa3f74",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "owner": "nariman",
+      "role": "candidate",
+      "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+      "stage": "matched"
+    },
+    {
+      "context": {
+        "member": "sou176/results/execution.json",
+        "member_sha256": "54bff7434b10220f0bdf77fc759587a88cabac02f2bb8ad4ca75d0204268c670",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "file": {
+        "member": "sou176/results/ask/qualification.json",
+        "member_sha256": "65a4a4ecf12deb22e65a1fd8b9c4f7b609d4f4a42f94079ffbc0e83ecd1cd664",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "id": "ask",
+      "identity_context": {
+        "member": "sou176/results/ask-identities.json",
+        "member_sha256": "6c4961e42033562c5a8c9415eaf73f3d2829c7fe4c1bf613a7dd6be0831d8060",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "owner": "nariman",
+      "role": "candidate",
+      "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+      "stage": "ask"
+    },
+    {
+      "context": {
+        "member": "sou176/results/execution.json",
+        "member_sha256": "54bff7434b10220f0bdf77fc759587a88cabac02f2bb8ad4ca75d0204268c670",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "file": {
+        "member": "sou176/results/prepared/report.json",
+        "member_sha256": "1ec55ebce71a29671ddac2827e0d63fd8b490ca0019e8d48c39c9709ae45a102",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "id": "prepared",
+      "identity_context": {
+        "member": "sou176/results/prepared-identities.json",
+        "member_sha256": "54ffc1df5d6f51dfc621522a490767edb81b24c2247fee4be98b8643da27a59d",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "owner": "nariman",
+      "role": "candidate",
+      "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+      "stage": "prepared"
+    },
+    {
+      "context": {
+        "member": "sou176/results/execution.json",
+        "member_sha256": "54bff7434b10220f0bdf77fc759587a88cabac02f2bb8ad4ca75d0204268c670",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "file": {
+        "member": "sou176/results/docs-code/report.json",
+        "member_sha256": "0ccfab24bc6b1aff6e74f056f41ebcdb7a8a6911bbe26d3174c8e419f19d03fa",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "id": "docs-code",
+      "identity_context": {
+        "member": "sou176/results/docs-code-identities.json",
+        "member_sha256": "2c8bae2fdc44bdd9c0ecbfececcb8659c915c2c677988be7f43578d908d2855c",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "owner": "nariman",
+      "role": "candidate",
+      "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+      "stage": "docs-code"
+    },
+    {
+      "context": {
+        "member": "sou176/results/execution.json",
+        "member_sha256": "54bff7434b10220f0bdf77fc759587a88cabac02f2bb8ad4ca75d0204268c670",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "file": {
+        "member": "sou176/results/unicode-spaces/report.json",
+        "member_sha256": "4f19aa45e166b5a523d8895f8ebddebd6b82339384bdc5c91c5943cf2307e8fa",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "id": "unicode-spaces",
+      "identity_context": {
+        "member": "sou176/results/unicode-spaces-identities.json",
+        "member_sha256": "34b850b088347f8cd2045aaf584b224cd74660386d97aec69de06d918f496355",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "owner": "nariman",
+      "role": "candidate",
+      "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+      "stage": "unicode-spaces"
+    },
+    {
+      "context": {
+        "member": "sou176/results/execution.json",
+        "member_sha256": "54bff7434b10220f0bdf77fc759587a88cabac02f2bb8ad4ca75d0204268c670",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "file": {
+        "member": "sou176/results/local-history/report.json",
+        "member_sha256": "4bf14c7adf80e51e19be369b2d1ecdf3ca65c6e96e6507adc5637cfcc309dc53",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "id": "local-history",
+      "identity_context": {
+        "member": "sou176/results/local-history-identities.json",
+        "member_sha256": "ea4d206f45bf2689071d7270e8a847519ba2d84ec8e1158d6e50268e440cc7c7",
+        "path": "attempt-4-native.zip",
+        "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+      },
+      "owner": "nariman",
+      "role": "candidate",
+      "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+      "stage": "local-history"
+    }
+  ],
+  "format": "sw-pilot-dossier-selection/2",
+  "identities": {
+    "agentfw": "f12326880020fda6f9cc921bb19abc9f64f2dde0267b410c8fd30758ef471ece",
+    "bwrap": "795e2906c8c2468d6e28791ee710efa261af7e3b335b08e3bb7a8dce920df9e3",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "git": "b548d3595181a4ff3aa33a31a5fcdb72401c50491b34cac9a1d42ec9c4edb932",
+    "git_launcher": "65ec048c2d9fa5497430e25be6a4916ddb818ab822b22ba470618c0b6f625928",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31"
+  },
+  "runtime_plan": {
+    "member": "sou176/results/runtime-plan.json",
+    "member_sha256": "e49da3cdcba03631e33be2a62dd71ec666896ffc6582ce34a5b6cafd020b6725",
+    "path": "attempt-4-native.zip",
+    "sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8"
+  },
+  "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+  "support_index": {
+    "member": null,
+    "member_sha256": null,
+    "path": "docs/operations/roadmap-support-index.json",
+    "sha256": "3c6a96d39133b3c3e740ef9b73ff0ce3b7d12c19439af7c544296e11de0b190e"
+  },
+  "workload": {
+    "member": null,
+    "member_sha256": null,
+    "path": "scripts/benchmarks/installed-pilot-workload-v2.json",
+    "sha256": "245110bb6c6b312a70d0bdc69771e44e3bec0da7c79c057019740befffdecd95"
+  }
+}

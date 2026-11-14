@@ -25,6 +25,8 @@ JOURNAL = "sw-pilot-update-journal/1"
 LIMIT = 65536
 MAX_BINARY = 512 * 1024 * 1024
 MAX_ARCHIVE = 32 * 1024 * 1024
+# Match the component producer and native installer, including runtime notices.
+MAX_COMPONENT_FILES = 160
 RESERVE = 1024 * 1024 * 1024
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -265,7 +267,7 @@ def component(record, source):
     raw = checked_file(record, MAX_ARCHIVE)
     with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
         members = archive.getmembers()
-        require(2 <= len(members) <= 129 and all(member.isfile() and not member.pax_headers for member in members)
+        require(2 <= len(members) <= MAX_COMPONENT_FILES + 1 and all(member.isfile() and not member.pax_headers for member in members)
                 and members[0].name == "manifest.json", "unsupported_component")
         manifest_raw = archive.extractfile(members[0]).read(LIMIT + 1)
         manifest = decode(manifest_raw)
@@ -755,23 +757,26 @@ def recover(root, confirmation):
             "protection": "not_observed", "authority": "fresh_run_required"}
 
 
-def selected_command(root, args):
+def selected_command(root, args, owner_home=None, coordinator=None):
     with Directory(root) as directory, directory.lock(exclusive=False):
         journal = read_journal(directory)
         require(not journal or journal.get("phase") == "complete", "recover_pending_update")
         binding = state(root)["current"]
         require(binding is not None, "no_coordinated_generation")
         verified = verify_binding(root, binding)
-        require(args and args[0] in ("run", "status"), "coordinated_run_or_status_required")
+        require(args and args[0] in ("run", "status", "maintenance"), "coordinated_run_or_status_required")
         require(not any(word == "--prefix" or word.startswith("--prefix=") for word in args[1:]),
                 "coordinated_prefix_override_refused")
         env = environment(verified["home"])
         if args[0] == "run":
             provider = load_helper("update_provider", ROOT, "pilot_provider.py")
             env.update(provider.selected(os.environ))
+        scope = (["--maintenance-home", str(owner_home), "--maintenance-coordinator-root", str(coordinator)]
+                 if owner_home is not None else [])
         try:
-            result = subprocess.run([str(verified["binary"]), "pilot", "--home", str(verified["home"]),
-                                     args[0], "--prefix", verified["inventory"]["prefix"], *args[1:]],
+            result = subprocess.run([str(verified["binary"]), "pilot", "--home", str(verified["home"]), *scope,
+                                     *([args[0], args[1], "--prefix", verified["inventory"]["prefix"], *args[2:]] if args[0] == "maintenance" else
+                                       [args[0], "--prefix", verified["inventory"]["prefix"], *args[1:]])],
                                     cwd=Path.home(), env=env, timeout=3700)
         except subprocess.TimeoutExpired:
             raise DispatchInterrupted("coordinated_dispatch_timeout") from None

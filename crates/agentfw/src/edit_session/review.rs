@@ -23,6 +23,9 @@ use std::{
 const FORMAT: &str = "sw-installed-edit-review/1";
 const CAP: u64 = 4096;
 
+mod diff;
+pub(super) mod export_set;
+
 #[derive(ClapArgs, Debug)]
 pub(super) struct Args {
     #[arg(long)]
@@ -36,6 +39,15 @@ pub(super) struct Args {
     /// Explicit NAME=/absolute/baseline file. Verifies recorded pre-edit content identity.
     #[arg(long)]
     baseline: Vec<String>,
+    /// Exact outputs for bounded read-only unified diff; no export or apply.
+    #[arg(long, conflicts_with_all = ["show", "baseline", "export"])]
+    diff: Vec<String>,
+    /// Explicit NAME=/absolute/copy, matching the plan's pre-edit content.
+    #[arg(long, requires = "diff")]
+    diff_baseline: Vec<String>,
+    /// Separately consent to reading and displaying selected baseline copies.
+    #[arg(long, requires = "diff_baseline")]
+    consent_baseline_content: bool,
     /// This operation may display or save the selected private file contents.
     #[arg(long)]
     consent_private_content: bool,
@@ -50,9 +62,9 @@ pub(super) struct Args {
     expect_observation: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct FileIdentity {
+pub(super) struct FileIdentity {
     device: u64,
     inode: u64,
     bytes: u64,
@@ -61,6 +73,11 @@ struct FileIdentity {
     mode: u32,
     mtime: (i64, i64),
     ctime: (i64, i64),
+}
+impl FileIdentity {
+    pub fn object_identity(&self) -> (u64, u64) {
+        (self.device, self.inode)
+    }
 }
 impl From<&Metadata> for FileIdentity {
     fn from(m: &Metadata) -> Self {
@@ -108,6 +125,148 @@ struct Reviewed {
     terminal: Vec<u8>,
     receipt: Vec<u8>,
     host: Vec<u8>,
+}
+
+/// Reuse the accepted completed-run checks without treating a review as a grant.
+/// The held output-directory lock remains alive until this selection is dropped.
+pub(super) struct SelectedOutput {
+    args: Args,
+    reviewed: Reviewed,
+    index: usize,
+}
+
+/// Narrow read-only lifecycle check for installed component removal. It reuses
+/// the completed-run, owner/host inactivity and cleanup-receipt checks; it does
+/// not issue an edit, cleanup or publication grant.
+pub(crate) fn removal_inactive(run: &Path) -> Result<()> {
+    let mut budget = Budget::new();
+    let selection = linux::select(run, &mut budget).map_err(anyhow::Error::msg)?;
+    let expected = audit::sha(&selection.profile_bytes);
+    drop(selection);
+    let args = Args {
+        run: run.into(),
+        sha256: expected,
+        show: vec![],
+        baseline: vec![],
+        diff: vec![],
+        diff_baseline: vec![],
+        consent_baseline_content: false,
+        consent_private_content: false,
+        export: None,
+        include: vec![],
+        expect_observation: None,
+    };
+    let observation = observe(&args, &mut budget)?;
+    recheck(&args, &observation, &mut budget)
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(super) struct OutputBinding {
+    pub run: PathBuf,
+    pub run_identity: (u64, u64),
+    pub run_sha256: String,
+    pub profile_sha256: String,
+    pub component: profile::Component,
+    pub observation_sha256: String,
+    pub binding_sha256: String,
+    pub output: String,
+    pub output_identity: FileIdentity,
+    pub output_sha256: String,
+    pub output_bytes: usize,
+}
+
+impl SelectedOutput {
+    pub fn open(run: &Path, expected: &str, name: &str, budget: &mut Budget) -> Result<Self> {
+        let args = Args {
+            run: run.into(),
+            sha256: expected.into(),
+            show: vec![],
+            baseline: vec![],
+            diff: vec![],
+            diff_baseline: vec![],
+            consent_baseline_content: false,
+            consent_private_content: false,
+            export: None,
+            include: vec![],
+            expect_observation: None,
+        };
+        let reviewed = observe(&args, budget)?;
+        let index = reviewed
+            .observation
+            .outputs
+            .iter()
+            .position(|o| o.name == name)
+            .context("edit_apply_output_not_declared")?;
+        let selected = Self {
+            args,
+            reviewed,
+            index,
+        };
+        selected.content()?;
+        Ok(selected)
+    }
+
+    /// Select another already-observed output while retaining the same completed
+    /// run and output-directory lock. This adds no publication authority.
+    pub fn select_name(&mut self, name: &str) -> Result<()> {
+        self.index = self
+            .reviewed
+            .observation
+            .outputs
+            .iter()
+            .position(|o| o.name == name)
+            .context("edit_apply_output_not_declared")?;
+        self.content()?;
+        Ok(())
+    }
+
+    pub fn profile(&self) -> &Profile {
+        &self.reviewed.selection.profile
+    }
+
+    pub fn content(&self) -> Result<&str> {
+        let output = &self.reviewed.observation.outputs[self.index];
+        ensure!(output.text, "edit_apply_text_output_required");
+        std::str::from_utf8(
+            output
+                .content
+                .as_deref()
+                .context("edit_apply_output_missing")?,
+        )
+        .context("edit_apply_text_output_required")
+    }
+
+    pub fn binding(&self) -> Result<OutputBinding> {
+        let observation = &self.reviewed.observation;
+        let output = &observation.outputs[self.index];
+        let meta = self
+            .reviewed
+            .selection
+            .directory
+            .metadata()
+            .map_err(anyhow::Error::msg)?;
+        Ok(OutputBinding {
+            run: self.args.run.clone(),
+            run_identity: (meta.dev(), meta.ino()),
+            run_sha256: observation.run_sha256.clone(),
+            profile_sha256: observation.profile_sha256.clone(),
+            component: self.profile().component.clone(),
+            observation_sha256: profile::digest(observation)?,
+            binding_sha256: observation.binding_sha256.clone(),
+            output: output.name.clone(),
+            output_identity: output
+                .identity
+                .clone()
+                .context("edit_apply_output_missing")?,
+            output_sha256: output.sha256.clone().context("edit_apply_output_missing")?,
+            output_bytes: output.bytes.context("edit_apply_output_missing")?,
+        })
+    }
+
+    pub fn recheck(&self, budget: &mut Budget) -> Result<()> {
+        recheck(&self.args, &self.reviewed, budget)
+    }
 }
 fn needed(dir: &Directory, name: &str, cap: u64, budget: &mut Budget) -> Result<Vec<u8>> {
     dir.read(name, cap, budget)
@@ -362,14 +521,7 @@ fn baseline(spec: &str, review: &Reviewed, budget: &mut Budget) -> Result<(Strin
     let (name, path) = spec
         .split_once('=')
         .context("edit_review_baseline_selection")?;
-    let target = review
-        .selection
-        .profile
-        .targets
-        .iter()
-        .find(|t| t.name == name)
-        .and_then(|t| t.replacement.as_ref())
-        .context("edit_review_baseline_not_replacement")?;
+    baseline_target(name, review)?;
     let path = Path::new(path);
     let leaf = path
         .file_name()
@@ -382,17 +534,42 @@ fn baseline(spec: &str, review: &Reviewed, budget: &mut Budget) -> Result<(Strin
         .read_output(leaf, CAP, budget)
         .map_err(anyhow::Error::msg)?
         .context("edit_review_baseline_unavailable")?;
-    // A separately retained copy can verify the plan's content identity, never
-    // the old inode's provenance or the source/writer of these bytes.
-    ensure!(
-        bytes.len() as u64 == target.identity.size && audit::sha(&bytes) == target.sha256,
-        "edit_review_baseline_content_identity_mismatch"
-    );
+    verify_baseline(name, &bytes, review)?;
     ensure!(text(&bytes), "edit_review_baseline_text_required");
     Ok((name.to_owned(), bytes))
 }
+fn baseline_target<'a>(name: &str, review: &'a Reviewed) -> Result<&'a profile::Baseline> {
+    review
+        .selection
+        .profile
+        .targets
+        .iter()
+        .find(|t| t.name == name)
+        .and_then(|t| t.replacement.as_ref())
+        .context("edit_review_baseline_not_replacement")
+}
+fn verify_baseline(name: &str, bytes: &[u8], review: &Reviewed) -> Result<()> {
+    let target = baseline_target(name, review)?;
+    // Explicit copies verify recorded content, not old inode/writer provenance.
+    ensure!(
+        bytes.len() as u64 == target.identity.size && audit::sha(bytes) == target.sha256,
+        "edit_review_baseline_content_identity_mismatch"
+    );
+    Ok(())
+}
 pub(super) fn command(args: Args) -> Result<()> {
-    let result = run(&args);
+    let result = if args.diff.is_empty() {
+        run(&args)
+    } else {
+        diff::run(&args)
+    };
+    if let (false, Err(error)) = (args.diff.is_empty(), &result) {
+        println!(
+            "{}",
+            serde_json::json!({"format":"sw-installed-edit-diff/1","status":"incomplete",
+                "reason":diff::reason(error),"complete":false,"display":[],"executed":false,"authority":false})
+        );
+    }
     // Never echo an untrusted path, payload or underlying OS/parser error.
     result.map_err(|e| {
         anyhow::anyhow!(

@@ -9,6 +9,8 @@ The separately installed [real filesystem server profile](MCP_REAL_FILESYSTEM.md
 adds a Linux sandbox and a bounded concurrent transport for one pinned original
 server. Select it explicitly with `AGENTFW_MCP_SERVER_PROFILE`; it does not widen
 the legacy contract described below or the built-in resource executors.
+The [raw request boundary](MCP_RAW_REQUEST_BOUNDARY.md) records byte-level
+refusals and independent installed filesystem/Git execution witnesses.
 
 The optional [daemon-owned Git execution boundary](GIT_OBJECT_WITNESS.md#daemon-owned-original-git-result-inspection-sou-109)
 adds a separately versioned Linux execution root for a fixed pinned Git profile.

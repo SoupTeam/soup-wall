@@ -1,0 +1,1036 @@
+{
+ "accepted_baseline": "9a3c5b38e56ebc6ebbeedfda98805f6a327cb371",
+ "after_cleanup_process_observation": {
+  "authorization": false,
+  "unavailable": []
+ },
+ "ask": {
+  "cases": [
+   {
+    "approved": true,
+    "case": "approve",
+    "cleanup": {
+     "all_stopped": true
+    },
+    "dispatched": 1,
+    "kernel_effects": 1,
+    "passed": true,
+    "profile": "git",
+    "stage": "exact_decision"
+   },
+   {
+    "approved": true,
+    "case": "approve",
+    "cleanup": {
+     "all_stopped": true
+    },
+    "dispatched": 1,
+    "kernel_effects": 1,
+    "passed": true,
+    "profile": "filesystem",
+    "stage": "exact_decision"
+   }
+  ],
+  "contract_version": "sw-pilot-ask-acceptance/1",
+  "error": null,
+  "first_pending": null,
+  "qualification_scope": "two_profile_correctness_probe_not_performance",
+  "status": "pass"
+ },
+ "build_source": {
+  "cargo_lock_sha256": "f4bd80d40a0408145a11bae4c91324ff954cdd59ee8172ce1f0a6e22b161f6c2",
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "dirty": false,
+  "files_sha256": "303854b052bbc48eb0b28cc410def92f63a7b725bbc01c64ae29eb6e19fce98e",
+  "rust_toolchain_sha256": "5a7b7b624394e3ece3fb4c9e0391aa400eeebf7a7a1efd18e74c5b68b71cd65e",
+  "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+ },
+ "cases": [
+  {
+   "case": "catalog-service-read-contract",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 0,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "unknown",
+    "other_prefix_unrelated_runs": 0,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "id": "linux-v1",
+     "instruction": "No scope selected. Prepare a new prefix with --scope linux-v1 to select the frozen v1 pilot scope.",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "selected": false,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "unselected"
+    }
+   },
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": null,
+   "status": "completed"
+  },
+  {
+   "case": "catalog-service-review-pending-diff",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 0,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "unknown",
+    "other_prefix_unrelated_runs": 0,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "id": "linux-v1",
+     "instruction": "No scope selected. Prepare a new prefix with --scope linux-v1 to select the frozen v1 pilot scope.",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "selected": false,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "unselected"
+    }
+   },
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": null,
+   "status": "completed"
+  },
+  {
+   "case": "catalog-service-trace-local-history",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 0,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "unknown",
+    "other_prefix_unrelated_runs": 0,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "id": "linux-v1",
+     "instruction": "No scope selected. Prepare a new prefix with --scope linux-v1 to select the frozen v1 pilot scope.",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "selected": false,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "unselected"
+    }
+   },
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": null,
+   "status": "completed"
+  },
+  {
+   "case": "catalog-service-inspect-last-commit",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 0,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "unknown",
+    "other_prefix_unrelated_runs": 0,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "id": "linux-v1",
+     "instruction": "No scope selected. Prepare a new prefix with --scope linux-v1 to select the frozen v1 pilot scope.",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "selected": false,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "unselected"
+    }
+   },
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": null,
+   "status": "completed"
+  },
+  {
+   "case": "catalog-service-denied",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 0,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "unknown",
+    "other_prefix_unrelated_runs": 0,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "id": "linux-v1",
+     "instruction": "No scope selected. Prepare a new prefix with --scope linux-v1 to select the frozen v1 pilot scope.",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "selected": false,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "unselected"
+    }
+   },
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": null,
+   "status": "completed"
+  },
+  {
+   "case": "release-ledger-read-contract",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 0,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "unknown",
+    "other_prefix_unrelated_runs": 0,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "id": "linux-v1",
+     "instruction": "No scope selected. Prepare a new prefix with --scope linux-v1 to select the frozen v1 pilot scope.",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "selected": false,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "unselected"
+    }
+   },
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": null,
+   "status": "completed"
+  },
+  {
+   "case": "release-ledger-review-pending-diff",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 0,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "unknown",
+    "other_prefix_unrelated_runs": 0,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "id": "linux-v1",
+     "instruction": "No scope selected. Prepare a new prefix with --scope linux-v1 to select the frozen v1 pilot scope.",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "selected": false,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "unselected"
+    }
+   },
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": null,
+   "status": "completed"
+  },
+  {
+   "case": "release-ledger-trace-local-history",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 0,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "unknown",
+    "other_prefix_unrelated_runs": 0,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "id": "linux-v1",
+     "instruction": "No scope selected. Prepare a new prefix with --scope linux-v1 to select the frozen v1 pilot scope.",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "selected": false,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "unselected"
+    }
+   },
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": null,
+   "status": "completed"
+  },
+  {
+   "case": "release-ledger-inspect-last-commit",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 0,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "unknown",
+    "other_prefix_unrelated_runs": 0,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "id": "linux-v1",
+     "instruction": "No scope selected. Prepare a new prefix with --scope linux-v1 to select the frozen v1 pilot scope.",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "selected": false,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "unselected"
+    }
+   },
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": null,
+   "status": "completed"
+  },
+  {
+   "case": "release-ledger-denied",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 0,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "unknown",
+    "other_prefix_unrelated_runs": 0,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "id": "linux-v1",
+     "instruction": "No scope selected. Prepare a new prefix with --scope linux-v1 to select the frozen v1 pilot scope.",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "selected": false,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "unselected"
+    }
+   },
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": null,
+   "status": "completed"
+  },
+  {
+   "case": "installed-a",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 0,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "unknown",
+    "other_prefix_unrelated_runs": 0,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "id": "linux-v1",
+     "instruction": "No scope selected. Prepare a new prefix with --scope linux-v1 to select the frozen v1 pilot scope.",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "selected": false,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "unselected"
+    }
+   },
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": null,
+   "status": "completed"
+  },
+  {
+   "case": "entered-updated-b",
+   "cleanup": null,
+   "exit": 1,
+   "live_status": {},
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": "maintenance_entered",
+   "status": "failed"
+  },
+  {
+   "case": "updated-b",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 0,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "unknown",
+    "other_prefix_unrelated_runs": 0,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "id": "linux-v1",
+     "instruction": "No scope selected. Prepare a new prefix with --scope linux-v1 to select the frozen v1 pilot scope.",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "selected": false,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "unselected"
+    }
+   },
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": null,
+   "status": "completed"
+  },
+  {
+   "case": "entered-rolled-back-a",
+   "cleanup": null,
+   "exit": 1,
+   "live_status": {},
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": "maintenance_entered",
+   "status": "failed"
+  },
+  {
+   "case": "rolled-back-a",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "exit": 0,
+   "live_status": {
+    "code": 0,
+    "other_prefix_protection": "unknown",
+    "other_prefix_unrelated_runs": 0,
+    "protection": "observed-live",
+    "runs": [
+     {
+      "protection": "observed-live"
+     }
+    ],
+    "scope": {
+     "id": "linux-v1",
+     "instruction": "No scope selected. Prepare a new prefix with --scope linux-v1 to select the frozen v1 pilot scope.",
+     "mode": "enforce",
+     "qualification": "unqualified: this scope claims no exact-source acceptance",
+     "selected": false,
+     "shadow": "outside v1: never selected and never reported as protection",
+     "state": "unselected"
+    }
+   },
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "reason": null,
+   "status": "completed"
+  }
+ ],
+ "ci_user_session": {
+  "authorizes_removal": false,
+  "observation": {
+   "authorization": false,
+   "diagnostic": "SOU-216 owned CI user-session preparation",
+   "driver_source": {
+    "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+    "dirty": false,
+    "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+   },
+   "installed_host_executed": false,
+   "native_removal_guard_changed": false,
+   "phase": "before installed-host attempt",
+   "status": "quiesced-empty-ci-user-session"
+  },
+  "report_sha256": "5e960952ced732db422c4bbab55432dc0a2c0a009e7b975670e8ba685529ae4e"
+ },
+ "clean_user": {
+  "active_case": "remove-preserves-user-data",
+  "cases": [
+   {
+    "archive_sha256": "3e0c7e3ad86d05810dde98c6bb7557a3d81a98016742f1031e18293f5a2b3172",
+    "attempted": true,
+    "component_sha256": "070bd7adb4be611cdf7f3e4ce6130f4761d921a9b3d449117fea4a8d98fc8d72",
+    "id": "component-install",
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "expected_sha256": "9279af7493c463ac4ef73174198ec1220067b2a599165647c37ef019ce53f93e",
+    "id": "catalog-service:read-contract",
+    "observed_text_sha256": "0ed7b4651f5169e5cb100247abe2c452637a94cc44d8f7a0453fdfe7b3eb7f19",
+    "original_result_useful": true,
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "expected_sha256": "b805e09aa91c4820846d7eab4b824058f80b790d4afa4fe2b61275b73256b4f6",
+    "id": "catalog-service:review-pending-diff",
+    "observed_text_sha256": "e185a21ec1f9ed3792cf004cb30da43034b8f972b833170628149934833dfa88",
+    "original_result_useful": true,
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "expected_sha256": "8ff2aaeeddb5a2a5b7aebfe396952e6e0dca5bfbba92bfd103feca44768669b2",
+    "id": "catalog-service:trace-local-history",
+    "observed_text_sha256": "397397912260ee6ce28b36f1809a75d8dd19b8e4d61a511956703ac159333f31",
+    "original_result_useful": true,
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "expected_sha256": "49950d4cd626fc59943932edbcf6e376017f07385ff10cb3a150c2c4c16443fd",
+    "id": "catalog-service:inspect-last-commit",
+    "observed_text_sha256": "4549ee8dce08b1c4fb29fc02357c5fc96a99b503055fb226a4544c6ef1953473",
+    "original_result_useful": true,
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "forbidden_files": 0,
+    "forbidden_network_connections": 0,
+    "forbidden_original_dispatches": 0,
+    "id": "catalog-service:denied-calls",
+    "positive_receiver": true,
+    "process_cleanup": {
+     "all_stopped": true
+    },
+    "status": "passed",
+    "unchanged_user_files": true,
+    "useful_continuation": true
+   },
+   {
+    "attempted": true,
+    "expected_sha256": "f3778348eab538cfa3f898dff67b94042cac565766050f4070e3706e77ad6711",
+    "id": "release-ledger:read-contract",
+    "observed_text_sha256": "f8f41dcabf663ee01c95d153574171a32033a2281cf9f7d18abb84467a0d7096",
+    "original_result_useful": true,
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "expected_sha256": "688fb25a4ea1304a9860d13e31d7fc410d57d060ed55c3c832540199863c829a",
+    "id": "release-ledger:review-pending-diff",
+    "observed_text_sha256": "33e36974e33c968b07f798bc70a3438a05c6f9e7d8c4381419822747c90cb753",
+    "original_result_useful": true,
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "expected_sha256": "42f6a9db2128c697800bf70c50064345c865fd378d7dfd7a8b42716c91261a40",
+    "id": "release-ledger:trace-local-history",
+    "observed_text_sha256": "bd9ffaa8c2289f2ff9569894fafa6775105c68f077054022664ed02ec9ff9b17",
+    "original_result_useful": true,
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "expected_sha256": "f475e3ca26908ca692155121dec24269984438a14fa45ad1ff4ef7a3b9a05491",
+    "id": "release-ledger:inspect-last-commit",
+    "observed_text_sha256": "a6b8c9bfb4c89ae3533c68f1a09b63fbc83088dbe99cdfef84649ceee73ece62",
+    "original_result_useful": true,
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "forbidden_files": 0,
+    "forbidden_network_connections": 0,
+    "forbidden_original_dispatches": 0,
+    "id": "release-ledger:denied-calls",
+    "positive_receiver": true,
+    "process_cleanup": {
+     "all_stopped": true
+    },
+    "status": "passed",
+    "unchanged_user_files": true,
+    "useful_continuation": true
+   },
+   {
+    "attempted": true,
+    "cases": 12,
+    "id": "documented-walkthrough",
+    "original_inventory_preserved": true,
+    "original_report_sha256": "187e836657ed23aa075d1d4133ef4234c208894e581b0ca1516cb3946f24b815",
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "id": "ask-once-replay",
+    "original_report_sha256": "515f4cfecbd808c8f45f5d5b7cb8ef7482daf800d84ed8d45cf92b67830d24f4",
+    "scope": "existing two-profile approval correctness smoke, not the full 15-case inventory",
+    "status": "passed"
+   },
+   {
+    "attempted": true,
+    "coordinated_selection_recovery": {
+     "bootstrap_agent_sha256": "98af293b9c80bc60822019bfa47de22d433f03d3d8145cd1280b406e5f227407",
+     "bootstrap_copy_verified": true,
+     "maintenance_preserved_across_update_and_rollback": [
+      {
+       "case": "entered-updated-b",
+       "host_executions": 0,
+       "process_cleanup": {
+        "all_stopped": true
+       },
+       "provider_requests": 0,
+       "reason": "maintenance_entered"
+      },
+      {
+       "case": "entered-rolled-back-a",
+       "host_executions": 0,
+       "process_cleanup": {
+        "all_stopped": true
+       },
+       "provider_requests": 0,
+       "reason": "maintenance_entered"
+      }
+     ],
+     "scope": "documented retained bootstrap; coordinated selection-generation A-B-A of one pinned source/binary set",
+     "selection_sha256": [
+      "ddb5945142e914d83465b0262ff48dedf49337b77df49b60edc80e399754b1b9",
+      "9120eced96796714ed4c9bd8d94bb41816f32be9480be396de4a41d80dce40da"
+     ],
+     "states": [
+      {
+       "current": {
+        "generation": "f21ea861c9e74e8f84bb45b74fb2d9ad",
+        "inventory_sha256": "37ea397398429584d3ffe00cefbf1860bcf15e935b4fd894c6b239ae92e4aef2"
+       },
+       "format": "sw-pilot-update-state/1",
+       "previous": null
+      },
+      {
+       "current": {
+        "generation": "c0faa39e3c824734a5ef2c24cd2c2a46",
+        "inventory_sha256": "cd2e0518b47c9795bc1aa9b0b0a1391276b1aac3434a7d6b605ef2e82788ea82"
+       },
+       "format": "sw-pilot-update-state/1",
+       "previous": {
+        "generation": "f21ea861c9e74e8f84bb45b74fb2d9ad",
+        "inventory_sha256": "37ea397398429584d3ffe00cefbf1860bcf15e935b4fd894c6b239ae92e4aef2"
+       }
+      },
+      {
+       "current": {
+        "generation": "f21ea861c9e74e8f84bb45b74fb2d9ad",
+        "inventory_sha256": "37ea397398429584d3ffe00cefbf1860bcf15e935b4fd894c6b239ae92e4aef2"
+       },
+       "format": "sw-pilot-update-state/1",
+       "previous": {
+        "generation": "c0faa39e3c824734a5ef2c24cd2c2a46",
+        "inventory_sha256": "cd2e0518b47c9795bc1aa9b0b0a1391276b1aac3434a7d6b605ef2e82788ea82"
+       }
+      }
+     ],
+     "status": "passed",
+     "useful_runs": 3
+    },
+    "id": "update-rollback",
+    "restored_component": "070bd7adb4be611cdf7f3e4ce6130f4761d921a9b3d449117fea4a8d98fc8d72",
+    "status": "passed",
+    "update_source": "synthetic identity-only component control",
+    "updated_component": "37426d68831d092c96001c9bfb80a89cee7cce3535c4dc3705c5e8046a2adcf8"
+   },
+   {
+    "attempted": true,
+    "id": "remove-preserves-user-data",
+    "selections_preserved": true,
+    "status": "passed",
+    "user_files_preserved": true
+   }
+  ],
+  "required": [
+   "component-install",
+   "catalog-service:read-contract",
+   "catalog-service:review-pending-diff",
+   "catalog-service:trace-local-history",
+   "catalog-service:inspect-last-commit",
+   "catalog-service:denied-calls",
+   "release-ledger:read-contract",
+   "release-ledger:review-pending-diff",
+   "release-ledger:trace-local-history",
+   "release-ledger:inspect-last-commit",
+   "release-ledger:denied-calls",
+   "documented-walkthrough",
+   "ask-once-replay",
+   "update-rollback",
+   "remove-preserves-user-data"
+  ],
+  "status": "passed"
+ },
+ "component": {
+  "action": "build",
+  "archive_sha256": "3e0c7e3ad86d05810dde98c6bb7557a3d81a98016742f1031e18293f5a2b3172",
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "component": "070bd7adb4be611cdf7f3e4ce6130f4761d921a9b3d449117fea4a8d98fc8d72",
+  "files": 90,
+  "out": "<redacted>"
+ },
+ "coordinated_update": {
+  "bootstrap_agent_sha256": "98af293b9c80bc60822019bfa47de22d433f03d3d8145cd1280b406e5f227407",
+  "bootstrap_copy_verified": true,
+  "maintenance_preserved_across_update_and_rollback": [
+   {
+    "case": "entered-updated-b",
+    "host_executions": 0,
+    "process_cleanup": {
+     "all_stopped": true
+    },
+    "provider_requests": 0,
+    "reason": "maintenance_entered"
+   },
+   {
+    "case": "entered-rolled-back-a",
+    "host_executions": 0,
+    "process_cleanup": {
+     "all_stopped": true
+    },
+    "provider_requests": 0,
+    "reason": "maintenance_entered"
+   }
+  ],
+  "scope": "documented retained bootstrap; coordinated selection-generation A-B-A of one pinned source/binary set",
+  "selection_sha256": [
+   "ddb5945142e914d83465b0262ff48dedf49337b77df49b60edc80e399754b1b9",
+   "9120eced96796714ed4c9bd8d94bb41816f32be9480be396de4a41d80dce40da"
+  ],
+  "states": [
+   {
+    "current": {
+     "generation": "f21ea861c9e74e8f84bb45b74fb2d9ad",
+     "inventory_sha256": "37ea397398429584d3ffe00cefbf1860bcf15e935b4fd894c6b239ae92e4aef2"
+    },
+    "format": "sw-pilot-update-state/1",
+    "previous": null
+   },
+   {
+    "current": {
+     "generation": "c0faa39e3c824734a5ef2c24cd2c2a46",
+     "inventory_sha256": "cd2e0518b47c9795bc1aa9b0b0a1391276b1aac3434a7d6b605ef2e82788ea82"
+    },
+    "format": "sw-pilot-update-state/1",
+    "previous": {
+     "generation": "f21ea861c9e74e8f84bb45b74fb2d9ad",
+     "inventory_sha256": "37ea397398429584d3ffe00cefbf1860bcf15e935b4fd894c6b239ae92e4aef2"
+    }
+   },
+   {
+    "current": {
+     "generation": "f21ea861c9e74e8f84bb45b74fb2d9ad",
+     "inventory_sha256": "37ea397398429584d3ffe00cefbf1860bcf15e935b4fd894c6b239ae92e4aef2"
+    },
+    "format": "sw-pilot-update-state/1",
+    "previous": {
+     "generation": "c0faa39e3c824734a5ef2c24cd2c2a46",
+     "inventory_sha256": "cd2e0518b47c9795bc1aa9b0b0a1391276b1aac3434a7d6b605ef2e82788ea82"
+    }
+   }
+  ],
+  "status": "passed",
+  "useful_runs": 3
+ },
+ "decision": "GO for this measured preprovisioned path only",
+ "driver_source": {
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "dirty": false,
+  "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+ },
+ "environment": {
+  "effective_capabilities": 0,
+  "fresh_private_home": true,
+  "ordinary_user": true,
+  "sandbox_precondition": "existing job-scoped exact-binary AppArmor permission; no global relaxation",
+  "unassisted_stock_host_acceptance": "not_established"
+ },
+ "fixture_sha256": "4e08b92f4215a574e76cf430f7e50569e002922519755c1f81b4cdaf4f683eb6",
+ "format": "sw-installed-front-door-qualification/1",
+ "full_product_acceptance": "not_established",
+ "initial_process_observation": {
+  "authorization": false,
+  "unavailable": []
+ },
+ "inputs_sha256": {
+  "agentfw": "98af293b9c80bc60822019bfa47de22d433f03d3d8145cd1280b406e5f227407",
+  "bwrap": "9141b41fc18c0b5b599729c96bad7bc495c86b6c3e6a27ebd9e0d53270022001",
+  "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+  "git": "bdc796fec3a083c7511e32f9387f7eaead93a109a6e48b1d469119518d1b6174",
+  "git_launcher": "95c3cdfa2ace75e1045f4d05c0fcb111c8daaeb28b9f453055cefa9a015bb9d5",
+  "node_archive": "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37",
+  "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+  "sandbox_tests": "1fa269adf86df0f2c721945ccb88a8c621a42888c9f91bf2cc59d8a970a43f6d"
+ },
+ "live_model_effectiveness": "not_tested",
+ "novice_human_evidence": "not_measured",
+ "paid_api_calls": 0,
+ "projects": {
+  "catalog-service": {
+   "after_lifecycle_sha256": "b47bad098791c8b745e5eb13f740fb6d7888ac02268fc836473fa28d3a3e1da8",
+   "expected_sha256": "9720794da59d9347a1cc3df7053e089183e420e7b156815e66e2fd1f3172c634",
+   "fixture_sha256": "966158b83ec4fe9f8168b53f1aaf96aee60e72ee41ca7d431bce0b25998f944b",
+   "selected_sha256": {
+    "agentfw": "98af293b9c80bc60822019bfa47de22d433f03d3d8145cd1280b406e5f227407",
+    "bwrap": "9141b41fc18c0b5b599729c96bad7bc495c86b6c3e6a27ebd9e0d53270022001",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "bdc796fec3a083c7511e32f9387f7eaead93a109a6e48b1d469119518d1b6174",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "95c3cdfa2ace75e1045f4d05c0fcb111c8daaeb28b9f453055cefa9a015bb9d5",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+    "sandbox_tests": "1fa269adf86df0f2c721945ccb88a8c621a42888c9f91bf2cc59d8a970a43f6d"
+   },
+   "selected_source": {
+    "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+    "dirty": false,
+    "files_sha256": "303854b052bbc48eb0b28cc410def92f63a7b725bbc01c64ae29eb6e19fce98e",
+    "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+   },
+   "selection_sha256": "ddb5945142e914d83465b0262ff48dedf49337b77df49b60edc80e399754b1b9",
+   "source_before_sha256": "b47bad098791c8b745e5eb13f740fb6d7888ac02268fc836473fa28d3a3e1da8"
+  },
+  "release-ledger": {
+   "after_lifecycle_sha256": "28fb8b86205416d8bfee5dbd7c11cf193c466ddbc29df34c7d456af5ccea4ba9",
+   "expected_sha256": "04f91aaffb51f2201d8b7dc971fbc293bc92729a2e6919368a0454e9e55e6604",
+   "fixture_sha256": "8067ac78c76febc603aaab169a67c124b8bd4e9510c2ac486ba846e5061c80e0",
+   "selected_sha256": {
+    "agentfw": "98af293b9c80bc60822019bfa47de22d433f03d3d8145cd1280b406e5f227407",
+    "bwrap": "9141b41fc18c0b5b599729c96bad7bc495c86b6c3e6a27ebd9e0d53270022001",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "bdc796fec3a083c7511e32f9387f7eaead93a109a6e48b1d469119518d1b6174",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "95c3cdfa2ace75e1045f4d05c0fcb111c8daaeb28b9f453055cefa9a015bb9d5",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+    "sandbox_tests": "1fa269adf86df0f2c721945ccb88a8c621a42888c9f91bf2cc59d8a970a43f6d"
+   },
+   "selected_source": {
+    "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+    "dirty": false,
+    "files_sha256": "303854b052bbc48eb0b28cc410def92f63a7b725bbc01c64ae29eb6e19fce98e",
+    "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+   },
+   "selection_sha256": "b013a11d9fa688a681b482b5fedf5a8a6a1d3b88d524b3e5fab65af8ef8fecb1",
+   "source_before_sha256": "28fb8b86205416d8bfee5dbd7c11cf193c466ddbc29df34c7d456af5ccea4ba9"
+  }
+ },
+ "provider": "owned-scripted-loopback",
+ "remaining_blockers": [],
+ "removal": {
+  "bootstrap_agent_retained": true,
+  "command": "agentfw pilot-removal preview/apply/status",
+  "coordinator_and_generations_retained": true,
+  "installations": [
+   {
+    "confirmation_sha256": "bf23b66f4325408d16f6d5dc1fe65f9367171ac1b7a04c8be60f35bc78ed37fb",
+    "installation": "direct",
+    "journal_retained": true,
+    "status": "removed",
+    "success_ack_sha256": "bb2c31a3050d6a0caeb9c5aab1064ba7246c002acb23a05c83a4acfa39459903"
+   },
+   {
+    "confirmation_sha256": "daf6c98ef4c6825fd8eedc37082cb1618e105dc4e782cfd8e1af462afaa0f1ae",
+    "installation": "bootstrap",
+    "journal_retained": true,
+    "status": "removed",
+    "success_ack_sha256": "e67b93e3d0db2a5aa5034500306bc7729ccb468eac99bdbf36f5db93eb3fc1a4"
+   }
+  ],
+  "maintenance_history_retained": true,
+  "retained_state_sha256": "ab9ba23002a9d49ee0eea31b8ba3ff32589c3f11a7ba778a6f6cb50d9fac0aaf"
+ },
+ "removal_maintenance": [
+  {
+   "installation": "direct",
+   "status": "entered"
+  },
+  {
+   "installation": "bootstrap",
+   "status": "entered"
+  }
+ ],
+ "run_archival": {
+  "completed_runs_archived": 13,
+  "expected_completed_runs": 13,
+  "local_audit_proves_execution": false,
+  "state_parent_retained": true,
+  "status": "passed"
+ },
+ "runtime_review_status": "author candidate; not merge approval",
+ "runtime_source": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+ "scope": "two-new-projects-one-clean-user-environment",
+ "skipped": 0,
+ "source_after": {
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "dirty": false,
+  "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+ },
+ "source_before": {
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "dirty": false,
+  "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+ },
+ "source_build_receipt_sha256": "7bd600e18e619f630d9f9505117122d6ee9274145807e4f8e4d48ff660e5a430",
+ "status": "passed",
+ "useful_latency_threshold": "unapproved; observations only",
+ "useful_trace_mode": "ordinary installed task launches; full syscall observer only for denied-call controls",
+ "walkthrough": {
+  "cases": [
+   {
+    "case": "plan",
+    "exit": null,
+    "passed": null,
+    "process_cleanup": null,
+    "reason": null,
+    "status": "passed"
+   },
+   {
+    "case": "occupied-port",
+    "exit": null,
+    "passed": null,
+    "process_cleanup": null,
+    "reason": "occupied_port_refused",
+    "status": "passed"
+   },
+   {
+    "case": "stale-source",
+    "exit": null,
+    "passed": null,
+    "process_cleanup": null,
+    "reason": "candidate_source_mismatch",
+    "status": "passed"
+   },
+   {
+    "case": "changed-selection",
+    "exit": null,
+    "passed": null,
+    "process_cleanup": null,
+    "reason": "selected_executable_changed",
+    "status": "passed"
+   },
+   {
+    "case": "provider-unavailable",
+    "exit": null,
+    "passed": null,
+    "process_cleanup": null,
+    "reason": "provider_unavailable",
+    "status": "passed"
+   },
+   {
+    "case": "useful-refusal",
+    "exit": null,
+    "passed": null,
+    "process_cleanup": {
+     "all_stopped": true
+    },
+    "reason": null,
+    "status": "passed"
+   },
+   {
+    "case": "ask",
+    "exit": null,
+    "passed": null,
+    "process_cleanup": {
+     "all_stopped": true
+    },
+    "reason": null,
+    "status": "passed"
+   },
+   {
+    "case": "default",
+    "exit": null,
+    "passed": null,
+    "process_cleanup": {
+     "all_stopped": true
+    },
+    "reason": null,
+    "status": "passed"
+   },
+   {
+    "case": "cancel",
+    "exit": null,
+    "passed": null,
+    "process_cleanup": {
+     "all_stopped": true
+    },
+    "reason": null,
+    "status": "passed"
+   },
+   {
+    "case": "daemon-loss",
+    "exit": null,
+    "passed": null,
+    "process_cleanup": {
+     "all_stopped": true
+    },
+    "reason": null,
+    "status": "passed"
+   },
+   {
+    "case": "host-crash",
+    "exit": null,
+    "passed": null,
+    "process_cleanup": {
+     "all_stopped": true
+    },
+    "reason": null,
+    "status": "passed"
+   },
+   {
+    "case": "timeout",
+    "exit": null,
+    "passed": null,
+    "process_cleanup": {
+     "all_stopped": true
+    },
+    "reason": null,
+    "status": "passed"
+   }
+  ],
+  "fixture_cleanup": {
+   "complete": true,
+   "retained_changed_files": []
+  },
+  "format": "sw-pilot-demo/1",
+  "reason": null,
+  "status": "passed"
+ },
+ "walkthrough_selection_sha256": "c481bce5dd5d2c09677c59a8e634e6d5b227687014271ca9a7a3fe80e15f00ad"
+}

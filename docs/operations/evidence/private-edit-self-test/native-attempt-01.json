@@ -1,0 +1,25 @@
+{
+  "format": "sw-private-edit-self-test-platform-attempt/1",
+  "date": "2026-10-29",
+  "platform": "native-ubuntu-24.04-x86_64",
+  "source_commit": "20a8aa244573796fee4dca9d4be75ddef02a4a48",
+  "workflow_run": "https://github.com/SoupTeam/soup-wall/actions/runs/40851443222",
+  "artifact_id": 12888540062,
+  "artifact_sha256": "616de60b776588f7ef3176fb792e52af0f112d4525a152546f22544e163e512e",
+  "status": "incomplete",
+  "stage": "qualification-format-preflight",
+  "runtime_executed": false,
+  "checks": {
+    "accepted_native_preparation": "passed",
+    "prepared_selection_reuse_and_wrong_digest_recovery": "passed",
+    "helper_unit_tests_passed": 23,
+    "qualification_validator_tests_passed": 4,
+    "component_tests_passed": 6,
+    "rust_cli_tests_passed": 3
+  },
+  "failure": "cargo-fmt was not installed for the explicitly selected Rust 1.94.1 toolchain",
+  "correction": "Install rustfmt and clippy explicitly in the existing native job; retain the format gate and repeat the focused qualification.",
+  "thresholds_changed": false,
+  "paid_inference": false,
+  "claim": "Build and preflight evidence only; no genuine-host private-edit runtime acceptance was produced."
+}

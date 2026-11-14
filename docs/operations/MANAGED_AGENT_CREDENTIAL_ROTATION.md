@@ -1,5 +1,7 @@
 # Managed Agent enrollment credential rotation (SOU-55)
 
+The Console offers the same rotation in the browser: see [Console Agent enrollment](CONSOLE_AGENT_ENROLLMENT.md).
+
 This is an **internal** operator procedure. It rotates the enrollment bearer for one
 managed Agent; it does **not** rotate policy-signing keys, change Agent identity,
 alter permissions or implicitly authorize a policy deployment.

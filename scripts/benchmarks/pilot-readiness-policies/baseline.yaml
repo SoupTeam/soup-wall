@@ -1,0 +1,21 @@
+agent_policies:
+  - name: combined-deny-destructive
+    when: { action_class: destructive }
+    action: deny
+  - name: combined-deny-write
+    when: { action_class: side_effecting }
+    action: deny
+  - name: combined-deny-network
+    when: { action_class: network }
+    action: deny
+  - name: combined-deny-privilege
+    when: { action_class: privilege_changing }
+    action: deny
+  - name: combined-deny-result-injection
+    when: { detector: injection, facet: tool_result, min_severity: medium }
+    action: deny
+  - name: combined-ask-mcp-derived-read
+    when: { taint: [mcp], action_class: read_only }
+    action: ask
+egress_allowlist: []
+default: allow

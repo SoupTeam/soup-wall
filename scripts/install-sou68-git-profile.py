@@ -19,11 +19,13 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import time
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pilot_provider import utility_environment
+from pilot_wheelhouse import install_arguments, prepare_wheelhouse
 ASSETS = ROOT / "profiles/mcp/git-readonly-v1"
 FORMAT = "sw-mcp/git-readonly/1"
 SHALLOW_FORMAT = "sw-mcp/git-readonly-shallow/1"
@@ -56,6 +58,92 @@ def extract_python(archive, destination):
         bundle.extractall(destination, members=members, filter="data")
 
 
+def verify_python_notices(identity):
+    """Require the exact local supplemental notice bundle, without following links."""
+    python = identity.get("python", {})
+    version = python.get("version", "")
+    notices = python.get("upstream_notices")
+    if (not isinstance(version, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
+            or not isinstance(notices, dict) or not 2 <= len(notices) <= 64):
+        raise ValueError("complete Python upstream notices are required")
+    prefix = "upstream-notices/python-" + version
+    names = set()
+    for name, expected in notices.items():
+        if (not isinstance(name, str) or not isinstance(expected, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", expected)):
+            raise ValueError("invalid Python upstream notice identity")
+        parts = PurePosixPath(name).parts
+        if (len(parts) != 3 or "/".join(parts[:2]) != prefix
+                or name != "/".join(parts)
+                or not re.fullmatch(r"(?:LICENSE\.[A-Za-z0-9._-]+\.txt|provenance\.json)", parts[2])):
+            raise ValueError("unsafe Python upstream notice path")
+        names.add(parts[2])
+    if "provenance.json" not in names:
+        raise ValueError("Python upstream notice provenance is required")
+    directory = ASSETS / prefix
+    for parent in (ASSETS / "upstream-notices", directory):
+        if parent.is_symlink() or not parent.is_dir():
+            raise ValueError("unsafe Python upstream notice directory")
+    if {path.name for path in directory.iterdir()} != names:
+        raise ValueError("Python upstream notice bundle differs from declaration")
+    for name, expected in notices.items():
+        path = ASSETS / name
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 2 * 1024 * 1024:
+            raise ValueError("unsafe Python upstream notice file")
+        if sha(path) != expected:
+            raise ValueError("Python upstream notice identity mismatch")
+
+
+def verify_runtime_license_notices(identity):
+    """Verify source-bound supplemental attribution before copying it."""
+    declaration = identity.get("runtime_license_provenance", {})
+    relative = "upstream-notices/runtime-licenses/provenance.json"
+    if (not isinstance(declaration, dict) or declaration.get("path") != relative
+            or not isinstance(declaration.get("sha256"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", declaration["sha256"])):
+        raise ValueError("runtime license provenance identity required")
+    directory = ASSETS / "upstream-notices/runtime-licenses"
+    for parent in (directory.parent, directory):
+        if parent.is_symlink() or not parent.is_dir():
+            raise ValueError("unsafe runtime license notice directory")
+    path = ASSETS / relative
+    if (path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024
+            or sha(path) != declaration["sha256"]):
+        raise ValueError("runtime license provenance identity mismatch")
+    data = json.loads(path.read_bytes())
+    components = data.get("components")
+    if (data.get("format") != "sw-python-runtime-license-provenance/1"
+            or not isinstance(components, list) or not 1 <= len(components) <= 256
+            or not all(isinstance(component, dict) for component in components)):
+        raise ValueError("invalid runtime license provenance components")
+    expected = {"provenance.json": declaration["sha256"]}
+    for component in components:
+        supplemental = component.get("supplemental_notices", [])
+        if not isinstance(supplemental, list) or len(supplemental) > 64:
+            raise ValueError("invalid runtime supplemental notices")
+        for notice in supplemental:
+            if not isinstance(notice, dict):
+                raise ValueError("invalid runtime supplemental notice")
+            name, digest = notice.get("path", ""), notice.get("sha256", "")
+            if not isinstance(name, str) or not isinstance(digest, str):
+                raise ValueError("invalid runtime supplemental notice identity")
+            parts = PurePosixPath(name).parts
+            if (len(parts) != 3 or name != "/".join(parts)
+                    or parts[:2] != ("upstream-notices", "runtime-licenses")
+                    or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}", parts[2])
+                    or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                    or (parts[2] in expected and expected[parts[2]] != digest)):
+                raise ValueError("unsafe runtime supplemental notice identity")
+            expected[parts[2]] = digest
+    if {p.name for p in directory.iterdir()} != set(expected):
+        raise ValueError("runtime license notice bundle differs from declaration")
+    for name, digest in expected.items():
+        path = directory / name
+        if (path.is_symlink() or not path.is_file() or path.stat().st_size > 2 * 1024 * 1024
+                or sha(path) != digest):
+            raise ValueError("runtime supplemental notice identity mismatch")
+
+
 class RuntimeLibrariesUnavailable(ValueError):
     """Bounded library identities suitable for prerequisite diagnostics."""
     def __init__(self, names):
@@ -85,11 +173,11 @@ def dependencies(executables, package):
     return [{"path": path, "sha256": sha(path)} for path in sorted(paths)]
 
 
-def registry(manifest, *, local_references=False, file_revisions=False, shallow_repository=False):
-    if sum((local_references, file_revisions, shallow_repository)) > 1:
+def registry(manifest, *, local_references=False, file_revisions=False, shallow_repository=False, linked_worktree=False):
+    if sum((local_references, file_revisions, shallow_repository, bool(linked_worktree))) > 1:
         raise ValueError("combined Git capabilities are not qualified")
-    selected_format = FILE_READS_FORMAT if file_revisions else SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT
-    registry_id = "git-readonly-file-revisions-v1" if file_revisions else "git-readonly-shallow-v1" if shallow_repository else "git-readonly-local-refs-v1" if local_references else "git-readonly-v1"
+    selected_format = "sw-mcp/git-linked-worktree-readonly/1" if linked_worktree else FILE_READS_FORMAT if file_revisions else SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT
+    registry_id = "git-linked-worktree-readonly-v1" if linked_worktree else "git-readonly-file-revisions-v1" if file_revisions else "git-readonly-shallow-v1" if shallow_repository else "git-readonly-local-refs-v1" if local_references else "git-readonly-v1"
     return {"contract_version": "sw-native/1", "registry_id": registry_id, "tools": [
         {"name": tool["name"],
          "schema_sha256": hashlib.sha256(filesystem.canonical(tool["inputSchema"])).hexdigest(),
@@ -101,8 +189,8 @@ def registry(manifest, *, local_references=False, file_revisions=False, shallow_
 
 def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
             *, static_git=False, python_archive=None, wheelhouse=None, allow_download=True, log=None,
-            local_references=False, file_revisions=False, shallow_repository=False):
-    if sum((local_references, file_revisions, shallow_repository)) > 1:
+            local_references=False, file_revisions=False, shallow_repository=False, linked_worktree=None):
+    if sum((local_references, file_revisions, shallow_repository, bool(linked_worktree))) > 1:
         raise ValueError("combined Git capabilities are not qualified")
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise ValueError("Git profile requires Linux x86-64; no isolation fallback")
@@ -110,18 +198,23 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     destination = Path(destination).absolute()
     if destination.exists() or destination.is_symlink() or destination.is_relative_to(workspace):
         raise ValueError("destination must be new and outside the repository")
-    if not (workspace / ".git").is_dir() or workspace == Path("/"):
+    if linked_worktree is not None:
+        import pilot_linked_worktree as linked
+        linked.verify(linked_worktree, workspace)
+    elif not (workspace / ".git").is_dir() or workspace == Path("/"):
         raise ValueError("standalone synthetic non-bare repository required")
     if not re.fullmatch(r"[0-9a-f]{64}", git_sha256) or sha(git) != git_sha256:
         raise ValueError("supplied Git binary digest mismatch")
     identity = json.loads((ASSETS / "upstream-identity.json").read_text())
+    verify_python_notices(identity)
+    verify_runtime_license_notices(identity)
     git_version = subprocess.check_output([str(git), "--version"], text=True, timeout=10, env=utility_environment()).strip()
     if git_version != "git version " + identity["git_version"]:
         raise ValueError("Git version differs from selected runtime")
     bwrap_help = subprocess.check_output([str(bwrap), "--help"], text=True, timeout=10, env=utility_environment())
     if "--ro-bind-fd" not in bwrap_help:
         raise ValueError("bubblewrap --ro-bind-fd is required")
-    if (local_references or file_revisions or shallow_repository) and "--ro-bind-data" not in bwrap_help:
+    if (local_references or file_revisions or shallow_repository or linked_worktree is not None) and "--ro-bind-data" not in bwrap_help:
         raise ValueError("local references require bubblewrap --ro-bind-data")
     for name, expected in identity["files"].items():
         if Path(name).name != name or sha(ASSETS / name) != expected:
@@ -158,13 +251,25 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
            "TMPDIR": str(tmp), "TEMP": str(tmp), "TMP": str(tmp), "LANG": "C.UTF-8"}
     if subprocess.check_output([str(python), "-I", "--version"], env=env, text=True, timeout=10).strip() != "Python " + identity["python"]["version"]:
         raise ValueError("Python version mismatch")
-    if not allow_download and wheelhouse is None:
-        raise ValueError("local wheelhouse is required without explicit downloads")
-    offline_args = ["--no-index", "--find-links", str(Path(wheelhouse).resolve(strict=True))] if not allow_download else []
+    deadline = time.monotonic() + 300
+    def remaining_install_time():
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired("verified wheel preparation and pip installation", 300)
+        return remaining
     try:
-        subprocess.run([str(python), "-I", "-m", "pip", "--isolated", "install", "--require-hashes",
-                        "--only-binary=:all:", "--no-compile", "--no-cache-dir", "--disable-pip-version-check",
-                        *offline_args, "-r", str(ASSETS / "requirements.lock")], env=env, check=True, timeout=300,
+        if allow_download and wheelhouse is None:
+            # A child-process timeout also bounds slow status/header reads inside
+            # the stdlib transport, before its response/body checks can run.
+            subprocess.run([sys.executable, "-I", str(ROOT / "scripts/pilot_wheelhouse.py"),
+                            "--manifest", str(ASSETS / "wheels.lock.json"),
+                            "--requirements", str(ASSETS / "requirements.lock"),
+                            "--destination", str(destination / "wheelhouse"), "--allow-download"],
+                           env=utility_environment(), check=True, timeout=remaining_install_time(),
+                           stdout=log, stderr=subprocess.STDOUT if log is not None else None)
+        verified_wheels = prepare_wheelhouse(ASSETS / "wheels.lock.json", ASSETS / "requirements.lock",
+            destination / "wheelhouse", source=wheelhouse, allow_download=False)
+        subprocess.run([str(python), *install_arguments(verified_wheels, ASSETS / "requirements.lock")], env=env, check=True, timeout=remaining_install_time(),
                        stdout=log, stderr=subprocess.STDOUT if log is not None else None)
     finally:
         if tmp == (destination / "tmp").resolve():
@@ -174,18 +279,22 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     # Default v1 dependency discovery and all v1 CLI behavior remain unchanged.
     elf_files = [python, git_launcher] if static_git else [python, git, git_launcher]
     elf_files.extend(path for path in (package / "python/lib").rglob("*.so") if path.is_file())
-    profile = {"format": FILE_READS_FORMAT if file_revisions else SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT,
+    profile = {"format": "sw-mcp/git-linked-worktree-readonly/1" if linked_worktree is not None else FILE_READS_FORMAT if file_revisions else SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT,
                "workspace": str(workspace), "runtimePath": str(python),
                "runtimeSha256": sha(python), "packageRoot": str(package), "packageTreeSha256": tree_sha(package),
                "bwrapPath": str(bwrap), "bwrapSha256": sha(bwrap),
                "git": {"path": str(git), "sha256": git_sha256},
                "gitLauncher": {"path": str(git_launcher), "sha256": sha(git_launcher)},
                "libraries": dependencies(elf_files, package)}
+    if linked_worktree is not None:
+        profile.update(linkedWorktree=linked_worktree, workspaceIdentity=linked_worktree["workspace"]["identity"])
     private_json(destination / "profile.json", profile)
     manifest = json.loads((ASSETS / "upstream-tools-list.json").read_text())
-    private_json(destination / "registry.json", registry(manifest, local_references=local_references, file_revisions=file_revisions, shallow_repository=shallow_repository))
+    private_json(destination / "registry.json", registry(manifest, local_references=local_references, file_revisions=file_revisions, shallow_repository=shallow_repository, linked_worktree=linked_worktree is not None))
     shutil.copyfile(ASSETS / "policy.yaml", destination / "policy.yaml")
     os.chmod(destination / "policy.yaml", 0o600)
+    verify_python_notices(identity)
+    verify_runtime_license_notices(identity)
     shutil.copytree(ASSETS / "upstream-notices", destination / "upstream-notices")
     private_json(destination / "installation.json", {
         "format": "sou68-profile-installation/1", "profile": profile, "upstream_identity": identity,

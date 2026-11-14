@@ -10,6 +10,9 @@ fn profile() -> ProfileConfig {
         format: git::FORMAT.into(),
         workspace: "/workspace".into(),
         workspace_identity: None,
+        linked_worktree: None,
+        filesystem_roots: None,
+            workspace_snapshot: None,
         runtime_path: "/owned/python".into(),
         runtime_sha256: "1".repeat(64),
         package_root: "/owned/package".into(),
@@ -105,8 +108,9 @@ async fn file_worker_withholds_after_original_tools_call_write_and_source_restor
     let failure = result
         .err()
         .expect("withdrawn source must never create a Completion");
+    assert_eq!(failure_stage(&failure), "complete");
     assert_eq!(
-        failure.to_string(),
+        failure.root_cause().to_string(),
         "Git file-revision source changed; a new protected session is required"
     );
     assert_eq!(std::fs::read(&reference).unwrap(), original);
@@ -387,7 +391,11 @@ fn fixture(format: &str) -> (tempfile::TempDir, Value, Arc<Snapshot>) {
 #[test]
 fn completion_binds_entire_original_text_and_retains_sticky_snapshot() {
     use base64::Engine;
-    for format in [git::FORMAT, git::FILE_READS_FORMAT, server_profile::git_tracked_symlinks::FORMAT] {
+    for format in [
+        git::FORMAT,
+        git::FILE_READS_FORMAT,
+        server_profile::git_tracked_symlinks::FORMAT,
+    ] {
         let (root, data, snapshot) = fixture(format);
         let raw = base64::engine::general_purpose::STANDARD
             .decode(data["original_response_base64"].as_str().unwrap())
@@ -465,7 +473,9 @@ async fn actual_owned_original_git_commit_and_blob_keep_exact_kind_boundary() {
     }
     match p.format.as_str() {
         git::FILE_READS_FORMAT => println!("SOU146_REAL_WORKER_KIND_BOUNDARY format={}", p.format),
-        server_profile::git_tracked_symlinks::FORMAT => println!("SOU150_REAL_WORKER_KIND_BOUNDARY format={}", p.format),
+        server_profile::git_tracked_symlinks::FORMAT => {
+            println!("SOU150_REAL_WORKER_KIND_BOUNDARY format={}", p.format)
+        }
         _ => println!("SOU156_REAL_WORKER_KIND_BOUNDARY format={}", p.format),
     }
 }

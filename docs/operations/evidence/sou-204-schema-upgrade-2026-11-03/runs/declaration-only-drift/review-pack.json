@@ -1,0 +1,70 @@
+{
+  "after_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+  "analysis_mode": "declaration_bound",
+  "before_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+  "format": "sw-mcp/schema-upgrade-review-pack/1",
+  "generation": {
+    "complete": true,
+    "omitted": 0,
+    "records": 1
+  },
+  "label_definitions": {
+    "contradiction": "the identified contradiction with the cited declaration, or null",
+    "declaration_refs": "relevance and traceability only; a reference alone never makes a record adverse",
+    "human_approval": "none; records require operator review",
+    "runtime_enforcement": "never observed by this analyzer",
+    "schema_validity": "observed verdict of the runtime input validator on the after schema",
+    "semantic_expectation": "proposal: adverse_under_current_declaration (only with a stated contradiction of the cited declaration), behavior_change_vs_before_schema (concrete schema change), unknown_requires_manual_review (meaning not established by declarations), exercise_only, rejected_by_schema, unknown (unsupported/unconstructible), not_applicable",
+    "semantic_safety": "never established by schema validity"
+  },
+  "limits": {
+    "max_array_items": 4,
+    "max_build_depth": 8,
+    "max_example_bytes": 4096,
+    "max_records": 512,
+    "max_records_per_finding": 4,
+    "max_string_chars": 64
+  },
+  "records": [
+    {
+      "argument_pointer": null,
+      "arguments": null,
+      "check_category": "proposed_declaration_review",
+      "declaration_refs": [],
+      "finding_ids": [
+        "F-d6783c65591bf0c6"
+      ],
+      "finding_kind": "declared_action_changed",
+      "finding_pointer": "",
+      "human_approval": "none",
+      "id": "E-3f4431115dce7629",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "Proposed declaration differs from the current one; it is a draft and grants nothing.",
+      "record_type": "review_item",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [],
+        "note": "this finding cites no current declaration"
+      },
+      "semantic_expectation": "not_applicable",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#declared_action_changed/proposed_declaration_review",
+      "status": "proposal_for_human_review",
+      "tool": "read_text_file"
+    }
+  ],
+  "report_format": "sw-mcp/schema-upgrade-report/1",
+  "schema_validity_basis": "agentfw::mcp::input::InputSchema::read_selected(after inputSchema).validate(arguments); selected-profile objects are closed",
+  "status": "proposal_for_human_review",
+  "these_records_are_not": [
+    "gold_labels",
+    "training_data",
+    "human_approvals",
+    "runtime_permission",
+    "evidence_of_observed_runtime_enforcement",
+    "semantic_safety_determinations"
+  ]
+}

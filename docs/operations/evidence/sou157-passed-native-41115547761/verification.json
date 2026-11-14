@@ -1,0 +1,17 @@
+{
+  "run": 41115547761,
+  "source": "e5327e5831d2c6bd082e26a7f925e78fd218b837",
+  "artifact": 13007090466,
+  "archive_sha256": "7482c7ad9463f59dc523bced1b8b4f04a0faa9e833596d12a505e3d5b379f600",
+  "crc_verified": true,
+  "unique_members": 4,
+  "full_policy_pairs_verified": 8,
+  "projection_matches": true,
+  "production_authority": false,
+  "task_complete": false,
+  "files": {
+    "formatter-shadow-acceptance.json": "403a3e786cbcd4779209727d8c51b0ac0d7105e1acbe6da21ff4665f4e236f04",
+    "formatter-shadow.json": "6f8a2c09116f9160cf465eab28b97e7086c75df56b3f1424554214c91d390b08",
+    "native-execution.json": "f4b438d5add41a34363ba01600020708594f038b6084a2bfe8c15e82004d0608"
+  }
+}

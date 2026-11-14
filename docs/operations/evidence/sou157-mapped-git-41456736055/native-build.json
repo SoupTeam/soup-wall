@@ -1,0 +1,47 @@
+{
+  "format": "sou155-native-build/1",
+  "status": "passed",
+  "runtime_qualification": false,
+  "source_commit": "0f33c2945206a23cca1c6274ada27f8f09005116",
+  "source_read_only": true,
+  "writes": "isolated-scratch-only",
+  "network": "private-loopback-only",
+  "steps": [
+    {
+      "label": "native-build",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 140.95,
+      "log_sha256": "d68c931131c119ae1051b75b3ec191bce06f7d8aa9899038add66ee5000c86fc"
+    },
+    {
+      "label": "native-closure-unit",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 72.91,
+      "log_sha256": "4b9e05263d9099409d92e768d7a8d854b94ac927581a287223d4660b68c4f075"
+    },
+    {
+      "label": "native-execution-unit",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 10.06,
+      "log_sha256": "041c38cf90cbe3b9a9adfb259242150af706a89620bd634155b01cee3c754368"
+    },
+    {
+      "label": "native-owner-unit",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.26,
+      "log_sha256": "230c161ba329dfd6aeec18fe88360f97dd54b1e75b936a6025fbbcd36360d143"
+    },
+    {
+      "label": "native-clippy",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 93.65,
+      "log_sha256": "70e9b8ef6220fa921796bd3b965cc44513f8778900a997f7c0c11e2633e8fead"
+    }
+  ],
+  "binary_sha256": "2f751e3ea133bec28c5152eac5a6ed814b2fdf3c036c1ffb4b5e0609128d2aad"
+}

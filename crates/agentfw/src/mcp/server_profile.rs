@@ -15,6 +15,8 @@ use sha2::{Digest, Sha256};
 use super::input::InputSchema;
 
 pub mod filesystem_create;
+pub mod filesystem_links;
+pub mod filesystem_roots;
 pub mod git;
 pub mod git_local_clone;
 #[cfg(test)]
@@ -22,6 +24,7 @@ mod git_local_clone_tests;
 pub mod git_tracked_symlinks;
 #[cfg(test)]
 mod git_tracked_symlinks_tests;
+pub mod workspace_snapshot;
 
 pub fn git_selected(format: &str) -> bool {
     git::is_profile(format)
@@ -48,11 +51,14 @@ pub fn selected(format: Option<&str>) -> bool {
         format,
         Some(
             FORMAT
+                | filesystem_roots::FORMAT
+                | filesystem_links::FORMAT
                 | filesystem_create::FORMAT
                 | git::FORMAT
                 | git::LOCAL_REFS_FORMAT
                 | git::FILE_READS_FORMAT
                 | git::SHALLOW_FORMAT
+                | git::linked_worktree::FORMAT
                 | git_local_clone::FORMAT
                 | git_tracked_symlinks::FORMAT
         )
@@ -153,6 +159,12 @@ pub struct ProfileConfig {
     pub workspace: PathBuf,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_identity: Option<WorkspaceIdentity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linked_worktree: Option<git::linked_worktree::Binding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filesystem_roots: Option<filesystem_roots::Binding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_snapshot: Option<workspace_snapshot::Binding>,
     pub runtime_path: PathBuf,
     pub runtime_sha256: String,
     pub package_root: PathBuf,
@@ -364,6 +376,49 @@ impl ProfileConfig {
                 "invalid Git executable pin"
             );
         }
+        ensure!(
+            (config.format == git::linked_worktree::FORMAT) == config.linked_worktree.is_some(),
+            "linked_worktree_profile_binding_required"
+        );
+        if let Some(binding) = &config.linked_worktree {
+            binding.validate_schema(&config.workspace)?;
+            ensure!(
+                config.workspace_identity.as_ref() == Some(&binding.workspace.identity),
+                "linked_worktree_workspace_binding_required"
+            );
+        }
+        ensure!(
+            (matches!(
+                config.format.as_str(),
+                filesystem_roots::FORMAT | filesystem_links::FORMAT
+            )) == config.filesystem_roots.is_some(),
+            "filesystem_roots_profile_binding_mismatch"
+        );
+        if let Some(binding) = &config.filesystem_roots {
+            binding.validate_schema(&config.workspace)?;
+            ensure!(
+                (config.format == filesystem_links::FORMAT)
+                    == (binding.format == filesystem_links::BINDING_FORMAT),
+                "filesystem_links_profile_binding_mismatch"
+            );
+            ensure!(
+                config.workspace_identity.as_ref() == Some(&binding.roots[0].identity),
+                "filesystem_roots_workspace_identity_mismatch"
+            );
+        }
+        if let Some(snapshot) = &config.workspace_snapshot {
+            ensure!(
+                config.format == FORMAT
+                    && config.filesystem_roots.is_none()
+                    && config.linked_worktree.is_none(),
+                "workspace_snapshot_profile_combination_unsupported"
+            );
+            snapshot.validate(&config.workspace)?;
+            ensure!(
+                config.workspace_identity.as_ref() == Some(&snapshot.workspace_identity),
+                "workspace_snapshot_root_changed"
+            );
+        }
         ensure!(config.libraries.len() <= 32, "MCP runtime library limit");
         for path in [
             &config.workspace,
@@ -433,6 +488,19 @@ impl ProfileConfig {
             return Ok(());
         }
         let entry = self.package_root.join(SERVER_ENTRYPOINT);
+        if let Some(binding) = &self.filesystem_roots {
+            binding.validate_schema(workspace)?;
+            let mut expected = vec![entry
+                .to_str()
+                .context("filesystem_roots_entrypoint")?
+                .to_owned()];
+            expected.extend(binding.arguments());
+            ensure!(
+                args == expected && workspace == self.workspace,
+                "filesystem_roots_command_mismatch"
+            );
+            return Ok(());
+        }
         ensure!(
             args.len() == 2
                 && Path::new(&args[0]) == entry
@@ -467,11 +535,15 @@ pub fn original_manifest() -> Value {
 
 pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
     match format {
-        FORMAT | filesystem_create::FORMAT => Ok(original_manifest()),
+        FORMAT
+        | filesystem_roots::FORMAT
+        | filesystem_links::FORMAT
+        | filesystem_create::FORMAT => Ok(original_manifest()),
         git::FORMAT
         | git::LOCAL_REFS_FORMAT
         | git::FILE_READS_FORMAT
         | git::SHALLOW_FORMAT
+        | git::linked_worktree::FORMAT
         | git_local_clone::FORMAT
         | git_tracked_symlinks::FORMAT => Ok(git::original_manifest()),
         _ => anyhow::bail!("unsupported MCP profile"),
@@ -480,11 +552,15 @@ pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
 
 pub fn validate_initialization_for(format: &str, value: &Value) -> anyhow::Result<()> {
     match format {
-        FORMAT | filesystem_create::FORMAT => validate_initialization(value),
+        FORMAT
+        | filesystem_roots::FORMAT
+        | filesystem_links::FORMAT
+        | filesystem_create::FORMAT => validate_initialization(value),
         git::FORMAT
         | git::LOCAL_REFS_FORMAT
         | git::FILE_READS_FORMAT
         | git::SHALLOW_FORMAT
+        | git::linked_worktree::FORMAT
         | git_local_clone::FORMAT
         | git_tracked_symlinks::FORMAT => git::validate_initialization(value),
         _ => anyhow::bail!("unsupported MCP profile"),
@@ -496,11 +572,12 @@ pub fn classify_manifest_for(
     value: &Value,
 ) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
     match format {
-        FORMAT => classify_manifest(value),
+        FORMAT | filesystem_roots::FORMAT | filesystem_links::FORMAT => classify_manifest(value),
         filesystem_create::FORMAT => filesystem_create::classify_manifest(value),
-        git::FORMAT | git_local_clone::FORMAT | git_tracked_symlinks::FORMAT => {
-            git::classify_manifest(value)
-        }
+        git::FORMAT
+        | git::linked_worktree::FORMAT
+        | git_local_clone::FORMAT
+        | git_tracked_symlinks::FORMAT => git::classify_manifest(value),
         git::LOCAL_REFS_FORMAT => git::classify_manifest_with_local_refs(value, true),
         git::SHALLOW_FORMAT => git::classify_manifest(value),
         git::FILE_READS_FORMAT => {
@@ -911,6 +988,28 @@ mod tests {
             )),
             "identity_lookup_changed"
         );
+    }
+
+    #[test]
+    fn frozen_false_refusal_paths_do_not_gain_selected_runtime_custody() {
+        let manifest: Value =
+            serde_json::from_str(include_str!("../../../../eval/sou123/manifest.json")).unwrap();
+        let tools = classify_manifest(&original_manifest()).unwrap();
+        for id in ["f05-a", "f12-a"] {
+            let case = manifest["cases"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|case| case["case_id"] == id)
+                .unwrap();
+            let error = tools["read_multiple_files"]
+                .validate_arguments(&case["arguments"])
+                .unwrap_err();
+            assert!(matches!(
+                error.downcast_ref::<PathRefusal>(),
+                Some(PathRefusal::Outside)
+            ));
+        }
     }
 
     #[test]

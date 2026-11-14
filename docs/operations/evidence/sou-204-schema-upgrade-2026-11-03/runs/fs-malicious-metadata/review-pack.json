@@ -1,0 +1,99 @@
+{
+  "after_raw_sha256": "6f583e5f10a0cc3af88700d3b2b86062f6b5bea49886d18bfb9fc7ab200048b4",
+  "analysis_mode": "declaration_bound",
+  "before_raw_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+  "format": "sw-mcp/schema-upgrade-review-pack/1",
+  "generation": {
+    "complete": true,
+    "omitted": 0,
+    "records": 2
+  },
+  "label_definitions": {
+    "contradiction": "the identified contradiction with the cited declaration, or null",
+    "declaration_refs": "relevance and traceability only; a reference alone never makes a record adverse",
+    "human_approval": "none; records require operator review",
+    "runtime_enforcement": "never observed by this analyzer",
+    "schema_validity": "observed verdict of the runtime input validator on the after schema",
+    "semantic_expectation": "proposal: adverse_under_current_declaration (only with a stated contradiction of the cited declaration), behavior_change_vs_before_schema (concrete schema change), unknown_requires_manual_review (meaning not established by declarations), exercise_only, rejected_by_schema, unknown (unsupported/unconstructible), not_applicable",
+    "semantic_safety": "never established by schema validity"
+  },
+  "limits": {
+    "max_array_items": 4,
+    "max_build_depth": 8,
+    "max_example_bytes": 4096,
+    "max_records": 512,
+    "max_records_per_finding": 4,
+    "max_string_chars": 64
+  },
+  "records": [
+    {
+      "argument_pointer": null,
+      "arguments": null,
+      "check_category": "verify_behavior_not_hint",
+      "declaration_refs": [],
+      "finding_ids": [
+        "F-ded6b8ac90e91006"
+      ],
+      "finding_kind": "behavior_hint_changed",
+      "finding_pointer": "/annotations/destructiveHint",
+      "human_approval": "none",
+      "id": "E-0b28c4ccaaff5d3e",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "Hints and capability metadata are untrusted; verify behavior in the implementation.",
+      "record_type": "review_item",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [],
+        "note": "this finding cites no current declaration"
+      },
+      "semantic_expectation": "not_applicable",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#behavior_hint_changed/verify_behavior_not_hint",
+      "status": "proposal_for_human_review",
+      "tool": "write_file"
+    },
+    {
+      "argument_pointer": null,
+      "arguments": null,
+      "check_category": "verify_behavior_not_hint",
+      "declaration_refs": [],
+      "finding_ids": [
+        "F-ccb8df5bb705a4c1"
+      ],
+      "finding_kind": "behavior_hint_changed",
+      "finding_pointer": "/annotations/readOnlyHint",
+      "human_approval": "none",
+      "id": "E-77d13dc564f5d96c",
+      "limitations": [
+        "Proposal for human review only: not a gold label, training data, approval, permission or evidence of observed runtime enforcement."
+      ],
+      "rationale": "Hints and capability metadata are untrusted; verify behavior in the implementation.",
+      "record_type": "review_item",
+      "runtime_enforcement": "not_observed",
+      "schema_validity": "not_applicable",
+      "semantic_basis": {
+        "declarations": [],
+        "note": "this finding cites no current declaration"
+      },
+      "semantic_expectation": "not_applicable",
+      "semantic_safety": "not_established",
+      "source_rule": "sw-mcp/schema-upgrade-rule/1#behavior_hint_changed/verify_behavior_not_hint",
+      "status": "proposal_for_human_review",
+      "tool": "write_file"
+    }
+  ],
+  "report_format": "sw-mcp/schema-upgrade-report/1",
+  "schema_validity_basis": "agentfw::mcp::input::InputSchema::read_selected(after inputSchema).validate(arguments); selected-profile objects are closed",
+  "status": "proposal_for_human_review",
+  "these_records_are_not": [
+    "gold_labels",
+    "training_data",
+    "human_approvals",
+    "runtime_permission",
+    "evidence_of_observed_runtime_enforcement",
+    "semantic_safety_determinations"
+  ]
+}

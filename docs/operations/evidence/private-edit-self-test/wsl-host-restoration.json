@@ -1,0 +1,21 @@
+{
+  "format": "sw-private-edit-wsl-host-restoration/1",
+  "status": "restored",
+  "temporary_resource_change_explicitly_user_authorized": true,
+  "original_wslconfig": "absent",
+  "temporary_wslconfig_sha256": "b8b7d92bacb12d92747b146cada1b2d9a51dfb48b94079f9943e8ad7c38007c2",
+  "temporary_memory_gib": 4,
+  "temporary_processors": 4,
+  "created_utc": "2026-10-29T13:57:03.2148263Z",
+  "restored_utc": "2026-10-29T14:15:26.7738736Z",
+  "temporary_file_unchanged_before_removal": true,
+  "original_configuration_absence_verified": true,
+  "ubuntu_vm_state_before": "stopped",
+  "ubuntu_vm_state_after": "stopped",
+  "other_distribution_state_before": "stopped",
+  "other_distribution_state_after": "stopped",
+  "unrelated_distribution_started_or_terminated": false,
+  "guest_namespace_and_security_settings_unchanged": true,
+  "qualification_evidence": "wsl-attempt-03-qualification.json",
+  "note": "Runtime acceptance was measured with the temporary cap. Restoring resource configuration is not another runtime acceptance run."
+}

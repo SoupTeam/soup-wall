@@ -1,0 +1,334 @@
+{
+  "cases": [
+    {
+      "attempted": true,
+      "exact_readback": true,
+      "id": "create-read",
+      "status": "passed",
+      "witness": {
+        "approved_or_rejected": 1,
+        "audit_sha256": "78d13df9c3d663af3dfb58abde097824c3920d76fdef1ace6b83bd9d3f1dc8e0",
+        "exit_code": 0,
+        "observed_results": 3,
+        "processes": {
+          "all_stopped": true,
+          "descendant_count": 5,
+          "discarded_exited_hints": 0,
+          "discarded_recycled_hints": 0,
+          "observed": [
+            {
+              "parent_pid": 15630,
+              "parent_process": true,
+              "parent_start_time_ticks": null,
+              "pid": 15638,
+              "pidfd_pinned": true,
+              "start_time_ticks": 57269
+            },
+            {
+              "parent_pid": 15638,
+              "parent_process": false,
+              "parent_start_time_ticks": 57269,
+              "pid": 15642,
+              "pidfd_pinned": true,
+              "start_time_ticks": 57380
+            },
+            {
+              "parent_pid": 15642,
+              "parent_process": false,
+              "parent_start_time_ticks": 57380,
+              "pid": 15679,
+              "pidfd_pinned": true,
+              "start_time_ticks": 57418
+            },
+            {
+              "parent_pid": 15642,
+              "parent_process": false,
+              "parent_start_time_ticks": 57380,
+              "pid": 15681,
+              "pidfd_pinned": true,
+              "start_time_ticks": 57418
+            },
+            {
+              "parent_pid": 15642,
+              "parent_process": false,
+              "parent_start_time_ticks": 57380,
+              "pid": 15680,
+              "pidfd_pinned": true,
+              "start_time_ticks": 57418
+            },
+            {
+              "parent_pid": 15642,
+              "parent_process": false,
+              "parent_start_time_ticks": 57380,
+              "pid": 15694,
+              "pidfd_pinned": true,
+              "start_time_ticks": 57425
+            }
+          ],
+          "pidfd_cleanup": true,
+          "remaining": [],
+          "reparented_owned_count": 0,
+          "unproven_hints_remaining": []
+        },
+        "provider_bytes": 68276,
+        "provider_requests": 4,
+        "publication_gates": 0,
+        "quota": {
+          "admitted_mutation_attempts": 1,
+          "charged_write_bytes": 39,
+          "known_committed_mutations": 1,
+          "known_committed_write_bytes": 39
+        },
+        "stderr_sha256": "1cab3dc4215a8f780aef9ae32b87f0ea81677868505a97af35aede8fc9de314c",
+        "stdout_sha256": "3991b87a9eaaba2fb02b8e1482b5d87cd6f757167a99cf1ea8bb3415f8dc43dc",
+        "target_after": {
+          "device": 2049,
+          "exists": true,
+          "inode": 9217055,
+          "mode": 33152,
+          "sha256": "144f520119405b0376e66d861d9a2150b318df32289a35bd8e519403591af8b8",
+          "size": 39
+        },
+        "target_before": {
+          "exists": false
+        },
+        "write_admissions": 1
+      }
+    },
+    {
+      "attempted": true,
+      "id": "replace-read",
+      "reason": "self_test_observation_incomplete",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "ask-reject-replay",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "aggregate-quota",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "exact-run-stop",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "stopped-authority",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "daemon-loss",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "fresh-run-recovery",
+      "status": "incomplete"
+    }
+  ],
+  "cleanup": {
+    "all_owned_processes_stopped": true,
+    "keep_workspace_requested": false,
+    "process_groups": [
+      {
+        "all_stopped": true,
+        "descendant_count": 5,
+        "discarded_exited_hints": 0,
+        "discarded_recycled_hints": 0,
+        "observed": [
+          {
+            "parent_pid": 15630,
+            "parent_process": true,
+            "parent_start_time_ticks": null,
+            "pid": 15638,
+            "pidfd_pinned": true,
+            "start_time_ticks": 57269
+          },
+          {
+            "parent_pid": 15638,
+            "parent_process": false,
+            "parent_start_time_ticks": 57269,
+            "pid": 15642,
+            "pidfd_pinned": true,
+            "start_time_ticks": 57380
+          },
+          {
+            "parent_pid": 15642,
+            "parent_process": false,
+            "parent_start_time_ticks": 57380,
+            "pid": 15679,
+            "pidfd_pinned": true,
+            "start_time_ticks": 57418
+          },
+          {
+            "parent_pid": 15642,
+            "parent_process": false,
+            "parent_start_time_ticks": 57380,
+            "pid": 15681,
+            "pidfd_pinned": true,
+            "start_time_ticks": 57418
+          },
+          {
+            "parent_pid": 15642,
+            "parent_process": false,
+            "parent_start_time_ticks": 57380,
+            "pid": 15680,
+            "pidfd_pinned": true,
+            "start_time_ticks": 57418
+          },
+          {
+            "parent_pid": 15642,
+            "parent_process": false,
+            "parent_start_time_ticks": 57380,
+            "pid": 15694,
+            "pidfd_pinned": true,
+            "start_time_ticks": 57425
+          }
+        ],
+        "pidfd_cleanup": true,
+        "remaining": [],
+        "reparented_owned_count": 0,
+        "unproven_hints_remaining": []
+      },
+      {
+        "all_stopped": true,
+        "descendant_count": 6,
+        "discarded_exited_hints": 0,
+        "discarded_recycled_hints": 0,
+        "observed": [
+          {
+            "parent_pid": 15630,
+            "parent_process": true,
+            "parent_start_time_ticks": null,
+            "pid": 15768,
+            "pidfd_pinned": true,
+            "start_time_ticks": 57626
+          },
+          {
+            "parent_pid": 15768,
+            "parent_process": false,
+            "parent_start_time_ticks": 57626,
+            "pid": 15772,
+            "pidfd_pinned": true,
+            "start_time_ticks": 57738
+          },
+          {
+            "parent_pid": 15772,
+            "parent_process": false,
+            "parent_start_time_ticks": 57738,
+            "pid": 15803,
+            "pidfd_pinned": true,
+            "start_time_ticks": 57782
+          },
+          {
+            "parent_pid": 15772,
+            "parent_process": false,
+            "parent_start_time_ticks": 57738,
+            "pid": 15802,
+            "pidfd_pinned": true,
+            "start_time_ticks": 57782
+          },
+          {
+            "parent_pid": 15772,
+            "parent_process": false,
+            "parent_start_time_ticks": 57738,
+            "pid": 15801,
+            "pidfd_pinned": true,
+            "start_time_ticks": 57782
+          },
+          {
+            "parent_pid": 15772,
+            "parent_process": false,
+            "parent_start_time_ticks": 57738,
+            "pid": 15810,
+            "pidfd_pinned": true,
+            "start_time_ticks": 57786
+          },
+          {
+            "parent_pid": 15772,
+            "parent_process": false,
+            "parent_start_time_ticks": 57738,
+            "pid": 15814,
+            "pidfd_pinned": true,
+            "start_time_ticks": 57789
+          }
+        ],
+        "pidfd_cleanup": true,
+        "remaining": [],
+        "reparented_owned_count": 0,
+        "unproven_hints_remaining": []
+      }
+    ],
+    "workspace_removed": true,
+    "workspace_retained": false
+  },
+  "effects_of_interrupted_runs": "indeterminate; no automatic retry or mutation replay",
+  "executed": true,
+  "expected": [
+    "create-read",
+    "replace-read",
+    "ask-reject-replay",
+    "aggregate-quota",
+    "exact-run-stop",
+    "stopped-authority",
+    "daemon-loss",
+    "fresh-run-recovery"
+  ],
+  "format": "sw-private-edit-self-test/1",
+  "identities": {
+    "component_sha256": "c27820af6291a7abbcfb8e3297083127a62f2d4c5ce7dff28b54ce197c0db02f",
+    "helper_python_sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+    "installed_sha256": {
+      "agentfw": "11985601244ae832a4b271257d407177cf29acc1f6ec36ee7b2e473a41e40664",
+      "bwrap": "6f3149a5c0152f68717deb1b942d67b1cd3bc4d37fb69685031c2062e2e1226a",
+      "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+      "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+      "git": "79ac7e2120003a6cfd09a5331775af12fa1f373a6e7201d37e51f346d277a85b",
+      "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+      "git_launcher": "c40476f1950c674f49d6c659f2a1a59c22a5842df94210dec74e03287cc00cd3",
+      "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+      "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+      "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+      "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+      "sandbox_tests": "afd5e244738b7b2c6726a6291ce746c6e16045c20641a4f6443d92c03d89d865"
+    },
+    "selection_sha256": "a0162fa15119fd364651c4bc9b53188d90c66fd0f5e69f94727f8e16b04f49f9",
+    "source_commit": "639553bcc7009a739fed73ed1d641e0b70cf80c6",
+    "source_tree": "77ef92d74124a00821b2442d977eb53df65dd203"
+  },
+  "inventory": {
+    "attempted": 2,
+    "expected": 8,
+    "failed": 0,
+    "incomplete": 7,
+    "passed": 1,
+    "unsupported": 0
+  },
+  "last_command": {
+    "exit_code": 0,
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 3,
+    "stdout_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+  },
+  "original_filesystem_git": "selected-runtime-pins-validated; private-output edits use the accepted native edit API",
+  "paid_inference": false,
+  "platform": {
+    "id": "native-linux-x86_64",
+    "supported": true
+  },
+  "preservation": {
+    "installed_state_unchanged": true,
+    "original_projects_unchanged": true,
+    "unrelated_sentinel_unchanged": true
+  },
+  "reason": "self_test_observation_incomplete",
+  "scope": "selected-genuine-Claude-owned-scripted-provider-native-private-output",
+  "status": "incomplete"
+}

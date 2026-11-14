@@ -34,14 +34,28 @@ SCHEMA = "sw-pilot-front-door-component/1"
 ENTRY = "scripts/pilot.py"
 PYTHON = "cpython>=3.11,<3.14"
 MAX_FILE = 1024 * 1024
-MAX_FILES = 128
+# The full helper and runtime-notice closure contains 142 files. Keep the
+# producer aligned with the consumer's bounded component capacity.
+MAX_FILES = 160
 MAX_NAME = 100
 # The complete transitive runtime of the guided front door: every helper it
 # loads directly or through the accepted scripts, and every checkout file those
 # helpers read at run time. `scripts/tests/test_pilot_front_door_component.py`
 # derives the closure from the sources and fails when this list misses one.
 SCRIPTS = (
+    "scripts/pilot-demo.py",
+    "scripts/qualify-prepared-pilot-run.py",
+    "scripts/qualify-pilot-launcher.py",
+    "scripts/qualify-pilot-ask.py",
+    "scripts/pilot_ask_latency.py",
+    "scripts/verify-sou105-selected-approval.py",
+    "scripts/sou84_owned_acceptance.py",
+    "scripts/prepared_stop_witness.py",
+    "scripts/pilot_provider_witness.py",
+    "scripts/prepared_syscall_witness.py",
     "scripts/agent-audit-report.py",
+    "scripts/agent-command-help.py",
+    "scripts/agent-diagnostic-diff.py",
     "scripts/edit-run-archive.py",
     "scripts/build-native-pilot-inputs.py",
     "scripts/install-sou62-filesystem-profile.py",
@@ -54,17 +68,37 @@ SCRIPTS = (
     "scripts/pilot-run-archive.py",
     "scripts/pilot-selection-lock.py",
     "scripts/pilot.py",
+    "scripts/pilot_candidate.py",
+    "scripts/pilot_maintenance.py",
+    "scripts/pilot_maintenance_launch.py",
+    "scripts/pilot_configuration_backup.py",
+    "scripts/private_edit_self_test.py",
     "scripts/pilot_git_profiles.py",
+    "scripts/pilot_linked_worktree.py",
+    "scripts/pilot_filesystem_roots.py",
+    "scripts/pilot_workspace_snapshot.py",
+    "scripts/pilot_filesystem_links.py",
     "scripts/pilot_audit.py",
     "scripts/pilot_capacity.py",
     "scripts/pilot_policy.py",
     "scripts/pilot_preparation_lock.py",
+    "scripts/pilot_prerequisite_cache_exchange.py",
     "scripts/pilot_provider.py",
+    "scripts/pilot_scope.py",
+    "scripts/pilot_policy_activation.py",
+    "scripts/pilot_budget_presets.py",
+    "scripts/pilot_project_presets.py",
+    "scripts/pilot_project_recovery.py",
+    "scripts/pilot_provider_ca.py",
     "scripts/pilot_provider_profiles.py",
+    "scripts/pilot_provider_preflight.py",
     "scripts/pilot_run_state.py",
     "scripts/pilot_qualification.py",
     "scripts/pilot_resumable_download.py",
     "scripts/pilot_source_identity.py",
+    "scripts/pilot_runtime_identity.py",
+    "scripts/pilot_wheelhouse.py",
+    "scripts/roadmap_support.py",
     "scripts/pilot_update.py",
     "scripts/switch-prepared-pilot.py",
     "scripts/prepare-installed-pilot.py",
@@ -75,9 +109,19 @@ SCRIPTS = (
     "scripts/verify-sou68-real-mcp.py",
     "scripts/verify-sou79-resource-budgets.py",
     "scripts/wsl_preflight.py",
+    "scripts/pilot_lifecycle_preflight.py",
     "scripts/wsl_qualification.py",
 )
 DATA_FILES = (
+    "crates/proxy/tests/fixtures/saml/local-idp-cert.pem",
+    "docs/operations/INSTALLED_PILOT_TOOLS.md",
+    "docs/ROADMAP.md",
+    "docs/operations/roadmap-support-index.json",
+    "scripts/roadmap_support_assets/report.css",
+    "scripts/roadmap_support_assets/report.js",
+    "docs/operations/AGENT_COMMAND_HELP.md",
+    "docs/operations/AGENT_DIAGNOSTIC_DIFF.md",
+    "profiles/mcp/git-linked-worktree-readonly-v1/contract.json",
     "rule_baseline/git_readonly_v1/rule_baseline.py",
     "rule_baseline/git_readonly_file_revisions_v1/rule_baseline.py",
     "rule_baseline/git_readonly_local_refs_v1/rule_baseline.py",
@@ -85,10 +129,13 @@ DATA_FILES = (
 )
 DATA_DIRECTORIES = (
     "profiles/mcp/filesystem-readonly-v1",
+    "profiles/mcp/filesystem-multi-root-readonly-v1",
+    "profiles/mcp/filesystem-multi-root-file-links-readonly-v1",
     "profiles/mcp/git-readonly-v1",
     "profiles/mcp/git-local-clone-readonly-v1",
     "profiles/mcp/git-tracked-symlinks-readonly-v1",
     "profiles/pilot/linux-readonly-v1",
+    "profiles/pilot/linux-v1",
 )
 
 

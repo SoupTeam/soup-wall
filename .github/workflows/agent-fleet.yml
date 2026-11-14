@@ -31,20 +31,115 @@ jobs:
           git restore .
           git rev-parse HEAD > target/fleet-evidence/source.txt
       - name: Fleet storage and authorization regressions
-        run: cargo test --locked -p llm-firewall --test fleet_projection
+        run: cargo test --locked -p llm-firewall --test fleet_projection --test fleet_triage --test agent_heartbeat --test managed_rejection_reasons --test managed_stale_recovery
       - name: Build real Console and Agent
         run: cargo build --locked -p llm-firewall -p agentfw
       - name: Prepare isolated browser driver
         run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends age
+          age --version
+          age-keygen --version
           python3 -m venv "$RUNNER_TEMP/fleet-driver"
           "$RUNNER_TEMP/fleet-driver/bin/python" -m pip install playwright==1.55.0 cryptography==50.0.2
           "$RUNNER_TEMP/fleet-driver/bin/python" -m playwright install --with-deps chromium
+          "$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts.tests.test_fleet_acceptance_read_accounting
       - name: SQLite real processes and browser
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" scripts/fleet-console-acceptance.py --backend sqlite --output target/fleet-evidence/sqlite'
       - name: PostgreSQL TLS real processes and browser
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" scripts/fleet-console-acceptance.py --backend postgres --output target/fleet-evidence/postgres'
       - name: Managed Agent rollout panel browser regressions
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_rollout_browser.py -v'
+      - name: Individual signed policy browser regressions
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_single_policy_browser.py -v'
+      - name: Individual policy complete real browser and Agent cycle on both backends
+        shell: bash
+        run: |
+          set +e
+          status=0
+          for backend in sqlite postgres; do
+            "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-single-policy-acceptance.py --no-build \
+              --backend "$backend" --output "$RUNNER_TEMP/single-policy" || status=1
+          done
+          mkdir -p target/fleet-evidence/single-policy
+          cp -r "$RUNNER_TEMP/single-policy/." target/fleet-evidence/single-policy/
+          exit $status
+      - name: Agent enrollment panel browser regressions
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_enrollment_browser.py -v'
+      - name: Browser enrollment and credential lifecycle with a real Agent over HTTPS
+        shell: bash
+        run: |
+          set +e
+          status=0
+          for backend in sqlite postgres; do
+            "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-enrollment-acceptance.py --no-build \
+              --backend "$backend" --output "$RUNNER_TEMP/enrollment" || status=1
+          done
+          cp -r "$RUNNER_TEMP/enrollment" target/fleet-evidence/enrollment
+          exit $status
+      - name: Agent heartbeat status browser regressions
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_heartbeat_browser.py -v'
+      - name: Stale-restore recovery panel browser regressions
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_stale_recovery_browser.py -v'
+      - name: Opt-in Agent heartbeat with real Agents
+        shell: bash
+        run: |
+          set +e
+          status=0
+          for backend in sqlite postgres; do
+            "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-agent-heartbeat-acceptance.py --no-build \
+              --backend "$backend" --output "$RUNNER_TEMP/heartbeat" || status=1
+          done
+          cp -r "$RUNNER_TEMP/heartbeat" target/fleet-evidence/heartbeat
+          exit $status
+      - name: Fleet triage overview browser regressions
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_fleet_triage_browser.py -v'
+      - name: Browser fleet triage overview with a real Agent
+        shell: bash
+        run: |
+          set +e
+          status=0
+          for backend in sqlite postgres; do
+            "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-fleet-triage-acceptance.py --no-build \
+              --backend "$backend" --output "$RUNNER_TEMP/triage" || status=1
+          done
+          cp -r "$RUNNER_TEMP/triage" target/fleet-evidence/triage
+          exit $status
+      - name: Agent history and incident snapshot browser regressions
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_agent_history_browser.py -v'
+      - name: Browser Agent history and incident snapshot with a real Agent
+        shell: bash
+        run: |
+          set +e
+          status=0
+          for backend in sqlite postgres; do
+            "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-agent-history-acceptance.py --no-build \
+              --backend "$backend" --output "$RUNNER_TEMP/history" || status=1
+          done
+          cp -r "$RUNNER_TEMP/history" target/fleet-evidence/history
+          exit $status
+      - name: Agent policy rejection reasons with a real Agent on both backends
+        shell: bash
+        run: |
+          set +e
+          status=0
+          for backend in sqlite postgres; do
+            "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-agent-rejection-acceptance.py --no-build \
+              --backend "$backend" --output "$RUNNER_TEMP/rejection" || status=1
+          done
+          cp -r "$RUNNER_TEMP/rejection" target/fleet-evidence/rejection
+          exit $status
+      - name: Stale-restore recovery with a real Agent on both backends
+        shell: bash
+        run: |
+          set +e
+          status=0
+          for backend in sqlite postgres; do
+            "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-stale-restore-acceptance.py --no-build \
+              --backend "$backend" --output "$RUNNER_TEMP/stale-restore" || status=1
+          done
+          cp -r "$RUNNER_TEMP/stale-restore" target/fleet-evidence/stale-restore
+          exit $status
       - name: Browser rollout to one pilot and two real Agents over HTTPS
         shell: bash
         run: |

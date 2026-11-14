@@ -1951,6 +1951,21 @@ mod tests {
         assert_eq!(value.as_object().unwrap().len(), 3);
     }
 
+    /// The installed preset catalog (scripts/pilot_budget_presets.py) computes the same
+    /// identity independently; both sides pin this vector so neither can drift alone.
+    #[test]
+    fn configuration_identity_vector_is_pinned_for_the_preset_catalog() {
+        let config = Config::read(
+            br#"{"memoryMaxBytes":268435456,"wallMillis":30000,"pidsMax":64,"cpuQuotaMicros":100000,
+            "format":"sw-mcp/linux-cgroup-budget/1","delegationRoot":"/sys/fs/cgroup/operator-owned/pilot-a"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.identity(),
+            "ea97fe06939ad1d00dd922f38f30a3a0dfdb731ecc3830238abd5a1dc9d15fcf"
+        );
+    }
+
     fn valid() -> Value {
         json!({"format":FORMAT,"delegationRoot":"/sys/fs/cgroup/owned/budgets",
             "memoryMaxBytes":268435456,"pidsMax":64,

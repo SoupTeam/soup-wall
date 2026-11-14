@@ -1,0 +1,2290 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded rand_pcg v0.10.2
+  Downloaded percent-encoding v2.3.2
+  Downloaded lazy_static v1.5.0
+  Downloaded rustc-hash v2.1.3
+  Downloaded httpdate v1.0.3
+  Downloaded fnv v1.0.7
+  Downloaded potential_utf v0.1.6
+  Downloaded serde_urlencoded v0.7.1
+  Downloaded cfg_aliases v0.2.2
+  Downloaded form_urlencoded v1.2.2
+  Downloaded strsim v0.11.1
+  Downloaded clap_lex v1.1.0
+  Downloaded deadpool-runtime v0.1.4
+  Downloaded cfg-if v1.0.4
+  Downloaded thread_local v1.1.10
+  Downloaded colorchoice v1.0.5
+  Downloaded generic-array v0.14.7
+  Downloaded heck v0.5.0
+  Downloaded idna_adapter v1.2.2
+  Downloaded yoke-derive v0.8.2
+  Downloaded tower-layer v0.3.3
+  Downloaded futures-task v0.3.34
+  Downloaded matchers v0.2.0
+  Downloaded equivalent v1.0.2
+  Downloaded mime v0.3.17
+  Downloaded num_cpus v1.17.0
+  Downloaded untrusted v0.7.1
+  Downloaded futures-io v0.3.34
+  Downloaded futures-sink v0.3.34
+  Downloaded stable_deref_trait v1.2.1
+  Downloaded block-buffer v0.10.4
+  Downloaded futures-macro v0.3.34
+  Downloaded once_cell_polyfill v1.70.2
+  Downloaded dunce v1.0.5
+  Downloaded is_terminal_polyfill v1.70.2
+  Downloaded lru-slab v0.1.2
+  Downloaded cpufeatures v0.2.17
+  Downloaded http-body v1.1.0
+  Downloaded displaydoc v0.2.7
+  Downloaded itoa v1.0.18
+  Downloaded matchit v0.7.3
+  Downloaded tokio-macros v2.7.2
+  Downloaded utf8parse v0.2.2
+  Downloaded fastrand v2.5.0
+  Downloaded futures-executor v0.3.34
+  Downloaded nu-ansi-term v0.50.3
+  Downloaded fs_extra v1.3.0
+  Downloaded cmake v0.1.58
+  Downloaded crypto-common v0.1.7
+  Downloaded digest v0.10.7
+  Downloaded find-msvc-tools v0.1.11
+  Downloaded http-body-util v0.1.5
+  Downloaded futures-core v0.3.34
+  Downloaded lock_api v0.4.14
+  Downloaded pin-project-lite v0.2.17
+  Downloaded version_check v0.9.5
+  Downloaded ipnet v2.12.1
+  Downloaded sync_wrapper v1.0.2
+  Downloaded tower-service v0.3.3
+  Downloaded hyper-rustls v0.27.9
+  Downloaded once_cell v1.21.4
+  Downloaded getrandom v0.2.17
+  Downloaded parking_lot_core v0.9.12
+  Downloaded anstyle-wincon v3.0.11
+  Downloaded clap_derive v4.6.7
+  Downloaded httparse v1.10.1
+  Downloaded base64 v0.22.1
+  Downloaded cpufeatures v0.3.0
+  Downloaded deadpool v0.12.3
+  Downloaded litemap v0.8.3
+  Downloaded parking_lot v0.12.5
+  Downloaded jobserver v0.1.35
+  Downloaded futures-channel v0.3.34
+  Downloaded getrandom v0.4.3
+  Downloaded log v0.4.34
+  Downloaded hmac v0.12.1
+  Downloaded proc-macro2 v1.0.107
+  Downloaded tracing-serde v0.2.0
+  Downloaded untrusted v0.9.0
+  Downloaded chacha20 v0.10.2
+  Downloaded tinyvec_macros v0.1.1
+  Downloaded icu_locale_core v2.3.0
+  Downloaded icu_normalizer_data v2.3.0
+  Downloaded icu_provider v2.3.1
+  Downloaded bitflags v2.13.1
+  Downloaded futures v0.3.34
+  Downloaded bytes v1.12.1
+  Downloaded try-lock v0.2.5
+  Downloaded utf8_iter v1.0.4
+  Downloaded icu_collections v2.3.0
+  Downloaded clap v4.6.7
+  Downloaded http v1.5.0
+  Downloaded want v0.3.1
+  Downloaded icu_properties v2.3.0
+  Downloaded indexmap v2.14.0
+  Downloaded mio v1.2.2
+  Downloaded base64 v0.23.1
+  Downloaded cc v1.4.4
+  Downloaded windows-link v0.2.1
+  Downloaded memchr v2.8.3
+  Downloaded hyper-util v0.1.20
+  Downloaded hashbrown v0.17.1
+  Downloaded zerofrom-derive v0.1.7
+  Downloaded futures-util v0.3.34
+  Downloaded h2 v0.4.18
+  Downloaded hyper v1.11.0
+  Downloaded icu_properties_data v2.3.0
+  Downloaded idna v1.1.0
+  Downloaded clap_builder v4.6.7
+  Downloaded anstyle-query v1.1.5
+  Downloaded atomic-waker v1.1.2
+  Downloaded icu_normalizer v2.3.0
+  Downloaded rand_core v0.10.1
+  Downloaded quinn-udp v0.5.15
+  Downloaded shlex v2.0.1
+  Downloaded libc v0.2.190
+  Downloaded slab v0.4.12
+  Downloaded serde_path_to_error v0.1.20
+  Downloaded scopeguard v1.2.0
+  Downloaded synstructure v0.13.2
+  Downloaded thiserror-impl v2.0.20
+  Downloaded zmij v1.0.23
+  Downloaded assert-json-diff v2.0.2
+  Downloaded rustversion v1.0.23
+  Downloaded tokio-rustls v0.26.6
+  Downloaded anstyle v1.0.14
+  Downloaded subtle v2.6.1
+  Downloaded tracing-log v0.2.0
+  Downloaded thiserror v2.0.20
+  Downloaded zerofrom v0.1.8
+  Downloaded zerovec-derive v0.11.6
+  Downloaded axum-core v0.4.5
+  Downloaded smallvec v1.15.2
+  Downloaded zeroize v1.9.0
+  Downloaded anstream v1.0.0
+  Downloaded anstyle-parse v1.0.0
+  Downloaded sha2 v0.10.9
+  Downloaded tracing-attributes v0.1.31
+  Downloaded writeable v0.6.4
+  Downloaded anyhow v1.0.104
+  Downloaded tempfile v3.27.0
+  Downloaded yoke v0.8.3
+  Downloaded tinystr v0.8.4
+  Downloaded quote v1.0.47
+  Downloaded serde_derive v1.0.229
+  Downloaded serde_yaml v0.9.34+deprecated
+  Downloaded quinn v0.11.11
+  Downloaded async-trait v0.1.92
+  Downloaded unsafe-libyaml v0.2.11
+  Downloaded sharded-slab v0.1.7
+  Downloaded ryu v1.0.23
+  Downloaded tinyvec v1.12.0
+  Downloaded unicode-ident v1.0.24
+  Downloaded wiremock v0.6.5
+  Downloaded socket2 v0.6.5
+  Downloaded tracing-core v0.1.36
+  Downloaded rustls-pki-types v1.15.1
+  Downloaded serde_core v1.0.229
+  Downloaded serde v1.0.229
+  Downloaded url v2.5.8
+  Downloaded rustls-webpki v0.103.16
+  Downloaded typenum v1.20.1
+  Downloaded zerotrie v0.2.5
+  Downloaded rand v0.10.3
+  Downloaded tower v0.5.3
+  Downloaded zerovec v0.11.8
+  Downloaded unicode-normalization v0.1.25
+  Downloaded regex v1.13.1
+  Downloaded aho-corasick v1.1.5
+  Downloaded tokio-util v0.7.19
+  Downloaded reqwest v0.12.28
+  Downloaded axum v0.7.9
+  Downloaded serde_json v1.0.154
+  Downloaded tower-http v0.6.11
+  Downloaded webpki-roots v1.0.10
+  Downloaded tracing-subscriber v0.3.23
+  Downloaded aws-lc-rs v1.18.2
+  Downloaded quinn-proto v0.11.19
+  Downloaded syn v3.0.3
+  Downloaded syn v2.0.119
+  Downloaded regex-syntax v0.8.11
+  Downloaded rustls v0.23.46
+  Downloaded tracing v0.1.44
+  Downloaded regex-automata v0.4.18
+  Downloaded tokio v1.53.3
+  Downloaded ring v0.17.14
+  Downloaded windows-sys v0.61.2
+  Downloaded aws-lc-sys v0.46.0
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling cfg-if v1.0.4
+   Compiling windows-link v0.2.1
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+   Compiling smallvec v1.15.2
+   Compiling windows-sys v0.61.2
+   Compiling pin-project-lite v0.2.17
+   Compiling getrandom v0.4.3
+   Compiling once_cell v1.21.4
+   Compiling futures-core v0.3.34
+   Compiling bytes v1.12.1
+   Compiling shlex v2.0.1
+   Compiling parking_lot_core v0.9.12
+   Compiling find-msvc-tools v0.1.11
+   Compiling stable_deref_trait v1.2.1
+   Compiling serde_core v1.0.229
+   Compiling scopeguard v1.2.0
+   Compiling futures-sink v0.3.34
+   Compiling lock_api v0.4.14
+   Compiling tracing-core v0.1.36
+   Compiling slab v0.4.12
+   Compiling log v0.4.34
+   Compiling serde v1.0.229
+   Compiling futures-channel v0.3.34
+   Compiling http v1.5.0
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.2
+   Compiling futures-task v0.3.34
+   Compiling futures-io v0.3.34
+   Compiling hashbrown v0.17.1
+   Compiling equivalent v1.0.2
+   Compiling writeable v0.6.4
+   Compiling litemap v0.8.3
+   Compiling zmij v1.0.23
+   Compiling jobserver v0.1.35
+   Compiling http-body v1.1.0
+   Compiling parking_lot v0.12.5
+   Compiling cc v1.4.4
+   Compiling icu_properties_data v2.3.0
+   Compiling utf8_iter v1.0.4
+   Compiling serde_json v1.0.154
+   Compiling icu_normalizer_data v2.3.0
+   Compiling indexmap v2.14.0
+   Compiling percent-encoding v2.3.2
+   Compiling syn v3.0.3
+   Compiling syn v2.0.119
+   Compiling zeroize v1.9.0
+   Compiling tower-service v0.3.3
+   Compiling version_check v0.9.5
+   Compiling httparse v1.10.1
+   Compiling generic-array v0.14.7
+   Compiling aho-corasick v1.1.5
+   Compiling subtle v2.6.1
+   Compiling libc v0.2.190
+   Compiling regex-syntax v0.8.11
+   Compiling try-lock v0.2.5
+   Compiling atomic-waker v1.1.2
+   Compiling fnv v1.0.7
+   Compiling want v0.3.1
+   Compiling rustls-pki-types v1.15.1
+   Compiling form_urlencoded v1.2.2
+   Compiling ring v0.17.14
+   Compiling getrandom v0.2.17
+   Compiling typenum v1.20.1
+   Compiling ryu v1.0.23
+   Compiling httpdate v1.0.3
+   Compiling untrusted v0.9.0
+   Compiling regex-automata v0.4.18
+   Compiling cmake v0.1.58
+   Compiling sync_wrapper v1.0.2
+   Compiling tower-layer v0.3.3
+   Compiling fs_extra v1.3.0
+   Compiling rustls v0.23.46
+   Compiling base64 v0.22.1
+   Compiling dunce v1.0.5
+   Compiling synstructure v0.13.2
+   Compiling ipnet v2.12.1
+   Compiling aws-lc-sys v0.46.0
+   Compiling http-body-util v0.1.5
+   Compiling rustversion v1.0.23
+   Compiling anstyle v1.0.14
+   Compiling tinyvec_macros v0.1.1
+   Compiling once_cell_polyfill v1.70.2
+   Compiling lazy_static v1.5.0
+   Compiling rand_core v0.10.1
+   Compiling utf8parse v0.2.2
+   Compiling anstyle-wincon v3.0.11
+   Compiling anstyle-parse v1.0.0
+   Compiling tinyvec v1.12.0
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling regex v1.13.1
+   Compiling anstyle-query v1.1.5
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling unsafe-libyaml v0.2.11
+   Compiling colorchoice v1.0.5
+   Compiling anstream v1.0.0
+   Compiling zerovec-derive v0.11.6
+   Compiling displaydoc v0.2.7
+   Compiling tokio-macros v2.7.2
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling tokio v1.53.3
+   Compiling tracing-attributes v0.1.31
+   Compiling serde_derive v1.0.229
+   Compiling zerofrom v0.1.8
+   Compiling futures-macro v0.3.34
+   Compiling rustls-webpki v0.103.16
+   Compiling yoke v0.8.3
+   Compiling tracing v0.1.44
+   Compiling zerovec v0.11.8
+   Compiling futures-util v0.3.34
+   Compiling zerotrie v0.2.5
+   Compiling tinystr v0.8.4
+   Compiling icu_locale_core v2.3.0
+   Compiling potential_utf v0.1.6
+   Compiling icu_collections v2.3.0
+   Compiling icu_provider v2.3.1
+   Compiling icu_normalizer v2.3.0
+   Compiling icu_properties v2.3.0
+   Compiling async-trait v0.1.92
+   Compiling digest v0.10.7
+   Compiling serde_yaml v0.9.34+deprecated
+   Compiling serde_urlencoded v0.7.1
+   Compiling tokio-util v0.7.19
+   Compiling idna_adapter v1.2.2
+   Compiling tower v0.5.3
+   Compiling idna v1.1.0
+   Compiling h2 v0.4.18
+   Compiling url v2.5.8
+   Compiling unicode-normalization v0.1.25
+   Compiling tokio-rustls v0.26.6
+   Compiling webpki-roots v1.0.10
+   Compiling strsim v0.11.1
+   Compiling base64 v0.23.1
+   Compiling aws-lc-rs v1.18.2
+   Compiling mime v0.3.17
+   Compiling bitflags v2.13.1
+   Compiling anyhow v1.0.104
+   Compiling cpufeatures v0.3.0
+   Compiling clap_lex v1.1.0
+   Compiling heck v0.5.0
+   Compiling tower-http v0.6.11
+   Compiling clap_derive v4.6.7
+   Compiling clap_builder v4.6.7
+   Compiling chacha20 v0.10.2
+   Compiling axum-core v0.4.5
+   Compiling soup-wall-core v0.2.0 (<work>\src\crates\core)
+error: only metadata stub found for `rlib` dependency `core` please provide path to the corresponding .rmeta file with full metadata
+ --> <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\axum-core-0.4.5\src\extract\request_parts.rs:9:1
+  |
+9 | #[async_trait]
+  | ^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `async_trait` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+memory allocation of 1179664 bytes failed
+stack backtrace:
+memory allocation of 1048576 bytes failed
+stack backtrace:
+   0:     0x7ffc722ef329 - <unknown>
+   0:     0x7ffc722ef329 - <unknown>
+   1:     0x7ffc72318b0e - <unknown>
+   1:     0x7ffc72318b0e - <unknown>
+   2:     0x7ffc722ff3c4 - <unknown>
+   3:     0x7ffc722e0a8c - <unknown>
+   4:     0x7ffc722c46fc - <unknown>
+   5:     0x7ffc722c0c0f - <unknown>
+   6:     0x7ffc722e0b2b - <unknown>
+   7:     0x7ffc722c5528 - <unknown>
+   8:     0x7ffc762b4a98 - <unknown>
+   9:     0x7ffc762b203e - <unknown>
+  10:     0x7ffc720b9b12 - <unknown>
+  11:     0x7ffc73bc746f - <unknown>
+   2:     0x7ffc722ff3c4 - <unknown>
+   3:     0x7ffc722e0a8c - <unknown>
+   4:     0x7ffc722c46fc - <unknown>
+  12:     0x7ffc73c88cf9 - <unknown>
+  13:     0x7ffc736637c6 - <unknown>
+   5:     0x7ffc722c0c0f - <unknown>
+   6:     0x7ffc722e0b2b - <unknown>
+  14:     0x7ffc724867d8 - <unknown>
+   7:     0x7ffc722c5528 - <unknown>
+   8:     0x7ffc762b4a98 - <unknown>
+   9:     0x7ffc762b4ab5 - <unknown>
+  15:     0x7ffc72f0affb - <unknown>
+  10:     0x7ffc73de5543 - <unknown>
+  16:     0x7ffc72e5041c - <unknown>
+  17:     0x7ffc72f0b039 - <unknown>
+  11:     0x7ffc73d2e36b - <unknown>
+  18:     0x7ffc73c4dd1e - <unknown>
+  19:     0x7ffc724823e4 - <unknown>
+  20:     0x7ffc72f1127b - <unknown>
+  21:     0x7ffc72e5040a - <unknown>
+  22:     0x7ffc72f112b9 - <unknown>
+  23:     0x7ffc724c1f7d - <unknown>
+  24:     0x7ffc72f19083 - <unknown>
+  25:     0x7ffc72e640f5 - <unknown>
+  12:     0x7ffc738cab37 - <unknown>
+  26:     0x7ffc72f190d7 - <unknown>
+  27:     0x7ffc73c9f3dc - <unknown>
+  13:     0x7ffc7387e136 - <unknown>
+  14:     0x7ffc72f20d18 - <unknown>
+  15:     0x7ffc72e13082 - <unknown>
+  28:     0x7ffc728bbcd3 - <unknown>
+  16:     0x7ffc72f20d82 - <unknown>
+  29:     0x7ffc72f14153 - <unknown>
+  30:     0x7ffc72eb1325 - <unknown>
+  17:     0x7ffc726f0bbb - <unknown>
+  31:     0x7ffc72f141a7 - <unknown>
+  32:     0x7ffc728ae48c - <unknown>
+  33:     0x7ffc728b3a87 - <unknown>
+  34:     0x7ffc728b3a87 - <unknown>
+  35:     0x7ffc728b3a87 - <unknown>
+  36:     0x7ffc728b3a87 - <unknown>
+  37:     0x7ffc728b3a87 - <unknown>
+  38:     0x7ffc728b3a87 - <unknown>
+  39:     0x7ffc728b3a87 - <unknown>
+  40:     0x7ffc728b3a87 - <unknown>
+  41:     0x7ffc728b3a87 - <unknown>
+  42:     0x7ffc728b3a87 - <unknown>
+  43:     0x7ffc728b3a87 - <unknown>
+  44:     0x7ffc728b3a87 - <unknown>
+  45:     0x7ffc728b3a87 - <unknown>
+  46:     0x7ffc728b3a87 - <unknown>
+error: failed to create encoded metadata from file: Файл подкачки слишком мал для завершения операции. (os error 1455)
+
+  47:     0x7ffc728b3a87 - <unknown>
+  48:     0x7ffc728b3a87 - <unknown>
+  49:     0x7ffc728b3a87 - <unknown>
+  18:     0x7ffc725791aa - <unknown>
+  50:     0x7ffc728b3a87 - <unknown>
+  51:     0x7ffc728b3a87 - <unknown>
+  52:     0x7ffc728b3a87 - <unknown>
+  53:     0x7ffc728b3a87 - <unknown>
+  54:     0x7ffc728b3a87 - <unknown>
+  55:     0x7ffc728b3a87 - <unknown>
+  19:     0x7ffc725ace3f - <unknown>
+  20:     0x7ffc7250657f - <unknown>
+  56:     0x7ffc71a8ca70 - <unknown>
+  21:     0x7ffc725add7c - <unknown>
+  22:     0x7ffc7250657f - <unknown>
+  23:     0x7ffc725add7c - <unknown>
+  57:     0x7ffc7289bf6e - <unknown>
+  58:     0x7ffc71d0a977 - <unknown>
+  24:     0x7ffc7262f80d - <unknown>
+  25:     0x7ffc7263480a - <unknown>
+  26:     0x7ffc725ab6eb - <unknown>
+  27:     0x7ffc72634699 - <unknown>
+  28:     0x7ffc725ab6eb - <unknown>
+  29:     0x7ffc72634699 - <unknown>
+  30:     0x7ffc725ab6eb - <unknown>
+  59:     0x7ffc71c00e1a - <unknown>
+  31:     0x7ffc727048dc - <unknown>
+  60:     0x7ffc71d0a9c3 - <unknown>
+  61:     0x7ffc6ea93954 - <unknown>
+  32:     0x7ffc72556583 - <unknown>
+  62:     0x7ffc6eafc8cc - <unknown>
+  33:     0x7ffc72578b70 - <unknown>
+  63:     0x7ffc6ea6e6ac - <unknown>
+  64:     0x7ffc6ea400e7 - <unknown>
+  65:     0x7ffc6ea39865 - <unknown>
+  34:     0x7ffc72f0c86b - <unknown>
+  66:     0x7ffc6ea44a27 - <unknown>
+  67:     0x7ffc722ebe53 - <unknown>
+  35:     0x7ffc72e01f12 - <unknown>
+  36:     0x7ffc72f0c8b7 - <unknown>
+  37:     0x7ffc7276799d - <unknown>
+  38:     0x7ffc723436d4 - <unknown>
+  39:     0x7ffc71d0d5da - <unknown>
+  40:     0x7ffc71bfb959 - <unknown>
+  41:     0x7ffc71d0d616 - <unknown>
+  42:     0x7ffc6ea40088 - <unknown>
+  43:     0x7ffc6ea39865 - <unknown>
+  44:     0x7ffc6ea44a27 - <unknown>
+  45:     0x7ffc722ebe53 - <unknown>
+  46:     0x7ffd3c3f259d - BaseThreadInitThunk
+  68:     0x7ffd3c3f259d - BaseThreadInitThunk
+  47:     0x7ffd3d00af58 - RtlUserThreadStart
+  69:     0x7ffd3d00af58 - RtlUserThreadStart
+error: could not compile `soup-wall-core` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+rustc-LLVM ERROR: out of memory
+Allocation failed
+memory allocation of 261120 bytes failed
+stack backtrace:
+   0:     0x7ffc722ef329 - <unknown>
+   1:     0x7ffc72318b0e - <unknown>
+   2:     0x7ffc722ff3c4 - <unknown>
+   3:     0x7ffc722e0a8c - <unknown>
+   4:     0x7ffc722c46fc - <unknown>
+   5:     0x7ffc722c0c0f - <unknown>
+   6:     0x7ffc722e0b2b - <unknown>
+   7:     0x7ffc722c5528 - <unknown>
+   8:     0x7ffc762b4a98 - <unknown>
+   9:     0x7ffc762b4ab5 - <unknown>
+  10:     0x7ffc748fa8bb - <unknown>
+  11:     0x7ffc72495a5c - <unknown>
+  12:     0x7ffc7249f343 - <unknown>
+  13:     0x7ffc72f1fd49 - <unknown>
+  14:     0x7ffc72e5ddc2 - <unknown>
+  15:     0x7ffc72f1fda7 - <unknown>
+  16:     0x7ffc72894ee4 - <unknown>
+  17:     0x7ffc72f11baa - <unknown>
+  18:     0x7ffc72e90931 - <unknown>
+  19:     0x7ffc72f11be9 - <unknown>
+warning: aws-lc-sys@0.46.0: Emitting configuration: cargo:rustc-cfg=universal
+warning: aws-lc-sys@0.46.0: Building with: CC
+warning: aws-lc-sys@0.46.0: Symbol Prefix: Some("aws_lc_0_46_0")
+warning: aws-lc-sys@0.46.0: Target platform: 'x86_64-pc-windows-msvc'
+warning: aws-lc-sys@0.46.0: Compilation of 'stdalign_check.c' failed - Err(Error { kind: ToolExecError, message: "command did not execute successfully (status code exit code: 2): \"C:\\\\Program Files (x86)\\\\Microsoft Visual Studio\\\\2022\\\\BuildTools\\\\VC\\\\Tools\\\\MSVC\\\\14.44.35207\\\\bin\\\\HostX64\\\\x64\\\\cl.exe\" \"-nologo\" \"-MD\" \"-Z7\" \"-Brepro\" \"-WX\" \"-W4\" \"-Fo<work>\\\\target\\\\debug\\\\build\\\\aws-lc-sys-5f777497bb0bff3d\\\\out\\\\out-stdalign_check\\\\60dd54bcacffee02-stdalign_check.o\" \"-c\" \"<home>\\\\CARGO~1\\\\registry\\\\src\\\\INDEXC~1.IO-\\\\AWS-LC~1.0\\\\aws-lc\\\\tests\\\\compiler_features_tests\\\\stdalign_check.c\"" }).
+warning: aws-lc-sys@0.46.0: NASM command not found or failed to execute.
+warning: aws-lc-sys@0.46.0: NASM command not found or failed to execute.
+error: failed to run custom build command for `aws-lc-sys v0.46.0`
+
+Caused by:
+  process didn't exit successfully: `<work>\target\debug\build\aws-lc-sys-248e692fa6850522\build-script-main` (exit code: 1)
+  --- stdout
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_PREFIX_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_PREFIX
+  cargo:rerun-if-env-changed=AWS_LC_SYS_PREGENERATING_BINDINGS_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_PREGENERATING_BINDINGS
+  cargo:rerun-if-env-changed=AWS_LC_SYS_EXTERNAL_BINDGEN_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_EXTERNAL_BINDGEN
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_ASM_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_ASM
+  cargo:rerun-if-env-changed=AWS_LC_SYS_PREBUILT_NASM_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_PREBUILT_NASM
+  cargo:rerun-if-env-changed=AWS_LC_SYS_C_STD_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_C_STD
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CMAKE_BUILDER_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CMAKE_BUILDER
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_PREGENERATED_SRC_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_PREGENERATED_SRC
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SMALL_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SMALL
+  cargo:rerun-if-env-changed=AWS_LC_SYS_EFFECTIVE_TARGET_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_EFFECTIVE_TARGET
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_JITTER_ENTROPY_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_JITTER_ENTROPY
+  cargo:rerun-if-env-changed=AWS_LC_SYS_INCLUDES_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_INCLUDES
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SANITIZER_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SANITIZER
+  cargo:rerun-if-env-changed=AWS_LC_SYS_LINK_WHOLE_ARCHIVE_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_LINK_WHOLE_ARCHIVE
+  cargo:rerun-if-env-changed=AWS_LC_SYS_STATIC_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_STATIC
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SYSTEM_DIR_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SYSTEM_DIR
+  cargo:rerun-if-env-changed=AWS_LC_SYS_USE_SYSTEM_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_USE_SYSTEM
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SYSTEM_BINDINGS_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SYSTEM_BINDINGS
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SYSTEM_SKIP_VERSION_CHECK_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_SYSTEM_SKIP_VERSION_CHECK
+  cargo:warning=Emitting configuration: cargo:rustc-cfg=universal
+  cargo:rustc-cfg=universal
+  cargo:rerun-if-env-changed=OPENSSL_DIR_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=OPENSSL_DIR
+  cargo:rerun-if-env-changed=OPENSSL_INCLUDE_DIR_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=OPENSSL_INCLUDE_DIR
+  cargo:rerun-if-env-changed=OPENSSL_LIB_DIR_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=OPENSSL_LIB_DIR
+  cargo:rerun-if-env-changed=CARGO_FEATURE_SSL
+  cargo:warning=Building with: CC
+  cargo:warning=Symbol Prefix: Some("aws_lc_0_46_0")
+  cargo:rerun-if-env-changed=CARGO_FEATURE_SSL
+  cargo:warning=Target platform: 'x86_64-pc-windows-msvc'
+  cargo:root=<work>\target\debug\build\aws-lc-sys-5f777497bb0bff3d\out
+  cargo:rerun-if-env-changed=AWS_LC_SYS_HOST_CFLAGS_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_HOST_CFLAGS
+  cargo:rerun-if-env-changed=HOST_CFLAGS_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CFLAGS_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CFLAGS
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=CFLAGS
+  cargo:rerun-if-env-changed=AWS_LC_SYS_HOST_CC_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_HOST_CC
+  cargo:rerun-if-env-changed=HOST_CC_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=HOST_CC
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CC_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CC
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=CC
+  cargo:rerun-if-env-changed=AWS_LC_SYS_HOST_CXX_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_HOST_CXX
+  cargo:rerun-if-env-changed=HOST_CXX_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=HOST_CXX
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CXX_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=AWS_LC_SYS_CXX
+  cargo:rerun-if-env-changed=CXX_x86_64_pc_windows_msvc
+  cargo:rerun-if-env-changed=CXX
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_FORCE_DISABLE
+  CC_FORCE_DISABLE = None
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+  stdalign_check.c
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(13): error C2220: следующее предупреждение рассматривается как ошибка
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(13): warning C4013: alignas: нет определения; предполагается "extern" с возвратом типа "int"
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(13): error C2146: синтаксическая ошибка: отсутствие ";" перед идентификатором "uint8_t"
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(13): error C2275: "uint8_t": ожидается выражение вместо типа
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(13): error C2146: синтаксическая ошибка: отсутствие ";" перед идентификатором "test"
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(13): error C2065: test: необъявленный идентификатор
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(13): error C2109: для индекса требуется массив или указатель
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(14): warning C4013: alignof: нет определения; предполагается "extern" с возвратом типа "int"
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(14): error C2275: "uint8_t": ожидается выражение вместо типа
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(16): error C2065: test: необъявленный идентификатор
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(16): error C2109: для индекса требуется массив или указатель
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(19): error C2065: test: необъявленный идентификатор
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\tests\compiler_features_tests\stdalign_check.c(19): error C2109: для индекса требуется массив или указатель
+  cargo:warning=Compilation of 'stdalign_check.c' failed - Err(Error { kind: ToolExecError, message: "command did not execute successfully (status code exit code: 2): \"C:\\\\Program Files (x86)\\\\Microsoft Visual Studio\\\\2022\\\\BuildTools\\\\VC\\\\Tools\\\\MSVC\\\\14.44.35207\\\\bin\\\\HostX64\\\\x64\\\\cl.exe\" \"-nologo\" \"-MD\" \"-Z7\" \"-Brepro\" \"-WX\" \"-W4\" \"-Fo<work>\\\\target\\\\debug\\\\build\\\\aws-lc-sys-5f777497bb0bff3d\\\\out\\\\out-stdalign_check\\\\60dd54bcacffee02-stdalign_check.o\" \"-c\" \"<home>\\\\CARGO~1\\\\registry\\\\src\\\\INDEXC~1.IO-\\\\AWS-LC~1.0\\\\aws-lc\\\\tests\\\\compiler_features_tests\\\\stdalign_check.c\"" }).
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_FORCE_DISABLE
+  CC_FORCE_DISABLE = None
+  cargo:rerun-if-env-changed=CC_FORCE_DISABLE
+  CC_FORCE_DISABLE = None
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  jitterentropy-base.c
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  jitterentropy-gcd.c
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  jitterentropy-health.c
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  jitterentropy-noise.c
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  jitterentropy-sha3.c
+  jitterentropy-timer.c
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  cargo:warning=NASM command not found or failed to execute.
+  cargo:warning=NASM command not found or failed to execute.
+  cargo:rerun-if-env-changed=CC_FORCE_DISABLE
+  CC_FORCE_DISABLE = None
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  asn1_lib.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/asn1_lib.c(124): warning C4267: =: преобразование из "size_t" в "long"; возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/asn1_lib.c(139): warning C4244: =: преобразование "int" в "unsigned char", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/asn1_lib.c(141): warning C4244: =: преобразование "int" в "unsigned char", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/asn1_lib.c(183): warning C4244: =: преобразование "int" в "unsigned char", возможна потеря данных
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  asn1_par.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/asn1_par.c(150): warning C4244: функция: преобразование "__int64" в "long", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/asn1_par.c(155): warning C4244: =: преобразование "__int64" в "long", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/asn1_par.c(172): warning C4244: функция: преобразование "__int64" в "long", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/asn1_par.c(176): warning C4244: -=: преобразование "__int64" в "long", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/asn1_par.c(568): warning C4244: =: преобразование "__int64" в "int", возможна потеря данных
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  asn_pack.c
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_bitstr.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/a_bitstr.c(197): warning C4244: =: преобразование "int" в "unsigned char", возможна потеря данных
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_bool.c
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_d2i_fp.c
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/a_d2i_fp.c(22): warning C4267: функция: преобразование из "size_t" в "long"; возможна потеря данных
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_dup.c
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_gentm.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_i2d_fp.c
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_int.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_mbstr.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_object.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/a_object.c(94): warning C4267: функция: преобразование из "size_t" в "long"; возможна потеря данных
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_octet.c
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_strex.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/a_strex.c(45): warning C4244: функция: преобразование "uint32_t" в "unsigned char", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/a_strex.c(269): warning C4267: +=: преобразование из "size_t" в "int"; возможна потеря данных
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_strnid.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/a_strnid.c(24): warning C4100: "mask": неиспользованный параметр
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/a_strnid.c(28): warning C4100: "p": неиспользованный параметр
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_time.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_type.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_utctm.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  a_utf8.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  f_int.c
+  0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  f_string.c
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/f_string.c(8): warning C4100: "type": неиспользованный параметр
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  posix_time.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/posix_time.c(170): warning C4127: условное выражение является константой
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  tasn_dec.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(338): warning C4244: -=: преобразование "__int64" в "long", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(363): warning C4244: -=: преобразование "__int64" в "long", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(397): warning C4244: функция: преобразование "__int64" в "int", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(426): warning C4100: "ctx": неиспользованный параметр
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(474): warning C4244: -=: преобразование "__int64" в "long", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(565): warning C4244: -=: преобразование "__int64" в "long", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(575): warning C4244: -=: преобразование "__int64" в "long", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(687): warning C4244: =: преобразование "__int64" в "long", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(689): warning C4244: =: преобразование "__int64" в "long", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(708): warning C4267: =: преобразование из "size_t" в "long"; возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(930): warning C4244: -=: преобразование "__int64" в "long", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(995): warning C4244: -=: преобразование "__int64" в "long", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(1008): warning C4267: =: преобразование из "size_t" в "int"; возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(1065): warning C4244: =: преобразование "__int64" в "long", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/asn1/tasn_dec.c(1082): warning C4244: =: преобразование "int" в "unsigned char", возможна потеря данных
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  tasn_enc.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  tasn_fre.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  tasn_new.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  tasn_typ.c
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  tasn_utl.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\asn1\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(<redacted: 18 entries>)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  base64.c
+  <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.46.0\aws-lc\crypto\base64\../internal.h(1284): warning C4100: "test": неиспользованный параметр
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(22): warning C4244: return: преобразование "crypto_word_t" в "uint8_t", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(175): warning C4244: функция: преобразование "uint32_t" в "uint8_t", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(176): warning C4244: функция: преобразование "uint32_t" в "uint8_t", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(177): warning C4244: функция: преобразование "uint32_t" в "uint8_t", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(178): warning C4244: функция: преобразование "uint32_t" в "uint8_t", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(186): warning C4244: функция: преобразование "uint32_t" в "uint8_t", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(187): warning C4244: функция: преобразование "uint32_t" в "uint8_t", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(188): warning C4244: функция: преобразование "uint32_t" в "uint8_t", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(266): warning C4244: =: преобразование "const uint32_t" в "uint8_t", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(267): warning C4244: =: преобразование "const uint32_t" в "uint8_t", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(268): warning C4244: =: преобразование "const uint32_t" в "uint8_t", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(273): warning C4244: =: преобразование "const uint32_t" в "uint8_t", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(274): warning C4244: =: преобразование "const uint32_t" в "uint8_t", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(279): warning C4244: =: преобразование "const uint32_t" в "uint8_t", возможна потеря данных
+  <home>\CARGO~1\registry\src\INDEXC~1.IO-\AWS-LC~1.0\aws-lc\crypto/base64/base64.c(345): warning C4100: "out": неиспользованный параметр
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+
+  --- stderr
+
+
+  error occurred in cc-rs: command `"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\cl.exe" "-nologo" "-MD" "-Z7" "-Brepro" "-I" "<home>\\CARGO~1\\registry\\src\\INDEXC~1.IO-\\AWS-LC~1.0\\generated-include" "-I" "<home>\\CARGO~1\\registry\\src\\INDEXC~1.IO-\\AWS-LC~1.0\\include" "-I" "<home>\\CARGO~1\\registry\\src\\INDEXC~1.IO-\\AWS-LC~1.0\\aws-lc\\include" "-I" "<home>\\CARGO~1\\registry\\src\\INDEXC~1.IO-\\AWS-LC~1.0\\aws-lc\\third_party\\s2n-bignum\\include" "-I" "<home>\\CARGO~1\\registry\\src\\INDEXC~1.IO-\\AWS-LC~1.0\\aws-lc\\third_party\\s2n-bignum\\s2n-bignum-imported\\include" "-I" "<home>\\CARGO~1\\registry\\src\\INDEXC~1.IO-\\AWS-LC~1.0\\aws-lc\\third_party\\jitterentropy\\jitterentropy-library" "-I" "<home>\\CARGO~1\\registry\\src\\INDEXC~1.IO-\\AWS-LC~1.0\\aws-lc\\third_party\\jitterentropy\\jitterentropy-library\\src" "-W4" "-DBORINGSSL_IMPLEMENTATION=1" "-DBORINGSSL_PREFIX=aws_lc_0_46_0" "-DWIN32_LEAN_AND_MEAN=" "-DNOMINMAX=" "-D_CRT_SECURE_NO_WARNINGS=1" "-D_HAS_EXCEPTIONS=0" "-D_STL_EXTRA_DISABLED_WARNINGS=4774 4987" "-Fo<work>\\target\\debug\\build\\aws-lc-sys-5f777497bb0bff3d\\out\\b62f2676647342db-bio.o" "-c" "<home>\\CARGO~1\\registry\\src\\INDEXC~1.IO-\\AWS-LC~1.0\\aws-lc\\crypto/bio/bio.c"` failed to start: Файл подкачки слишком мал для завершения операции. (os error 1455)
+
+
+  20:     0x7ffc728b5349 - <unknown>
+  21:     0x7ffc72f14153 - <unknown>
+  22:     0x7ffc72eb1325 - <unknown>
+  23:     0x7ffc72f141a7 - <unknown>
+  24:     0x7ffc728ae48c - <unknown>
+  25:     0x7ffc728b3a87 - <unknown>
+  26:     0x7ffc728b3a87 - <unknown>
+  27:     0x7ffc728b3a87 - <unknown>
+  28:     0x7ffc728b3a87 - <unknown>
+  29:     0x7ffc728b3a87 - <unknown>
+  30:     0x7ffc728b3a87 - <unknown>
+  31:     0x7ffc728b3a87 - <unknown>
+  32:     0x7ffc728b3a87 - <unknown>
+  33:     0x7ffc728b3a87 - <unknown>
+  34:     0x7ffc728b3a87 - <unknown>
+  35:     0x7ffc728b3a87 - <unknown>
+  36:     0x7ffc728b3a87 - <unknown>
+  37:     0x7ffc728b3a87 - <unknown>
+  38:     0x7ffc71a8ca70 - <unknown>
+  39:     0x7ffc7289bf6e - <unknown>
+  40:     0x7ffc71d0a977 - <unknown>
+  41:     0x7ffc71c00e1a - <unknown>
+  42:     0x7ffc71d0a9c3 - <unknown>
+  43:     0x7ffc7305d007 - <unknown>
+  44:     0x7ffc71d062bd - <unknown>
+  45:     0x7ffc71bebe1e - <unknown>
+  46:     0x7ffc71d062eb - <unknown>
+  47:     0x7ffc73824539 - <unknown>
+  48:     0x7ffc71fabe03 - <unknown>
+  49:     0x7ffc71fc8c6b - <unknown>
+  50:     0x7ffc71fc40ab - <unknown>
+  51:     0x7ffc6ea6e61d - <unknown>
+  52:     0x7ffc6ea400e7 - <unknown>
+  53:     0x7ffc6ea39865 - <unknown>
+  54:     0x7ffc6ea44a27 - <unknown>
+  55:     0x7ffc722ebe53 - <unknown>
+  56:     0x7ffd3c3f259d - <unknown>
+  57:     0x7ffd3d00af58 - <unknown>
+rustc-LLVM ERROR: out of memory
+Allocation failed
+error: could not compile `clap_builder` (lib)
+
+Caused by:
+  process didn't exit successfully: `<home>\.rustup\toolchains\1.99.1-x86_64-pc-windows-msvc\bin\rustc.exe --crate-name clap_builder --edition=2024 <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clap_builder-4.6.7\src\lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 --cfg "feature=\"color\"" --cfg "feature=\"error-context\"" --cfg "feature=\"help\"" --cfg "feature=\"std\"" --cfg "feature=\"suggestions\"" --cfg "feature=\"usage\"" --check-cfg cfg(docsrs,test) --check-cfg "cfg(feature, values(\"cargo\", \"color\", \"debug\", \"default\", \"deprecated\", \"env\", \"error-context\", \"help\", \"std\", \"string\", \"suggestions\", \"unicode\", \"unstable-doc\", \"unstable-ext\", \"unstable-styles\", \"unstable-v5\", \"usage\", \"wrap_help\"))" -C metadata=fd871d4187c9684e -C extra-filename=-0034ebd51b0dc316 --out-dir <work>\target\debug\deps -L dependency=<work>\target\debug\deps --extern anstream=<work>\target\debug\deps\libanstream-04580eb7da0799fc.rmeta --extern anstyle=<work>\target\debug\deps\libanstyle-51bcfc5ad9e66b49.rmeta --extern clap_lex=<work>\target\debug\deps\libclap_lex-99370781f82913a1.rmeta --extern strsim=<work>\target\debug\deps\libstrsim-6b8b9d52dd33408b.rmeta --cap-lints allow` (exit code: 0xc0000409, STATUS_STACK_BUFFER_OVERRUN)
+error: could not compile `tokio` (lib)
+
+Caused by:
+  process didn't exit successfully: `<home>\.rustup\toolchains\1.99.1-x86_64-pc-windows-msvc\bin\rustc.exe --crate-name tokio --edition=2021 <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.53.3\src\lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 --cfg "feature=\"bytes\"" --cfg "feature=\"default\"" --cfg "feature=\"fs\"" --cfg "feature=\"full\"" --cfg "feature=\"io-std\"" --cfg "feature=\"io-util\"" --cfg "feature=\"libc\"" --cfg "feature=\"macros\"" --cfg "feature=\"mio\"" --cfg "feature=\"net\"" --cfg "feature=\"parking_lot\"" --cfg "feature=\"process\"" --cfg "feature=\"rt\"" --cfg "feature=\"rt-multi-thread\"" --cfg "feature=\"signal\"" --cfg "feature=\"signal-hook-registry\"" --cfg "feature=\"socket2\"" --cfg "feature=\"sync\"" --cfg "feature=\"time\"" --cfg "feature=\"tokio-macros\"" --cfg "feature=\"windows-sys\"" --check-cfg cfg(docsrs,test) --check-cfg "cfg(feature, values(\"bytes\", \"default\", \"fs\", \"full\", \"io-std\", \"io-uring\", \"io-util\", \"libc\", \"macros\", \"mio\", \"net\", \"parking_lot\", \"process\", \"rt\", \"rt-multi-thread\", \"schedule-latency\", \"signal\", \"signal-hook-registry\", \"socket2\", \"sync\", \"taskdump\", \"test-util\", \"time\", \"tokio-macros\", \"tracing\", \"windows-sys\"))" -C metadata=fc3a70bd5a38a98f -C extra-filename=-2d6b824506a84659 --out-dir <work>\target\debug\deps -L dependency=<work>\target\debug\deps --extern bytes=<work>\target\debug\deps\libbytes-0093e1a3fc7eeafd.rmeta --extern mio=<work>\target\debug\deps\libmio-71a8f8edbd88d235.rmeta --extern parking_lot=<work>\target\debug\deps\libparking_lot-7e943756ee95f9ce.rmeta --extern pin_project_lite=<work>\target\debug\deps\libpin_project_lite-45cc2132bea4ef6d.rmeta --extern socket2=<work>\target\debug\deps\libsocket2-7abfcde8dd094d14.rmeta --extern tokio_macros=<work>\target\debug\deps\tokio_macros-367a2311bc102f86.dll --extern windows_sys=<work>\target\debug\deps\libwindows_sys-9249ef61f5a29c94.rmeta --cap-lints allow` (exit code: 0xc0000409, STATUS_STACK_BUFFER_OVERRUN)
+error: could not compile `axum-core` (lib) due to 1 previous error
+
+Caused by:
+  process didn't exit successfully: `<home>\.rustup\toolchains\1.99.1-x86_64-pc-windows-msvc\bin\rustc.exe --crate-name axum_core --edition=2021 <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\axum-core-0.4.5\src\lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 --cfg "feature=\"tracing\"" --check-cfg cfg(docsrs,test) --check-cfg "cfg(feature, values(\"__private_docs\", \"tracing\"))" -C metadata=96362488864c83c5 -C extra-filename=-ba3acaa408a5082c --out-dir <work>\target\debug\deps -L dependency=<work>\target\debug\deps --extern async_trait=<work>\target\debug\deps\async_trait-b2bda8075a2f54f0.dll --extern bytes=<work>\target\debug\deps\libbytes-0093e1a3fc7eeafd.rmeta --extern futures_util=<work>\target\debug\deps\libfutures_util-cbbfc13546f54f37.rmeta --extern http=<work>\target\debug\deps\libhttp-7cdf48ccde47db85.rmeta --extern http_body=<work>\target\debug\deps\libhttp_body-fad8da1b9005517b.rmeta --extern http_body_util=<work>\target\debug\deps\libhttp_body_util-29c494f9877627e4.rmeta --extern mime=<work>\target\debug\deps\libmime-d59ac7e78431c119.rmeta --extern pin_project_lite=<work>\target\debug\deps\libpin_project_lite-45cc2132bea4ef6d.rmeta --extern rustversion=<work>\target\debug\deps\rustversion-cd39c03b22dbbaa9.dll --extern sync_wrapper=<work>\target\debug\deps\libsync_wrapper-ebd1f4338af3c83a.rmeta --extern tower_layer=<work>\target\debug\deps\libtower_layer-b3c7d207747fb5fd.rmeta --extern tower_service=<work>\target\debug\deps\libtower_service-07d2747dbba20ec1.rmeta --extern tracing=<work>\target\debug\deps\libtracing-d851c19cb4ac2c9f.rmeta --cap-lints allow` (exit code: 0xc0000409, STATUS_STACK_BUFFER_OVERRUN)
+error: could not compile `clap_derive` (lib)
+
+Caused by:
+  process didn't exit successfully: `<home>\.rustup\toolchains\1.99.1-x86_64-pc-windows-msvc\bin\rustc.exe --crate-name clap_derive --edition=2024 <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clap_derive-4.6.7\src\lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type proc-macro --emit=dep-info,link -C prefer-dynamic -C embed-bitcode=no --cfg "feature=\"default\"" --check-cfg cfg(docsrs,test) --check-cfg "cfg(feature, values(\"debug\", \"default\", \"deprecated\", \"raw-deprecated\", \"unstable-markdown\", \"unstable-v5\"))" -C metadata=573a5b073fd6c1a9 -C extra-filename=-c6b51079a9122b33 --out-dir <work>\target\debug\deps -L dependency=<work>\target\debug\deps --extern heck=<work>\target\debug\deps\libheck-8ee29d40795d89c0.rlib --extern proc_macro2=<work>\target\debug\deps\libproc_macro2-ea7acdb656675c3f.rlib --extern quote=<work>\target\debug\deps\libquote-2c41fd93a74ff3a0.rlib --extern syn=<work>\target\debug\deps\libsyn-3d86f3037662922a.rlib --extern proc_macro --cap-lints allow` (exit code: 0xc0000409, STATUS_STACK_BUFFER_OVERRUN)
+error: could not compile `rustls` (lib)
+
+Caused by:
+  process didn't exit successfully: `<home>\.rustup\toolchains\1.99.1-x86_64-pc-windows-msvc\bin\rustc.exe --crate-name rustls --edition=2021 <home>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\rustls-0.23.46\src\lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debuginfo=2 --cfg "feature=\"ring\"" --cfg "feature=\"std\"" --cfg "feature=\"tls12\"" --check-cfg cfg(docsrs,test) --check-cfg "cfg(feature, values(\"aws-lc-rs\", \"aws_lc_rs\", \"brotli\", \"custom-provider\", \"default\", \"fips\", \"hashbrown\", \"log\", \"logging\", \"prefer-post-quantum\", \"read_buf\", \"ring\", \"rustversion\", \"std\", \"tls12\", \"zlib\"))" -C metadata=693a8f4679b900a4 -C extra-filename=-fd4d443e4b240841 --out-dir <work>\target\debug\deps -L dependency=<work>\target\debug\deps --extern once_cell=<work>\target\debug\deps\libonce_cell-fd36a77660da678a.rmeta --extern ring=<work>\target\debug\deps\libring-850b1cec3d21e999.rmeta --extern pki_types=<work>\target\debug\deps\librustls_pki_types-7a71a89e1de3dbea.rmeta --extern webpki=<work>\target\debug\deps\libwebpki-a967b3a9f04603b2.rmeta --extern subtle=<work>\target\debug\deps\libsubtle-f46b4080d58b1864.rmeta --extern zeroize=<work>\target\debug\deps\libzeroize-284ed67f016c30cc.rmeta --cap-lints allow -L native=<work>\target\debug\build\ring-c4e0e4672d4252a0\out` (exit code: 0xc0000409, STATUS_STACK_BUFFER_OVERRUN)

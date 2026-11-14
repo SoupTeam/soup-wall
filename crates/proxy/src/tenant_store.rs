@@ -6,6 +6,7 @@
 //! the token itself. A raw token is returned only by [`TenantStore::issue_token`]
 //! so an operator can give it to a tenant once.
 
+use self::operator_audit::{AuditFact, AuditOperation, AuditTarget};
 use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -23,14 +24,30 @@ use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 
 mod agent_enrollment;
+pub mod agent_heartbeat;
 pub mod fleet;
+pub mod fleet_triage;
 mod managed_async;
+mod managed_confirmation;
+mod managed_idempotency;
 mod managed_policy;
+pub mod managed_rejection;
+pub mod managed_stale_recovery;
+pub use managed_confirmation::{
+    valid_confirmation_id, CohortAgent, CohortBlocker, CohortPreview, ConfirmationFailure,
+    ConfirmationRefused, GroupStartPreview, GuardedStart, LatestRollout, StartConfirmation,
+    StartGuard, CONFIRMATION_TTL_SECS, MAX_PREVIEW_AGENTS,
+};
+pub use managed_idempotency::{
+    valid_idempotency_key, DeploymentIdempotency, DeploymentPreconditionFailed,
+    IdempotencyConflict, KeyedDeployment, MAX_IDEMPOTENCY_KEY_BYTES, MIN_IDEMPOTENCY_KEY_BYTES,
+};
 pub use managed_policy::{
     AppliedReport, ManagedAgentGroup, ManagedDeployment, ManagedGroupMember, ManagedGroupRevision,
-    ManagedGroupRollout, ManagedIssuer, ManagedRevision, ManagedRolloutAgentStatus, RolloutPhase,
-    SignedManagedBundle,
+    ManagedGroupRollout, ManagedIssuer, ManagedRevision, ManagedRevisionDocument,
+    ManagedRolloutAgentStatus, RolloutPhase, SignedManagedBundle,
 };
+pub(crate) mod operator_audit;
 mod postgres;
 pub use agent_enrollment::{
     EnrolledAgent, IssuedAgentCredential, RotationOutcome, RotationRequest,
@@ -59,9 +76,11 @@ pub struct TenantStore {
     connection: Option<Arc<Mutex<Connection>>>,
     postgres: Option<PostgresTenantStore>,
     audit_max_rows: usize,
+    operator: Option<operator_audit::OperatorContext>,
     audit_dispatcher: Option<TenantAuditDispatcher>,
     usage_failed_events: Arc<AtomicU64>,
     webhook_signing_key: Option<WebhookSigningKey>,
+    pub(crate) reconciliation: Arc<Mutex<crate::rollout_reconciliation::ReconciliationStatus>>,
 }
 
 // Readiness counters moved to `crate::control_plane`: the data plane reports its
@@ -2005,13 +2024,20 @@ impl TenantStore {
             .context("failed to backfill SQLite tenant workspaces")?;
 
         managed_policy::migrate_existing_groups(&connection)?;
+        let audit_migration = connection.unchecked_transaction()?;
+        audit_migration
+            .execute_batch(operator_audit::SQLITE_SCHEMA)
+            .context("migrate SQLite operator audit")?;
+        audit_migration.commit()?;
         Ok(Self {
             connection: Some(Arc::new(Mutex::new(connection))),
             postgres: None,
             audit_max_rows: audit_max_rows.max(1),
+            operator: None,
             audit_dispatcher: None,
             usage_failed_events: Arc::new(AtomicU64::new(0)),
             webhook_signing_key: None,
+            reconciliation: Default::default(),
         })
     }
 
@@ -2086,9 +2112,11 @@ impl TenantStore {
             connection: None,
             postgres: Some(postgres),
             audit_max_rows: audit_max_rows.max(1),
+            operator: None,
             audit_dispatcher: None,
             usage_failed_events: Arc::new(AtomicU64::new(0)),
             webhook_signing_key: None,
+            reconciliation: Default::default(),
         })
     }
 
@@ -2251,9 +2279,11 @@ impl TenantStore {
             connection: None,
             postgres: Some(postgres),
             audit_max_rows: audit_max_rows.max(1),
+            operator: None,
             audit_dispatcher: None,
             usage_failed_events: Arc::new(AtomicU64::new(0)),
             webhook_signing_key: None,
+            reconciliation: Default::default(),
         })
     }
 
@@ -7695,9 +7725,9 @@ impl TenantStore {
         let (document_json, content_sha256) = canonical_policy_document(&document)?;
         let id = random_id("policy");
         let created_at_unix = now_unix();
-        let connection = self.connection()?;
+        let mut connection = self.connection()?;
         let transaction = connection
-            .unchecked_transaction()
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .context("failed to begin policy-version transaction")?;
         let tenant_exists = transaction
             .query_row("SELECT 1 FROM tenants WHERE id = ?1", [tenant_id], |_| {
@@ -7734,6 +7764,16 @@ impl TenantStore {
                 ],
             )
             .context("failed to append tenant policy version")?;
+        self.audit_committed(
+            &transaction,
+            tenant_id,
+            AuditFact::new(
+                AuditOperation::PolicyCreate,
+                AuditTarget::PolicyVersion,
+                &id,
+            )
+            .source(&id, Some(&content_sha256)),
+        )?;
         transaction
             .commit()
             .context("failed to commit policy version")?;
@@ -7816,9 +7856,9 @@ impl TenantStore {
     ) -> anyhow::Result<TenantPolicyVersion> {
         validate_usage_text(actor_id, "policy approver ID", 256)?;
         let now = now_unix();
-        let connection = self.connection()?;
+        let mut connection = self.connection()?;
         let transaction = connection
-            .unchecked_transaction()
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .context("failed to begin policy-approval transaction")?;
         let existing = transaction
             .query_row(
@@ -7847,6 +7887,15 @@ impl TenantStore {
                         params![version_id, actor_id, now],
                     )
                     .context("failed to approve policy version")?;
+                self.audit_committed(
+                    &transaction,
+                    tenant_id,
+                    AuditFact::new(
+                        AuditOperation::PolicyApprove,
+                        AuditTarget::PolicyVersion,
+                        version_id,
+                    ),
+                )?;
             }
         }
         transaction
@@ -7867,19 +7916,19 @@ impl TenantStore {
         validate_usage_text(actor_id, "policy deployment actor ID", 256)?;
         let now = now_unix();
         let deployment_id = random_id("policy_deployment");
-        let connection = self.connection()?;
+        let mut connection = self.connection()?;
         let transaction = connection
-            .unchecked_transaction()
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .context("failed to begin policy deployment")?;
-        let document_json = transaction
+        let (document_json, content_sha256) = transaction
             .query_row(
-                "SELECT versions.document_json
+                "SELECT versions.document_json, versions.content_sha256
                  FROM tenant_policy_versions AS versions
                  JOIN tenant_policy_approvals AS approvals
                    ON approvals.version_id = versions.id
                  WHERE versions.tenant_id = ?1 AND versions.id = ?2",
                 params![tenant_id, version_id],
-                |row| row.get::<_, String>(0),
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
             )
             .optional()
             .context("failed to load approved policy version")?
@@ -8054,6 +8103,17 @@ impl TenantStore {
                 )
                 .context("failed to enqueue webhook delivery")?;
         }
+        let operation = match action {
+            PolicyDeploymentAction::Activate => AuditOperation::PolicyActivate,
+            PolicyDeploymentAction::Rollback => AuditOperation::PolicyRollback,
+        };
+        self.audit_committed(
+            &transaction,
+            tenant_id,
+            AuditFact::new(operation, AuditTarget::PolicyVersion, version_id)
+                .source(&deployment.id, Some(&content_sha256))
+                .sequence(deployment.sequence),
+        )?;
         transaction
             .commit()
             .context("failed to commit policy deployment")?;
@@ -8562,9 +8622,9 @@ impl TenantStore {
         let now = now_unix();
         let version_id = random_id("policy");
         let deployment_id = random_id("policy_deployment");
-        let connection = self.connection()?;
+        let mut connection = self.connection()?;
         let transaction = connection
-            .unchecked_transaction()
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .context("failed to begin customer model policy transaction")?;
         let authorized = transaction
             .query_row(
@@ -8781,6 +8841,21 @@ impl TenantStore {
                 params![&authorized.0, workspace_id, principal_id, audit_action, now],
             )
             .context("failed to append customer model policy audit event")?;
+        Self::audit_workspace_committed(
+            &transaction,
+            &authorized.1,
+            principal_id,
+            self.operator
+                .as_ref()
+                .map_or(now, |actor| actor.receipt_time()),
+            AuditFact::new(
+                AuditOperation::ModelPolicySet,
+                AuditTarget::PolicyVersion,
+                &version_id,
+            )
+            .source(&deployment.id, Some(&content_sha256))
+            .sequence(deployment.sequence),
+        )?;
         transaction
             .commit()
             .context("failed to commit customer model policy transaction")?;
@@ -11358,7 +11433,7 @@ mod webhook_delivery_tests;
 #[cfg(test)]
 mod webhook_transport_tests;
 
-fn now_unix() -> i64 {
+pub(crate) fn now_unix() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("system clock is after Unix epoch")

@@ -1,0 +1,25 @@
+MCP original-tool schema upgrade review (offline, non-authoritative)
+Format: sw-mcp/schema-upgrade-report/1
+
+NOTICE: This analyzer accepts nothing. It does not approve or install a schema, grant runtime permission, modify an accepted profile or declaration, launch a server, retrieve references, perform network lookups or classify with a model. Every after-side identity that differs from the before side remains unaccepted until the operator completes the existing review, qualification and admission process.
+
+before: file upstream-tools-list.json raw_sha256 8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b (6022 bytes, 12 tools, mcp/tools-list-response)
+        discovery_sha256 0ebf2d0c147352d483aed19e6988749c8641a11258ac05a16e0a58639163489c
+after : file upstream-tools-list.json raw_sha256 8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b (6022 bytes, 12 tools, mcp/tools-list-response)
+        discovery_sha256 0ebf2d0c147352d483aed19e6988749c8641a11258ac05a16e0a58639163489c
+before identity: verified upstream-identity.json raw_sha256 90fbf2f84db1fee38145914adaf851c35d9b8b3735dc4e78caf7820c507e09e4 (3 referenced files verified)
+current declarations: sw-native/1 git-readonly-v1.registry.json raw_sha256 5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385
+
+Outcome: no_drift / byte_identical (exit 0)
+Snapshots byte-identical: true; declaration findings: 0
+Tools: before 12 after 12; added 0 removed 0 changed 0 unchanged 12
+Findings: 0 (inert metadata 0, review required 0, unsupported 0, declaration requalification 0)
+Coverage complete: false; review-pack records: 0
+New UNACCEPTED tool identities (0): none
+Accepted by this analyzer: nothing.
+
+Findings (tool / pointer / kind / nature):
+
+Coverage gaps:
+  - {"entries":20,"gap":"unsupported_constructs_present"}
+Unsupported constructs reported: 20

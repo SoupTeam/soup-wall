@@ -34,6 +34,43 @@ MAX_DEPTH = 18
 ROADMAP_ORDINALS = {"Foundation": 6, "Phase 1": 4, "Phase 2": 6, "Phase 3": 3,
                     "Phase 4": 4, "Phase 5": 5, "Phase 6": 6, "Phase 7": 4}
 
+# SOU-228 installed Linux reports. One producer format carries two report
+# shapes, so the reviewed index selects the variant and the adapter verifies it.
+INSTALLED_REPORT = "sw-installed-front-door-qualification/1"
+FRONT_DOOR_FORMAT = "sw-installed-front-door/standard/1"
+SCOPE_FORMAT = "sw-installed-front-door/linux-v1-scope/1"
+CLEAN_USER_FORMAT = "sw-installed-front-door/clean-user/1"
+# Native binaries are rebuilt in every run and byte equality is not claimed:
+# these rows pin their own runtime digest while the capability leaves it null.
+PER_RUN_FORMATS = (FRONT_DOOR_FORMAT, SCOPE_FORMAT, CLEAN_USER_FORMAT)
+COMPANION_ROLES = {FRONT_DOOR_FORMAT: ("installed-pilot", "demo"), SCOPE_FORMAT: ("installed-pilot", "demo"),
+                   CLEAN_USER_FORMAT: ("walkthrough", "ask", "user-session", "user-session-after-cleanup")}
+STANDARD_CASES = ("component-install", "preview-zero-effect", "prepare-and-reuse", "existing-selection-status",
+                  "status-configured", "useful", "status-after-run", "cancel")
+SCOPE_CASES = ("scope-selected-through-preview-and-prepare", "excluded-option-preview",
+               "standard-cases-ran-under-scope", "excluded-capability-refused", "tampered-scope-refused",
+               "unselected-claims-nothing", "status-never-claims-more", "owned-cleanup")
+INSTALLED_PILOT_CASES = ("exact-installed-inputs", "sandbox-positive", "witness-calibration", "read-and-history",
+                         "inspect-and-diff", "untrusted-input-refusal", "independent-conversation",
+                         "parallel-cancellation", "collector-recovery", "daemon-fresh-conversation",
+                         "bad-input-controls", "final-cleanup")
+DEMO_CASES = ("plan", "occupied-port", "stale-source", "changed-selection", "provider-unavailable",
+              "useful-refusal", "ask", "default", "cancel", "daemon-loss", "host-crash", "timeout")
+CLEAN_USER_TASKS = ("read-contract", "review-pending-diff", "trace-local-history", "inspect-last-commit")
+CLEAN_USER_CASES = ("component-install",
+                    *(project + ":" + task for project in ("catalog-service", "release-ledger")
+                      for task in (*CLEAN_USER_TASKS, "denied-calls")),
+                    "documented-walkthrough", "ask-once-replay", "update-rollback", "remove-preserves-user-data")
+MAINTENANCE_REFUSALS = ("entered-updated-b", "entered-rolled-back-a")
+INPUT_ROLES = {"agentfw", "bwrap", "claude", "git", "git_launcher", "node_archive", "python", "sandbox_tests"}
+SCOPE_ID = "linux-v1"
+UNVERIFIED_RECEIPT_ABSENT = "build receipt: not recorded by this report"
+UNVERIFIED_RECEIPT_BYTES = "build receipt: only its SHA-256 is retained; the receipt bytes are absent"
+UNVERIFIED_WITNESS = "independent witness: refusal, receiver and cleanup witnesses are measurement-driver records"
+UNVERIFIED_SEALED = "independent witness: sealed process provenance is not verifiable offline"
+UNVERIFIED_GENERATION = "companion generation: linked by binary identity only, not by a selection digest"
+UNVERIFIED_DRIVER = "custody: the measurement driver differs from the tested product source"
+
 
 class Invalid(ValueError):
     pass
@@ -244,8 +281,10 @@ def validate_index(obj: dict) -> dict:
                 "profile input/identity mismatch")
     seen.clear()
     for row in evidence:
+        per_run = type(row) is dict and row.get("format") in PER_RUN_FORMATS
         exact(row, {"id", "capability", "path", "sha256", "format", "kind", "source",
-                    "platform", "architecture", "host", "transport", "server", "profile", "identity"},
+                    "platform", "architecture", "host", "transport", "server", "profile", "identity",
+                    *(("companions",) if per_run else ())},
               "evidence descriptor")
         identifier(row["id"], "evidence.id")
         require(row["id"] not in seen, "duplicate evidence ID")
@@ -255,7 +294,8 @@ def validate_index(obj: dict) -> dict:
         relative(row["path"], "evidence.path")
         digest(row["sha256"], "evidence.sha256")
         require(row["format"] in ("sou54-followup/1", "sou56-https-get/1", "sw-self-test/1",
-                                  "sou63-component/1", EVIDENCE_VERSION), "unsupported report version")
+                                  "sou63-component/1", EVIDENCE_VERSION, *PER_RUN_FORMATS),
+                "unsupported report version")
         require(row["kind"] in ("component", "integrated-candidate"), "invalid evidence kind")
         source(row["source"], "evidence.source", optional=True)
         require(row["platform"] in ("linux", "macos", "windows") and
@@ -266,9 +306,32 @@ def validate_index(obj: dict) -> dict:
         cap = next(c for c in caps if c["id"] == row["capability"])
         require(all(row[k] == cap[k] for k in ("platform", "architecture", "host", "transport", "server", "profile")),
                 "evidence/profile mismatch in index")
-        require(row["identity"] == cap["identity"], "evidence/identity mismatch in index")
+        if per_run:
+            require(row["kind"] == "integrated-candidate" and row["source"] is not None,
+                    "per-run evidence must be integrated and source-bound")
+            validate_companions(row["companions"], row["format"], row["path"])
+            require(cap["identity"]["runtime"] is None and row["identity"]["runtime"] is not None,
+                    "per-run runtime digest must be pinned on the evidence row only")
+            require(all(row["identity"][k] == cap["identity"][k] for k in IDENTITY_FIELDS - {"runtime"}),
+                    "evidence/identity mismatch in index")
+        else:
+            require(row["identity"] == cap["identity"], "evidence/identity mismatch in index")
         require(cap["support"] != "unsupported", "unsupported capability cannot have positive evidence")
     return obj
+
+
+def validate_companions(rows: object, fmt: str, main_path: str) -> None:
+    roles = COMPANION_ROLES[fmt]
+    require(type(rows) is list and len(rows) <= len(roles), "companion count limit")
+    seen_roles, seen_paths = set(), {main_path}
+    for row in rows:
+        exact(row, {"role", "path", "sha256"}, "companion")
+        require(row["role"] in roles and row["role"] not in seen_roles, "unknown or duplicate companion role")
+        seen_roles.add(row["role"])
+        relative(row["path"], "companion path")
+        require(row["path"] not in seen_paths, "duplicate companion path")
+        seen_paths.add(row["path"])
+        digest(row["sha256"], "companion SHA-256")
 
 
 def validate_profile_inputs(index: dict, source_root: Path) -> None:
@@ -285,8 +348,423 @@ def counts(passed: object, failed: object, skipped: object, expected: object) ->
             "complete": e > 0 and p == e and f == 0 and s == 0}
 
 
-def project_report(obj: dict, fmt: str) -> dict:
+def clean_source(value: object, label: str, commit: str | None = None, tree: str | None = None,
+                 extra: tuple[str, ...] = ()) -> tuple[str, str]:
+    obj = exact(value, {"commit", "tree", "dirty", *extra}, label)
+    source(obj["commit"], label + ".commit")
+    source(obj["tree"], label + ".tree")
+    require(obj["dirty"] is False, label + ": source was not clean")
+    for key in extra:
+        digest(obj[key], label + "." + key)
+    require(commit is None or (obj["commit"], obj["tree"]) == (commit, tree), label + ": source identity mismatch")
+    return obj["commit"], obj["tree"]
+
+
+def case_outcomes(rows: object, expected: tuple[str, ...], label: str, key: str,
+                  words: tuple[str, ...]) -> list[str]:
+    """Return the non-passed case IDs of a fixed, ordered, unique inventory."""
+    require(type(rows) is list and all(type(row) is dict for row in rows) and
+            [row.get(key) for row in rows] == list(expected), label + ": case inventory mismatch")
+    require(all(row.get("status") in words for row in rows), label + ": invalid case status")
+    return [row[key] for row in rows if row["status"] != "passed"]
+
+
+def same_binaries(selected: object, inputs: dict, roles: tuple[str, ...], label: str) -> None:
+    require(type(selected) is dict and all(selected.get(role) == inputs[role] for role in roles),
+            label + ": selected binaries differ from the qualified inputs")
+
+
+def demo_outcomes(demo: dict, commit: str, tree: str, label: str) -> list[str]:
+    require(demo.get("format") == "sw-pilot-demo/1" and demo.get("provider") == "owned-scripted-loopback" and
+            demo.get("live_model_effectiveness") == "not_tested", label + ": version or claim field mismatch")
+    rows = demo.get("cases")
+    require(type(rows) is list and all(type(row) is dict for row in rows) and
+            [row.get("case") for row in rows] == list(DEMO_CASES), label + ": case inventory mismatch")
+    require(all(type(row.get("status")) is str for row in rows), label + ": invalid case status")
+    unfinished = [row["case"] for row in rows if row["status"] != "passed"]
+    require(demo.get("status") in ("passed", "failed") and (demo["status"] == "passed") == (not unfinished),
+            label + ": status contradicts case outcomes")
+    for key in ("source", "source_before"):
+        clean_source(demo[key], label + "." + key, commit, tree, ("files_sha256",))
+    if demo["status"] == "passed":
+        clean_source(demo["source_after"], label + ".source_after", commit, tree, ("files_sha256",))
+        require(demo.get("fixture_cleanup", {}).get("complete") is True, label + ": fixture cleanup incomplete")
+    return unfinished
+
+
+def front_door_companions(companions: dict, commit: str, tree: str, inputs: dict,
+                          required: bool) -> tuple[list[int], str | None, str | None]:
+    """Installed acceptance and first-use demo on the generation the front door prepared."""
+    pilot, demo = companions.get("installed-pilot"), companions.get("demo")
+    require(not required or (pilot is not None and demo is not None),
+            "index omits a companion report required by a passed front-door report")
+    tally, policy, architecture = [0, 0, 0], None, None
+    if pilot is None:
+        tally[2] += len(INSTALLED_PILOT_CASES)
+    else:
+        pilot = pilot[0]
+        require(pilot.get("format") == "sw-installed-pilot/1" and pilot.get("required") == len(INSTALLED_PILOT_CASES)
+                and pilot.get("pilot_readiness") == "not_certified", "installed-pilot: version or claim field mismatch")
+        open_cases = case_outcomes(pilot.get("cases"), INSTALLED_PILOT_CASES, "installed-pilot", "id",
+                                   ("passed", "failed", "incomplete", "unsupported"))
+        statuses = [row["status"] for row in pilot["cases"]]
+        reported = exact(pilot.get("counts"), {"passed", "failed", "incomplete", "unsupported"}, "installed-pilot counts")
+        require(reported == {word: statuses.count(word) for word in reported}, "installed-pilot: counts disagree with cases")
+        require(pilot.get("status") in ("passed", "failed", "incomplete") and
+                (pilot["status"] == "passed") == (not open_cases) and
+                type(pilot.get("remaining_blockers")) is list and
+                [row.get("case") for row in pilot["remaining_blockers"]] == open_cases,
+                "installed-pilot: status contradicts case outcomes")
+        clean_source(pilot["source_before"], "installed-pilot.source_before", commit, tree, ("files_sha256",))
+        if pilot["status"] == "passed":
+            clean_source(pilot["source_after"], "installed-pilot.source_after", commit, tree, ("files_sha256",))
+        environment = pilot.get("environment", {})
+        require(environment.get("os") == "Linux", "installed-pilot: not a native Linux host")
+        architecture = environment.get("machine") if environment.get("machine") in ("x86_64", "aarch64") else None
+        selected = pilot.get("selected_sha256")
+        same_binaries(selected, inputs, ("agentfw", "bwrap", "claude", "git", "git_launcher", "python", "sandbox_tests"),
+                      "installed-pilot")
+        policy = digest(selected.get("policy"), "installed-pilot policy")
+        tally[0] += len(INSTALLED_PILOT_CASES) - len(open_cases)
+        tally[1] += len(open_cases)
+    if demo is None:
+        tally[2] += len(DEMO_CASES)
+    else:
+        demo = demo[0]
+        unfinished = demo_outcomes(demo, commit, tree, "demo")
+        if pilot is not None:
+            require(demo.get("selected_sha256") == pilot["selected_sha256"], "demo: generation differs from installed-pilot")
+        else:
+            same_binaries(demo.get("selected_sha256"), inputs, ("agentfw",), "demo")
+        tally[0] += len(DEMO_CASES) - len(unfinished)
+        tally[1] += len(unfinished)
+    return tally, policy, architecture
+
+
+SCOPE_FACTS = {
+    "excluded-option-preview": {"refused": ["capability-git-profiles"]},
+    "standard-cases-ran-under-scope": {"live_scope_mode": "enforce"},
+    "excluded-capability-refused": {"reason": "scope_excludes_capability", "selected_started": 0,
+                                    "network_connections": 0, "prefix_unchanged": True},
+    "tampered-scope-refused": {"reason": "scope_document_changed", "selected_started": 0},
+    "unselected-claims-nothing": {"protection": "not-configured"},
+    "status-never-claims-more": {"acceptance": "not-claimed", "enforce_only_when_observed_live": True},
+    "owned-cleanup": {"sources_preserved": True, "receiver_effects": 0},
+}
+
+
+def project_front_door(obj: dict, fmt: str, companions: dict) -> dict:
+    require("clean_user" not in obj, "a clean-user report is not front-door evidence")
+    require(obj.get("provider") == "owned-scripted-loopback" and obj.get("live_model_effectiveness") == "not_tested"
+            and obj.get("skipped") == 0, "unsupported provider or claim field")
+    require(obj.get("status") in ("passed", "failed"), "invalid report status")
+    passed = obj["status"] == "passed"
+    require(passed == (obj.get("error") is None), "report status contradicts its error")
+    rows = obj.get("cases")
+    inventory = STANDARD_CASES + SCOPE_CASES
+    require(type(rows) is list and all(type(row) is dict for row in rows), "front-door case inventory mismatch")
+    names = [row.get("case") for row in rows]
+    require(names == list(inventory[:len(names)]) and all(row.get("passed") is True for row in rows),
+            "front-door case inventory mismatch")
+    require(not passed or len(names) == len(inventory), "passed report lacks required cases")
+    nested = obj.get("pilot_scope_qualification")
+    # Only the reviewed pilot-scope focus is inventoried; an honest early failure may precede it.
+    require(nested is not None or (not passed and len(names) <= len(STANDARD_CASES)), "unsupported front-door focus")
+    total = len(inventory) + len(INSTALLED_PILOT_CASES) + len(DEMO_CASES)
+    if "source_before" not in obj:
+        # A refusal before the clean-source check records nothing to bind.
+        require(not passed and not names, "front-door report lacks its source")
+        return {"source": None, "platform": "linux", "architecture": None,
+                "identity": {key: None for key in IDENTITY_FIELDS}, "counts": counts(0, 1, total, total),
+                "execution": "scripted-host", "version": fmt, "unverified": [UNVERIFIED_RECEIPT_ABSENT]}
+    commit, tree = clean_source(obj.get("source_before"), "source_before")
+    if passed or "source_after" in obj:
+        clean_source(obj.get("source_after"), "source_after", commit, tree)
+    require((obj.get("platform") or {}).get("kind") == "linux", "front door did not run on native Linux")
+    inputs = exact(obj.get("inputs_sha256"), INPUT_ROLES, "inputs_sha256")
+    for role in INPUT_ROLES:
+        digest(inputs[role], "input " + role)
+    component = None
+    if passed or "component" in obj:
+        component = exact(obj.get("component"), {"component", "archive_sha256", "files", "commit"}, "component")
+        digest(component["component"], "component")
+        digest(component["archive_sha256"], "component archive")
+        require(component["commit"] == commit, "component was built from another source")
+    by_case = dict(zip(names, rows))
+    if "component-install" in by_case:
+        require(component is not None and by_case["component-install"].get("component") == component["component"],
+                "installed component differs from the built component")
+    if "preview-zero-effect" in by_case:
+        require(by_case["preview-zero-effect"].get("selected_started") == 0 and
+                by_case["preview-zero-effect"].get("inet_connects") == 0, "preview reported effects")
+    for name in ("useful", "cancel"):
+        if name in by_case:
+            row = by_case[name]
+            require((row.get("process_cleanup") or {}).get("all_stopped") is True and
+                    (row.get("live_status") or {}).get("protection") == "observed-live", name + ": cleanup or live status")
+    if "cancel" in by_case:
+        require(by_case["cancel"].get("reason") == "pilot_cancelled", "cancel: not reported as cancelled")
+    nested_passed = False
+    if nested is not None:
+        require(nested.get("format") == "sw-installed-pilot-scope-qualification/1" and
+                nested.get("expected") == list(SCOPE_CASES), "scope qualification version or inventory mismatch")
+        open_cases = case_outcomes(nested.get("cases"), SCOPE_CASES, "scope qualification", "id",
+                                   ("passed", "incomplete"))
+        require(all(type(row.get("attempted")) is bool and (row["status"] != "passed" or row["attempted"])
+                    for row in nested["cases"]), "scope qualification: unattempted case passed")
+        nested_passed = nested.get("status") == "passed"
+        require(nested.get("status") in ("passed", "incomplete") and nested_passed == (not open_cases),
+                "scope qualification status contradicts case outcomes")
+        require((len(names) == len(inventory)) == nested_passed, "scope rows disagree with the scope qualification")
+        clean_source(nested.get("source"), "scope qualification source", commit, tree)
+        if nested_passed:
+            clean_source(nested.get("source_after"), "scope qualification source_after", commit, tree)
+    tally, policy, architecture = front_door_companions(companions, commit, tree, inputs, passed)
+    observation = {"source": commit, "tree": tree, "platform": "linux", "architecture": architecture,
+                   "identity": {"implementation": component["archive_sha256"] if component else None,
+                                "policy": policy, "registry": None, "runtime": inputs["agentfw"], "server": None},
+                   "counts": counts(len(names) + tally[0], (0 if passed else 1) + tally[1],
+                                    len(inventory) - len(names) + tally[2], total),
+                   "execution": "scripted-host", "version": fmt,
+                   "unverified": [UNVERIFIED_RECEIPT_ABSENT, UNVERIFIED_WITNESS, UNVERIFIED_GENERATION]}
+    if fmt != SCOPE_FORMAT:
+        return observation
+    # The scope variant must observe linux-v1 selected and conforming while the runs were live.
+    scopes = []
+    for name in ("useful", "cancel"):
+        if name in by_case:
+            live = exact(by_case[name]["live_status"].get("scope"), {"document_sha256", "id", "mode", "qualification",
+                                                                     "reasons", "selected", "shadow", "state"},
+                         name + " live scope")
+            require(live["id"] == SCOPE_ID and live["selected"] is True and live["state"] == "conforming" and
+                    live["mode"] == "enforce" and live["reasons"] == [],
+                    "Linux-v1 scope was not selected and conforming during the run")
+            require(type(live["qualification"]) is str and live["qualification"].startswith("unqualified") and
+                    "READY" not in live["qualification"].replace("NOT_READY", ""), "scope status claims qualification")
+            scopes.append(digest(live["document_sha256"], "scope document"))
+    require(len(set(scopes)) <= 1 and (scopes or not passed), "scope document identity is absent or inconsistent")
+    if nested is not None:
+        for row in nested["cases"]:
+            if row["status"] == "passed":
+                expected = SCOPE_FACTS.get(row["id"], {})
+                if row["id"] == "scope-selected-through-preview-and-prepare":
+                    expected = {"document_sha256": scopes[0][:12] if scopes else None}
+                require(all(row.get(key) == value for key, value in expected.items()),
+                        row["id"] + ": recorded facts do not match the scope control")
+    if scopes:
+        observation["profile"] = SCOPE_ID + "@" + scopes[0]
+    observation["scope"] = {"id": SCOPE_ID, "selected": bool(scopes), "state": "conforming" if scopes else None,
+                            "document_sha256": scopes[0] if scopes else None}
+    return observation
+
+
+CLEAN_USER_CLAIMS = {"full_product_acceptance": "not_established", "novice_human_evidence": "not_measured",
+                     "live_model_effectiveness": "not_tested", "paid_api_calls": 0,
+                     "runtime_review_status": "author candidate; not merge approval",
+                     "scope": "two-new-projects-one-clean-user-environment"}
+CLEAN_USER_GO = "GO for this measured preprovisioned path only"
+
+
+def project_clean_user(obj: dict, companions: dict) -> dict:
+    require("pilot_scope_qualification" not in obj and "pilot_scope" not in obj,
+            "a Linux-v1 scope report is not clean-user evidence")
+    require(obj.get("provider") == "owned-scripted-loopback" and obj.get("skipped") == 0,
+            "unsupported provider or claim field")
+    status = obj.get("status")
+    require(status in ("passed", "failed", "incomplete"), "invalid report status")
+    empty = {key: None for key in IDENTITY_FIELDS}
+    base = {"platform": "linux", "execution": "scripted-host", "version": CLEAN_USER_FORMAT,
+            "unverified": [UNVERIFIED_RECEIPT_BYTES, UNVERIFIED_WITNESS, UNVERIFIED_SEALED]}
+    if "clean_user" not in obj:
+        # An honest early refusal (for example, a wrong platform) precedes the inventory.
+        require(status != "passed", "passed report lacks its clean-user inventory")
+        return {**base, "source": None, "architecture": None, "identity": empty,
+                "counts": counts(0, 1, len(CLEAN_USER_CASES), len(CLEAN_USER_CASES))}
+    for key, value in CLEAN_USER_CLAIMS.items():
+        require(obj.get(key) == value, "unsupported or forged claim field: " + key)
+    inventory = obj["clean_user"]
+    require(type(inventory) is dict and inventory.get("required") == list(CLEAN_USER_CASES),
+            "clean-user required inventory mismatch")
+    rows = inventory.get("cases")
+    open_cases = case_outcomes(rows, CLEAN_USER_CASES, "clean-user", "id", ("passed", "failed", "incomplete"))
+    require(all(type(row.get("attempted")) is bool and (row["attempted"] or row["status"] == "incomplete")
+                for row in rows), "clean-user: unattempted case has an outcome")
+    passed = status == "passed"
+    require(passed == (not open_cases) and inventory.get("status", status) == status,
+            "report status contradicts case outcomes")
+    require(obj.get("remaining_blockers") == open_cases, "remaining blockers contradict case outcomes")
+    decision = obj.get("decision")
+    require(decision == CLEAN_USER_GO if passed else type(decision) is str and decision.startswith("NO-GO"),
+            "decision text contradicts case outcomes")
+    commit, tree = clean_source(obj.get("source_before"), "source_before")
+    driver, driver_tree = clean_source(obj.get("driver_source"), "driver_source")
+    require(obj.get("runtime_source") == commit, "runtime source differs from the qualified source")
+    if passed or "source_after" in obj:
+        clean_source(obj.get("source_after"), "source_after", commit, tree)
+    build = None
+    if passed or "build_source" in obj:
+        clean_source(obj.get("build_source"), "build_source", commit, tree,
+                     ("cargo_lock_sha256", "files_sha256", "rust_toolchain_sha256"))
+        build = obj["build_source"]
+        digest(obj.get("source_build_receipt_sha256"), "build receipt")
+    inputs = exact(obj.get("inputs_sha256"), INPUT_ROLES, "inputs_sha256")
+    for role in INPUT_ROLES:
+        digest(inputs[role], "input " + role)
+    environment = obj.get("environment")
+    require(type(environment) is dict and environment.get("ordinary_user") is True and
+            environment.get("effective_capabilities") == 0 and
+            environment.get("unassisted_stock_host_acceptance") == "not_established",
+            "environment is not the ordinary-user precondition")
+    by_case = {row["id"]: row for row in rows if row["status"] == "passed"}
+    component = None
+    if passed or "component" in obj:
+        # The clean-user driver keeps the raw build result; its private output path is never projected.
+        component = exact(obj.get("component"), {"action", "component", "archive_sha256", "files", "commit", "out"},
+                          "component")
+        require(component["action"] == "build", "component was not built by this run")
+        digest(component["component"], "component")
+        digest(component["archive_sha256"], "component archive")
+        require(component["commit"] == commit, "component was built from another source")
+    if "component-install" in by_case:
+        row = by_case["component-install"]
+        require(component is not None and row.get("archive_sha256") == component["archive_sha256"] and
+                row.get("component_sha256") == component["component"], "installed component differs from the build")
+    policies = set()
+    for project in ("catalog-service", "release-ledger"):
+        if all(project + ":" + task in by_case for task in (*CLEAN_USER_TASKS, "denied-calls")):
+            facts = (obj.get("projects") or {}).get(project) or {}
+            clean_source(facts.get("selected_source"), project + " selected source", commit, tree, ("files_sha256",))
+            require(build is not None and facts["selected_source"]["files_sha256"] == build["files_sha256"],
+                    project + ": selected files differ from the built source")
+            same_binaries(facts.get("selected_sha256"), inputs, ("agentfw", "bwrap", "claude", "git", "git_launcher",
+                                                                  "python", "sandbox_tests"), project)
+            policies.add(digest(facts["selected_sha256"].get("policy"), project + " policy"))
+        for task in CLEAN_USER_TASKS:
+            row = by_case.get(project + ":" + task)
+            if row is not None:
+                require(row.get("original_result_useful") is True, row["id"] + ": original result not useful")
+                digest(row.get("expected_sha256"), row["id"] + " expected")
+                digest(row.get("observed_text_sha256"), row["id"] + " observed")
+        row = by_case.get(project + ":denied-calls")
+        if row is not None:
+            require(row.get("forbidden_files") == 0 and row.get("forbidden_network_connections") == 0 and
+                    row.get("forbidden_original_dispatches") == 0 and row.get("positive_receiver") is True and
+                    row.get("unchanged_user_files") is True and row.get("useful_continuation") is True and
+                    (row.get("process_cleanup") or {}).get("all_stopped") is True,
+                    row["id"] + ": denied-call witnesses do not match the control")
+    require(len(policies) <= 1, "projects selected different policies")
+    architecture = None
+    if "documented-walkthrough" in by_case:
+        walk = companions.get("walkthrough")
+        require(walk is not None, "index omits the walkthrough companion")
+        row = by_case["documented-walkthrough"]
+        require(row.get("original_report_sha256") == walk[1], "walkthrough companion hash differs from the report")
+        require(demo_outcomes(walk[0], commit, tree, "walkthrough") == [] and row.get("cases") == len(DEMO_CASES) and
+                row.get("original_inventory_preserved") is True, "walkthrough companion is not a complete passed demo")
+        summary = (obj.get("walkthrough") or {}).get("cases")
+        require(type(summary) is list and [(c.get("case"), c.get("status")) for c in summary] ==
+                [(c["case"], c["status"]) for c in walk[0]["cases"]], "walkthrough summary differs from its companion")
+        same_binaries(walk[0].get("selected_sha256"), inputs, ("agentfw",), "walkthrough")
+        if walk[0].get("required_platform") == "native Ubuntu 24.04 x86_64, non-root":
+            architecture = "x86_64"
+    if "ask-once-replay" in by_case:
+        ask = companions.get("ask")
+        require(ask is not None, "index omits the Ask companion")
+        require(by_case["ask-once-replay"].get("original_report_sha256") == ask[1], "Ask companion hash differs from the report")
+        ask = ask[0]
+        require(ask.get("contract_version") == "sw-pilot-ask-acceptance/1" and ask.get("status") == "pass" and
+                ask.get("qualification_scope") == "two_profile_correctness_probe_not_performance" and
+                ask.get("physical_human_presence_proven") is False and ask.get("paid_api_calls") == 0,
+                "Ask companion version or claim field mismatch")
+        clean_source(ask.get("source"), "Ask source", commit, tree)
+        clean_source(ask.get("source_after"), "Ask source_after", commit, tree)
+        cases = ask.get("cases")
+        require(type(cases) is list and sorted(c.get("profile") for c in cases) == ["filesystem", "git"] and
+                all(c.get("passed") is True and (c.get("cleanup") or {}).get("all_stopped") is True for c in cases),
+                "Ask companion cases incomplete")
+        same_binaries(ask.get("selected_sha256"), inputs, ("agentfw", "bwrap", "claude", "git", "git_launcher"), "Ask")
+    refusals = []
+    for row in obj.get("cases") or []:
+        require(type(row) is dict and row.get("status") in ("completed", "failed"), "invalid run row")
+        live = (row.get("live_status") or {}).get("scope")
+        require(live is None or (type(live) is dict and live.get("selected") is False and
+                                 live.get("state") == "unselected"),
+                "a clean-user run recorded a selected scope")
+        if row["status"] == "failed":
+            expected_refusal = (row.get("case") in MAINTENANCE_REFUSALS and row.get("exit") == 1 and
+                                row.get("reason") == "maintenance_entered" and
+                                (row.get("process_cleanup") or {}).get("all_stopped") is True)
+            require(expected_refusal or not passed, "unexpected failed run in a passed report")
+            if expected_refusal:
+                refusals.append(row["case"])
+        elif passed:
+            require(row.get("exit") == 0 and (row.get("process_cleanup") or {}).get("all_stopped") is True,
+                    "completed run did not exit cleanly")
+    if "update-rollback" in by_case:
+        row = by_case["update-rollback"]
+        update = obj.get("coordinated_update") or {}
+        preserved = update.get("maintenance_preserved_across_update_and_rollback")
+        require(component is not None and row.get("restored_component") == component["component"] and
+                row.get("update_source") == "synthetic identity-only component control" and
+                update.get("status") == "passed" and type(preserved) is list and
+                [item.get("case") for item in preserved] == list(MAINTENANCE_REFUSALS) and
+                all(item.get("host_executions") == 0 and item.get("provider_requests") == 0 and
+                    item.get("reason") == "maintenance_entered" for item in preserved),
+                "update and rollback did not preserve the maintenance refusals")
+        require(refusals == list(MAINTENANCE_REFUSALS), "expected maintenance refusals are missing or relabelled")
+    if passed:
+        archival = obj.get("run_archival") or {}
+        completed = sum(row.get("status") == "completed" for row in obj["cases"])
+        require(archival.get("status") == "passed" and archival.get("local_audit_proves_execution") is False and
+                archival.get("completed_runs_archived") == archival.get("expected_completed_runs") == completed,
+                "run archival totals disagree")
+    if "remove-preserves-user-data" in by_case:
+        row = by_case["remove-preserves-user-data"]
+        removal = obj.get("removal") or {}
+        installs = removal.get("installations")
+        require(row.get("user_files_preserved") is True and row.get("selections_preserved") is True and
+                type(installs) is list and
+                sorted((item.get("installation"), item.get("status")) for item in installs) ==
+                [("bootstrap", "removed"), ("direct", "removed")] and
+                sorted((item.get("installation"), item.get("status")) for item in obj.get("removal_maintenance") or []) ==
+                [("bootstrap", "entered"), ("direct", "entered")] and
+                (obj.get("initial_process_observation") or {}).get("unavailable") == [] and
+                (obj.get("after_cleanup_process_observation") or {}).get("unavailable") == [],
+                "removal did not confirm both installations with complete process visibility")
+    if "ci_user_session" in obj:
+        session = exact(obj["ci_user_session"], {"authorizes_removal", "observation", "report_sha256"}, "ci_user_session")
+        companion = companions.get("user-session")
+        require(companion is not None, "index omits the user-session companion")
+        require(session["authorizes_removal"] is False and session["report_sha256"] == companion[1] and
+                session["observation"] == companion[0], "user-session companion differs from the report")
+    for role, statuses in (("user-session", ("already-visible", "quiesced-empty-ci-user-session")),
+                           ("user-session-after-cleanup", ("observed",))):
+        if role in companions:
+            value = companions[role][0]
+            require(value.get("status") in statuses and value.get("authorization") is False and
+                    value.get("native_removal_guard_changed") is False and
+                    value.get("installed_host_executed") in (False, None), role + ": witness state mismatch")
+            clean_source(value.get("driver_source"), role + " driver source", driver, driver_tree)
+    unverified = list(base["unverified"]) + ([UNVERIFIED_DRIVER] if driver != commit else [])
+    return {**base, "unverified": unverified, "source": commit, "tree": tree, "driver_source": driver,
+            "architecture": architecture,
+            "identity": {"implementation": component["archive_sha256"] if component else None,
+                         "policy": next(iter(policies), None), "registry": None, "runtime": inputs["agentfw"],
+                         "server": None},
+            "counts": counts(len(CLEAN_USER_CASES) - len(open_cases),
+                             sum(row["status"] == "failed" for row in rows),
+                             sum(row["status"] == "incomplete" for row in rows), len(CLEAN_USER_CASES)),
+            "refusals": len(refusals), "scope": {"id": SCOPE_ID, "selected": False, "state": "unselected",
+                                                 "document_sha256": None}}
+
+
+def project_report(obj: dict, fmt: str, companions: dict | None = None) -> dict:
     """Extract only allowlisted identities and counts; never copy raw report text."""
+    if fmt in PER_RUN_FORMATS:
+        require(obj.get("format") == INSTALLED_REPORT, "report version mismatch")
+        if fmt == CLEAN_USER_FORMAT:
+            return project_clean_user(obj, companions or {})
+        return project_front_door(obj, fmt, companions or {})
     if fmt == "sou54-followup/1":
         require(obj.get("schema_version") == "sou54-complete-followup/1", "report version mismatch")
         env, run = obj["environment"], obj["stdio"]
@@ -377,12 +855,29 @@ def evaluate(descriptor: dict, root: Path, target: str, cap: dict) -> dict:
     try:
         obj, actual = load_json(path, MAX_REPORT)
         require(actual == descriptor["sha256"], "SHA-256 mismatch")
-        observation = project_report(obj, descriptor["format"])
-        require(observation["source"] == descriptor["source"], "source identity mismatch")
+        companions = {}
+        for row in descriptor.get("companions", []):
+            companion = root.joinpath(*PurePosixPath(row["path"]).parts)
+            if not companion.exists() and not companion.is_symlink():
+                return {**base, "status": "missing", "reason": "Companion report " + row["role"] + " is absent"}
+            value, observed = load_json(companion, MAX_REPORT)
+            require(observed == row["sha256"], "companion " + row["role"] + " SHA-256 mismatch")
+            companions[row["role"]] = (value, observed)
+        observation = project_report(obj, descriptor["format"], companions)
+        # An honest early installed refusal may record no source; it can only be incomplete.
+        require(observation["source"] == descriptor["source"] or
+                (descriptor["format"] in PER_RUN_FORMATS and observation["source"] is None),
+                "source identity mismatch")
+        # An installed report may not record its architecture; that stays unbound, never matched.
+        # Legacy formats keep exact platform identity.
+        unrecorded = (None,) if descriptor["format"] in PER_RUN_FORMATS else ()
         require(observation["platform"] == descriptor["platform"] and
-                observation["architecture"] == descriptor["architecture"], "platform identity mismatch")
+                observation["architecture"] in (descriptor["architecture"], *unrecorded), "platform identity mismatch")
+        # A per-run refusal before any source was recorded measures no identity; it is never complete.
+        early = descriptor["format"] in PER_RUN_FORMATS and observation["source"] is None
+        require(not early or not observation["counts"]["complete"], "complete report lacks its source")
         for key in IDENTITY_FIELDS:
-            if descriptor["identity"][key] is not None:
+            if descriptor["identity"][key] is not None and not early:
                 measured = observation["identity"].get(key) if "identity" in observation else observation.get(key)
                 require(measured == descriptor["identity"][key], f"{key} identity mismatch")
         for key in ("host", "transport", "server", "profile"):
@@ -392,16 +887,27 @@ def evaluate(descriptor: dict, root: Path, target: str, cap: dict) -> dict:
                     "platform": observation["platform"], "architecture": observation["architecture"],
                     "counts": observation["counts"], "execution": observation["execution"],
                     "version": observation["version"], "identity": descriptor["identity"]}
+        for key in ("tree", "driver_source", "unverified", "refusals", "scope"):
+            if key in observation:
+                observed[key] = observation[key]
+        if companions:
+            observed["companions"] = [{"role": role, "sha256": value[1]} for role, value in companions.items()]
         if not observation["counts"]["complete"]:
             status, reason = "incomplete", "Failed, skipped, zero-denominator or incomplete checks"
         elif observation["source"] is None:
             status, reason = "unbound", "Report does not bind execution to one clean source commit"
         elif observation["source"] != target:
-            status, reason = "historical", "Validated component evidence is from another source revision"
+            status, reason = "historical", ("Validated component evidence is from another source revision"
+                                            if descriptor["kind"] == "component" else
+                                            "Validated integrated evidence is from another source commit")
+        elif observation["architecture"] is None:
+            status, reason = "unbound", "Report does not record the architecture it ran on"
         elif cap["platform"] != observation["platform"] or cap["architecture"] != observation["architecture"]:
             status, reason = "mismatch", "Target platform or architecture differs"
         elif descriptor["kind"] == "component":
             status, reason = "component", "Exact-source component check; integrated acceptance remains open"
+        elif observation.get("unverified"):
+            status, reason = "unbound", "Unverified: " + "; ".join(observation["unverified"])
         elif any(descriptor["identity"][k] is None for k in IDENTITY_FIELDS):
             status, reason = "unbound", "Integrated report lacks required exact identities"
         else:
@@ -529,15 +1035,22 @@ def write_private(directory: Path, name: str, data: bytes) -> None:
         raise
 
 
-def main(argv: list[str] | None = None) -> int:
+def parser(installed=False) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", required=True, help="full clean candidate commit SHA")
     parser.add_argument("--evidence-dir", required=True, type=Path)
-    parser.add_argument("--index", required=True, type=Path)
-    parser.add_argument("--roadmap", required=True, type=Path)
+    root = Path(__file__).resolve().parents[1]
+    parser.add_argument("--index", required=not installed, type=Path,
+                        default=root / "docs/operations/roadmap-support-index.json" if installed else None)
+    parser.add_argument("--roadmap", required=not installed, type=Path,
+                        default=root / "docs/ROADMAP.md" if installed else None)
     parser.add_argument("--output", required=True, type=Path, help="new private output directory")
     parser.add_argument("--decisions", type=Path, help="optional, explicit operator decision JSON")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None, *, installed=False) -> int:
+    args = parser(installed).parse_args(argv)
     try:
         source(args.source, "target source")
         index = validate_index(load_json(args.index, MAX_INDEX)[0])

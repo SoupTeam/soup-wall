@@ -21,7 +21,9 @@ import time
 import traceback
 import urllib.request
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pilot_project_fixtures import PROJECTS, create_files, identity as project_identity
+import pilot_runtime_identity as IDENTITY
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,7 +61,7 @@ def digest(value):
     return BASE.hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
-def run_host(args, selection_path, paths, private, case, marker, receiver, sentinel):
+def run_host(args, selection_path, paths, private, case, marker, receiver, sentinel, identity_report=None):
     root = private / case; root.mkdir(mode=0o700)
     state = root / "state"; state.mkdir(mode=0o700)
     model = BASE.DEMO.ScriptedModel([])
@@ -125,6 +127,8 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
                         pass
                 require(process.poll() is None, "existing_entry_exited_before_host")
             record = PREPARED.until(identify, "existing_run_not_published", seconds=90)
+            IDENTITY.capture_prepared(identity_report if identity_report is not None else {},
+                                      case, selection_path, Path(record['home']))
             if hold:
                 PREPARED.until(lambda: bool(model.requests), "actual_host_request_missing")
                 os.kill(record["supervisor_pid"] if case == "cancel" else record["daemon_pid"],
@@ -216,6 +220,7 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
                     except ProcessLookupError:
                         pass
         model.close()
+        IDENTITY.finish(case)
 
 
 def marker_text(case):
@@ -289,6 +294,8 @@ def qualify(args, private, report):
             prep_args.allow_download = False
         prepared = RUN.PREP.prepare(prep_args)
         selection_path = Path(prepared["selection"])
+        IDENTITY.capture_prepared(report, 'selection', selection_path)
+        IDENTITY.finish()
         require(RUN.PREP.prepare(prep_args)["status"] == "reused", "explicit_preparation_not_reused")
         require(before["filesystem"] == snapshot(fs) and before["git"] == snapshot(git), "preparation_changed_project")
         report.update(source=seed["source"], selected_sha256={role: BASE.sha(path) for role, path in paths.items()},
@@ -343,7 +350,7 @@ def qualify(args, private, report):
             current = {"filesystem": snapshot(fs), "git": snapshot(git)}
             report["active_case"] = case
             try:
-                result = run_host(args, selection_path, paths, private, case, marker, receiver, sentinel)
+                result = run_host(args, selection_path, paths, private, case, marker, receiver, sentinel, report)
             except ProjectCaseFailure as error:
                 result = error.evidence
                 require(result["process_cleanup"]["all_stopped"] and not result["process_cleanup"]["remaining"],

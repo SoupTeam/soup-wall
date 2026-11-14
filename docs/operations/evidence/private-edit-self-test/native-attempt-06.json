@@ -1,0 +1,32 @@
+{
+  "format": "sw-private-edit-self-test-platform-attempt/1",
+  "date": "2026-10-29",
+  "platform": "native-ubuntu-24.04-x86_64",
+  "source_commit": "7dc2291ff7483ad346cd5b8f2f17698cd0f1ec99",
+  "source_tree": "7d687895ba03601e05e24e6cb78f917b9ed63139",
+  "workflow_run": "https://github.com/SoupTeam/soup-wall/actions/runs/40885879378",
+  "workflow_job": "https://github.com/SoupTeam/soup-wall/actions/runs/40885879378/job/123489412379",
+  "status": "failed",
+  "stage": "preparation-regression-tests",
+  "runtime_executed": false,
+  "failure": "One reused-generation preparation fixture compared the lexical Python executable alias with a canonical resolved runtime path. The mocked mount classification therefore missed the actual runtime target, and the expected refusal assertion failed before installed runtime qualification.",
+  "corrective_source_commit": "23db5b6d55d62d6545dd7bee222e4a453f98ac6f",
+  "correction": "Canonicalize the fixture runtime path to match production, retain the typed unsupported-filesystem refusal, and add portable lexical-alias and POSIX real-symlink canary controls. Production guards and runtime acceptance thresholds remain unchanged.",
+  "corrective_checks_on_actual_wsl": {
+    "preparation_tests": {"passed": 27, "failed": 0},
+    "helper_tests": {"passed": 34, "failed": 0},
+    "qualification_validator_tests": {"passed": 9, "failed": 0},
+    "component_tests": {"passed": 6, "failed": 0},
+    "wsl_preflight_tests": {"run": 9, "failed": 0, "expected_non_wsl_refusal_skips": 1},
+    "scope": "Focused source regression checks; not installed self-test runtime acceptance."
+  },
+  "following_native_regression": {
+    "workflow_run": "https://github.com/SoupTeam/soup-wall/actions/runs/40886850670",
+    "status_at_recording": "in_progress",
+    "runtime_result": "pending"
+  },
+  "actual_wsl_runtime": "Build in progress; no installed runtime result is claimed by this record.",
+  "thresholds_changed": false,
+  "paid_inference": false,
+  "claim": "Preserved failed native preparation attempt and subsequent focused fixture regressions only. Earlier native runtime acceptance remains bound to its own source; neither it nor these checks establish current WSL runtime acceptance."
+}

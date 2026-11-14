@@ -20,12 +20,49 @@ jobs:
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-https-post')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      SOU166_MODE: source
+      SOU166_EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      SOU166_PRODUCER_RESULT: ''
+      SOU166_PRODUCER_ATTEMPT: ''
+      SOU166_PRODUCER_IMAGE_VERSION: ''
+      SOU166_ARTIFACT_ID: ''
+      SOU166_ARCHIVE_NAME: ''
+      SOU166_ARCHIVE_SHA256: ''
+      SOU166_MANIFEST_SHA256: ''
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: dtolnay/rust-toolchain@1.99.1
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+      - name: Initialize private current-job artifact locations
+        run: |
+          printf 'SOU166_BUNDLE=%s/sou166-selected\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          printf 'SOU166_CONTEXT=%s/sou166-context.json\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Require successful explicit producer before download
+        if: env.SOU166_MODE == 'shared'
+        run: python3 -B scripts/ci_qualification_build.py guard
+      - name: Download only the immutable current-run producer artifact
+        if: env.SOU166_MODE == 'shared'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          artifact-ids: ${{ env.SOU166_ARTIFACT_ID }}
+          path: ${{ runner.temp }}/sou166-download
+          skip-decompress: true
+          digest-mismatch: error
+      - name: Independently verify provenance, tuple and every executable byte
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          python3 -B scripts/ci_qualification_build.py prepare \
+            --archive "$RUNNER_TEMP/sou166-download/$SOU166_ARCHIVE_NAME" \
+            --output "$SOU166_BUNDLE" --context "$SOU166_CONTEXT"
+      - name: Fetch locked dependencies for required source Clippy
+        run: cargo fetch --locked
       - name: Build and identify the exact candidate
         shell: bash
         run: |
@@ -33,15 +70,15 @@ jobs:
           git rev-parse HEAD > "$RUNNER_TEMP/sou73-source.txt"
           rustc --version > "$RUNNER_TEMP/sou73-rust.txt"
           openssl version > "$RUNNER_TEMP/sou73-openssl.txt"
-          cargo build --locked -p agentfw --bin agentfw --message-format=json > "$RUNNER_TEMP/sou73-build.jsonl"
-          sha256sum target/debug/agentfw > "$RUNNER_TEMP/sou73-binary.txt"
+          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou73-build-use.json" -- build --locked --offline -p agentfw --bin agentfw > "$RUNNER_TEMP/sou73-build.jsonl"
+          sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$RUNNER_TEMP/sou73-binary.txt"
       - name: Native executor, authority and compatibility regressions
         shell: bash
         run: |
           set -o pipefail
-          cargo test --locked -p agentfw --lib -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou73-native-unit.log"
-          cargo test --locked -p agentfw --test native_endpoint -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou73-native-router.log"
-          cargo clippy --locked -p agentfw --all-targets -- -D warnings 2>&1 | tee "$RUNNER_TEMP/sou73-clippy.log"
+          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou73-unit-use.json" -- test --locked --offline -p agentfw --lib -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou73-native-unit.log"
+          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou73-router-use.json" -- test --locked --offline -p agentfw --test native_endpoint -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou73-native-router.log"
+          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou73-clippy-use.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings 2>&1 | tee "$RUNNER_TEMP/sou73-clippy.log"
       - name: Require nonempty passing native evidence
         run: |
           python3 - <<'PYCODE'
@@ -61,7 +98,7 @@ jobs:
         run: |
           set -o pipefail
           python3 -B scripts/verify-sou73-https-post.py --run --repo "$PWD" \
-            --agentfw "$PWD/target/debug/agentfw" --expected-commit "$(git rev-parse HEAD)" \
+            --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou73-https-post-results.json" 2>&1 | tee "$RUNNER_TEMP/sou73-driver.log"
       - name: Retain sanitized outcomes and exact source/build identities
         if: always()
@@ -73,5 +110,6 @@ jobs:
             ${{ runner.temp }}/sou73-*.jsonl
             ${{ runner.temp }}/sou73-*.txt
             ${{ runner.temp }}/sou73-*.log
+            ${{ runner.temp }}/sou166-context.json.metrics.json
           if-no-files-found: warn
           retention-days: 30

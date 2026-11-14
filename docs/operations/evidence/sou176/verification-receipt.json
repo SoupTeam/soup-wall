@@ -1,0 +1,311 @@
+{
+  "archive_sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8",
+  "command": "python3 -B scripts/verify-sou145-evidence.py --selection PRIVATE_SELECTION --archive PRIVATE_ARCHIVE --output NEW_PRIVATE_OUTPUT",
+  "dossier_sha256": "9749c1f0efe3aa08eb1053e33bbaf1c74dbe738d498038a0b98a6cf0e7de5a9f",
+  "exit_code": 1,
+  "format": "sw-sou176-verification-receipt/1",
+  "identity_blockers": 0,
+  "ledger": [
+    {
+      "counts": null,
+      "item": "install-start",
+      "observations": [
+        {
+          "counts": {
+            "passed": 4,
+            "required": 4
+          },
+          "evidence": "installed",
+          "observed_status": "pass"
+        },
+        {
+          "counts": {
+            "passed": 3,
+            "required": 3
+          },
+          "evidence": "prepared",
+          "observed_status": "pass"
+        },
+        {
+          "counts": {
+            "passed": 4,
+            "required": 4
+          },
+          "evidence": "docs-code",
+          "observed_status": "pass"
+        },
+        {
+          "counts": {
+            "passed": 4,
+            "required": 4
+          },
+          "evidence": "unicode-spaces",
+          "observed_status": "pass"
+        },
+        {
+          "counts": {
+            "passed": 4,
+            "required": 4
+          },
+          "evidence": "local-history",
+          "observed_status": "pass"
+        }
+      ],
+      "status": "pass"
+    },
+    {
+      "counts": null,
+      "item": "useful-workflows",
+      "observations": [
+        {
+          "counts": {
+            "passed": 2,
+            "required": 2
+          },
+          "evidence": "installed",
+          "observed_status": "pass"
+        },
+        {
+          "counts": {
+            "passed": 10,
+            "required": 12
+          },
+          "evidence": "matched",
+          "observed_status": "fail"
+        },
+        {
+          "counts": {
+            "passed": 0,
+            "required": 3
+          },
+          "evidence": "docs-code",
+          "observed_status": "fail"
+        },
+        {
+          "counts": {
+            "passed": 0,
+            "required": 3
+          },
+          "evidence": "unicode-spaces",
+          "observed_status": "fail"
+        },
+        {
+          "counts": {
+            "passed": 0,
+            "required": 3
+          },
+          "evidence": "local-history",
+          "observed_status": "fail"
+        }
+      ],
+      "status": "fail"
+    },
+    {
+      "counts": null,
+      "item": "refusal-zero-effects",
+      "observations": [
+        {
+          "counts": {
+            "passed": 1,
+            "required": 1
+          },
+          "evidence": "installed",
+          "observed_status": "pass"
+        },
+        {
+          "counts": {
+            "passed": 8,
+            "required": 8
+          },
+          "evidence": "matched",
+          "observed_status": "pass"
+        },
+        {
+          "counts": {
+            "passed": 0,
+            "required": 3
+          },
+          "evidence": "docs-code",
+          "observed_status": "fail"
+        },
+        {
+          "counts": {
+            "passed": 0,
+            "required": 3
+          },
+          "evidence": "unicode-spaces",
+          "observed_status": "fail"
+        },
+        {
+          "counts": {
+            "passed": 0,
+            "required": 3
+          },
+          "evidence": "local-history",
+          "observed_status": "fail"
+        }
+      ],
+      "status": "fail"
+    },
+    {
+      "counts": {
+        "passed": 15,
+        "required": 15
+      },
+      "item": "ask",
+      "observations": [
+        {
+          "counts": {
+            "passed": 15,
+            "required": 15
+          },
+          "evidence": "ask",
+          "observed_status": "pass"
+        }
+      ],
+      "status": "pass"
+    },
+    {
+      "counts": null,
+      "item": "daemon-loss",
+      "observations": [
+        {
+          "counts": {
+            "passed": 2,
+            "required": 2
+          },
+          "evidence": "installed",
+          "observed_status": "pass"
+        },
+        {
+          "counts": {
+            "passed": 1,
+            "required": 1
+          },
+          "evidence": "prepared",
+          "observed_status": "pass"
+        },
+        {
+          "counts": {
+            "passed": 1,
+            "required": 2
+          },
+          "evidence": "docs-code",
+          "observed_status": "fail"
+        },
+        {
+          "counts": {
+            "passed": 1,
+            "required": 2
+          },
+          "evidence": "unicode-spaces",
+          "observed_status": "fail"
+        },
+        {
+          "counts": {
+            "passed": 1,
+            "required": 2
+          },
+          "evidence": "local-history",
+          "observed_status": "fail"
+        }
+      ],
+      "status": "fail"
+    },
+    {
+      "counts": null,
+      "item": "cancellation-cleanup",
+      "observations": [
+        {
+          "counts": {
+            "passed": 2,
+            "required": 2
+          },
+          "evidence": "installed",
+          "observed_status": "pass"
+        },
+        {
+          "counts": {
+            "passed": 3,
+            "required": 3
+          },
+          "evidence": "prepared",
+          "observed_status": "pass"
+        },
+        {
+          "counts": {
+            "passed": 1,
+            "required": 1
+          },
+          "evidence": "docs-code",
+          "observed_status": "pass"
+        },
+        {
+          "counts": {
+            "passed": 1,
+            "required": 1
+          },
+          "evidence": "unicode-spaces",
+          "observed_status": "pass"
+        },
+        {
+          "counts": {
+            "passed": 1,
+            "required": 1
+          },
+          "evidence": "local-history",
+          "observed_status": "pass"
+        }
+      ],
+      "status": "pass"
+    },
+    {
+      "counts": null,
+      "item": "linux-platform",
+      "observations": [],
+      "status": "pass"
+    },
+    {
+      "counts": null,
+      "item": "wsl-platform",
+      "observations": [],
+      "status": "incomplete"
+    }
+  ],
+  "live_model_effectiveness": "not_measured",
+  "phase4_acceptance": false,
+  "public_release": false,
+  "qualified_identity_scopes": 50,
+  "reporter_dependencies": {
+    "benchmarks/agentdojo_protocol.py": "616b02850b348c919df5f88200a9c80f12ba61aaa1fb593412a2acf8b1695959",
+    "pilot_project_fixtures.py": "6f6857028579650652863df8351b1982c2f36296092d24bb0022f9595c0392ac",
+    "pilot_qualification.py": "7b83fee9305c3f9002af0b8985dc651f6d9ffc5f81ea1a1bc8f86a2551ee8523",
+    "pilot_runtime_identity.py": "93d560801bc86d49b8c823b618ab73619c4bb059a19b1e88d741ee09d1b56fca",
+    "roadmap_support.py": "81fa82f39e78b7315622a0714870041c877d77ced2a337109f2c080ec7bf8749"
+  },
+  "reporter_sha256": "4f97d0ad39250f86dd52b6757d9c24732a7efb933b217274bd903050aef95b03",
+  "scorecard_sha256": "250d2ebc24a6c06d494bce21f82ac4cee43351b670b1d932a64302a914e0ec91",
+  "selection_sha256": "215e25989d37d3cb180b15454648d0fbc75089da75406ab7e1e7a25972c118ce",
+  "source": {
+    "commit": "69b88976f5a68db5ebb5781589c3ee8556317ad7",
+    "dirty": false,
+    "files_sha256": "055a5a24f0e6ef6cb513590b58a42976691173271b12c5a69975d16302dc0486",
+    "tree": "e0a0adfca8907ab3b8c0fa48a9c0df03d165f573"
+  },
+  "status": "NOT_READY",
+  "transport": {
+    "artifact_sha256": "c3b0e4224ba9f79e720c137fdf5c05c7974413eb6959e5b60371816aa555f3c4",
+    "ciphertext_sha256": "ed8d080b1f365f2c9931a1d25ced9f539229f4208005809572e18b83e0e48126",
+    "format": "sw-sou176-private-envelope-receipt/1",
+    "member_count": 25,
+    "plaintext_archive_sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8",
+    "prior_attempt_archive_hashes_verified": true,
+    "private_key": "local only; never committed or transmitted",
+    "recipient_certificate_sha256": "f8eb6d0cbeb61cc180080b6554a293a7802e0fca1e2e5cf200f18a83f67db4b1",
+    "repository": "Nari-Ab/soup-wall-evidence-private",
+    "run": 40857968501,
+    "uncompressed_bytes": 4602595,
+    "visibility": "PRIVATE",
+    "workflow_commit": "a0f633c096abdcd4c50dc53d80eba13901156da2"
+  }
+}

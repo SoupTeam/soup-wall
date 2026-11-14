@@ -1,0 +1,128 @@
+{
+ "cases": [
+  {
+   "approved": true,
+   "approved_observation": "native signed grant redemption audit",
+   "binding_sha256": "d3c1715a6a8b93c1008789fd7867e81246b1ab4d18b294320e695786b172fecf",
+   "broker_ttl_seconds": 30,
+   "case": "approve",
+   "cleanup": {
+    "all_stopped": true
+   },
+   "configuration_sha256": "1741a540b8eadce06f721395ae3722a2996bd34996160e18414fd36901b2852c",
+   "configured": true,
+   "decision_attempt_at_ms": 1793791524250,
+   "decision_submitted": "approve",
+   "dispatched": 1,
+   "explicit_home_without_environment": true,
+   "first_pending_bound_met": true,
+   "first_pending_bound_ms": 5000,
+   "first_pending_ms": 1438.102058,
+   "followup": {
+    "diagnostic_flags": [],
+    "is_error": false,
+    "present": true,
+    "refusal_codes": [],
+    "result_received_at_ms": 1793791527515,
+    "sha256": "60c2ca11c81f7a227ec8cf509e429388a76c8a61990488b3e546717a93734b87"
+   },
+   "followup_decision": {
+    "decision_submitted_at_ms": 1793791526528,
+    "expires_at_ms": 1793791556505
+   },
+   "host_result_sha256": "c111b63564e629f45462b3f22a8f8cf1517386be7ba8d512228437d03af179a4",
+   "kernel_effects": 1,
+   "passed": true,
+   "pending": true,
+   "pending_expires_at_ms": 1793791553582,
+   "pending_observed_at_ms": 1793791523591,
+   "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+   "primary_refusal_codes": [],
+   "profile": "git",
+   "raw_arguments_exported": false,
+   "released": true,
+   "runtime_controls_passed": true,
+   "sample_index": 0,
+   "stage": "exact_decision"
+  },
+  {
+   "allow_peer_while_pending": true,
+   "approved": true,
+   "approved_observation": "native signed grant redemption audit",
+   "binding_sha256": "c5c04e30724cf1cc5e9a023c917a78e086b75c602f6bddf90912e27e7c1b0133",
+   "both_hosts_ready_before_proposals": true,
+   "broker_ttl_seconds": 30,
+   "case": "approve",
+   "cleanup": {
+    "all_stopped": true
+   },
+   "configuration_sha256": "1741a540b8eadce06f721395ae3722a2996bd34996160e18414fd36901b2852c",
+   "configured": true,
+   "cross_run_isolation_and_cleanup": true,
+   "decision_attempt_at_ms": 1793791539358,
+   "decision_submitted": "approve",
+   "dispatched": 1,
+   "explicit_home_without_environment": true,
+   "first_pending_bound_met": true,
+   "first_pending_bound_ms": 5000,
+   "first_pending_ms": 1479.187113,
+   "followup": {
+    "diagnostic_flags": [],
+    "is_error": false,
+    "present": true,
+    "refusal_codes": [],
+    "result_received_at_ms": 1793791540443,
+    "sha256": "60c2ca11c81f7a227ec8cf509e429388a76c8a61990488b3e546717a93734b87"
+   },
+   "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+   "kernel_effects": 1,
+   "passed": true,
+   "pending": true,
+   "pending_expires_at_ms": 1793791568057,
+   "pending_observed_at_ms": 1793791538075,
+   "policy_sha256": "fd60f9e53011d1a37cff8888b96136470a6643e2bce0e98166a8e3796b75888e",
+   "primary_refusal_codes": [],
+   "profile": "filesystem",
+   "proposals_released_at_ms": 1793791536595,
+   "raw_arguments_exported": false,
+   "released": true,
+   "runtime_controls_passed": true,
+   "sample_index": 0,
+   "stage": "exact_decision"
+  }
+ ],
+ "classifier_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+ "contract_version": "sw-pilot-ask-acceptance/1",
+ "paid_api_calls": 0,
+ "physical_human_presence_proven": false,
+ "qualification_scope": "two_profile_correctness_probe_not_performance",
+ "real_host_executed": true,
+ "scripted_owned_provider": true,
+ "selected_sha256": {
+  "agentfw": "05df6445147e4d38320fce980943a2c9dc4d9ef2e1f09298fea74743f776ca02",
+  "bwrap": "550a0623653afe734a1010ba7f8a5a58fa7332fb951eb4c856a7b8c08c725057",
+  "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+  "git": "99514a14e23788719ce0ed5eaeba29de557c1cdf7f6f8d40cc6cf5ce5fe12cdf",
+  "git_launcher": "289f480bab8e3dccd1b18d89c1e067887dae44be4244727709b2607e4a1187d8",
+  "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+  "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+  "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+ },
+ "source": {
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "dirty": false,
+  "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+ },
+ "source_after": {
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "dirty": false,
+  "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+ },
+ "status": "pass",
+ "trace_requested": {
+  "fallback_possible": true,
+  "mode": "seccomp-bpf",
+  "syscalls": "execve,openat,write,writev,clone,clone3,exit,exit_group"
+ },
+ "workspace_unchanged": true
+}

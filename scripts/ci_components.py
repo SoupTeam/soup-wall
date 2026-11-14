@@ -4,6 +4,7 @@
 The original manually dispatchable workflows remain the editable source of truth.
 Names, planner/build dependencies and the reviewed execution mode change.
 Commands, artifacts, runtime isolation and matrices stay in the source workflows.
+A bounded Ubuntu DNS fallback precedes package-installing component jobs.
 """
 from __future__ import annotations
 import argparse
@@ -35,6 +36,23 @@ jobs:
 """
 
 
+UBUNTU_MIRROR_STEP = r"""      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
+"""
+
+
 def blocks(text: str) -> dict[str, str]:
     jobs = text.split("jobs:\n", 1)[1]
     matches = list(re.finditer(r"^  ([a-z][a-z0-9-]*):\s*\n", jobs, re.M))
@@ -51,8 +69,10 @@ def generated() -> str:
         jobs = blocks(source)
         # This explicitly dispatched hour-long development exercise must never
         # enter ordinary component qualification or required admission.
-        manual = {"mcp-real-filesystem.yml": {"manual-long-session", "manual-native-result-profile"},
-                  "mcp-real-git.yml": {"manual-installed-git-profiles"},
+        manual = {"mcp-real-filesystem.yml": {"manual-long-session", "manual-native-result-profile",
+                                              "sou193-provider-preflight", "sou205-proxy-preflight",
+                                              "manual-sou194-cache-exchange", "manual-sou216-process-probe", "manual-sou225-lifecycle-preflight", "manual-linux-candidate"},
+                  "mcp-real-git.yml": {"manual-installed-git-profiles", "sou182-raw-boundary"},
                   "mcp-create-file.yml": {"reuse-plan", "reuse-qualification"}}.get(workflow, set())
         if set(jobs) != {*expected, "impact", *manual}:
             raise ValueError("Unregistered source jobs: " + workflow)
@@ -66,12 +86,18 @@ def generated() -> str:
             if before not in body:
                 raise ValueError("Missing planner condition: " + workflow)
             body = body.replace(before, "fromJSON(inputs.plan).workflows['" + workflow + "']")
-            # The selected consumers must start even when the producer failed:
-            # their explicit guard reports failure instead of skipped-green.
+            # The parent Ready job no longer waits for unrelated platforms.
+            # Every child still refuses an obsolete cancelled run. Selected
+            # build consumers may start after a failed producer only to report
+            # that failure through their existing guard and evidence upload.
+            if len(re.findall(r"(?m)^    if: ", body)) != 1 or re.search(r"(?m)^    if: >-", body):
+                raise ValueError("Unsupported component condition: " + workflow)
+            body = re.sub(r"(?m)^    if: ([^\n]+)$",
+                          lambda match: "    if: >-\n      !cancelled() && (" + match[1] + ")",
+                          body, count=1)
             if job_id in BUILD_CONSUMERS.get(workflow, ()):
                 producer = BUILD_PRODUCER[0].removesuffix(".yml") + "--" + BUILD_PRODUCER[1]
                 body = "    needs: " + producer + "\n" + body
-                body = body.replace("    if: ", "    if: always() && ", 1)
                 body = body.replace(" && github.event.inputs.build_mode != 'shared'", "", 1)
                 body = body.replace("      SOU166_MODE: source\n", "      SOU166_MODE: shared\n", 1)
                 for key, field in {"RESULT": "result", "ATTEMPT": "outputs.producer_attempt",
@@ -102,14 +128,43 @@ def generated() -> str:
                         raise ValueError("Complex implicit matrix name needs explicit support: " + workflow)
                     value += " (" + ", ".join("${{ matrix." + axis + " }}" for axis in axes) + ")"
                 body = "    name: " + json.dumps(prefix + " / " + value) + "\n" + body
+            if "apt-get" in body or "--with-deps" in body:
+                if body.count("    steps:\n") != 1:
+                    raise ValueError("Unsupported Ubuntu package setup: " + workflow)
+                body = body.replace("    steps:\n", "    steps:\n" + UBUNTU_MIRROR_STEP, 1)
             output.append("  " + prefix + "--" + job_id + ":\n" + body.rstrip() + "\n\n")
     return "".join(output)
 
 
+def inventory() -> dict[str, object]:
+    """Report the finite registered source, runner and real artifact edges."""
+    mirrored = blocks(generated())
+    rows = []
+    for workflow, jobs in WORKFLOW_JOBS.items():
+        if workflow == "ci.yml":
+            continue
+        for job in jobs:
+            mirror_id = workflow.removesuffix(".yml") + "--" + job
+            body = mirrored[mirror_id]
+            runners = re.findall(r"(?m)^    runs-on: (.+)$", body)
+            if len(runners) != 1:
+                raise ValueError("Unregistered component runner: " + mirror_id)
+            rows.append({"source_workflow": workflow, "source_job": job,
+                         "component_job": mirror_id, "runs_on": runners[0],
+                         "build_producer": (BUILD_PRODUCER[0].removesuffix(".yml") + "--" + BUILD_PRODUCER[1]
+                                            if job in BUILD_CONSUMERS.get(workflow, ()) else None)})
+    return {"schema": "sou239-component-inventory/1", "components": rows}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true")
+    options = parser.add_mutually_exclusive_group()
+    options.add_argument("--check", action="store_true")
+    options.add_argument("--inventory", action="store_true")
     args = parser.parse_args()
+    if args.inventory:
+        print(json.dumps(inventory(), sort_keys=True, separators=(",", ":")))
+        return 0
     content = generated()
     if args.check:
         if not TARGET.is_file() or TARGET.read_text(encoding="utf-8") != content:

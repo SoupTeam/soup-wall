@@ -7,6 +7,9 @@ Nothing here changes either classifier file, enables rev2 by default, or claims
 generalization. Two profiles are supported, Linux/Unix (SOU-64) and native Windows x86_64
 (SOU-81); every other platform refuses (no weaker fallback).
 
+See also [Installed tool-call preview](TOOL_PREVIEW.md): a non-executing,
+non-authoritative description of one supplied frame by this installed package.
+
 ## Platform scope
 
 | Profile | Demonstrated | Owner / access check | Process ownership |

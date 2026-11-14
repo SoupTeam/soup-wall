@@ -16,6 +16,7 @@ pub mod customer_ui;
 pub mod events;
 pub mod fleet_api;
 pub mod handlers;
+pub mod heartbeat_api;
 pub mod invitation_ui;
 pub mod managed_agent_api;
 pub mod moderation;
@@ -23,13 +24,16 @@ pub mod oidc;
 pub mod oidc_auth;
 pub mod oidc_token;
 pub mod openai;
+mod operator_audit_api;
 pub mod pipeline;
 pub mod rate_limit;
 pub mod redis_limits;
 pub mod responses;
+pub mod rollout_reconciliation;
 pub mod saml_auth;
 pub mod scim;
 pub mod spend_limit;
+pub mod stale_recovery_api;
 pub mod tenant_store;
 pub mod usage;
 
@@ -102,6 +106,18 @@ pub fn app(state: Shared) -> Router {
             .route(
                 "/agent/v1/policy/ack",
                 post(managed_agent_api::acknowledge_policy),
+            )
+            .route(
+                "/agent/v1/heartbeat/registrations",
+                post(heartbeat_api::register).layer(axum::extract::DefaultBodyLimit::max(
+                    tenant_store::agent_heartbeat::MAX_BODY_BYTES,
+                )),
+            )
+            .route(
+                "/agent/v1/heartbeats",
+                post(heartbeat_api::record).layer(axum::extract::DefaultBodyLimit::max(
+                    tenant_store::agent_heartbeat::MAX_BODY_BYTES,
+                )),
             );
         let scim_api = Router::new()
             .route("/scim/v2/ResourceTypes", get(scim::resource_types))
@@ -195,6 +211,18 @@ pub fn app(state: Shared) -> Router {
                 get(fleet_api::detail),
             )
             .route(
+                "/admin/v1/tenants/:tenant_id/agent-fleet/:agent_id/heartbeat",
+                get(heartbeat_api::status),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agent-fleet-detail",
+                get(fleet_api::selected_detail),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agent-triage",
+                get(fleet_api::triage),
+            )
+            .route(
                 "/admin/v1/tenants/:tenant_id/agents",
                 post(managed_agent_api::enroll).get(managed_agent_api::list),
             )
@@ -207,8 +235,24 @@ pub fn app(state: Shared) -> Router {
                 post(managed_agent_api::rotate_credential),
             )
             .route(
+                "/admin/v1/tenants/:tenant_id/agents/credential-rotations",
+                post(managed_agent_api::rotate_selected_credential),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/enrollment",
+                get(managed_agent_api::selected_enrollment),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/revoke",
+                post(managed_agent_api::revoke_selected_agent),
+            )
+            .route(
                 "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions",
-                post(managed_agent_api::create_revision),
+                post(managed_agent_api::create_revision).get(managed_agent_api::list_revisions),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision",
+                get(managed_agent_api::read_revision),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision/approve",
@@ -219,8 +263,46 @@ pub fn app(state: Shared) -> Router {
                 post(managed_agent_api::deploy_revision),
             )
             .route(
+                "/admin/v1/tenants/:tenant_id/agents/policy-revision",
+                get(managed_agent_api::read_selected_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/policy-revision/approve",
+                post(managed_agent_api::approve_selected_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/policy-revision/deploy",
+                post(managed_agent_api::deploy_selected_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/policy-revisions",
+                get(managed_agent_api::list_selected_revisions)
+                    .post(managed_agent_api::create_selected_revision),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/policy-deployments",
+                get(managed_agent_api::selected_deployments),
+            )
+            .route(
                 "/admin/v1/tenants/:tenant_id/agents/:agent_id/deployments",
                 get(managed_agent_api::deployments),
+            )
+            // SOU-242: owner-confirmed stale-restore recovery for one Agent.
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/stale-recovery",
+                get(stale_recovery_api::status),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/stale-recovery/preview",
+                post(stale_recovery_api::preview).layer(DefaultBodyLimit::max(
+                    crate::tenant_store::managed_stale_recovery::MAX_BODY_BYTES,
+                )),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/agents/:agent_id/stale-recovery/confirm",
+                post(stale_recovery_api::confirm).layer(DefaultBodyLimit::max(
+                    crate::tenant_store::managed_stale_recovery::MAX_BODY_BYTES,
+                )),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/groups",
@@ -252,6 +334,14 @@ pub fn app(state: Shared) -> Router {
                 "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout",
                 post(managed_agent_api::start_group_rollout)
                     .get(managed_agent_api::get_group_rollout),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/preview",
+                post(managed_agent_api::preview_group_rollout),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/reconciliation",
+                get(managed_agent_api::reconciliation_status),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/advance",
@@ -328,6 +418,10 @@ pub fn app(state: Shared) -> Router {
             .route(
                 "/admin/v1/tenants/:tenant_id/webhook-deliveries",
                 get(admin::list_webhook_deliveries),
+            )
+            .route(
+                "/admin/v1/tenants/:tenant_id/operator-audit",
+                get(operator_audit_api::history),
             )
             .route(
                 "/admin/v1/tenants/:tenant_id/audit",
@@ -547,6 +641,7 @@ pub fn test_config(base: String) -> Config {
         rate_limit: config::RateLimit::default(),
         spend_limit: config::SpendLimit::default(),
         tenant_store: config::TenantStoreConfig::default(),
+        rollout_reconciliation: Default::default(),
         redis_limits: config::RedisLimitsConfig::default(),
         capability_policy: capability::CapabilityPolicy::default(),
         output_moderation: config::OutputModeration::default(),

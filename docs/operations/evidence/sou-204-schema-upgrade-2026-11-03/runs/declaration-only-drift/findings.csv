@@ -1,0 +1,2 @@
+"finding_id","tool","area","pointer","argument_pointer","kind","nature","before","after","review_reasons","example_ids","accepted_by_analyzer"
+"F-d6783c65591bf0c6","read_text_file","declaration","","","declared_action_changed","review_required","read_only","network","Declared semantics differ between the current and proposed declarations.","E-3f4431115dce7629","false"

@@ -240,7 +240,7 @@ class Attestation(Fixture):
         code, report = self.attest(python="/nonexistent/python3")
         self.assertIn("existing absolute", self.failed(report)["interpreter"])
         code, report = self.attest(python=sys.executable, python_role="git_runtime")
-        self.assertIn("is not the pinned 3.11.14", self.failed(report)["interpreter"])
+        self.assertIn("is not the pinned 3.11.18", self.failed(report)["interpreter"])
 
     def test_old_classifier_interpreter_is_refused(self):
         pins = self.root / "profiles/toolchain/linux-pilot-toolchain.json"

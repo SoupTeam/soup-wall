@@ -9,21 +9,29 @@ pub(crate) enum SelectedView {
     LocalReferences(Arc<super::reference_view::View>),
     FileRevisions(Arc<super::revision_view::View>),
     Shallow(Arc<super::shallow_view::View>),
+    LinkedWorktree(Arc<super::shallow_view::View>),
 }
 impl SelectedView {
     pub(crate) fn validate_call(&self, tool: &str, args: &Value) -> anyhow::Result<()> {
         match self {
             Self::LocalReferences(view) => view.validate_call(tool, args),
             Self::FileRevisions(view) => view.validate_call(tool, args),
-            Self::Shallow(view) => view.validate_call(tool, args),
+            Self::Shallow(view) | Self::LinkedWorktree(view) => view.validate_call(tool, args),
         }
     }
     #[cfg(target_os = "linux")]
     pub(crate) fn capture(
         format: &str,
         workspace: &std::fs::File,
+        binding: Option<&super::linked_worktree::Binding>,
     ) -> anyhow::Result<Option<Arc<Self>>> {
         Ok(match format {
+            super::linked_worktree::FORMAT => Some(Arc::new(Self::LinkedWorktree(
+                super::shallow_view::View::capture_linked(
+                    workspace,
+                    binding.ok_or_else(|| anyhow::anyhow!("linked_worktree_binding_required"))?,
+                )?,
+            ))),
             super::LOCAL_REFS_FORMAT => Some(Arc::new(Self::LocalReferences(
                 super::reference_view::View::capture(workspace)?,
             ))),
@@ -45,7 +53,7 @@ impl SelectedView {
         match self {
             Self::LocalReferences(view) => view.mount(command, pins),
             Self::FileRevisions(view) => view.mount(command, pins),
-            Self::Shallow(view) => view.mount(command, pins),
+            Self::Shallow(view) | Self::LinkedWorktree(view) => view.mount(command, pins),
         }
     }
 }
