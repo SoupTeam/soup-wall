@@ -104,6 +104,7 @@ SCRIPTS = (
     "scripts/prepare-installed-pilot.py",
     "scripts/prepare-native-pilot-prerequisites.py",
     "scripts/qualify-installed-pilot.py",
+    "scripts/sou97_runtime_replay.py",
     "scripts/verify-sou62-real-mcp.py",
     "scripts/verify-sou62-sou63-combined.py",
     "scripts/verify-sou68-real-mcp.py",
