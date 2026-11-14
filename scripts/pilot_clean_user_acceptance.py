@@ -602,8 +602,18 @@ def qualify(a, report):
             setup_started = time.monotonic()
             code, plan, _ = door.call("preview", timeout=600)
             require(code == 0 and plan.get("executed") is False and not chosen.prefix.exists(), "clean_preview_failed")
-            code, prepared, _ = door.call("prepare", "--apply", timeout=3600)
-            require(code == 0 and prepared.get("status") == "prepared-not-active", "clean_prepare_failed")
+            code, prepared, stderr = door.call("prepare", "--apply", timeout=3600)
+            if code != 0 or prepared.get("status") != "prepared-not-active":
+                diagnostic = {"source": runtime_identity, "project": name, "exit": code,
+                              "report": prepared, "stderr": stderr[-16384:]}
+                raw = canonical(diagnostic)
+                if len(raw) <= 128 * 1024:
+                    report["prepare_failure_custody"] = custody.retain(a.output, "prepare-failure.json", raw)
+                report["prepare_failure"] = {"exit": code, **{
+                    key: text for key in ("status", "stage", "reason")
+                    if isinstance(text := prepared.get(key), str)
+                    and re.fullmatch(r"[a-z][a-z0-9_-]{0,95}", text)}}
+                require(False, "clean_prepare_failed")
             code, repeated, _ = door.call("prepare", "--apply", inputs=False, timeout=900)
             require(code == 0 and repeated.get("status") == "reused", "clean_prepare_reuse_failed")
             selection = Path(prepared["selection"])
