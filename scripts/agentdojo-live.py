@@ -163,7 +163,7 @@ def main():
         if args.plan is None:
             parser.error("Plan check requires --plan")
         sanitize_environment()
-        result = check_plan(args.upstream_checkout, args.plan.read_bytes(), repo, args.case_manifest)
+        result = check_plan(args.upstream_checkout, args.plan.read_bytes(), repo, args.case_manifest, args.plan_set)
         print(json.dumps(result, indent=2))
         if result["errors"]:
             raise adapter.AdapterError("Frozen plan does not reproduce from the pinned upstream source")
@@ -317,7 +317,7 @@ def freeze_plan(checkout, spec_bytes):
     return ordered
 
 
-def check_plan(checkout, plan_bytes, repo, case_manifest_path=None):
+def check_plan(checkout, plan_bytes, repo, case_manifest_path=None, plan_set=None):
     """Re-derive a frozen plan's selection and injection hashes from the pinned upstream source."""
     plan = protocol.load_plan(plan_bytes, adapter.REVISION)
     upstream = adapter.load_upstream(checkout)
@@ -340,13 +340,13 @@ def check_plan(checkout, plan_bytes, repo, case_manifest_path=None):
             "live_gate_blockers": {name: protocol.live_gate(plan, name) for name in protocol.SETS},
             "model_calls": 0}
     if case_manifest_path is not None:
-        result["case_manifest"] = bind_case_manifest(checkout, plan, case_manifest_path)
+        result["case_manifest"] = bind_case_manifest(checkout, plan, case_manifest_path, plan_set)
     return result
 
 
-def bind_case_manifest(checkout, plan, path):
+def bind_case_manifest(checkout, plan, path, plan_set=None):
     try:
-        value = case_manifest.verify(checkout, path, plan)
+        value = case_manifest.verify(checkout, path, plan, plan_set)
     except (case_manifest.Invalid, OSError, subprocess.SubprocessError, UnicodeError) as error:
         raise adapter.AdapterError("Case manifest is unavailable or inconsistent with the pinned public plan") from error
     return {**value, "verifier_source_sha256": adapter.digest(CASE_MANIFEST_BYTES)}
@@ -403,7 +403,7 @@ def run_live(args, repo):
         if blockers:
             raise LiveGateClosed(blockers)
         if manifest_path is not None:
-            manifest_binding = bind_case_manifest(args.upstream_checkout, plan, manifest_path)
+            manifest_binding = bind_case_manifest(args.upstream_checkout, plan, manifest_path, plan_set)
     else:
         if plan_set is not None:
             raise adapter.AdapterError("--plan-set requires a schema 2 frozen plan")
@@ -587,7 +587,7 @@ def run_live(args, repo):
         report["selection"].update(repetitions=plan["sets"][plan_set]["repetitions"], attack=plan["attack"]["name"])
     if manifest_binding is not None:
         adapter.verify_checkout(args.upstream_checkout)
-        if bind_case_manifest(args.upstream_checkout, plan, manifest_path) != manifest_binding:
+        if bind_case_manifest(args.upstream_checkout, plan, manifest_path, plan_set) != manifest_binding:
             raise adapter.AdapterError("Frozen case manifest changed during measurement")
         report["case_manifest"] = manifest_binding
     if native_registry is not None:

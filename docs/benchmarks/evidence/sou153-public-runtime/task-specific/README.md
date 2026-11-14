@@ -58,11 +58,14 @@ verified inventory. The labels must agree with the existing plan. A separate,
 genuinely observed unknown-outcome annotation would need its own original
 run SHA and observation. No source reports such an outcome here.
 
-The current producer's optional `--case-manifest src/ &` validates a tracked,
+The producer's optional `--case-manifest src/paired-cases.json --plan-set development` validates a tracked,
 owner-supplied manifest before the matched development run reads provider
 credentials. It retains the manifest and verifier digests in the original run
 report, and rechecks the upstream inventory after measurement. The
 current public checkout cannot supply that file at its pinned revision.
-A reviewed upstream revision containing that manifest and two fresh matched
-runs are required for a fully bound comparator report. The historic pinned
+A development-only manifest covers the 16 measured public cases. A
+plan-check without a selected set still checks coverage of every frozen set.
+A reviewed upstream revision containing that manifest, an explicit update to
+the producer's upstream pin, and two fresh matched runs are required for a
+fully bound comparator report. The historic pinned
 runs above keep their original bytes and attribution.

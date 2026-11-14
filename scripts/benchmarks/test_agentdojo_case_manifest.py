@@ -51,6 +51,13 @@ class CaseManifestTest(unittest.TestCase):
                 with self.assertRaises(manifest.Invalid):
                     manifest.verify(root, name, self.plan)
 
+    def test_manifest_can_cover_development_without_fresh_evaluation(self):
+        self.plan["sets"]["fresh_evaluation"] = {"cases": [{**self.case, "case_id": "fresh/benign"}]}
+        self.assertEqual(manifest.validate(self.encode(), self.plan, self.files, "development"), 1)
+        for plan_set in (None, "fresh_evaluation"):
+            with self.subTest(plan_set=plan_set), self.assertRaises(manifest.Invalid):
+                manifest.validate(self.encode(), self.plan, self.files, plan_set)
+
     def test_source_record_outside_bound_inventory_rejects(self):
         changed = copy.deepcopy(self.data)
         changed["cases"][0]["environment_file"] = "src/untracked"

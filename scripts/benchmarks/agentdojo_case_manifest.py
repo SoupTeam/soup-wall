@@ -30,7 +30,7 @@ def source_path(value, inventory):
     return value
 
 
-def validate(raw, plan, inventory):
+def validate(raw, plan, inventory, plan_set=None):
     check(len(raw) <= MANIFEST_LIMIT, "case manifest exceeds its byte limit")
     try:
         manifest = protocol.strict_json(raw)
@@ -40,6 +40,7 @@ def validate(raw, plan, inventory):
           manifest["schema"] == SCHEMA and manifest["suite"] == plan["upstream"]["suite"],
           "manifest schema or suite differs from the frozen plan")
     planned = {row["case_id"]: row for entry in plan["sets"].values() for row in entry["cases"]}
+    required = set(planned) if plan_set is None else {row["case_id"] for row in plan["sets"][plan_set]["cases"]}
     rows = manifest["cases"]
     check(type(rows) is list and 0 < len(rows) <= CASE_LIMIT, "invalid case manifest inventory")
     seen = set()
@@ -57,11 +58,11 @@ def validate(raw, plan, inventory):
         source_path(row["user_task_file"], inventory)
         source_path(row["environment_file"], inventory)
         seen.add(key)
-    check(seen == set(planned), "case manifest does not cover the frozen inventory")
+    check(required <= seen, "case manifest does not cover the selected frozen set")
     return len(seen)
 
 
-def verify(checkout, path, plan):
+def verify(checkout, path, plan, plan_set=None):
     result = subprocess.run(
         ["git", "-C", str(checkout), "ls-files", "src"], check=True, capture_output=True, timeout=15)
     check(len(result.stdout) <= MANIFEST_LIMIT, "source inventory byte limit")
@@ -69,4 +70,4 @@ def verify(checkout, path, plan):
     selected = checkout / source_path(path, inventory)
     with selected.open("rb") as source:
         raw = source.read(MANIFEST_LIMIT + 1)
-    return {"path": path, "sha256": protocol.digest(raw), "case_count": validate(raw, plan, inventory)}
+    return {"path": path, "sha256": protocol.digest(raw), "case_count": validate(raw, plan, inventory, plan_set)}
