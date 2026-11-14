@@ -23,6 +23,20 @@ Exit codes: 0 = all scored cases pass, no technical errors, no constraint violat
 usage:
   python3 eval_runner.py FIXTURE.json [FIXTURE.json ...] --classifier-path DIR \
       [--classifier rule_baseline:classify] [--out-dir results]
+
+SOU-97 pilot report (additive; the default mode above is unchanged):
+  python3 eval_runner.py MATRIX.json --pilot-report --pilot-candidate FILE \
+      --pilot-baseline filesystem=FILE --pilot-baseline git=FILE [--pilot-expect LABEL=SHA256 ...] \
+      [--latency-calls N] [--latency-spawns N] [--source-commit SHA --source-repo DIR] --out-dir DIR
+  Scores each profile's cases with its selected baseline and with the candidate, using the same
+  evaluate_case() rules, and measures batch-1 latency with rule_baseline/evaluate_dev.py. It is a
+  measurement, not an acceptance decision: it never reports native policy verdicts or execution
+  effects. Exit 0 = report written; 3 = usage or fixture error; 4 = an identity was missing,
+  differed from --pilot-expect, or drifted during the run (no report is written).
+  Provenance: in a git checkout the report records HEAD, tracked/untracked changes and whether every
+  input's raw bytes equal its committed blob at HEAD (recorded, never normalized). Outside a checkout,
+  git.head stays null; --source-commit/--source-repo then verify every input byte against that commit
+  in the real repository and exit 4 on any difference. Without either, provenance is "unverified".
 """
 from __future__ import annotations
 
@@ -31,11 +45,14 @@ import copy
 import csv
 import hashlib
 import importlib
+import importlib.util
 import io
 import json
 import math
+import os
 import platform
 import re
+import subprocess
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -395,6 +412,459 @@ def render_csv(recs: list[dict]) -> str:
     return buf.getvalue()
 
 
+# ---------------------------------------------------------------- SOU-97 pilot report (additive)
+RISKY = ("write", "delete", "send_data", "change_permissions")
+PILOT_PROFILES = ("filesystem", "git")
+REPO = Path(__file__).resolve().parents[1]
+# Profile and policy identities recorded with every pilot report (raw bytes, never normalized).
+PILOT_IDENTITY_FILES = (
+    "profiles/mcp/filesystem-readonly-v1/policy.yaml",
+    "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+    "profiles/mcp/filesystem-readonly-v1/upstream-identity.json",
+    "profiles/mcp/git-readonly-v1/policy.yaml",
+    "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+    "profiles/mcp/git-readonly-v1/upstream-identity.json",
+)
+NOT_MEASURED = {"status": "not_measured",
+                "note": "offline classification only; native policy verdicts and execution effects come only "
+                        "from real runtime runs and are never derived from classifier predictions"}
+SAFETY_NOT_PROVEN_READ = "must_not_be_classified_read_with_unknown_false"
+
+
+class IdentityError(RuntimeError):
+    """A required identity is missing, differs from the expected digest, or drifted during the run."""
+
+
+def _load_evaluate_dev():
+    """The existing SOU-14 snapshot/latency machinery, loaded from its source file (no bytecode cache)."""
+    path = REPO / "rule_baseline" / "evaluate_dev.py"
+    if not path.is_file():
+        raise IdentityError("missing rule_baseline/evaluate_dev.py")
+    sys.dont_write_bytecode = True
+    spec = importlib.util.spec_from_file_location("evaluate_dev_for_pilot_report", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module, path
+
+
+def _git_state() -> dict:
+    try:
+        top = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--show-toplevel"], capture_output=True,
+                             text=True, timeout=10, check=True).stdout.strip()
+        if Path(top).resolve() != REPO.resolve():
+            raise subprocess.SubprocessError("runner is not at the root of its own checkout")
+        head = subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"], capture_output=True, text=True,
+                              timeout=10, check=True).stdout.strip()
+        status = subprocess.run(["git", "-C", str(REPO), "status", "--porcelain"], capture_output=True, text=True,
+                                timeout=60, check=True).stdout.splitlines()
+        return {"head": head, "tracked_changes": any(not line.startswith("??") for line in status),
+                "untracked_files": any(line.startswith("??") for line in status)}
+    except (OSError, subprocess.SubprocessError):
+        return {"head": None, "tracked_changes": None, "untracked_files": None, "note": "not a usable git checkout"}
+
+
+def _committed_sha256(repo: Path, commit: str, rel: str) -> str | None:
+    """sha256 of the raw committed blob (git cat-file applies no filters), or None if it is absent."""
+    try:
+        done = subprocess.run(["git", "-C", str(repo), "cat-file", "blob", f"{commit}:{rel}"], capture_output=True,
+                              timeout=60, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return hashlib.sha256(done.stdout).hexdigest() if done.returncode == 0 else None
+
+
+def _relative(path) -> str | None:
+    try:
+        return Path(path).resolve().relative_to(REPO.resolve()).as_posix()
+    except ValueError:
+        return None
+
+
+OUTSIDE_TREE = "outside-source-tree/"  # an input that no commit of this tree can identify
+
+
+def _provenance(files: dict[str, str], git: dict, source_commit: str | None, source_repo: str | None) -> dict:
+    """Bind every input's raw bytes to a commit, or say plainly that no commit was verified."""
+    if source_commit:
+        repo = Path(source_repo)
+        try:
+            commit = subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", f"{source_commit}^{{commit}}"],
+                                    capture_output=True, text=True, timeout=10, check=True).stdout.strip()
+        except (OSError, subprocess.SubprocessError) as e:
+            raise IdentityError(f"--source-commit {source_commit} is not a commit in --source-repo") from e
+        rows = {}
+        for rel, digest in files.items():
+            committed = None if rel.startswith(OUTSIDE_TREE) else _committed_sha256(repo, commit, rel)
+            if committed != digest:
+                raise IdentityError(f"{rel}: sha256 {digest} differs from {commit}:{rel} ({committed})")
+            rows[rel] = {"sha256": digest, "committed_sha256": committed, "matches_commit": True}
+        return {"mode": "exported_bytes_verified_against_commit", "source_commit": commit, "files": rows,
+                "all_match": True, "note": "the run did not execute in a checkout; git.head is null by design"}
+    if git.get("head"):
+        rows = {}
+        for rel, digest in files.items():
+            committed = None if rel.startswith(OUTSIDE_TREE) else _committed_sha256(REPO, git["head"], rel)
+            rows[rel] = {"sha256": digest, "committed_sha256": committed, "matches_commit": committed == digest}
+        return {"mode": "checkout", "source_commit": git["head"], "tracked_changes": git["tracked_changes"],
+                "untracked_files": git["untracked_files"], "files": rows,
+                "all_match": all(r["matches_commit"] for r in rows.values())}
+    return {"mode": "unverified", "source_commit": None, "files": {rel: {"sha256": d} for rel, d in files.items()},
+            "all_match": None, "note": "not a git checkout and no --source-commit; no commit provenance is claimed"}
+
+
+def _environment() -> dict:
+    return {"python": platform.python_version(), "implementation": platform.python_implementation(),
+            "platform": platform.platform(), "machine": platform.machine(), "processor": platform.processor(),
+            "cpu_count": os.cpu_count(), "executable": Path(sys.executable).name}
+
+
+def _ratio4(a: int, b: int):
+    return round(a / b, 4) if b else None
+
+
+def _uncertainty(r: dict):
+    out = r.get("raw_output")
+    return out.get("uncertainty") if isinstance(out, dict) else None
+
+
+def _benign_supported(r: dict, meta: dict) -> bool:
+    return (meta["profile_admission"] == "admit" and r["expected_technical_failure"] is None
+            and not set(r["expected_actions"] or []) & set(RISKY) and r["expected_unknown"] is False)
+
+
+def _interrupted(r: dict) -> list[str]:
+    """Classification signals the native mapping does not allow (admission.rs); a signal, not a verdict."""
+    if r["technical_error"]:
+        return ["technical_error"]
+    reasons = []
+    if r["predicted_unknown"]:
+        reasons.append("unknown")
+    u = _uncertainty(r)
+    if isinstance(u, (int, float)) and u >= 0.8:
+        reasons.append("uncertainty>=0.8")
+    risky = [a for a in RISKY if a in r["predicted_actions"]]
+    if risky:
+        reasons.append("risky_action:" + "+".join(risky))
+    return reasons
+
+
+def pilot_metrics(recs: list[dict], meta: dict[str, dict]) -> dict:
+    """Classification metrics for one profile and one classifier (scored cases; pending observed only)."""
+    scored = [r for r in recs if r["expectation_status"] in SCORED]
+    cls = [r for r in scored if r["expected_technical_failure"] is None]
+    valid = [r for r in cls if r["technical_error"] is None]
+    per_action = {}
+    for a in ACTIONS:
+        tp = sum(a in r["expected_actions"] and a in r["predicted_actions"] for r in valid)
+        fp = sum(a not in r["expected_actions"] and a in r["predicted_actions"] for r in valid)
+        fn = sum(a in r["expected_actions"] and a not in r["predicted_actions"] for r in valid)
+        per_action[a] = {"known_labels": len(valid), "known_positive": tp + fn, "predicted_positive": tp + fp,
+                         "tp": tp, "fp": fp, "fn": fn, "precision": _ratio4(tp, tp + fp), "recall": _ratio4(tp, tp + fn)}
+    known_effect = [r for r in valid if r["expected_unknown"] is False]
+    expected_unknown = [r for r in valid if r["expected_unknown"] is True]
+    abstained = [r for r in known_effect if r["predicted_unknown"]]
+    mixed = [r for r in valid if len(r["expected_actions"]) > 1]
+    benign = [r for r in valid if _benign_supported(r, meta[r["id"]])]
+    pending = [r for r in recs if r["outcome"] == "unscored"]
+    return {
+        "cases": len(recs), "scored": len(scored), "unscored": len(pending),
+        "pass": sum(r["outcome"] == "pass" for r in scored), "fail": sum(r["outcome"] == "fail" for r in scored),
+        "technical_error": sum(r["outcome"] == "technical_error" for r in scored),
+        "failed_ids": sorted(r["id"] for r in scored if r["outcome"] != "pass"),
+        "per_action": per_action,
+        "known_risk_misses": [{"id": r["id"], "missing": [a for a in RISKY if a in r["missing"]],
+                               "predicted_actions": r["predicted_actions"], "predicted_unknown": r["predicted_unknown"]}
+                              for r in valid if set(r["missing"]) & set(RISKY)],
+        "mixed_action": {"cases": len(mixed), "exact": sum(bool(r["actions_match"] and r["unknown_match"]) for r in mixed),
+                         "actions_exact": sum(bool(r["actions_match"]) for r in mixed),
+                         "failed_ids": sorted(r["id"] for r in mixed if not (r["actions_match"] and r["unknown_match"]))},
+        "abstention": {
+            "known_effect_cases": len(known_effect), "abstained": len(abstained),
+            "partial_unknown": sorted(r["id"] for r in abstained if r["predicted_actions"]),
+            "full_unknown": sorted(r["id"] for r in abstained if not r["predicted_actions"]),
+            "expected_unknown_cases": len(expected_unknown),
+            "expected_unknown_covered": sum(bool(r["predicted_unknown"]) for r in expected_unknown),
+            "expected_unknown_missed": sorted(r["id"] for r in expected_unknown if not r["predicted_unknown"]),
+        },
+        "technical_failures": {
+            "unexpected": [{"id": r["id"], "error": r["technical_error"]} for r in cls if r["technical_error"]],
+            "expected_d06": [{"id": r["id"], "expected": r["expected_technical_failure"],
+                              "observed_channel": r["failure_channel"], "masked_as_classification": r["masked_failure"],
+                              "predicted_actions": r["predicted_actions"], "predicted_unknown": r["predicted_unknown"],
+                              "outcome": r["outcome"]} for r in scored if r["expected_technical_failure"]],
+        },
+        "supported_benign": {"cases": len(benign),
+                             "false_interruptions": [{"id": r["id"], "reasons": _interrupted(r)}
+                                                     for r in benign if _interrupted(r)]},
+        "pending_observed": [{"id": r["id"], "predicted_actions": r["predicted_actions"],
+                              "predicted_unknown": r["predicted_unknown"], "technical_error": r["technical_error"],
+                              "safety_expectation": meta[r["id"]].get("safety_expectation"),
+                              "safety_expectation_violated": bool(
+                                  meta[r["id"]].get("safety_expectation") == SAFETY_NOT_PROVEN_READ
+                                  and r["technical_error"] is None and r["predicted_actions"] == ["read"]
+                                  and r["predicted_unknown"] is False)} for r in pending],
+    }
+
+
+def pilot_compare(before: dict, after: dict) -> dict:
+    def ids(metrics, *path):
+        node = metrics
+        for key in path:
+            node = node[key]
+        return {x["id"] for x in node}
+    return {
+        "newly_failing": sorted(set(after["failed_ids"]) - set(before["failed_ids"])),
+        "newly_passing": sorted(set(before["failed_ids"]) - set(after["failed_ids"])),
+        "new_known_risk_misses": sorted(ids(after, "known_risk_misses") - ids(before, "known_risk_misses")),
+        "new_unexpected_technical_failures": sorted(ids(after, "technical_failures", "unexpected")
+                                                    - ids(before, "technical_failures", "unexpected")),
+        "new_expected_d06_mismatches": sorted({x["id"] for x in after["technical_failures"]["expected_d06"] if x["outcome"] != "pass"}
+                                              - {x["id"] for x in before["technical_failures"]["expected_d06"] if x["outcome"] != "pass"}),
+        "new_supported_benign_false_interruptions": sorted(ids(after, "supported_benign", "false_interruptions")
+                                                           - ids(before, "supported_benign", "false_interruptions")),
+        "new_pending_safety_violations": sorted({x["id"] for x in after["pending_observed"] if x["safety_expectation_violated"]}
+                                                - {x["id"] for x in before["pending_observed"] if x["safety_expectation_violated"]}),
+    }
+
+
+def _sha_file(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError as e:
+        raise IdentityError(f"missing identity input {path.name}: {e.strerror}") from e
+
+
+CASE_FIELDS = ("id", "group", "outcome", "expected_actions", "expected_unknown", "predicted_actions", "predicted_unknown",
+               "missing", "spurious", "technical_error", "expected_technical_failure", "failure_channel", "masked_failure")
+
+
+def run_pilot(fixture_paths: list[str], candidate: str, baselines: dict[str, str], expect: dict[str, str],
+              calls: int, spawns: int, source_commit: str | None = None, source_repo: str | None = None) -> dict:
+    dev, dev_path = _load_evaluate_dev()
+    identities = {"eval/eval_runner.py": _sha_file(Path(__file__)), "rule_baseline/evaluate_dev.py": _sha_file(dev_path)}
+    for rel in PILOT_IDENTITY_FILES:
+        identities[rel] = _sha_file(REPO / rel)
+    fixtures, cases = [], []
+    for p in fixture_paths:
+        raw = Path(p).read_bytes()
+        data = json.loads(raw.decode("utf-8"))
+        errs = validate_fixture(data, Path(p).name)
+        bad = [c.get("id") if isinstance(c, dict) else None for c in data.get("cases", [])
+               if not isinstance(c, dict) or not isinstance(c.get("evaluator_only"), dict)
+               or c["evaluator_only"].get("profile") not in PILOT_PROFILES or "profile_admission" not in c["evaluator_only"]]
+        if bad:
+            errs.append(f"{Path(p).name}: pilot cases need evaluator_only.profile and profile_admission: {bad[:5]}")
+        if errs:
+            raise ValueError("; ".join(errs))
+        fixtures.append({"file": Path(p).name, "path": p, "fixture_version": data["fixture_version"],
+                         "sha256": hashlib.sha256(raw).hexdigest()})
+        cases += [(data["fixture_version"], c) for c in data["cases"]]
+    ids = [c["id"] for _, c in cases]
+    if len(ids) != len(set(ids)):
+        raise ValueError("duplicate case ids across pilot fixtures")
+    meta = {c["id"]: c["evaluator_only"] for _, c in cases}
+
+    subjects = {"candidate": candidate, **{f"baseline_{k}": baselines[k] for k in PILOT_PROFILES}}
+    snaps = {}
+    try:
+        for label, path in subjects.items():
+            try:
+                snaps[label] = dev.Snapshot(path, label)
+            except OSError as e:
+                raise IdentityError(f"{label}: cannot read {path}: {e.strerror}") from e
+            want = expect.get(label)
+            if want is not None and snaps[label].sha256 != want:
+                raise IdentityError(f"{label}: {Path(path).name} sha256 {snaps[label].sha256} differs from expected {want}")
+        inputs = dict(identities)
+        for item, digest in [(path, snaps[label].sha256) for label, path in subjects.items()] + \
+                [(f["path"], f["sha256"]) for f in fixtures]:
+            inputs[_relative(item) or OUTSIDE_TREE + Path(item).name] = digest
+        git = _git_state()
+        report = {
+            "kind": "sou97-pilot-report", "report_version": 2, "environment": _environment(), "git": git,
+            "provenance": _provenance(inputs, git, source_commit, source_repo),
+            "identities": identities,
+            "fixtures": [{k: v for k, v in f.items() if k != "path"} for f in fixtures],
+            "classifiers": {label: {"file": Path(path).name, "sha256": snaps[label].sha256,
+                                    "expected_sha256": expect.get(label),
+                                    "revision": snaps[label].classify.__globals__.get("REVISION")}
+                            for label, path in subjects.items()},
+            "native_policy": NOT_MEASURED, "execution_effects": NOT_MEASURED,
+            "latency_parameters": {"calls": calls, "spawns": spawns, "batch_size": 1,
+                                   "request_timeout_s": dev.REQUEST_TIMEOUT_S,
+                                   "bridge_inner_timeout_ms": dev.BRIDGE_INNER_TIMEOUT_MS,
+                                   "workload": "the profile's admitted cases (profile_admission=admit), cycled in order",
+                                   "source": "rule_baseline/evaluate_dev.py latency()"},
+            "profiles": {},
+        }
+        for profile in PILOT_PROFILES:
+            prof_cases = [(v, c) for v, c in cases if meta[c["id"]]["profile"] == profile]
+            admitted = [{"input": c["input"]} for _, c in prof_cases if meta[c["id"]]["profile_admission"] == "admit"]
+            entry = {"selected_baseline": f"baseline_{profile}", "cases": len(prof_cases),
+                     "latency_workload": {"cases": len(admitted), "sha256": hashlib.sha256(json.dumps(
+                         [x["input"] for x in admitted], sort_keys=True, ensure_ascii=False).encode()).hexdigest()}}
+            for role, label in (("before", f"baseline_{profile}"), ("after", "candidate")):
+                recs = [evaluate_case(c, snaps[label].classify, v) for v, c in prof_cases]
+                entry[role] = {"classifier": label, "metrics": pilot_metrics(recs, meta),
+                               "cases": [{**{k: r[k] for k in CASE_FIELDS}, "uncertainty": _uncertainty(r)} for r in recs],
+                               "latency": (dev.latency(snaps[label], {"admitted": admitted}, calls, spawns)
+                                           if admitted and (calls > 0 or spawns > 0) else {"status": "not_measured"})}
+            entry["comparison"] = pilot_compare(entry["before"]["metrics"], entry["after"]["metrics"])
+            report["profiles"][profile] = entry
+        # Fail closed on drift: classifiers (on disk and as executed), fixtures, evaluators and identities.
+        for snap in snaps.values():
+            try:
+                snap.verify_unchanged()
+            except dev.SourceDrift as e:
+                raise IdentityError(str(e)) from e
+        for f in fixtures:
+            if _sha_file(Path(f["path"])) != f["sha256"]:
+                raise IdentityError(f"{f['file']} changed during the run")
+        if (_sha_file(Path(__file__)) != identities["eval/eval_runner.py"]
+                or _sha_file(dev_path) != identities["rule_baseline/evaluate_dev.py"]):
+            raise IdentityError("evaluator source changed during the run")
+        for rel in PILOT_IDENTITY_FILES:
+            if _sha_file(REPO / rel) != identities[rel]:
+                raise IdentityError(f"{rel} changed during the run")
+        report["drift_check"] = "passed: classifier, executed snapshot, fixture, evaluator and profile/policy bytes unchanged"
+        return report
+    finally:
+        for snap in snaps.values():
+            snap.close()
+
+
+def _pct(x):
+    return "n/a" if x is None else f"{x * 100:.1f}%"
+
+
+def _lat(entry: dict, mode: str) -> str:
+    m = entry["latency"].get(mode)
+    if not m:
+        return "not measured"
+    vals = f"p50 {m['p50_ms']} ms, p95 {m['p95_ms']} ms" if "p50_ms" in m else "no valid sample"
+    return f"{vals} ({m['valid']}/{m['attempts']} valid, {m['failed']} failed, {m['timed_out']} timed out)"
+
+
+def _ids(items) -> str:
+    return ", ".join(x if isinstance(x, str) else x["id"] for x in items) or "none"
+
+
+def render_pilot_markdown(rep: dict) -> str:
+    env, g = rep["environment"], rep["git"]
+    L = ["# SOU-97 pilot classifier report", "",
+         "Offline classification measurement on development data. This is **not** an acceptance decision and "
+         "**not** a runtime result: native policy verdicts and execution effects were not measured and are never "
+         "derived from these predictions. Latency depends on the host.", "",
+         "## Identities", "", "| item | sha256 |", "|---|---|"]
+    for label, c in rep["classifiers"].items():
+        L.append(f"| {label}: `{c['file']}`, revision {c['revision'] or 'none'} | `{c['sha256']}` |")
+    for f in rep["fixtures"]:
+        L.append(f"| fixture `{f['file']}` ({f['fixture_version']}) | `{f['sha256']}` |")
+    for rel, digest in rep["identities"].items():
+        L.append(f"| `{rel}` | `{digest}` |")
+    prov = rep["provenance"]
+    L += ["", f"Provenance: mode `{prov['mode']}`, source commit `{prov['source_commit']}`, every input byte matches "
+          f"that commit: {prov['all_match']}." + (f" {prov['note']}." if prov.get("note") else "")]
+    L += ["", f"Git HEAD `{g.get('head')}`, tracked changes: {g.get('tracked_changes')}, untracked files: "
+          f"{g.get('untracked_files')}. Host: {env['platform']}, "
+          f"Python {env['python']} ({env['implementation']}), {env['cpu_count']} CPUs. Drift check {rep['drift_check']}.",
+          "", f"Latency: batch size 1, {rep['latency_parameters']['calls']} in-process and warm calls, "
+          f"{rep['latency_parameters']['spawns']} cold spawns per classifier and profile; request timeout "
+          f"{rep['latency_parameters']['request_timeout_s']} s; the bridge's inner timeout is "
+          f"{rep['latency_parameters']['bridge_inner_timeout_ms']} ms. Only valid completed exchanges are timed; "
+          "failed and timed-out attempts are counted.", ""]
+    for profile, e in rep["profiles"].items():
+        b, a = e["before"]["metrics"], e["after"]["metrics"]
+        d06 = lambda m: sum(x["outcome"] != "pass" for x in m["technical_failures"]["expected_d06"])  # noqa: E731
+        L += [f"## Profile: {profile}", "",
+              f"Before: `{e['before']['classifier']}`. After: `candidate`. {e['cases']} cases, {b['scored']} scored, "
+              f"{b['unscored']} pending (observed only). Latency workload: {e['latency_workload']['cases']} admitted cases.", "",
+              "| measure | before | after |", "|---|---|---|",
+              f"| scored pass | {b['pass']}/{b['scored']} | {a['pass']}/{a['scored']} |",
+              f"| known-risk misses | {_ids(b['known_risk_misses'])} | {_ids(a['known_risk_misses'])} |",
+              f"| mixed-action exact | {b['mixed_action']['exact']}/{b['mixed_action']['cases']} | "
+              f"{a['mixed_action']['exact']}/{a['mixed_action']['cases']} |",
+              f"| abstained on known-effect cases | {b['abstention']['abstained']}/{b['abstention']['known_effect_cases']} | "
+              f"{a['abstention']['abstained']}/{a['abstention']['known_effect_cases']} |",
+              f"| of which partial unknown | {len(b['abstention']['partial_unknown'])} | {len(a['abstention']['partial_unknown'])} |",
+              f"| expected-unknown cases covered | {b['abstention']['expected_unknown_covered']}/{b['abstention']['expected_unknown_cases']} | "
+              f"{a['abstention']['expected_unknown_covered']}/{a['abstention']['expected_unknown_cases']} |",
+              f"| unexpected technical failures | {len(b['technical_failures']['unexpected'])} | {len(a['technical_failures']['unexpected'])} |",
+              f"| expected D06 failures not met | {d06(b)}/{len(b['technical_failures']['expected_d06'])} | "
+              f"{d06(a)}/{len(a['technical_failures']['expected_d06'])} |",
+              f"| supported benign false interruptions | {len(b['supported_benign']['false_interruptions'])}/{b['supported_benign']['cases']} | "
+              f"{len(a['supported_benign']['false_interruptions'])}/{a['supported_benign']['cases']} |",
+              f"| warm batch-1 round trip | {_lat(e['before'], 'warm_process_round_trip')} | {_lat(e['after'], 'warm_process_round_trip')} |",
+              f"| cold process per call | {_lat(e['before'], 'cold_process_per_call')} | {_lat(e['after'], 'cold_process_per_call')} |",
+              f"| in-process call | {_lat(e['before'], 'in_process_call')} | {_lat(e['after'], 'in_process_call')} |",
+              "", "Per-action precision and recall on known labels. Each cell gives P, R, then (TP, FP, FN; known labels).", "",
+              "| action | before | after |", "|---|---|---|"]
+        for act in ACTIONS:
+            fmt = lambda p: f"P {_pct(p['precision'])}, R {_pct(p['recall'])} ({p['tp']}, {p['fp']}, {p['fn']}; {p['known_labels']})"  # noqa: E731
+            L.append(f"| {act} | {fmt(b['per_action'][act])} | {fmt(a['per_action'][act])} |")
+        c = e["comparison"]
+        L += ["", "Changes against the selected baseline:", ""]
+        L += [f"- {k.replace('_', ' ')}: {_ids(v)}" for k, v in c.items()]
+        L += ["", "Retained as they are, not relabelled:", "",
+              "- known-risk misses after: " + ("; ".join(
+                  f"{x['id']} misses {'+'.join(x['missing'])} (predicted {x['predicted_actions']}, unknown={x['predicted_unknown']})"
+                  for x in a["known_risk_misses"]) or "none"),
+              "- expected D06 failures not met after: " + ("; ".join(
+                  f"{x['id']} " + ("masked as a classification" if x["masked_as_classification"] else f"via {x['observed_channel']}")
+                  for x in a["technical_failures"]["expected_d06"] if x["outcome"] != "pass") or "none"),
+              "- supported benign false interruptions after: " + ("; ".join(
+                  f"{x['id']} ({', '.join(x['reasons'])})" for x in a["supported_benign"]["false_interruptions"]) or "none"),
+              ""]
+    L += ["## Not measured", "", "- Native policy verdicts: not measured.", "- Execution effects: not measured.", ""]
+    return "\n".join(L)
+
+
+def pilot_main(a) -> int:
+    baselines = {}
+    for item in a.pilot_baseline or []:
+        profile, _, path = item.partition("=")
+        if profile not in PILOT_PROFILES or not path or profile in baselines:
+            print(f"usage error: --pilot-baseline must be PROFILE=FILE once per profile {PILOT_PROFILES}", file=sys.stderr)
+            return 3
+        baselines[profile] = path
+    if set(baselines) != set(PILOT_PROFILES) or not a.pilot_candidate:
+        print("usage error: --pilot-report needs --pilot-candidate and one --pilot-baseline per profile", file=sys.stderr)
+        return 3
+    expect = {}
+    for item in a.pilot_expect or []:
+        label, _, digest = item.partition("=")
+        if label not in ("candidate", "baseline_filesystem", "baseline_git") or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            print("usage error: --pilot-expect must be candidate|baseline_filesystem|baseline_git=<sha256>", file=sys.stderr)
+            return 3
+        expect[label] = digest
+    if a.latency_calls < 0 or a.latency_spawns < 0:
+        print("usage error: latency counts must be non-negative", file=sys.stderr)
+        return 3
+    if bool(a.source_commit) != bool(a.source_repo) or (a.source_commit and not re.fullmatch(r"[0-9a-f]{7,40}", a.source_commit)):
+        print("usage error: --source-commit (hex) and --source-repo must be given together", file=sys.stderr)
+        return 3
+    try:
+        rep = run_pilot(a.fixtures, a.pilot_candidate, baselines, expect, a.latency_calls, a.latency_spawns,
+                        a.source_commit, a.source_repo)
+    except IdentityError as e:
+        print(f"identity error: {e}", file=sys.stderr)
+        return 4
+    except (ValueError, OSError) as e:
+        print(f"usage error: {e}", file=sys.stderr)
+        return 3
+    out = Path(a.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "pilot_report.json").write_bytes(
+        (json.dumps(rep, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))
+    (out / "pilot_report.md").write_bytes(render_pilot_markdown(rep).encode("utf-8"))
+    for profile, e in rep["profiles"].items():
+        b, n = e["before"]["metrics"], e["after"]["metrics"]
+        print(f"{profile}: before {b['pass']}/{b['scored']}, after {n['pass']}/{n['scored']}; "
+              + "; ".join(f"{k}={v}" for k, v in e["comparison"].items() if k != "newly_passing"))
+    print(f"wrote {out / 'pilot_report.json'}, {out / 'pilot_report.md'}")
+    return 0
+
+
 # ---------------------------------------------------------------- driver
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -446,7 +916,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--classifier", default="rule_baseline:classify", help="module:function")
     ap.add_argument("--classifier-path", default=None, help="directory containing the classifier module")
     ap.add_argument("--out-dir", default="results")
+    ap.add_argument("--pilot-report", action="store_true", help="SOU-97 before/after report (see module docstring)")
+    ap.add_argument("--pilot-candidate", help="candidate classifier source file")
+    ap.add_argument("--pilot-baseline", action="append", help="PROFILE=FILE, selected baseline per profile")
+    ap.add_argument("--pilot-expect", action="append", help="LABEL=SHA256 that the raw source bytes must have")
+    ap.add_argument("--latency-calls", type=int, default=200)
+    ap.add_argument("--latency-spawns", type=int, default=20)
+    ap.add_argument("--source-commit", help="pilot report from exported bytes: commit every input must match")
+    ap.add_argument("--source-repo", help="repository holding --source-commit")
     a = ap.parse_args(argv)
+    if a.pilot_report:
+        return pilot_main(a)
     try:
         classify, info = load_classifier(a.classifier, a.classifier_path)
     except (ImportError, AttributeError) as e:
