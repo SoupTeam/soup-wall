@@ -38,6 +38,7 @@ const PATH_OUTSIDE_MESSAGE: &str =
 const PATH_SPELLING_MESSAGE: &str = "MCP path refused before execution: unsupported spelling (empty, '.', '..' or '//' segment, backslash, '~', control character, relative ':' or over 4096 bytes)";
 
 mod frames;
+mod outcomes;
 
 // Host-owned diagnostic pipes may close before the namespace owners finish.
 // Reporting must not panic past cleanup or its authenticated acknowledgement;
@@ -433,7 +434,30 @@ async fn admit(
                 Err(code) => return Ok(refusal(&code)),
             };
         let mut timing = ContinuationTiming::new();
+        let check_create_resource = || -> anyhow::Result<()> {
+            #[cfg(target_os = "linux")]
+            if let Some(expected) = &context.original_create {
+                let workspace = call
+                    .pinned_workspace
+                    .as_deref()
+                    .context("selected create root missing")?;
+                ensure!(
+                    &server_profile::filesystem_create::CreateResource::capture(
+                        workspace, &call.args
+                    )? == expected,
+                    "selected create resource changed during approval"
+                );
+            }
+            Ok(())
+        };
         let resumed = async {
+            // Reject an already-invalid create before the full package rehash.
+            // Check it again after the rehash before acquiring live authority.
+            let resource = check_create_resource();
+            if resource.is_err() {
+                timing.record(call, "create_resource_before_assets", false);
+            }
+            resource?;
             let verified = if let Some(verified_assets) = verified_assets {
                 let frozen = profile.clone();
                 tokio::task::spawn_blocking(move || frozen.revalidate_assets(&verified_assets))
@@ -452,19 +476,7 @@ async fn admit(
             };
             timing.record(call, "profile_and_assets", verified.is_ok());
             verified?;
-            #[cfg(target_os = "linux")]
-            if let Some(expected) = &context.original_create {
-                let workspace = call
-                    .pinned_workspace
-                    .as_deref()
-                    .context("selected create root missing")?;
-                ensure!(
-                    &server_profile::filesystem_create::CreateResource::capture(
-                        workspace, &call.args
-                    )? == expected,
-                    "selected create resource changed during approval"
-                );
-            }
+            check_create_resource()?;
             boundary = collector.policy_boundary().await?;
             timing.record(call, "policy_boundary", true);
             let reassessed = collector
@@ -520,6 +532,15 @@ async fn admit(
         continuation = Some(timing);
     }
     let receipt = receipt.context("selected admission receipt absent")?;
+    diagnostic!(
+        "{}",
+        json!({"event":"mcp_call_outcome","version":1,"stage":"call_admission",
+            "request_sha256":call.request_sha256,
+            "host_call_sha256":sha(canonical(&call.id).to_string().as_bytes()),
+            "response_sha256":sha(canonical(&receipt).to_string().as_bytes()),
+            "reason_codes_sha256":sha(canonical(&receipt["reason_codes"]).to_string().as_bytes()),
+            "released":receipt["release"] == true,"response":null,"authority":false})
+    );
     if receipt["release"] != true {
         return Ok(Decision::Refused(withheld(
             &call.id,
@@ -709,6 +730,15 @@ async fn inspect(
         timing.record(call, "result_inspection", receipt["release"] == true);
     }
     let authorized = receipt["release"] == true;
+    diagnostic!(
+        "{}",
+        json!({"event":"mcp_call_outcome","version":1,
+        "stage":"result_inspection", "request_sha256":call.request_sha256,
+        "host_call_sha256":sha(canonical(&call.id).to_string().as_bytes()),
+        "released":authorized,"response_sha256":sha(&raw),
+        "reason_codes_sha256":sha(canonical(&receipt["reason_codes"]).to_string().as_bytes()),
+        "response":parse(&raw).ok().as_ref().map(outcomes::response),"authority":false})
+    );
     let raw = if authorized {
         raw
     } else {
@@ -1300,7 +1330,15 @@ where
                                     Some(server_profile::PathRefusal::Spelling) => PATH_SPELLING_MESSAGE,
                                     None => "MCP arguments violate the selected input profile",
                                 };
-                                write(host, &error(request_id, -32602, message)).await?;
+                                let rejected = error(request_id, -32602, message);
+                                if crate::mcp::verified_git::supports_profile(format) {
+                                    diagnostic!("{}", json!({"event":"mcp_call_outcome","version":1,
+                                        "stage":"input_profile","request_sha256":sha(&raw),
+                                        "host_call_sha256":sha(canonical(request_id).to_string().as_bytes()),
+                                        "response_sha256":sha(&rejected),"accepted":false,
+                                        "authority":false}));
+                                }
+                                write(host, &rejected).await?;
                                 continue;
                             }
                         };
@@ -1965,11 +2003,21 @@ where
                 if let Some(timing) = &mut grant.continuation {
                     timing.record(call, "original_response", value.get("result").is_some());
                 }
+                diagnostic!("{}", json!({"event":"mcp_call_outcome","version":1,
+                    "stage":"original_response","request_sha256":call.request_sha256,
+                    "host_call_sha256":sha(canonical(&call.id).to_string().as_bytes()),
+                    "response_sha256":sha(&raw),"response":outcomes::response(&value),
+                    "authority":false}));
                 let input = detached(call);
                 let worker_key = key.clone();
                 let validated = profiles[&call.tool]
                     .validate_result(&value)
                     .map(str::to_owned);
+                diagnostic!("{}", json!({"event":"mcp_call_outcome","version":1,
+                    "stage":"profile_validation","request_sha256":call.request_sha256,
+                    "host_call_sha256":sha(canonical(&call.id).to_string().as_bytes()),
+                    "response_sha256":sha(&raw),"response":outcomes::response(&value),
+                    "accepted":validated.is_ok(),"authority":false}));
                 match validated {
                     Ok(kind) => {
                         if let Some(source)=grant.source.take() {
