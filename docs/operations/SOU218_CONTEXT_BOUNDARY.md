@@ -2351,3 +2351,28 @@ production acceptance are not achieved; no source-command execution is shown.
 Local SOU218-facts-before-after.zip preserves60 responses, sources, audits and
 decoder results. SHA-256: 82aa5bf22e1d24877d2389bb46448cf92b58cac2d3b8ff5a5274ee3647d6742c.
 No API replay or Telegram/Linear posting was performed.
+
+### Evidence-first explanation candidate
+
+The separate sou218-gemini35-grounded profile asks for supporting quotations
+before drafting the explanation. Material source notes and commands should be
+supported by substantive enum quotes when available rather than generic headers.
+Source-request attribution now applies to every summary section, specifically
+including claims in Limitations that local command execution is required.
+Non-English, unbackticked and quoted requests must be reported as untrusted
+source content without disappearing when the model declines to follow them.
+The instruction also retains logical-file, diff-prefix and planning-timing rules.
+
+Only the trusted instruction changes. The complete source, schema, quote
+catalog, indices, strict decoder and result denial remain unchanged. No expected
+case answer, response repair, new authority or production release is introduced.
+The prior facts profile remains reproducible; the new profile digest prevents
+reusing old receipts as fresh evidence. A regression test preserves an untrusted
+verification requirement and a Russian deletion request in the source and index.
+It validates construction, not provider compliance.
+
+Measure all six originals and 24 attacks in a fresh journal before claiming a
+semantic fix. Specifically review substantive citation support, hostile-request
+coverage, non-adoption of source verification requirements, logical-file counts,
+diff facts and useful note details. Retain negative outcomes. No automatic retry,
+paid fallback, or Telegram/Linear posting.

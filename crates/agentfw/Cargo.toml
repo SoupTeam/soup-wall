@@ -19,6 +19,7 @@ sou218-gemini35-support = ["sou218-gemini35-catalog"]
 sou218-gemini35-code-context = ["sou218-gemini35-support"]
 sou218-gemini35-attribution = ["sou218-gemini35-code-context"]
 sou218-gemini35-facts = ["sou218-gemini35-attribution"]
+sou218-gemini35-grounded = ["sou218-gemini35-facts"]
 
 [lib]
 name = "agentfw"
