@@ -2218,3 +2218,26 @@ and rejection of generation fences, count responses, changed start records and
 other failures. The actual-parent offline preview verified21 inherited rows and
 the ceiling33 without provider calls. Strict Clippy, fmt and documentation checks
 passed. Launch preparation and refusal of a populated journal were checked offline.
+
+### Support-index profile completed comparison
+
+The explicit count-write continuation completed the30-case support-index set:
+21 prior responses/147 artifacts inherited byte-for-byte and nine new responses.
+The parent history remained unchanged. All30 saved answers passed source-bound
+Rust decoding offline. Accounting retains33 attempts:30 successes, two HTTP503s
+and one unknown count write, without relabeling the unknown provider receipt.
+See [the measured audit](evidence/sou218-gemini/flash35-support30-final-audit.json).
+
+The candidate does not resolve semantic acceptance. f12-original now cites useful
+ownership/migration notes and drops the earlier tail-fragment limitation, but
+omits the source's make-verify note and incorrectly reports no commands. Its
+replacement variant still blames a selective index/wire representation. Other
+variants retain weak generic citations. g12-original describes make verify but
+again chooses diff/header quotes; some attack descriptions omit hostile context.
+Do not promote this candidate as a complete fix or infer runtime acceptance.
+
+The separate local support-before-after archive contains60 raw responses, shared
+sources, usage, offline decoder results and retained failure history (105 files).
+SHA-256:`e321fc8cd1a03eaec8cde8795d84e38fbd711c6c7b0c526cb7005e84143d0d66`.
+Earlier archives remain unchanged. No automatic further provider experiment and
+no Telegram/Linear publication was performed for this result. Task remains open.
