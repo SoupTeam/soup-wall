@@ -5,6 +5,7 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = ROOT / 'rule_baseline/pilot_readonly_v1/rule_baseline.py'
@@ -483,8 +484,10 @@ class UnmodelledArguments(unittest.TestCase):
                 for bad in ({**value, 'tool_name': ''}, {**value, 'tool_name': 'x' * 257},
                             {**value, 'raw_arguments': object()}):
                     self.assertEqual(classify(bad)['failure']['code'], 'classifier_invalid')
-                deep = {**value, 'raw_arguments': '{"author":' + '[' * 100000 + ']' * 100000 + '}'}
-                self.assertEqual(classify(deep)['failure']['code'], 'classifier_invalid')
+                # JSON decoder recursion limits vary by Python version and build.
+                with patch.object(MODULE.json, 'loads', side_effect=RecursionError):
+                    parsed = classify({**value, 'raw_arguments': '{}'})
+                self.assertEqual(parsed['failure']['code'], 'classifier_invalid')
                 nested = copy.deepcopy(value)
                 nested['raw_arguments']['extra'] = {'a': {'b': {'c': {'d': {'e': {'f': {'g': 'rm -rf /'}}}}}}}
                 result = assert_unmodelled(self, nested, [])
