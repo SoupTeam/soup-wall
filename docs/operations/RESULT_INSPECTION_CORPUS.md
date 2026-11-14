@@ -197,15 +197,50 @@ The acceptance status is `fail`.
 ### Limits of the effect controls
 
 - The agent is scripted. The result measures the consequence of delivery, not how a model behaves.
-- Not executed here, and listed with a reason in the report: the 12 Git pairs (they need the Git profile
-  harness, `scripts/verify-sou68-real-mcp.py`, not the filesystem one) and the filesystem boundary-sized
-  pair `f12` (its exact size depends on the host path prefix, which the sandbox rewrites to `/workspace`;
-  the adapter run covers it).
+- The filesystem run lists the 12 Git pairs as a separate profile. Run them with the Git command below.
+  The filesystem boundary pair `f12` depends on the host path prefix and is covered by the adapter run.
 - The retained report is a development run on a local debug build of `agentfw` with a local Node v22.22.0
   that is not the pinned official archive, so the installer's runtime pin was relaxed for that run only.
   Its `runtime_note` says so. Re-run it on the native Ubuntu 24.04 pilot environment for pinned runtime
   identity before using it as acceptance evidence.
 - The sandbox isolation itself is covered by the existing real-server acceptance, not by this harness.
+
+
+## Original Git effect controls (SOU-244)
+
+Start from a clean checkout. Build `agentfw` and `agentfw-git-sandbox` with the locked toolchain
+(`cargo build --locked -p agentfw --bins`). Record the build commit and tree in a JSON receipt with
+the fields `source_commit`, `source_tree`, `agentfw_sha256`, and `git_launcher_sha256`. Use the
+source-matched build receipt and the pinned Git 2.51.3, Python distribution, verified wheelhouse
+and bubblewrap inputs from the original Git profile. See [original Git runtime inputs](GIT_MCP_PROFILE.md).
+
+```sh
+python3 -B eval/sou123/effect_controls.py --surface git --run \
+  --expected-commit "$(git rev-parse HEAD)" --agentfw target/debug/agentfw \
+  --git-launcher target/debug/agentfw-git-sandbox --build-receipt /path/to/build.json \
+  --git /path/to/git --git-sha256 "$GIT_SHA256" --bwrap /path/to/bwrap \
+  --python-archive /path/to/python.tar.gz --wheelhouse /path/to/wheelhouse \
+  --output /new/owned/evidence-directory
+```
+
+Without `--run`, the Git mode verifies the frozen inputs and prints its 24-case plan. The run
+records build, preset, classifier, original server, fixture and runtime digests in `plan.json`
+and the effect-control report. It uses an owned isolated repository, a single protected attempt
+per case and the loopback receiver. Keep the sanitized plans and reports from failed and
+incomplete attempts. The `private/` logs are for local troubleshooting.
+
+The reference starts the pinned original server directly against the owned fixture. Its text
+must match the frozen digest with the declared repository path mapping. The generator sets
+`core.autocrlf=false` explicitly. The isolated protected fixture uses Git's default of false
+with system and global configuration disabled. The protected package, policy and argument
+values remain pinned. Released bytes must match the reference and the observed original frame.
+
+The original `git_diff` argument is `HEAD~1`. The default protected profile refuses this
+revision spelling at input validation. These rows retain verified reference bytes and a measured
+pre-dispatch refusal. Their detector and downstream effects are non-comparable. The
+`git_show` rows report actual delivery and synthetic effects independently of the historical
+detector outcome. Exit 1 means all rows were observed and an acceptance problem remains.
+Exit 2 means a preflight refusal or incomplete measurement.
 
 ## Tests
 

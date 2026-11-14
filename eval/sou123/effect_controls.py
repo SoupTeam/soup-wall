@@ -21,9 +21,8 @@ in an idle window, or the whole report is `invalid`. A withheld result is never 
 proof of prevention by itself, and there is no live model: the agent is scripted, so this
 measures consequence of delivery, not model behaviour.
 
-Cases that cannot run on this path are listed with a reason, never silently dropped:
-Git surfaces (separate Git profile harness) and the boundary-sized case (its exact size
-depends on the host path prefix, which the sandbox rewrites to /workspace).
+Use --surface git for the separate original Git profile, including all 24 semantic Git cases.
+The filesystem boundary case still depends on the host path prefix and stays out of that run.
 """
 from __future__ import annotations
 
@@ -303,12 +302,17 @@ def run_case(stack, case, pair, observers, log_dir):
     return row
 
 
-def select_cases(manifest):
+def select_cases(manifest, *, git=False):
     run, skipped = [], []
     pairs = {p["id"]: p for p in CORPUS.PAIRS}
     for case in manifest["cases"]:
         if case["class"] != "semantic":
             skipped.append({"case_id": case["case_id"], "reason": "technical_case_not_semantic"})
+        elif git:
+            if case["surface"] in ("git_show", "git_diff"):
+                run.append(case)
+            else:
+                skipped.append({"case_id": case["case_id"], "reason": "separate_filesystem_profile"})
         elif case["surface"] != "read_multiple_files":
             skipped.append({"case_id": case["case_id"], "reason": "git_surface_uses_the_git_profile_harness"})
         elif pairs[case["pair_id"]]["host"] == "padded":
@@ -429,21 +433,43 @@ def main(argv=None):
     p.add_argument("--run", action="store_true", help="start the owned runtime; without it only the plan is printed")
     p.add_argument("--manifest", type=Path, default=HERE / "manifest.json")
     p.add_argument("--payload-dir", type=Path, default=HERE / "payloads")
-    p.add_argument("--agentfw", type=Path, required=True)
-    p.add_argument("--node", type=Path, required=True)
-    p.add_argument("--bwrap", type=Path, required=True)
+    p.add_argument("--surface", choices=("filesystem", "git"), default="filesystem")
+    p.add_argument("--agentfw", type=Path)
+    p.add_argument("--node", type=Path)
+    p.add_argument("--bwrap", type=Path)
+    p.add_argument("--expected-commit")
+    p.add_argument("--git", type=Path)
+    p.add_argument("--git-sha256")
+    p.add_argument("--git-launcher", type=Path)
+    p.add_argument("--python-archive", type=Path)
+    p.add_argument("--wheelhouse", type=Path)
+    p.add_argument("--build-receipt", type=Path)
     p.add_argument("--npm", type=Path, default=Path(shutil.which("npm") or "npm"))
     p.add_argument("--npm-cache", type=Path, default=None)
     p.add_argument("--offline", action="store_true")
     p.add_argument("--identity", action="append", default=[], metavar="KEY=VALUE")
     p.add_argument("--output", type=Path, required=True)
     a = p.parse_args(argv)
+    if a.surface == "git":
+        driver = load("sou244_runtime", HERE / "git_effect_controls.py")
+        try:
+            if a.run:
+                return driver.run(sys.modules[__name__], a)
+            cases, skipped = driver.inventory(sys.modules[__name__], a)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            print(json.dumps({"status": "refused", "error": str(error)[:300]}))
+            return 2
+        print(json.dumps({"status": "plan", "executed": False, "cases_to_run": len(cases),
+                          "not_executed": skipped, "live_model": False}))
+        return 0
     if not a.run:
         manifest = RUN.load_manifest(a.manifest)
         cases, skipped = select_cases(manifest)
         print(json.dumps({"status": "plan", "executed": False, "cases_to_run": len(cases), "not_executed": skipped,
                           "live_model": False}, ensure_ascii=False))
         return 0
+    if not all((a.agentfw, a.node, a.bwrap)):
+        p.error("--agentfw, --node and --bwrap are required for the filesystem runtime")
     try:
         return run(a)
     except (OSError, ValueError, subprocess.SubprocessError) as error:
