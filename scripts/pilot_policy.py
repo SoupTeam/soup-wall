@@ -40,7 +40,7 @@ def verify_assets():
     return manifest
 
 
-def prepare(kind, installation, destination, port, python=None):
+def prepare(kind, installation, destination, port, python=None, *, git_profile=None):
     """Create a new dedicated config, never overwrite a home or scenario policy.
 
     Existing Agent startup/selected-profile validators remain authoritative for
@@ -51,6 +51,8 @@ def prepare(kind, installation, destination, port, python=None):
     if kind not in KINDS or type(port) is not int or not 1 <= port <= 65535:
         raise ValueError("unsupported profile kind or port")
     manifest = verify_assets()
+    if git_profile is not None and kind != "git":
+        raise ValueError("explicit Git profile requires the Git preset")
     installation = Path(installation).resolve(strict=True)
     destination = Path(destination).absolute()
     if destination.exists() or destination.is_symlink():
@@ -63,23 +65,38 @@ def prepare(kind, installation, destination, port, python=None):
     profile = read(installation / "profile.json")
     registry = read(installation / "registry.json")
     profile_name, classifier = KINDS[kind]
-    if sha(installation / "policy.yaml") != sha(ROOT / "profiles/mcp" / profile_name / "policy.yaml"):
-        raise ValueError("installation scenario policy is not the accepted version")
     expected_format = f"sw-mcp/{kind}-readonly/1"
+    expected_registry = None
+    binding = None
+    if git_profile is not None:
+        import pilot_git_profiles as git_profiles
+        binding = git_profiles.binding(git_profile)
+        git_profiles.verify_receipt(git_profile, installed)
+        profile_name = git_profile
+        expected_format = binding["profile_format"]
+        classifier = git_profiles.classifier_path(git_profile)
+        expected_registry = git_profiles.registry(git_profile)
+        scenario_policy = git_profiles.policy_path(git_profile)
+    else:
+        scenario_policy = ROOT / "profiles/mcp" / profile_name / "policy.yaml"
+    if sha(installation / "policy.yaml") != sha(scenario_policy):
+        raise ValueError("installation scenario policy is not the accepted version")
     if profile.get("format") != expected_format:
         raise ValueError("unsupported runtime profile format")
     if registry.get("registry_id") != profile_name:
         raise ValueError("registry belongs to another profile")
     # The reviewed original registry is derived from full pinned upstream schemas;
     # result provenance or action authority cannot be supplied by a caller.
-    import importlib.util
-    installer_path = ROOT / "scripts" / (
-        "install-sou62-filesystem-profile.py" if kind == "filesystem" else "install-sou68-git-profile.py")
-    spec = importlib.util.spec_from_file_location("pilot_installer", installer_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    upstream = read(ROOT / "profiles/mcp" / profile_name / "upstream-tools-list.json")
-    if registry != module.registry(upstream):
+    if expected_registry is None:
+        import importlib.util
+        installer_path = ROOT / "scripts" / (
+            "install-sou62-filesystem-profile.py" if kind == "filesystem" else "install-sou68-git-profile.py")
+        spec = importlib.util.spec_from_file_location("pilot_installer", installer_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        upstream = read(ROOT / "profiles/mcp" / profile_name / "upstream-tools-list.json")
+        expected_registry = module.registry(upstream)
+    if registry != expected_registry:
         raise ValueError("registry differs from accepted tool/resource authority")
     if profile != installed["profile"]:
         raise ValueError("profile differs from installation receipt")
@@ -114,6 +131,8 @@ def prepare(kind, installation, destination, port, python=None):
         "environment": environment,
         "scope": "Linux x86-64; selected original stdio server; isolated collector; no real-server Ask approval",
     }
+    if binding is not None:
+        receipt["git_profile_binding"] = binding
     for filename, value in (("config.json", config), ("selection.json", receipt)):
         path = destination / filename
         with path.open("x", encoding="utf-8") as stream:

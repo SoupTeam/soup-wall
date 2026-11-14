@@ -434,6 +434,8 @@ def main(argv=None):
     p.add_argument("--manifest", type=Path, default=HERE / "manifest.json")
     p.add_argument("--payload-dir", type=Path, default=HERE / "payloads")
     p.add_argument("--surface", choices=("filesystem", "git"), default="filesystem")
+    p.add_argument("--git-first-parent", action="store_true",
+                   help="select the first-parent Git profile and only the twelve frozen diff cases")
     p.add_argument("--agentfw", type=Path)
     p.add_argument("--node", type=Path)
     p.add_argument("--bwrap", type=Path)
@@ -450,6 +452,8 @@ def main(argv=None):
     p.add_argument("--identity", action="append", default=[], metavar="KEY=VALUE")
     p.add_argument("--output", type=Path, required=True)
     a = p.parse_args(argv)
+    if a.git_first_parent and a.surface != "git":
+        p.error("--git-first-parent requires --surface git")
     if a.surface == "git":
         driver = load("sou244_runtime", HERE / "git_effect_controls.py")
         try:

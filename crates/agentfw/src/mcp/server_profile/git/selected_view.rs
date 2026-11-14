@@ -8,6 +8,7 @@ use std::sync::Arc;
 pub(crate) enum SelectedView {
     LocalReferences(Arc<super::reference_view::View>),
     FileRevisions(Arc<super::revision_view::View>),
+    FirstParent(Arc<super::revision_view::View>),
     Shallow(Arc<super::shallow_view::View>),
     LinkedWorktree(Arc<super::shallow_view::View>),
 }
@@ -16,6 +17,7 @@ impl SelectedView {
         match self {
             Self::LocalReferences(view) => view.validate_call(tool, args),
             Self::FileRevisions(view) => view.validate_call(tool, args),
+            Self::FirstParent(view) => view.validate_first_parent_call(tool, args),
             Self::Shallow(view) | Self::LinkedWorktree(view) => view.validate_call(tool, args),
         }
     }
@@ -35,6 +37,9 @@ impl SelectedView {
             super::LOCAL_REFS_FORMAT => Some(Arc::new(Self::LocalReferences(
                 super::reference_view::View::capture(workspace)?,
             ))),
+            super::FIRST_PARENT_FORMAT => Some(Arc::new(Self::FirstParent(
+                super::revision_view::View::capture_first_parent(workspace)?,
+            ))),
             super::FILE_READS_FORMAT => Some(Arc::new(Self::FileRevisions(
                 super::revision_view::View::capture(workspace)?,
             ))),
@@ -52,7 +57,7 @@ impl SelectedView {
     ) -> anyhow::Result<()> {
         match self {
             Self::LocalReferences(view) => view.mount(command, pins),
-            Self::FileRevisions(view) => view.mount(command, pins),
+            Self::FileRevisions(view) | Self::FirstParent(view) => view.mount(command, pins),
             Self::Shallow(view) | Self::LinkedWorktree(view) => view.mount(command, pins),
         }
     }

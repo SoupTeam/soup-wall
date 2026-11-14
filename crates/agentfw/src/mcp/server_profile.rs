@@ -57,6 +57,7 @@ pub fn selected(format: Option<&str>) -> bool {
                 | git::FORMAT
                 | git::LOCAL_REFS_FORMAT
                 | git::FILE_READS_FORMAT
+                | git::FIRST_PARENT_FORMAT
                 | git::SHALLOW_FORMAT
                 | git::linked_worktree::FORMAT
                 | git_local_clone::FORMAT
@@ -542,6 +543,7 @@ pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
         git::FORMAT
         | git::LOCAL_REFS_FORMAT
         | git::FILE_READS_FORMAT
+        | git::FIRST_PARENT_FORMAT
         | git::SHALLOW_FORMAT
         | git::linked_worktree::FORMAT
         | git_local_clone::FORMAT
@@ -559,6 +561,7 @@ pub fn validate_initialization_for(format: &str, value: &Value) -> anyhow::Resul
         git::FORMAT
         | git::LOCAL_REFS_FORMAT
         | git::FILE_READS_FORMAT
+        | git::FIRST_PARENT_FORMAT
         | git::SHALLOW_FORMAT
         | git::linked_worktree::FORMAT
         | git_local_clone::FORMAT
@@ -580,6 +583,9 @@ pub fn classify_manifest_for(
         | git_tracked_symlinks::FORMAT => git::classify_manifest(value),
         git::LOCAL_REFS_FORMAT => git::classify_manifest_with_local_refs(value, true),
         git::SHALLOW_FORMAT => git::classify_manifest(value),
+        git::FIRST_PARENT_FORMAT => {
+            git::classify_manifest_with_extension(value, git::ReadExtension::FirstParent)
+        }
         git::FILE_READS_FORMAT => {
             git::classify_manifest_with_extension(value, git::ReadExtension::FileRevisions)
         }

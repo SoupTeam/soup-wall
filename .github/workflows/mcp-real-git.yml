@@ -139,6 +139,17 @@ jobs:
             --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou98-git" \
             2>&1 | tee "$RUNNER_TEMP/sou98-git.log"
+      - name: SOU-244 sealed first-parent original-server controls
+        if: ${{ !inputs.local_refs_only && !inputs.shallow_only && !inputs.file_revisions_only && !inputs.tracked_symlinks_only }}
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/verify-sou244-git-first-parent.py --allow-download \
+            --agentfw "$PWD/target/debug/agentfw" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou244-first-parent"
       - name: SOU-107 opt-in local-clone acceptance
         if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.local_refs_only || inputs.shallow_only || inputs.file_revisions_only || inputs.tracked_symlinks_only)) }}
         shell: bash
@@ -222,6 +233,7 @@ jobs:
         with:
           name: sou68-real-git-mcp-evidence
           path: |
+            ${{ runner.temp }}/sou244-first-parent/**
             ${{ runner.temp }}/sou146-acceptance/**
             ${{ runner.temp }}/sou146-acceptance.log
             ${{ runner.temp }}/sou150-acceptance/**

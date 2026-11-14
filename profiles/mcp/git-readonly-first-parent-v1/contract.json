@@ -1,0 +1,14 @@
+{
+  "format": "sw-mcp/git-readonly-first-parent/1",
+  "opt_in": true,
+  "base": "git-readonly-v1",
+  "extension": {
+    "tool": "git_diff",
+    "argument": "target",
+    "literal": "HEAD~1"
+  },
+  "repository": "standalone non-shallow SHA-1 with bounded loose objects",
+  "proof": "HEAD and its first parent are commits in one descriptor-held sealed view",
+  "dispatch": "unchanged original arguments through the selected original collector",
+  "result": "full untrusted original result inspection and sticky source validity through delivery"
+}
