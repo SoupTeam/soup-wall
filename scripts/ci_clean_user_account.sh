@@ -37,7 +37,9 @@ test "$uid" -ge 1000 && test "$uid" != "$runner_uid"
 test "$(id -G "$account")" = "$gid"
 
 if [[ "$phase" == setup ]]; then
-    sudo -n /usr/bin/install -d -m 0711 -o "$runner_uid" -g "$(id -g)" -- "$base"
+    # The native workspace validator opens each ancestor read-only, including
+    # this outer directory. All actual sources and evidence remain private.
+    sudo -n /usr/bin/install -d -m 0755 -o "$runner_uid" -g "$(id -g)" -- "$base"
     sudo -n /usr/bin/install -d -m 0700 -o "$uid" -g "$gid" -- "$owned" "$owned/home" "$evidence" "$inputs"
     # The runner can feed already selected bytes without granting the fixture
     # account access to its worktree, checkout credentials or other job files.
