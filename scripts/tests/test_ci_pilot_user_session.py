@@ -89,6 +89,56 @@ class UserExitBoundary(unittest.TestCase):
             run.assert_not_called()
 
 
+class MixedProcessSnapshot(unittest.TestCase):
+    def test_real_uid_is_considered_even_when_proc_owner_differs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            uid = m.os.getuid() + 1
+            for pid, ids in (("10", [uid, 0, 0, 0]), ("11", [0] * 4)):
+                (root / pid).mkdir()
+                (root / pid / "status").write_text("Uid: " + " ".join(map(str, ids)) + "\n")
+            row = {"uids": [uid, 0, 0, 0], "parent": 0}
+            read = mock.Mock(return_value=row)
+            with mock.patch.object(m.os, 'getuid', return_value=uid):
+                self.assertEqual(m.kernel_snapshot(root, read, 0), {"10": row})
+                read.assert_called_once_with(10)
+
+
+class Recipients(unittest.TestCase):
+    def test_historical_and_fresh_recipients_are_distinct_and_pinned(self):
+        legacy = m.process_recipient('sou216')
+        fresh = m.process_recipient('sou243')
+        self.assertNotEqual(legacy, fresh)
+        self.assertEqual(m.H.sha(legacy[0]), legacy[1])
+        self.assertEqual(m.H.sha(fresh[0]), fresh[1])
+
+
+class ReadOnlyBeforeCleanUser(unittest.TestCase):
+    def test_before_clean_user_never_uses_session_control(self):
+        with mock.patch.object(m,'load') as load, mock.patch.object(sys,'argv',
+                ['ci_pilot_user_session.py','--before-clean-user','--quiesce']), \
+                mock.patch('sys.stderr', new_callable=io.StringIO):
+            with self.assertRaises(SystemExit):
+                m.main()
+            load.assert_not_called()
+
+    def test_visible_preflight_has_the_producer_accepted_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = {"commit": "1" * 40, "tree": "2" * 40, "dirty": False}
+            with mock.patch.dict(m.os.environ, {"RUNNER_TEMP": directory}), \
+                    mock.patch.object(sys,'argv',['ci_pilot_user_session.py','--before-clean-user','--recipient','sou243']), \
+                    mock.patch.object(m,'load'), mock.patch.object(m,'context',return_value={"effective_capabilities":0}), \
+                    mock.patch.object(m,'kernel_snapshot',return_value={}), \
+                    mock.patch.object(m,'quiesce') as quiesce, mock.patch.object(m.H,'source',return_value=source), \
+                    mock.patch.object(m.H,'git',return_value=source["commit"]), \
+                    mock.patch.object(m.H,'process_observation',return_value={"authorization":False,"unavailable":[]}), \
+                    mock.patch.object(m.subprocess,'run'), mock.patch.object(m.H,'sha',return_value=m.QUALIFICATION_CERT_SHA256), \
+                    mock.patch("sys.stdout",new_callable=io.StringIO) as output:
+                self.assertEqual(m.main(),0)
+                self.assertEqual(json.loads(output.getvalue())["status"],"already-visible")
+                quiesce.assert_not_called()
+
+
 class ReadOnlyPostCleanup(unittest.TestCase):
     def test_post_cleanup_cannot_enable_quiescence(self):
         with mock.patch.object(m,'load') as load, mock.patch.object(sys,'argv',

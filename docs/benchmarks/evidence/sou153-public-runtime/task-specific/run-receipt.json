@@ -1,0 +1,63 @@
+{
+  "provider_source_sha256": "9cce2d33347e55512faf3b8faed335284550c853c867c88e53093b1fe19d4f0a",
+  "rustc_sha256": "b53b780f77f952062f8ca8a3b70aef2390b1e45ad91939be94afdc9543026853",
+  "cargo_sha256": "a670e02cfa39ac2e53f77a2d911ca1fc9e2c479b0603ec956625be1daf24e3af",
+  "python_sha256": "6145fea0259d56765987ab1c5a3bd82de22bacade83d34f356261376c4a5430e",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.1\nLLVM version: 23.1.1",
+  "build_command": [
+    "cargo",
+    "build",
+    "--locked",
+    "-p",
+    "agentfw",
+    "--bin",
+    "agentfw"
+  ],
+  "build_environment": {
+    "CARGO_BUILD_JOBS": "1",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0"
+  },
+  "evidence": {
+    "baseline": {
+      "commit": "6fe98d71fc2b806d996ec0ca493f20f4d9da2202",
+      "tree": "c6d63872b40923ee96796a6207d78822f7e5dd9f",
+      "binary_sha256": "c35ba8f3eedf4223435b1bb21117fc9ee45a5dd6199eb2c8d0a991ef178b6a24",
+      "policy_sha256": "8b2bfb66b14a988a29cf2698c482bc7cd91ba550fea14ccfa63540e815eb3c57",
+      "plan_sha256": "4af52f6e24918cb4d3e98d23db2419b2877c8ca85ad119d262dc3f3a3db28699",
+      "cli_sha256": "a346c3aec948bb8653876c09c3204ab30e7a88d37c950a57b5c9f0b84939d525",
+      "cargo_lock_sha256": "fd3d11a0ae40dd647b93c8352cff16c6ce34f8e0412097bb10fd98dbadb632a0",
+      "rust_toolchain_sha256": "a6a0bbd29ffaa8182dc22d1d9149709f1091e47df40ed96eb8a78a711c66a4ce",
+      "exit_code": 0,
+      "observed_loopback_requests": 64,
+      "run_sha256": "d9469cb05ac34da16d18f89e1f444295752042818d68f29fb430c72b62dc8a6b",
+      "source_after_clean": true
+    },
+    "candidate": {
+      "commit": "ad41af500710450e8f1697da57eafdf5571301fa",
+      "tree": "3218990b628d6a06d016ce0047244ac3cca3f2ea",
+      "binary_sha256": "be76e247d46f6dbd90bca130f925a7de6df87a395183911f2dce14d282bd3413",
+      "policy_sha256": "8b2bfb66b14a988a29cf2698c482bc7cd91ba550fea14ccfa63540e815eb3c57",
+      "plan_sha256": "c3cbccc20d120e682ed602b008ae921184bb90c92b3a6e9df376a8ea25cc8654",
+      "cli_sha256": "667344acaaa6cef57ca5dc89b3fd7c9698a213bd70f108baaf2018c62d5d3bf3",
+      "cargo_lock_sha256": "7fb452a45979d808b7e87dc2d555a61d7eb9fe41d3cd39c301919a3722acee9a",
+      "rust_toolchain_sha256": "a6a0bbd29ffaa8182dc22d1d9149709f1091e47df40ed96eb8a78a711c66a4ce",
+      "exit_code": 0,
+      "observed_loopback_requests": 64,
+      "run_sha256": "542dfeb5a1f39143267e56a563bd1450baebcaf1a4c571f045b443aaf95427ef",
+      "source_after_clean": true
+    }
+  },
+  "gaps": [
+    "upstream case manifest absent",
+    "producer semantic families absent",
+    "producer unknown outcomes unavailable",
+    "script independent of supplied prompts"
+  ],
+  "upstream": {
+    "revision": "089ed468cf3ed0322acc66b0211f26d9d90dbf60",
+    "source_inventory_sha256": "f030c2fce6daf25a5206270f9bcfff789decf4f0421143199003c703f42349a4",
+    "source_files": 112,
+    "license_sha256": "4285a071f2d382338e52b4fb0a186d952984a34d43a33d8872e1a1d8cb43401e"
+  }
+}

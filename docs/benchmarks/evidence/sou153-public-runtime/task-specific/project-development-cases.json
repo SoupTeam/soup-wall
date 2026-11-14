@@ -1,0 +1,351 @@
+{
+  "schema": "soup-wall-project-development-cases/1",
+  "plan_set": "development",
+  "provenance": {
+    "kind": "project-development-ai-assisted",
+    "basis": "Frozen public workspace tasks grouped by their source-defined task and injection objectives"
+  },
+  "inputs_sha256": "ac040ee1e4711095a7542401277eaf8d9c4704d4bccdd93b7c976bcf0087e871",
+  "upstream": {
+    "revision": "089ed468cf3ed0322acc66b0211f26d9d90dbf60",
+    "benchmark_version": "v1.2.2",
+    "suite": "workspace",
+    "source_inventory_sha256": "f030c2fce6daf25a5206270f9bcfff789decf4f0421143199003c703f42349a4"
+  },
+  "sides": {
+    "baseline": {
+      "plan_sha256": "4af52f6e24918cb4d3e98d23db2419b2877c8ca85ad119d262dc3f3a3db28699",
+      "run_sha256": "d9469cb05ac34da16d18f89e1f444295752042818d68f29fb430c72b62dc8a6b",
+      "source_revision": "6fe98d71fc2b806d996ec0ca493f20f4d9da2202",
+      "producer_sha256": "a346c3aec948bb8653876c09c3204ab30e7a88d37c950a57b5c9f0b84939d525"
+    },
+    "candidate": {
+      "plan_sha256": "c3cbccc20d120e682ed602b008ae921184bb90c92b3a6e9df376a8ea25cc8654",
+      "run_sha256": "542dfeb5a1f39143267e56a563bd1450baebcaf1a4c571f045b443aaf95427ef",
+      "source_revision": "ad41af500710450e8f1697da57eafdf5571301fa",
+      "producer_sha256": "667344acaaa6cef57ca5dc89b3fd7c9698a213bd70f108baaf2018c62d5d3bf3"
+    }
+  },
+  "cases": [
+    {
+      "case_id": "user_task_31/benign",
+      "user_task_id": "user_task_31",
+      "expected_label": "benign",
+      "injection_task_id": null,
+      "semantic_family": "hawaii_trip_document",
+      "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1_2/workspace/user_tasks.py",
+          "sha256": "6b21b84053d1ac1703674e75d75dd4986e489d3434fcf60e8707b96114ab03bb"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_31/injection_task_9",
+      "user_task_id": "user_task_31",
+      "expected_label": "attack",
+      "injection_task_id": "injection_task_9",
+      "semantic_family": "unread_inbox_disclosure_and_deletion",
+      "injections_sha256": "0a413c3cb67d45f93025f0f4581c2f05be27be632289cbc3aad77de2892d6c8f",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1_2/workspace/user_tasks.py",
+          "sha256": "6b21b84053d1ac1703674e75d75dd4986e489d3434fcf60e8707b96114ab03bb"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        },
+        "injection_task": {
+          "path": "src/agentdojo/default_suites/v1_2/workspace/injection_tasks.py",
+          "sha256": "d11a9a4aa86085a1b0e8cea20652dd20f903adedfc6065175a0ead858c29e4a3"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_38/benign",
+      "user_task_id": "user_task_38",
+      "expected_label": "benign",
+      "injection_task_id": null,
+      "semantic_family": "drive_listing_and_deletion",
+      "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1/workspace/user_tasks.py",
+          "sha256": "d2a550b812b7f40ee2dea17ac19d44f2dd063d103524118216b563eca6e44171"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_38/injection_task_5",
+      "user_task_id": "user_task_38",
+      "expected_label": "attack",
+      "injection_task_id": "injection_task_5",
+      "semantic_family": "verification_code_disclosure",
+      "injections_sha256": "529a2c8cac38ff3891ce8c14d6a7fd6235d20e2444f104b0e446481bf8e59cde",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1/workspace/user_tasks.py",
+          "sha256": "d2a550b812b7f40ee2dea17ac19d44f2dd063d103524118216b563eca6e44171"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        },
+        "injection_task": {
+          "path": "src/agentdojo/default_suites/v1/workspace/injection_tasks.py",
+          "sha256": "03e0894ffb544a79fd0bfd2c62cc5f90b19a2b1d429068d800239bfd020b6dcc"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_19/benign",
+      "user_task_id": "user_task_19",
+      "expected_label": "benign",
+      "injection_task_id": null,
+      "semantic_family": "calendar_summary_and_inbox_action",
+      "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1/workspace/user_tasks.py",
+          "sha256": "d2a550b812b7f40ee2dea17ac19d44f2dd063d103524118216b563eca6e44171"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_19/injection_task_9",
+      "user_task_id": "user_task_19",
+      "expected_label": "attack",
+      "injection_task_id": "injection_task_9",
+      "semantic_family": "unread_inbox_disclosure_and_deletion",
+      "injections_sha256": "31a24b9a592ecec1f72892e61ad18b4de4c283e87987f7b63245a3675daefce2",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1/workspace/user_tasks.py",
+          "sha256": "d2a550b812b7f40ee2dea17ac19d44f2dd063d103524118216b563eca6e44171"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        },
+        "injection_task": {
+          "path": "src/agentdojo/default_suites/v1_2/workspace/injection_tasks.py",
+          "sha256": "d11a9a4aa86085a1b0e8cea20652dd20f903adedfc6065175a0ead858c29e4a3"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_11/benign",
+      "user_task_id": "user_task_11",
+      "expected_label": "benign",
+      "injection_task_id": null,
+      "semantic_family": "calendar_event_lookup",
+      "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1/workspace/user_tasks.py",
+          "sha256": "d2a550b812b7f40ee2dea17ac19d44f2dd063d103524118216b563eca6e44171"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_11/injection_task_9",
+      "user_task_id": "user_task_11",
+      "expected_label": "attack",
+      "injection_task_id": "injection_task_9",
+      "semantic_family": "unread_inbox_disclosure_and_deletion",
+      "injections_sha256": "c76a4dfdb35c64be1e5651885eb6764427e19f50473bb3e554715d93e58fd45c",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1/workspace/user_tasks.py",
+          "sha256": "d2a550b812b7f40ee2dea17ac19d44f2dd063d103524118216b563eca6e44171"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        },
+        "injection_task": {
+          "path": "src/agentdojo/default_suites/v1_2/workspace/injection_tasks.py",
+          "sha256": "d11a9a4aa86085a1b0e8cea20652dd20f903adedfc6065175a0ead858c29e4a3"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_32/benign",
+      "user_task_id": "user_task_32",
+      "expected_label": "benign",
+      "injection_task_id": null,
+      "semantic_family": "hawaii_trip_document",
+      "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1_2/workspace/user_tasks.py",
+          "sha256": "6b21b84053d1ac1703674e75d75dd4986e489d3434fcf60e8707b96114ab03bb"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_32/injection_task_8",
+      "user_task_id": "user_task_32",
+      "expected_label": "attack",
+      "injection_task_id": "injection_task_8",
+      "semantic_family": "unread_inbox_disclosure_and_deletion",
+      "injections_sha256": "3e0f272366014c71a3eae8188b684b1350db16b61e8194a39cc26c4d153e6ed7",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1_2/workspace/user_tasks.py",
+          "sha256": "6b21b84053d1ac1703674e75d75dd4986e489d3434fcf60e8707b96114ab03bb"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        },
+        "injection_task": {
+          "path": "src/agentdojo/default_suites/v1_2/workspace/injection_tasks.py",
+          "sha256": "d11a9a4aa86085a1b0e8cea20652dd20f903adedfc6065175a0ead858c29e4a3"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_0/benign",
+      "user_task_id": "user_task_0",
+      "expected_label": "benign",
+      "injection_task_id": null,
+      "semantic_family": "calendar_event_lookup",
+      "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1_2/workspace/user_tasks.py",
+          "sha256": "6b21b84053d1ac1703674e75d75dd4986e489d3434fcf60e8707b96114ab03bb"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_0/injection_task_11",
+      "user_task_id": "user_task_0",
+      "expected_label": "attack",
+      "injection_task_id": "injection_task_11",
+      "semantic_family": "large_drive_file_disclosure",
+      "injections_sha256": "7def60e3ce309cb93618f6b6e9cfa486ded200d2fa3c1a9eb9376358737d3cab",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1_2/workspace/user_tasks.py",
+          "sha256": "6b21b84053d1ac1703674e75d75dd4986e489d3434fcf60e8707b96114ab03bb"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        },
+        "injection_task": {
+          "path": "src/agentdojo/default_suites/v1_2_1/workspace/injection_tasks.py",
+          "sha256": "5a30d439850b58cfb834840bdfe7bbdf4405859bb1899e59ef476f29156078e8"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_30/benign",
+      "user_task_id": "user_task_30",
+      "expected_label": "benign",
+      "injection_task_id": null,
+      "semantic_family": "hawaii_trip_document",
+      "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1/workspace/user_tasks.py",
+          "sha256": "d2a550b812b7f40ee2dea17ac19d44f2dd063d103524118216b563eca6e44171"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_30/injection_task_13",
+      "user_task_id": "user_task_30",
+      "expected_label": "attack",
+      "injection_task_id": "injection_task_13",
+      "semantic_family": "meeting_attendee_outbound_email",
+      "injections_sha256": "b6dbb2daa50ddb80ab04852681e320fc3343aa57108bf714e168adcda38975eb",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1/workspace/user_tasks.py",
+          "sha256": "d2a550b812b7f40ee2dea17ac19d44f2dd063d103524118216b563eca6e44171"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        },
+        "injection_task": {
+          "path": "src/agentdojo/default_suites/v1_2/workspace/injection_tasks.py",
+          "sha256": "d11a9a4aa86085a1b0e8cea20652dd20f903adedfc6065175a0ead858c29e4a3"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_6/benign",
+      "user_task_id": "user_task_6",
+      "expected_label": "benign",
+      "injection_task_id": null,
+      "semantic_family": "calendar_event_creation",
+      "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1/workspace/user_tasks.py",
+          "sha256": "d2a550b812b7f40ee2dea17ac19d44f2dd063d103524118216b563eca6e44171"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        }
+      }
+    },
+    {
+      "case_id": "user_task_6/injection_task_12",
+      "user_task_id": "user_task_6",
+      "expected_label": "attack",
+      "injection_task_id": "injection_task_12",
+      "semantic_family": "large_drive_file_disclosure",
+      "injections_sha256": "0e3981dcd7a079488a14359b0dc50c4fb0c5b32ab1ad029b6e2eebc44ad47340",
+      "sources": {
+        "user_task": {
+          "path": "src/agentdojo/default_suites/v1/workspace/user_tasks.py",
+          "sha256": "d2a550b812b7f40ee2dea17ac19d44f2dd063d103524118216b563eca6e44171"
+        },
+        "environment": {
+          "path": "src/agentdojo/data/suites/workspace/environment.yaml",
+          "sha256": "08a22c4eac0f72012e23c135cf3157b6fa7b35881b57bd2e910a5b059c02d157"
+        },
+        "injection_task": {
+          "path": "src/agentdojo/default_suites/v1_2_1/workspace/injection_tasks.py",
+          "sha256": "5a30d439850b58cfb834840bdfe7bbdf4405859bb1899e59ef476f29156078e8"
+        }
+      }
+    }
+  ]
+}

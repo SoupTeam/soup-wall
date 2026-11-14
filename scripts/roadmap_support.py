@@ -11,6 +11,7 @@ import argparse
 import base64
 import hashlib
 import json
+import math
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -47,6 +48,10 @@ COMPANION_ROLES = {FRONT_DOOR_FORMAT: ("installed-pilot", "demo"), SCOPE_FORMAT:
                    CLEAN_USER_FORMAT: ("walkthrough", "ask", "user-session", "user-session-after-cleanup")}
 STANDARD_CASES = ("component-install", "preview-zero-effect", "prepare-and-reuse", "existing-selection-status",
                   "status-configured", "useful", "status-after-run", "cancel")
+STANDARD_LIFECYCLE_CASES = ("tampered-helper-bytes", "tampered-helper-unlisted", "tampered-helper-link",
+                            "tampered-interpreter", "interrupted-update", "failed-update-wrong-digest",
+                            "failed-update-damaged-archive", "update-and-rollback", "redirected-parent-removal",
+                            "removed-component")
 SCOPE_CASES = ("scope-selected-through-preview-and-prepare", "excluded-option-preview",
                "standard-cases-ran-under-scope", "excluded-capability-refused", "tampered-scope-refused",
                "unselected-claims-nothing", "status-never-claims-more", "owned-cleanup")
@@ -151,6 +156,7 @@ def bounded_tree(value: object, depth: int = 0) -> None:
         require(len(value) <= 65536, "JSON string limit exceeded")
     else:
         require(value is None or type(value) in (bool, int, float), "invalid JSON value")
+        require(type(value) is not float or math.isfinite(value), "non-finite JSON number")
 
 
 def safe_file(path: Path, limit: int) -> bytes:
@@ -191,8 +197,7 @@ def safe_file(path: Path, limit: int) -> bytes:
         os.close(fd)
 
 
-def load_json(path: Path, limit: int) -> tuple[dict, str]:
-    raw = safe_file(path, limit)
+def parse_json(raw: bytes) -> dict:
     try:
         obj = json.loads(raw.decode("utf-8"), object_pairs_hook=pairs_unique,
                          parse_constant=lambda _x: (_ for _ in ()).throw(Invalid("non-finite JSON number")))
@@ -202,7 +207,12 @@ def load_json(path: Path, limit: int) -> tuple[dict, str]:
         raise Invalid("invalid UTF-8 JSON") from exc
     bounded_tree(obj)
     require(type(obj) is dict, "JSON root must be an object")
-    return obj, hashlib.sha256(raw).hexdigest()
+    return obj
+
+
+def load_json(path: Path, limit: int) -> tuple[dict, str]:
+    raw = safe_file(path, limit)
+    return parse_json(raw), hashlib.sha256(raw).hexdigest()
 
 
 IDENTITY_FIELDS = {"implementation", "policy", "registry", "runtime", "server"}
@@ -461,15 +471,25 @@ def project_front_door(obj: dict, fmt: str, companions: dict) -> dict:
     passed = obj["status"] == "passed"
     require(passed == (obj.get("error") is None), "report status contradicts its error")
     rows = obj.get("cases")
-    inventory = STANDARD_CASES + SCOPE_CASES
+    nested = obj.get("pilot_scope_qualification")
+    # SOU-228 included the scope run as a front-door observation. Preserve that
+    # original projection alongside the actual standalone lifecycle inventory.
+    tail = SCOPE_CASES if nested is not None or fmt == SCOPE_FORMAT else STANDARD_LIFECYCLE_CASES
+    inventory = STANDARD_CASES + tail
     require(type(rows) is list and all(type(row) is dict for row in rows), "front-door case inventory mismatch")
     names = [row.get("case") for row in rows]
     require(names == list(inventory[:len(names)]) and all(row.get("passed") is True for row in rows),
             "front-door case inventory mismatch")
     require(not passed or len(names) == len(inventory), "passed report lacks required cases")
-    nested = obj.get("pilot_scope_qualification")
-    # Only the reviewed pilot-scope focus is inventoried; an honest early failure may precede it.
-    require(nested is not None or (not passed and len(names) <= len(STANDARD_CASES)), "unsupported front-door focus")
+    require(fmt != SCOPE_FORMAT or nested is not None or not passed, "scope qualification absent")
+    if passed and nested is None:
+        lifecycle = {r["case"]: r for r in rows}
+        require(lifecycle["interrupted-update"].get("recovered") is True and
+                all(lifecycle[name].get("previous_retained") is True for name in
+                    ("failed-update-wrong-digest", "failed-update-damaged-archive")) and
+                lifecycle["redirected-parent-removal"].get("external_unchanged") is True and
+                lifecycle["removed-component"].get("selections_unchanged") is True,
+                "front-door lifecycle observations incomplete")
     total = len(inventory) + len(INSTALLED_PILOT_CASES) + len(DEMO_CASES)
     if "source_before" not in obj:
         # A refusal before the clean-source check records nothing to bind.
@@ -864,6 +884,30 @@ def evaluate(descriptor: dict, root: Path, target: str, cap: dict) -> dict:
             require(observed == row["sha256"], "companion " + row["role"] + " SHA-256 mismatch")
             companions[row["role"]] = (value, observed)
         observation = project_report(obj, descriptor["format"], companions)
+        if descriptor["format"] in PER_RUN_FORMATS and "custody" in obj:
+            from pilot_evidence_custody import read_custody, verify_clean_user, verify_front_door
+
+            source_info = obj["source_before"]
+            custody_path = path.parent / "custody"
+            if observation["counts"]["complete"]:
+                source_reader = lambda name, limit: safe_file(Path(__file__).with_name(name), limit)
+                verifier = verify_clean_user if descriptor["format"] == CLEAN_USER_FORMAT else verify_front_door
+                verified, measured = verifier(custody_path, obj, source_info, obj["inputs_sha256"],
+                                              companions, source_reader, actual)
+                observation["identity"].update(measured)
+                observation["custody"] = {"receipt_sha256": verified["receipt"]["sha256"]}
+                # The original observer package supplements the existing adapter.
+                # Its independent limits and scope still determine what it proves.
+                observation["unverified"] = [
+                    reason for reason in observation["unverified"]
+                    if reason not in (UNVERIFIED_RECEIPT_ABSENT, UNVERIFIED_RECEIPT_BYTES,
+                                      UNVERIFIED_GENERATION, UNVERIFIED_WITNESS)
+                ]
+                if descriptor["format"] == CLEAN_USER_FORMAT and not any(
+                        role in companions for role in ("user-session", "user-session-after-cleanup")):
+                    observation["unverified"].remove(UNVERIFIED_SEALED)
+            else:
+                read_custody(custody_path, obj, source_info, obj["inputs_sha256"])
         # An honest early installed refusal may record no source; it can only be incomplete.
         require(observation["source"] == descriptor["source"] or
                 (descriptor["format"] in PER_RUN_FORMATS and observation["source"] is None),
@@ -887,7 +931,7 @@ def evaluate(descriptor: dict, root: Path, target: str, cap: dict) -> dict:
                     "platform": observation["platform"], "architecture": observation["architecture"],
                     "counts": observation["counts"], "execution": observation["execution"],
                     "version": observation["version"], "identity": descriptor["identity"]}
-        for key in ("tree", "driver_source", "unverified", "refusals", "scope"):
+        for key in ("tree", "driver_source", "unverified", "refusals", "scope", "custody"):
             if key in observation:
                 observed[key] = observation[key]
         if companions:
@@ -913,7 +957,7 @@ def evaluate(descriptor: dict, root: Path, target: str, cap: dict) -> dict:
         else:
             status, reason = "pending-review", "Mechanically matching candidate; operator review required"
         return {**base, "status": status, "reason": reason, "observed": observed}
-    except (Invalid, KeyError, TypeError, IndexError, OSError) as exc:
+    except (ValueError, KeyError, TypeError, IndexError, OSError, StopIteration) as exc:
         return {**base, "reason": str(exc) if isinstance(exc, Invalid) else "Malformed or unsafe report"}
 
 

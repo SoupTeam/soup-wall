@@ -13,6 +13,7 @@ import tempfile
 import time
 
 sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = {
     "filesystem-workspace/notes.txt": b"Owned prepared-selection useful notes.\n/workspace\n/workspace/credentials.txt\n/workspace/followup.txt\n",
@@ -79,14 +80,24 @@ def run(args, report):
     if any(args.output.is_relative_to(generation / name)
            for name in ("filesystem-workspace", "git-workspace")):
         raise ValueError("demo_output_inside_workspace")
+    from pilot_evidence_custody import SELECTION_LIMIT, parse_json, safe_file, verify_parent
+
+    selection_bytes = safe_file(args.selection, SELECTION_LIMIT)
+    if parse_json(selection_bytes) != selection:
+        raise ValueError("demo_selection_changed")
+    selection_sha = hashlib.sha256(selection_bytes).hexdigest()
+    if getattr(args, "parent_report", None) is not None:
+        report["parent_report_sha256"] = verify_parent(args.parent_report, selection_sha, selection["source"])
     args.output.mkdir(mode=0o700)
-    report.update(source=selection["source"], selection_sha256=hashlib.sha256(args.selection.read_bytes()).hexdigest(),
+    report.update(source=selection["source"], selection_sha256=selection_sha,
                   strace_sha256=hashlib.sha256(args.strace.read_bytes()).hexdigest(),
                   executed=True, status="running", cases=[])
     started = time.monotonic()
     try:
         with tempfile.TemporaryDirectory(prefix="soup-wall-demo-") as temporary:
             driver.qualify(check, Path(temporary), report)
+            if safe_file(args.selection, SELECTION_LIMIT) != selection_bytes:
+                raise ValueError("demo_selection_changed")
     except Exception as error:
         report.update(status="failed", reason=reason(error))
     finally:
@@ -104,6 +115,7 @@ def parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--selection", type=Path)
+    parser.add_argument("--parent-report", type=Path, help="bind the original installed qualification parent report")
     parser.add_argument("--expected-commit")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--strace", type=Path, default=Path("/usr/bin/strace"))
