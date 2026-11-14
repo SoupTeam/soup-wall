@@ -19,6 +19,20 @@ rev2 and `git_readonly_v1` artifacts are unchanged byte for byte.
   `sou97_candidate` workflow dispatch input does.
 - Regressions: `rule_baseline/test_pilot_readonly.py`. Current evidence: `eval/evidence/sou97/v1.2-main-8c249000/`.
 
+## Qualification status
+
+The public development gate reports `OFFLINE_QUALIFIED` with zero failures and
+`pilot_acceptance=false`. Original-server runtime acceptance is blocked. The
+original Git candidate passed 40 selected controls on source `c8817be3`.
+Filesystem cases PMF-B16 through PMF-B19 reached the original server and
+registered 50, 200, 201 and 256 file opens. Native result inspection withheld
+all four responses with `filesystem-profile-refuse-result-injection`. The
+candidate cannot change that result policy or grant operator authority.
+
+SOU-97 stays open until the original Filesystem and Git reports pass the
+[runtime gate](../../eval/pilot/README.md) on one clean source. The opt-in code
+delivery carries the offline result above.
+
 ## Selection and rollback
 
 The collector reads `AGENTFW_CLASSIFIER`, `AGENTFW_RULE_BASELINE` and the script's bytes once, when it
