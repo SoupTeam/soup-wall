@@ -19,14 +19,20 @@ use soup_wall_agent::{ActionClass, AgentEvent, EventKind, Outcome, Provenance, T
 use crate::config::NativeCfg;
 use crate::handlers::Shared;
 
+pub mod analysis_purpose;
 pub mod approval;
 pub mod child_authority;
 pub mod continuity;
 pub mod execution;
 mod invocation;
+// SOU-218 executable contract experiment. No shipped endpoint or release path.
+pub mod consumer;
 pub mod liveness;
 pub mod pilot_cleanup;
 pub mod pilot_stop;
+#[cfg(test)]
+mod purpose_prototype;
+mod quarantine;
 pub mod resource;
 pub mod resource_approval;
 mod timing;
@@ -478,6 +484,11 @@ impl Session {
 
 #[derive(Default)]
 pub(crate) struct Sessions {
+    purpose_spent: BTreeMap<String, u64>,
+    pub(crate) consumer_terminal: BTreeMap<String, u64>,
+    pub(crate) consumers: BTreeMap<String, crate::pilot_approval::consumer::Registration>,
+    #[cfg(test)]
+    analysis_hosts: BTreeSet<String>,
     pub(crate) entries: BTreeMap<String, Session>,
     // Bounded tombstones prevent a completed scoped host from silently reverting
     // to unsigned hooks. Reaching the cap refuses new host IDs until restart.
@@ -597,6 +608,7 @@ pub struct NativeState {
     pub(crate) edit: Option<Arc<crate::edit_session::transport::Service>>,
     pub(crate) continuity: Option<continuity::Continuity>,
     pub(crate) sessions: Mutex<Sessions>,
+    quarantine: Mutex<quarantine::Quarantine>,
     pub(crate) approval: Option<approval::ApprovalState>,
     test_time_offset_ms: std::sync::atomic::AtomicU64,
     pub(crate) policy_barrier: Option<crate::policy_transition::Barrier>,
@@ -767,6 +779,7 @@ impl NativeState {
             edit: None,
             continuity: None,
             sessions: Mutex::default(),
+            quarantine: Mutex::default(),
             approval: None,
             test_time_offset_ms: std::sync::atomic::AtomicU64::new(0),
             policy_barrier: None,
@@ -838,6 +851,7 @@ impl NativeState {
             edit: None,
             continuity: None,
             sessions: Mutex::default(),
+            quarantine: Mutex::default(),
             approval: None,
             test_time_offset_ms: std::sync::atomic::AtomicU64::new(0),
             policy_barrier: self.policy_barrier.clone(),
@@ -944,6 +958,10 @@ impl NativeState {
         proof: Option<&str>,
         call: Option<(&str, &Value)>,
     ) -> Result<(String, Option<String>, Option<String>), &'static str> {
+        #[cfg(test)]
+        if sessions.analysis_hosts.contains(session_id) {
+            return Err("analysis_purpose_effects_withheld");
+        }
         let Some(proof) = proof else {
             if sessions.scoped_hosts.contains(session_id)
                 || agent_id.is_some()
@@ -1301,6 +1319,11 @@ fn parse(body: &str) -> Result<Request, &'static str> {
 
 #[derive(Serialize)]
 struct Response {
+    // Control-side diagnostics are not fields of the strict MCP receipt.
+    #[serde(skip)]
+    quarantine_id: Option<String>,
+    #[serde(skip)]
+    quarantine_error: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     publication_ttl_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1980,6 +2003,12 @@ pub(crate) fn retire_sessions_terminal(
 
     sessions.spent_authorities.retain(|_, exp| *exp > now_ms);
 
+    if let Ok(mut quarantine) = native.quarantine.lock() {
+        for (_, session, _) in &to_retire {
+            quarantine.retire(&session.epoch);
+        }
+    }
+
     let count = to_retire.len();
 
     if let Some(approval) = &native.approval {
@@ -2121,6 +2150,8 @@ fn inspect_bound_measured(
         .lock()
         .map_err(|_| "native_state_unavailable")?;
     timing.session_wait_us = started.elapsed().as_micros();
+    #[cfg(test)]
+    purpose_prototype::guard(&state, &request)?;
     let wait = Instant::now();
     let mut firewall = st
         .firewall
@@ -2140,6 +2171,8 @@ fn inspect_bound_measured(
         session.calls.retain(|_, call| call.expires > now);
     }
     let mut response = Response {
+        quarantine_id: None,
+        quarantine_error: None,
         policy_shadow: Vec::new(),
         publication_ttl_ms: None,
         execution: None,
@@ -3331,6 +3364,29 @@ fn inspect_bound_measured(
         representative.as_ref(),
         timing,
     )?;
+    if !response.release {
+        if let (Some(consumed), Some(outcome)) = (consumed, representative.as_ref()) {
+            match native
+                .quarantine
+                .lock()
+                .map_err(|_| "analysis_quarantine_state")?
+                .hold(
+                    consumed,
+                    quarantine::Capture {
+                        session,
+                        call: &call,
+                        request: &request,
+                        firewall: &firewall,
+                        events: &events,
+                        outcome,
+                        now: native.monotonic_now(),
+                    },
+                ) {
+                Ok(id) => response.quarantine_id = Some(id),
+                Err(reason) => response.quarantine_error = Some(reason),
+            }
+        }
+    }
     if response.release {
         // An outer model result is still held inside the collector until the
         // later context event. Raw judge spans remain post-audit only.

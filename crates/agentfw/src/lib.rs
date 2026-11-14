@@ -131,6 +131,10 @@ pub fn app_with_diagnostics(
         )
         .route("/native/v1/instance", get(native::instance))
         .route(
+            native::consumer::ENDPOINT,
+            post(native::consumer::handler).layer(axum::extract::DefaultBodyLimit::max(65_536)),
+        )
+        .route(
             native::pilot_cleanup::ENDPOINT,
             post(native::pilot_cleanup::handler).layer(axum::extract::DefaultBodyLimit::max(4096)),
         )

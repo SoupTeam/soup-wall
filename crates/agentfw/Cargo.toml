@@ -7,6 +7,16 @@ repository.workspace = true
 description = "Agent firewall daemon: inspects Claude Code tool calls via native hooks."
 default-run = "agentfw"
 
+[features]
+# Explicit test-only experiment variant; never an automatic provider fallback.
+sou218-gemini25-lite = []
+sou218-gemini35-lite = []
+sou218-gemini35-compact = ["sou218-gemini35-lite"]
+sou218-gemini35-catalog = ["sou218-gemini35-lite"]
+sou218-gemini35-coverage = ["sou218-gemini35-catalog"]
+sou218-gemini35-evidence = ["sou218-gemini35-coverage"]
+sou218-gemini35-support = ["sou218-gemini35-catalog"]
+
 [lib]
 name = "agentfw"
 path = "src/lib.rs"
@@ -64,6 +74,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 tempfile = "3"
 
 [dev-dependencies]
+zeroize = "1"
 tower = { version = "0.5", features = ["util"] }
 tempfile = "3"
 wiremock = "0.6"
