@@ -434,7 +434,30 @@ async fn admit(
                 Err(code) => return Ok(refusal(&code)),
             };
         let mut timing = ContinuationTiming::new();
+        let check_create_resource = || -> anyhow::Result<()> {
+            #[cfg(target_os = "linux")]
+            if let Some(expected) = &context.original_create {
+                let workspace = call
+                    .pinned_workspace
+                    .as_deref()
+                    .context("selected create root missing")?;
+                ensure!(
+                    &server_profile::filesystem_create::CreateResource::capture(
+                        workspace, &call.args
+                    )? == expected,
+                    "selected create resource changed during approval"
+                );
+            }
+            Ok(())
+        };
         let resumed = async {
+            // Reject an already-invalid create before the full package rehash.
+            // Check it again after the rehash before acquiring live authority.
+            let resource = check_create_resource();
+            if resource.is_err() {
+                timing.record(call, "create_resource_before_assets", false);
+            }
+            resource?;
             let verified = if let Some(verified_assets) = verified_assets {
                 let frozen = profile.clone();
                 tokio::task::spawn_blocking(move || frozen.revalidate_assets(&verified_assets))
@@ -453,19 +476,7 @@ async fn admit(
             };
             timing.record(call, "profile_and_assets", verified.is_ok());
             verified?;
-            #[cfg(target_os = "linux")]
-            if let Some(expected) = &context.original_create {
-                let workspace = call
-                    .pinned_workspace
-                    .as_deref()
-                    .context("selected create root missing")?;
-                ensure!(
-                    &server_profile::filesystem_create::CreateResource::capture(
-                        workspace, &call.args
-                    )? == expected,
-                    "selected create resource changed during approval"
-                );
-            }
+            check_create_resource()?;
             boundary = collector.policy_boundary().await?;
             timing.record(call, "policy_boundary", true);
             let reassessed = collector
