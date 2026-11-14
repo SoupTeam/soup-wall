@@ -17,6 +17,7 @@ sou218-gemini35-coverage = ["sou218-gemini35-catalog"]
 sou218-gemini35-evidence = ["sou218-gemini35-coverage"]
 sou218-gemini35-support = ["sou218-gemini35-catalog"]
 sou218-gemini35-code-context = ["sou218-gemini35-support"]
+sou218-gemini35-attribution = ["sou218-gemini35-code-context"]
 
 [lib]
 name = "agentfw"

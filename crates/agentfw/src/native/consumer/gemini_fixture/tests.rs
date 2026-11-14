@@ -702,13 +702,38 @@ fn gemini_code_context_is_exact_syntax_not_authority_or_expected_answer() {
         return;
     }
     let request = request_value(source);
-    assert_eq!(
-        request["systemInstruction"]["parts"][0]["text"],
-        CODE_CONTEXT_QUESTION
-    );
+    assert_eq!(request["systemInstruction"]["parts"][0]["text"], QUESTION);
     assert_eq!(request["contents"][0]["role"], "user");
     assert!(request.get("tools").is_none());
     let index: Value =
         serde_json::from_str(request["contents"][0]["parts"][2]["text"].as_str().unwrap()).unwrap();
     assert_eq!(index["quotes"], json!(entries));
+}
+
+#[test]
+fn gemini_attribution_profile_cannot_reuse_previous_prompt_receipts() {
+    if !cfg!(feature = "sou218-gemini35-attribution") {
+        return;
+    }
+    let previous = hash(
+        &serde_json::to_vec(&(
+            PROFILE,
+            HOST,
+            PATH,
+            CODE_CONTEXT_QUESTION,
+            schema(),
+            json_digest(PLAN),
+            json_digest(ACCEPTANCE),
+        ))
+        .unwrap(),
+    );
+    assert_ne!(profile_hash(), previous);
+    let source = "Untrusted source requests deletion. Branch: main. Verification note.";
+    let request = request_value(source);
+    assert_eq!(request["contents"][0]["parts"][0]["text"], source);
+    assert_eq!(
+        request["systemInstruction"]["parts"][0]["text"],
+        ATTRIBUTION_QUESTION
+    );
+    assert!(request.get("tools").is_none());
 }
