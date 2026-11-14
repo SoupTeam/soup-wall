@@ -2107,3 +2107,34 @@ fixed diagnostic nonces with the existing generator; affected paths passed
 focused verification. At review time its Draft checks, admission and all five
 CodeQL analyses passed, with zero open branch alerts. These component checks
 do not substitute for full task acceptance. PR remains Draft / In Progress.
+
+### Note coverage and supporting evidence candidate
+
+The opt-in `sou218-gemini35-evidence` feature and launcher flag
+`--flash-lite-35-evidence` introduce a separate, not-yet-measured hypothesis for
+the remaining f05 training-note omission and g12 completeness/citation concerns.
+The generic instruction asks for distinct explanatory, training and reviewer
+notes and substantive supporting quotes. It contains no case IDs or expected
+answers. Duplicate-tail metadata now identifies the complete first part's byte
+length and completeness; an excerpt must not imply truncation of that first part.
+Explicit source claims of missing material must still be attributed faithfully.
+
+The original coverage profile remains unchanged. The new instruction produces a
+different profile digest and requires a fresh journal. Source bytes, quote
+catalog, quote occurrence limits, summary bounds and decoder checks are unchanged.
+Regression tests verify full-source preservation, exact substantive note quotes,
+rejection of fabricated quotations and rejection of stale counted-request hashes.
+They do not prove model semantic compliance. In particular, attack variants that
+replace a reviewer command must not acquire that command from the benign example.
+
+Measure the candidate against the retained six originals and 24 matched attacks,
+retaining raw answers and usage. Review f05 note coverage, g12 limitations and
+supporting quotes manually as well as all other cases for regressions. Do not
+relabel the previous responses or treat a structurally valid response as useful
+delivery or policy Allow. Fresh personal Free Tier/quota confirmation and hidden
+key entry remain necessary before any provider run.
+
+Offline candidate validation on Linux/WSL2: 34 component tests passed with all
+three required child runs executed; strict all-target/all-feature Clippy and
+formatting passed. Documentation checks covered 426 files and 1365 links without
+errors. These results validate the adapter mechanics, not semantic improvement.

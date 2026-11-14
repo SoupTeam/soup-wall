@@ -386,16 +386,72 @@ fn gemini_coverage_tail_is_exact_bounded_unicode_and_never_system_instruction() 
         let start = tail["source_byte_start"].as_u64().unwrap() as usize;
         assert_eq!(tail["raw_source_excerpt"], source[start..]);
         assert!(source.len() - start <= 8192);
-        assert_eq!(
-            request["systemInstruction"]["parts"][0]["text"],
-            COVERAGE_QUESTION
-        );
+        assert_eq!(request["systemInstruction"]["parts"][0]["text"], QUESTION);
         assert_eq!(request["contents"][0]["role"], "user");
         assert!(request.get("tools").is_none());
     }
     assert_ne!(QUESTION, CATALOG_QUESTION);
     let p = prepared();
     assert!(decode(&p, &envelope(answer("invented non-source quotation"))).is_err());
+}
+
+#[test]
+fn gemini_evidence_full_source_metadata_and_note_quotes_remain_untrusted() {
+    if !cfg!(feature = "sou218-gemini35-evidence") {
+        return;
+    }
+    let cases = [
+        (
+            include_str!("../../../../../../eval/sou123/payloads/f05-a.txt"),
+            "Training note for human reviewers",
+        ),
+        (
+            include_str!("../../../../../../eval/sou123/payloads/g12-a.txt"),
+            "make verify",
+        ),
+    ];
+    for (text, note) in cases {
+        let source = json!({"jsonrpc":"2.0","id":"host-call","result":{"content":[{"type":"text","text":text}],"structuredContent":{"content":text}}}).to_string();
+        let request = request_value(&source);
+        assert_eq!(request["contents"][0]["parts"][0]["text"], source);
+        let tail: Value =
+            serde_json::from_str(request["contents"][0]["parts"][1]["text"].as_str().unwrap())
+                .unwrap();
+        assert_eq!(tail["source_byte_length"], source.len());
+        assert_eq!(tail["source_complete"], true);
+        let start = tail["source_byte_start"].as_u64().unwrap() as usize;
+        assert_eq!(tail["raw_source_excerpt"], source[start..]);
+        let quote = quote_catalog::candidates(&source)
+            .into_iter()
+            .find(|q| q.contains(note))
+            .expect("substantive note must be available to cite");
+        let p = prepare(
+            &source,
+            &crate::token::generate(),
+            Instant::now() + std::time::Duration::from_secs(30),
+            preflight_for(&source),
+        )
+        .unwrap();
+        assert!(decode(&p, &envelope(answer(quote))).is_ok());
+        // The profile does not repair, promote or reject model prose by keyword.
+        // A fabricated quotation still fails even when its prose sounds useful.
+        assert!(decode(
+            &p,
+            &envelope(answer("fabricated substantive supporting quote"))
+        )
+        .is_err());
+        let mut stale = preflight_for(&source);
+        let mut old = request.clone();
+        old["systemInstruction"]["parts"][0]["text"] = json!(COVERAGE_QUESTION);
+        stale.counted_request_sha256 = hash(&serde_json::to_vec(&old).unwrap());
+        assert!(prepare(
+            &source,
+            &crate::token::generate(),
+            Instant::now() + std::time::Duration::from_secs(30),
+            stale
+        )
+        .is_err());
+    }
 }
 
 #[test]
