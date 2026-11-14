@@ -6,7 +6,7 @@ on:
       installed_focus:
         description: Focus one installed qualification; linked/filesystem/configuration also require native_preparation_only
         type: choice
-        options: ['off', lifecycle-preflight, linux-candidate, linked-worktrees, filesystem-roots, filesystem-links, workspace-snapshot, clean-user, clean-user-processes, clean-user-session, proxy-preflight, configuration-recovery, project-recovery, maintenance, policy-activation, budget-presets, pilot-scope]
+        options: ['off', lifecycle-preflight, linux-candidate, linked-worktrees, filesystem-roots, filesystem-links, workspace-snapshot, clean-user, clean-user-processes, clean-user-session, proxy-preflight, sou97-candidate, configuration-recovery, project-recovery, maintenance, policy-activation, budget-presets, pilot-scope]
         default: 'off'
       project_presets_only:
         description: Focus installed SOU-197 project presets (use with native_preparation_only)
@@ -55,10 +55,6 @@ on:
         default: false
       native_preparation_only:
         description: Run only native Ubuntu 24.04 preparation qualification
-        type: boolean
-        default: false
-      sou97_candidate:
-        description: Also run the SOU-97 pilot candidate classifier through the original server (opt-in)
         type: boolean
         default: false
       provider_ca_only:
@@ -726,7 +722,7 @@ jobs:
             --out "$RUNNER_TEMP/profile-onboarding-filesystem" --work-parent "$RUNNER_TEMP" \
             2>&1 | tee "$RUNNER_TEMP/sou62-profile-onboarding.log"
       - name: SOU-97 opt-in candidate classifier through the original filesystem server
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_candidate == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'sou97-candidate' }}
         shell: bash
         run: |
           set -euo pipefail

@@ -2295,7 +2295,7 @@ jobs:
             --out "$RUNNER_TEMP/profile-onboarding-filesystem" --work-parent "$RUNNER_TEMP" \
             2>&1 | tee "$RUNNER_TEMP/sou62-profile-onboarding.log"
       - name: SOU-97 opt-in candidate classifier through the original filesystem server
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_candidate == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'sou97-candidate' }}
         shell: bash
         run: |
           set -euo pipefail

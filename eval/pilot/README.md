@@ -113,13 +113,16 @@ classifier, native policy and pinned original servers. No evidence exists until 
 runs have completed and their artifacts have been checked.
 
 1. Push the exact commit: `git push -u origin feat/sou97-pilot-classifier`.
-2. Dispatch each existing workflow on that branch with `sou97_candidate` set to `true`.
-   - **GitHub UI:** Actions, then "Real filesystem MCP profile" (and then "Real Git MCP
-     profile"), then Run workflow. Choose the branch, tick `sou97_candidate`, and run.
-   - **REST, for each of `mcp-real-filesystem.yml` and `mcp-real-git.yml`:**
-     `POST https://api.github.com/repos/SoupTeam/soup-wall/actions/workflows/<file>/dispatches`
-     with body `{"ref": "feat/sou97-pilot-classifier", "inputs": {"sou97_candidate": "true"}}`.
-     Use a token that has `actions: write`.
+2. Dispatch both workflows on that branch with the other inputs at their defaults.
+   - **GitHub UI**. In Actions, open each workflow and choose Run workflow. On
+     **Real filesystem MCP profile**, select `sou97-candidate` in `installed_focus`.
+     On **Real Git MCP profile**, tick `sou97_candidate`.
+   - **REST**. Use a token with `actions: write` to send
+     `POST https://api.github.com/repos/SoupTeam/soup-wall/actions/workflows/<file>/dispatches`.
+     For `mcp-real-filesystem.yml`, send
+     `{"ref": "feat/sou97-pilot-classifier", "inputs": {"installed_focus": "sou97-candidate"}}`.
+     For `mcp-real-git.yml`, send
+     `{"ref": "feat/sou97-pilot-classifier", "inputs": {"sou97_candidate": "true"}}`.
 3. Wait for both runs to finish. Download the artifacts `sou62-real-filesystem-mcp-evidence`
    and `sou68-real-git-mcp-evidence`. Each contains `sou97-*-candidate/sou97-runtime-evidence.json`
    with the run's driver report, collector logs and response sidecar.

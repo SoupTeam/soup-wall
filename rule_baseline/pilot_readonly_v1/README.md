@@ -16,7 +16,8 @@ rev2 and `git_readonly_v1` artifacts are unchanged byte for byte.
   `python3 eval/eval_runner.py <fixtures> --classifier-path rule_baseline/pilot_readonly_v1 --out-dir <out>`.
   No default, profile, package or required CI step selects it. Only an explicit operator
   environment (below), the drivers' opt-in `--classifier-script`/`--classifier-sha256` flags, or the
-  `sou97_candidate` workflow dispatch input does.
+  workflow dispatch selectors do (`installed_focus=sou97-candidate` for filesystem and
+  `sou97_candidate=true` for Git).
 - Regressions: `rule_baseline/test_pilot_readonly.py`. Current evidence: `eval/evidence/sou97/v1.2-main-8c249000/`.
 
 ## Qualification status
@@ -55,7 +56,8 @@ starts. Changes therefore apply to newly started collector processes, not to run
    - Git: `rule_baseline/git_readonly_v1/rule_baseline.py`, sha256
      `8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474`.
 2. Restart the collector processes that had the candidate selected.
-3. For acceptance runs, omit both flags (or leave `sou97_candidate` unset); default mode is unchanged.
+3. For ordinary acceptance runs, omit both flags. For workflow dispatch, leave
+   `installed_focus` at `off` for filesystem and `sou97_candidate` unchecked for Git.
 
 Rollback changes no policy, registry, profile or stored state, because the candidate never owns any.
 It cannot undo calls the candidate already admitted.

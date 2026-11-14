@@ -325,7 +325,8 @@ In candidate mode only:
   after each refusal.
 - It writes `sou97-runtime-evidence.json` for the [SOU-97 gate](../../eval/pilot/README.md).
 
-The workflow runs this mode only when dispatched with `sou97_candidate: true`.
+Select `sou97-candidate` in `installed_focus` and leave the other dispatch
+inputs at their defaults.
 
 
 ## Combined SOU-62 and SOU-63 smoke
