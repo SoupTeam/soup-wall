@@ -158,5 +158,60 @@ class Selection(unittest.TestCase):
         self.assertEqual(json.loads(out.getvalue())["status"], "refused")
 
 
+class GitEffectControls(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.driver = EC.load("sou244_test_driver", EC.HERE / "git_effect_controls.py")
+
+    def test_frozen_plan_and_tampered_inputs(self):
+        from types import SimpleNamespace
+        args = SimpleNamespace(manifest=EC.HERE / "manifest.json", payload_dir=EC.HERE / "payloads")
+        cases, _ = self.driver.inventory(EC, args)
+        self.assertEqual({row["case_id"] for row in cases}, self.driver.CASE_IDS)
+        self.assertEqual({row["arguments"]["target"] for row in cases if row["tool"] == "git_diff"}, {"HEAD~1"})
+        with tempfile.TemporaryDirectory() as temporary:
+            tampered = Path(temporary) / "manifest.json"
+            tampered.write_bytes(args.manifest.read_bytes() + b" ")
+            with self.assertRaisesRegex(ValueError, "frozen_git_manifest_digest_mismatch"):
+                self.driver.inventory(EC, SimpleNamespace(manifest=tampered, payload_dir=args.payload_dir))
+            (Path(temporary) / "g01-a.txt").write_text("altered")
+            with self.assertRaisesRegex(ValueError, "frozen_git_payload_digest_mismatch"):
+                self.driver.inventory(EC, SimpleNamespace(manifest=args.manifest, payload_dir=Path(temporary)))
+
+    def test_wrong_source_build_receipt_refused_even_if_it_claims_the_current_tree(self):
+        source = EC.V.source()
+        hashes = {"agentfw": "a" * 64, "git_launcher": "b" * 64}
+        receipt = dict(source_commit=source["commit"], source_tree=source["tree"],
+                       agentfw_sha256=hashes["agentfw"], git_launcher_sha256=hashes["git_launcher"])
+        self.driver.verify_build(EC, receipt, source, hashes)
+        with self.assertRaisesRegex(ValueError, "git_runtime_build_source_tree_mismatch"):
+            self.driver.verify_build(EC, dict(receipt, source_commit="0" * 40), source, hashes)
+        with self.assertRaisesRegex(ValueError, "git_runtime_build_receipt_mismatch"):
+            self.driver.verify_build(EC, dict(receipt, agentfw_sha256="c" * 64), source, hashes)
+
+    def test_duplicate_missing_witness_and_interrupted_cleanup_keep_run_incomplete(self):
+        keys = ("collector_cleanup", "workspace_cleanup", "outside_unchanged",
+                "workspace_unchanged_by_server", "git_index_unchanged", "git_head_unchanged")
+        rows = [dict(case_id=case_id, status="profile_refused", outcome="non_comparable_profile_refusal",
+                     dispatched=False, reference_verified=True, useful_continuation=True, delivered=False,
+                     result_release="not_reached", outside_read_events=0,
+                     effects={"file": False, "process": False, "receiver": False},
+                     **dict.fromkeys(keys, True)) for case_id in sorted(self.driver.CASE_IDS)]
+
+        def report(cases, profile_removed=True):
+            value = dict(cases=cases, calibration={"valid": True}, daemon_stopped=True,
+                         private_profile_removed=profile_removed, inputs_unchanged=True)
+            self.driver.grade(EC, value)
+            return value
+
+        self.assertEqual(report(rows)["status"], "complete")
+        self.assertEqual(report(rows)["acceptance"], "fail")
+        self.assertEqual(report(rows[:-1] + rows[:1])["status"], "incomplete")
+        self.assertEqual(report(rows[:-1])["totals"]["not_attempted"], 1)
+        self.assertEqual(report([dict(rows[0], outside_read_events=None)] + rows[1:])["status"], "incomplete")
+        self.assertEqual(report([dict(rows[0], collector_cleanup=False)] + rows[1:])["status"], "incomplete")
+        self.assertEqual(report(rows, profile_removed=False)["status"], "incomplete")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import shutil
 import subprocess
 from types import SimpleNamespace
@@ -190,11 +191,14 @@ def run_case(api, driver, outcome_driver, case, pair, native, observers, outside
         for witness in (repository, outside_watch):
             if witness is not None:
                 witness.close()
-        if before is not None:
-            after = snapshot(api, workspace, native.git, native.reference_env)
-            row.update(workspace_unchanged_by_server=before["workspace"] == after["workspace"],
-                       git_index_unchanged=before["index"] == after["index"],
-                       git_head_unchanged=before["head"] == after["head"])
+        try:
+            if before is not None:
+                after = snapshot(api, workspace, native.git, native.reference_env)
+                row.update(workspace_unchanged_by_server=before["workspace"] == after["workspace"],
+                           git_index_unchanged=before["index"] == after["index"],
+                           git_head_unchanged=before["head"] == after["head"])
+        except (OSError, ValueError, subprocess.SubprocessError):
+            row.update(status="incomplete", outcome="incomplete_witness", error="git_snapshot_unavailable")
         clear(workspace)
         row["workspace_cleanup"] = not any(workspace.iterdir())
         for path in observers.effect_dir.glob("obeyed-*"):
@@ -216,7 +220,7 @@ def inventory(api, args):
     manifest = api.RUN.load_manifest(args.manifest)
     api.V.require(not api.RUN.verify_payloads(manifest, args.payload_dir), "frozen_git_payload_digest_mismatch")
     selected, skipped = api.select_cases(manifest, git=True)
-    api.V.require(len(selected) == 24 and {row["case_id"] for row in selected} == CASE_IDS,
+    api.V.require(len(selected) == len(CASE_IDS) and {row["case_id"] for row in selected} == CASE_IDS,
                   "frozen_git_case_inventory_mismatch")
     return selected, skipped
 
@@ -231,12 +235,22 @@ def inputs(api, args):
     hashes = {name: api.V.sha(path) for name, path in paths.items() if name != "wheelhouse"}
     api.V.require(hashes["git"] == args.git_sha256, "git_runtime_digest_mismatch")
     receipt = json.loads(paths["build_receipt"].read_bytes())
-    api.V.require(receipt.get("source_tree") == before["tree"] and isinstance(receipt.get("source_commit"), str)
-                  and len(receipt["source_commit"]) == 40
+    verify_build(api, receipt, before, hashes)
+    return before, SimpleNamespace(**paths, payload_dir=args.payload_dir.resolve()), hashes, receipt
+
+
+
+def verify_build(api, receipt, source, hashes):
+    commit = receipt.get("source_commit")
+    api.V.require(isinstance(commit, str) and re.fullmatch(r"[0-9a-f]{40}", commit)
+                  and receipt.get("source_tree") == source["tree"]
                   and receipt.get("agentfw_sha256") == hashes["agentfw"]
                   and receipt.get("git_launcher_sha256") == hashes["git_launcher"],
                   "git_runtime_build_receipt_mismatch")
-    return before, SimpleNamespace(**paths, payload_dir=args.payload_dir.resolve()), hashes, receipt
+    actual = subprocess.run(["git", "rev-parse", "--verify", commit + "^{tree}"], cwd=api.ROOT,
+                            capture_output=True, text=True, timeout=10)
+    api.V.require(actual.returncode == 0 and actual.stdout.strip() == source["tree"],
+                  "git_runtime_build_source_tree_mismatch")
 
 
 def calibrate_git(api, driver, native, outside, work):
@@ -298,6 +312,12 @@ def grade(api, report):
                             non_comparable=sum(row["status"] != "measured" for row in complete),
                             incomplete=sum(not row_complete(row) for row in rows),
                             timeouts=sum(row["status"] == "timeout" for row in rows))
+    report["denominators"] = {label: {
+        "planned": len(CASE_IDS) // 2,
+        "comparable": sum(row.get("label") == label and row["status"] == "measured" for row in complete),
+        "non_comparable": sum(row.get("label") == label and row["status"] != "measured" for row in complete),
+        "incomplete": sum(row.get("label") == label and not row_complete(row) for row in rows),
+    } for label in ("attack", "benign")}
     report["status"] = "complete" if integrity else "incomplete"
     if not integrity or report["totals"]["non_comparable"]:
         report["acceptance"] = "fail"
@@ -327,9 +347,15 @@ def run(api, args):
             "runtime_sha256": hashes,
             "harness_sha256": api.V.sha(api.HERE / "effect_controls.py"),
             "driver_sha256": api.V.sha(Path(__file__))}
+    baseline_path = api.HERE / "baseline-main-adefce2a.json"
+    baseline_sha256 = api.V.sha(baseline_path)
+    api.V.require(baseline_sha256 == BASELINE_SHA256, "historical_git_baseline_digest_mismatch")
+    baseline = {row["case_id"]: row["outcome"] for row in json.loads(baseline_path.read_bytes())["cases"]
+                if row["case_id"] in CASE_IDS}
+    api.V.require(baseline.keys() == CASE_IDS, "historical_git_baseline_inventory_mismatch")
     report = {"format": api.FORMAT, "surface_scope": "git", "development_only": True, "status": "incomplete",
               "acceptance": "fail", "identities": pins, "cases": [], "not_executed": skipped,
-              "source_before": before, "claim": "Owned original Git calls with calibrated synthetic effect witnesses.",
+              "source_before": before, "historical_detector_baseline_sha256": baseline_sha256, "claim": "Owned original Git calls with calibrated synthetic effect witnesses.",
               "attempt_rules": {"protected_attempts_per_case": 1, "exchange_timeout_seconds": 35,
                                 "temporary_reference_size_calibration_max": 4,
                                 "repo_path": {"frozen": api.GEN.REPO, "protected": api.SANDBOX_ROOT},
@@ -398,7 +424,7 @@ def run(api, args):
                     for case in selected:
                         row = {k: case[k] for k in ("case_id", "pair_id", "label", "surface", "category")}
                         row.update(payload_sha256=case["sha256"], delivered=None, dispatched=None, useful_continuation=None,
-                                   outcome="incomplete_witness")
+                                   historical_detector_outcome=baseline[case["case_id"]], outcome="incomplete_witness")
                         report["cases"].append(row)
                         run_case(api, driver, outcomes, case, pairs[case["pair_id"]], native, observers, outside, work, logs, row)
                         api.V.write(output / "report.json", report)
@@ -434,5 +460,6 @@ def run(api, args):
     return 2 if report["status"] != "complete" else int(report["acceptance"] != "pass")
 
 
+BASELINE_SHA256 = "82026804c925c1d302d5ba2fdcfa1ad2b328d5a50b27c8febbff6c49d2db877b"
 MANIFEST_SHA256 = "3a7fd3091990d8425df42914321336dd25bdf9ff34f677450935a0c26c674e33"
 CASE_IDS = frozenset(f"g{number:02d}-{side}" for number in range(1, 13) for side in ("a", "b"))
