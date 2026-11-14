@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 import time
 import tempfile
@@ -43,6 +44,11 @@ protocol = types.ModuleType("agentdojo_protocol")
 protocol.__file__ = str(PROTOCOL_PATH)
 sys.modules["agentdojo_protocol"] = protocol
 exec(compile(PROTOCOL_BYTES, str(PROTOCOL_PATH), "exec", dont_inherit=True), protocol.__dict__)
+CASE_MANIFEST_PATH = MODULE_PATH.with_name("agentdojo_case_manifest.py")
+CASE_MANIFEST_BYTES = CASE_MANIFEST_PATH.read_bytes()
+case_manifest = types.ModuleType("agentdojo_case_manifest")
+exec(compile(CASE_MANIFEST_BYTES, str(CASE_MANIFEST_PATH), "exec", dont_inherit=True), case_manifest.__dict__)
+
 DEPENDENCIES = ["openai", "pydantic", "docstring-parser", "typing-extensions", "PyYAML", "tenacity",
                 "google-genai", "rich", "deepdiff", "anthropic", "cohere", "requests"]
 
@@ -66,6 +72,7 @@ def main():
     parser.add_argument("--plan", type=Path, help="Explicit frozen native task/injection selection JSON")
     parser.add_argument("--plan-set", choices=list(protocol.SETS),
                         help="Plan schema 2 only: the frozen set to run")
+    parser.add_argument("--case-manifest", help="pinned upstream src/ manifest for a matched plan-check or run")
     parser.add_argument("--plan-spec", type=Path, help="freeze-plan: plan fields without cases or source inventory")
     parser.add_argument("--results", type=Path, nargs="+", help="report: every published run report for the plan")
     parser.add_argument("--report-out", type=Path, help="report: fresh directory for report.json and report.md")
@@ -84,6 +91,8 @@ def main():
     parser.add_argument("--acknowledge-cost-estimate", action="store_true")
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
+    if args.case_manifest is not None and args.mode not in {"plan-check", "live"}:
+        parser.error("--case-manifest requires a frozen matched plan-check or run")
     if args.mode == "manifest":
         print(json.dumps({"schema_version": 1, "upstream_revision": adapter.REVISION,
                           "adapter": native.CONTRACT if args.native_registry else "existing-hook-native-name-fallback-v1", "model_calls": 0,
@@ -154,7 +163,7 @@ def main():
         if args.plan is None:
             parser.error("Plan check requires --plan")
         sanitize_environment()
-        result = check_plan(args.upstream_checkout, args.plan.read_bytes(), repo)
+        result = check_plan(args.upstream_checkout, args.plan.read_bytes(), repo, args.case_manifest)
         print(json.dumps(result, indent=2))
         if result["errors"]:
             raise adapter.AdapterError("Frozen plan does not reproduce from the pinned upstream source")
@@ -308,7 +317,7 @@ def freeze_plan(checkout, spec_bytes):
     return ordered
 
 
-def check_plan(checkout, plan_bytes, repo):
+def check_plan(checkout, plan_bytes, repo, case_manifest_path=None):
     """Re-derive a frozen plan's selection and injection hashes from the pinned upstream source."""
     plan = protocol.load_plan(plan_bytes, adapter.REVISION)
     upstream = adapter.load_upstream(checkout)
@@ -325,11 +334,22 @@ def check_plan(checkout, plan_bytes, repo):
         errors.append("plan policy identity differs from the shipped policy bytes")
     if plan["identities"]["runtime"]["dependency_lock_sha256"] != lock_identity()[0]:
         errors.append("plan dependency lock identity differs from the repository lock")
-    return {"plan_sha256": adapter.digest(plan_bytes), "plan_id": plan["plan_id"], "errors": errors,
+    result = {"plan_sha256": adapter.digest(plan_bytes), "plan_id": plan["plan_id"], "errors": errors,
             "reproduced": not errors, "upstream": upstream.verified,
             "cases": {name: len(plan["sets"][name]["cases"]) for name in protocol.SETS},
             "live_gate_blockers": {name: protocol.live_gate(plan, name) for name in protocol.SETS},
             "model_calls": 0}
+    if case_manifest_path is not None:
+        result["case_manifest"] = bind_case_manifest(checkout, plan, case_manifest_path)
+    return result
+
+
+def bind_case_manifest(checkout, plan, path):
+    try:
+        value = case_manifest.verify(checkout, path, plan)
+    except (case_manifest.Invalid, OSError, subprocess.SubprocessError, UnicodeError) as error:
+        raise adapter.AdapterError("Case manifest is unavailable or inconsistent with the pinned public plan") from error
+    return {**value, "verifier_source_sha256": adapter.digest(CASE_MANIFEST_BYTES)}
 
 
 def write_report(plan_path, result_paths, out_dir):
@@ -358,6 +378,10 @@ def run_live(args, repo):
     native_registry = native.Registry(native_registry_path.read_bytes()) if native_registry_path else None
     plan_set = getattr(args, "plan_set", None)
     started_at = datetime.now(timezone.utc).isoformat()
+    manifest_path = getattr(args, "case_manifest", None)
+    manifest_binding = None
+    if manifest_path is not None and not frozen:
+        raise adapter.AdapterError("Case manifest requires a frozen matched plan")
     if frozen:
         plan = protocol.load_plan(plan_bytes, adapter.REVISION)
         if plan_set is None:
@@ -378,6 +402,8 @@ def run_live(args, repo):
         blockers = protocol.check_live_identity(plan, plan_set, observed)
         if blockers:
             raise LiveGateClosed(blockers)
+        if manifest_path is not None:
+            manifest_binding = bind_case_manifest(args.upstream_checkout, plan, manifest_path)
     else:
         if plan_set is not None:
             raise adapter.AdapterError("--plan-set requires a schema 2 frozen plan")
@@ -559,6 +585,11 @@ def run_live(args, repo):
                       protocol_source_sha256=adapter.digest(PROTOCOL_BYTES),
                       completion_tokens_reported=provider.completion_tokens if not provider.responses_without_usage else None)
         report["selection"].update(repetitions=plan["sets"][plan_set]["repetitions"], attack=plan["attack"]["name"])
+    if manifest_binding is not None:
+        adapter.verify_checkout(args.upstream_checkout)
+        if bind_case_manifest(args.upstream_checkout, plan, manifest_path) != manifest_binding:
+            raise adapter.AdapterError("Frozen case manifest changed during measurement")
+        report["case_manifest"] = manifest_binding
     if native_registry is not None:
         report.update(native_contract=native.CONTRACT, native_semantics_registry_sha256=native_registry.sha256,
                       native_adapter_source_sha256=adapter.digest(NATIVE_BYTES),

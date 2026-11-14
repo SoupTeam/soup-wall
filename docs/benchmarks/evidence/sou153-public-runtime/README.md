@@ -29,6 +29,11 @@ them. Unknown evaluator outcomes and individual timeouts cannot be resolved
 by matched/1. The original reports and comparison retain these limits.
 DEC-SOU153-20261028 remains open for the missing per-case and family binding.
 
+The later [task-specific repetition](task-specific/README.md) executes the
+same selection with bounded answers derived from returned workspace facts.
+It achieves 3/8 original utility on each side in both conditions, with the
+same source and family-binding limitations.
+
 ## Replay
 
 Recover `inputs.json` from the evidence bundle or regenerate it with the
