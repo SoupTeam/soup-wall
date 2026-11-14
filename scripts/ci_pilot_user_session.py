@@ -22,6 +22,14 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 CERT = ROOT / 'scripts/fixtures/sou216-process-recipient.crt'
 CERT_SHA256 = '70fe2f78676803487c792babc7d49d867c6c12877790d79b93593fd6b8ba69f4'
+QUALIFICATION_CERT = ROOT / 'scripts/fixtures/sou243-custody-recipient.crt'
+QUALIFICATION_CERT_SHA256 = '5de07c5f15b1f7c15970769001e527aadacf91a32a826f840932c5cc379db5b2'
+
+
+def process_recipient(name):
+    if name == 'sou243':
+        return QUALIFICATION_CERT, QUALIFICATION_CERT_SHA256
+    return CERT, CERT_SHA256
 
 
 def load(name, filename):
@@ -227,6 +235,8 @@ def main():
     operation = parser.add_mutually_exclusive_group()
     operation.add_argument('--quiesce', action='store_true')
     operation.add_argument('--after-cleanup', action='store_true', help='read-only snapshot after the installed-host attempt')
+    parser.add_argument('--recipient', choices=('sou216', 'sou243'), default='sou216',
+                        help='pinned public certificate for this new snapshot')
     args = parser.parse_args()
     report = {'diagnostic': 'SOU-216 owned CI user-session preparation', 'authorization': False,
         'installed_host_executed': None if args.after_cleanup else False,
@@ -257,13 +267,14 @@ def main():
     if directory is not None:
         raw = H.canonical(private); require(len(raw) <= 2 * 1024 * 1024, 'private_session_observation_bound')
         raw_path = directory / 'private-provenance.json'; raw_path.write_bytes(raw)
-        require(H.sha(CERT) == CERT_SHA256, 'process_recipient_changed')
+        recipient, fingerprint = process_recipient(args.recipient)
+        require(H.sha(recipient) == fingerprint, 'process_recipient_changed')
         encrypted = directory / 'private-provenance.cms'
         subprocess.run(['/usr/bin/openssl', 'cms', '-encrypt', '-binary', '-aes-256-gcm',
-            '-in', str(raw_path), '-out', str(encrypted), '-outform', 'DER', str(CERT)],
+            '-in', str(raw_path), '-out', str(encrypted), '-outform', 'DER', str(recipient)],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=15)
         report.update(private_provenance_sha256=H.sha(raw_path), encrypted_provenance_sha256=H.sha(encrypted),
-            recipient_certificate_sha256=CERT_SHA256, private_provenance='CMS encrypted; private key retained locally, no raw argv/environment captured')
+            recipient_certificate_sha256=fingerprint, private_provenance='CMS encrypted; private key retained locally, no raw argv/environment captured')
         H.save(directory / 'report.json', report)
     print(json.dumps(report, sort_keys=True))
     return 1 if report['status'] == 'failed' else 0

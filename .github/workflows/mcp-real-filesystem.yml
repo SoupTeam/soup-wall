@@ -2315,7 +2315,7 @@ jobs:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: |
           set -euo pipefail
-          python3 -I -B scripts/ci_pilot_user_session.py --quiesce
+          python3 -I -B scripts/ci_pilot_user_session.py --quiesce --recipient sou243
       - name: Qualify pinned installed pilot in a clean ordinary-user environment
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'clean-user' && github.event.inputs.native_preparation_only == 'true'
         shell: bash
@@ -2341,7 +2341,7 @@ jobs:
         shell: bash
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
-        run: python3 -I -B scripts/ci_pilot_user_session.py --after-cleanup
+        run: python3 -I -B scripts/ci_pilot_user_session.py --after-cleanup --recipient sou243
       - name: Seal sou216-clean-user installed pilot custody
         if: always() && github.event.inputs.installed_focus == 'clean-user'
         shell: bash

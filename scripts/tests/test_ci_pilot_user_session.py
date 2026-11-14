@@ -89,6 +89,15 @@ class UserExitBoundary(unittest.TestCase):
             run.assert_not_called()
 
 
+class Recipients(unittest.TestCase):
+    def test_historical_and_fresh_recipients_are_distinct_and_pinned(self):
+        legacy = m.process_recipient('sou216')
+        fresh = m.process_recipient('sou243')
+        self.assertNotEqual(legacy, fresh)
+        self.assertEqual(m.H.sha(legacy[0]), legacy[1])
+        self.assertEqual(m.H.sha(fresh[0]), fresh[1])
+
+
 class ReadOnlyPostCleanup(unittest.TestCase):
     def test_post_cleanup_cannot_enable_quiescence(self):
         with mock.patch.object(m,'load') as load, mock.patch.object(sys,'argv',
