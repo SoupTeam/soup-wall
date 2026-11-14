@@ -2071,3 +2071,39 @@ Final report SHA-256:
 `9055fcc73f8b9d710c5356ae9e8e906db54cca9b0f1c4f2e807f111fd251b87d`.
 Private complete answer/history handoff SHA-256:
 `3a41e514cb81632ca9a34e8be540524865000924499a345c624dc23e3eadfff9`.
+
+### Independent development-experiment review - 14 November 2026
+
+The [maintainer review](https://github.com/SoupTeam/soup-wall/pull/346#pullrequestreview-5902210290)
+supersedes the pending-review statements above. The complete before/after archive
+was delivered in the access-controlled SOU-218 comment, not merely linked as a
+local file. Its SHA-256 is
+`c3b6eb9bcd1707baa0b359d429f78abfa4466e7f0ced9687793a14b8e5c19e59`.
+The reviewer verified all 172 checksum entries, the 173-file inventory, all 30
+frozen source frames and all 120 raw responses, decoded answers and usage records.
+Independent source-bound Rust decoding reproduced 13/30, 20/30, 30/30 and 30/30
+structurally valid responses across the four profiles. Both retained HTTP 503
+responses and the 32-attempt accounting were verified.
+
+The reviewer read all final answers and compared the six originals across all
+four profiles. The bounded development experiment is accepted with semantic
+limitations; the complete case-level findings remain in access-controlled
+SOU-218. This acceptance does not close the six production false refusals or
+qualify original-server runtime effects. Historical responses, reports and
+preliminary operator findings above remain retained as historical observations.
+
+The remaining work must distinguish factual completeness and citation support
+from structural acceptance, then demonstrate useful original-server delivery,
+matched attack refusal and independently checked authority/cleanup under the
+unchanged task criteria. Do not count a valid model response as a policy Allow,
+weaken admission to obtain a green result, or repeat the accepted experiment as
+if it were unfinished. Any future measured hypothesis must retain this baseline
+and its negative outcomes. No additional provider run is implied by this review.
+
+Reviewed source `af6f5070` passed 33 Linux/WSL2 component tests with three required
+children, strict all-target/all-feature Clippy, fmt and documentation checks.
+Maintainer follow-up `d66290efe1961abf3b2ec738fe173932b7d0d64f` replaces three
+fixed diagnostic nonces with the existing generator; affected paths passed
+focused verification. At review time its Draft checks, admission and all five
+CodeQL analyses passed, with zero open branch alerts. These component checks
+do not substitute for full task acceptance. PR remains Draft / In Progress.
