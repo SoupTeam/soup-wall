@@ -293,7 +293,8 @@ and scope companions, use the producer's demo selection and pass the parent
 `report.json` through each companion's `--parent-report` option.
 
 The focused hosted workflows encrypt the new custody directory with the
-existing SOU-216 operator recipient before artifact upload. On an authorized
+SOU-243 qualification recipient before artifact upload. The historical SOU-216
+user-session report has its own recipient. On an authorized
 operator host, decrypt the CMS payload in a private directory, inspect the
 archive member names and extract the `custody/` directory beside the original
 report. Preserve original report and companion paths and SHA-256 digests.

@@ -3854,8 +3854,8 @@ jobs:
           umask 077
           output="$RUNNER_TEMP/sou216-clean-user"
           if test -d "$output/custody"; then
-            cert=scripts/fixtures/sou216-process-recipient.crt
-            test "$(sha256sum "$cert" | cut -d ' ' -f1)" = 70fe2f78676803487c792babc7d49d867c6c12877790d79b93593fd6b8ba69f4
+            cert=scripts/fixtures/sou243-custody-recipient.crt
+            test "$(sha256sum "$cert" | cut -d ' ' -f1)" = 5de07c5f15b1f7c15970769001e527aadacf91a32a826f840932c5cc379db5b2
             tar -C "$output" -cf - custody | openssl cms -encrypt -binary -aes-256-gcm \
               -out "$output/installed-custody.cms" -outform DER "$cert"
           fi
@@ -4052,8 +4052,8 @@ jobs:
           umask 077
           output="$RUNNER_TEMP/sou215-pilot-scope"
           if test -d "$output/custody"; then
-            cert=scripts/fixtures/sou216-process-recipient.crt
-            test "$(sha256sum "$cert" | cut -d ' ' -f1)" = 70fe2f78676803487c792babc7d49d867c6c12877790d79b93593fd6b8ba69f4
+            cert=scripts/fixtures/sou243-custody-recipient.crt
+            test "$(sha256sum "$cert" | cut -d ' ' -f1)" = 5de07c5f15b1f7c15970769001e527aadacf91a32a826f840932c5cc379db5b2
             tar -C "$output" -cf - custody | openssl cms -encrypt -binary -aes-256-gcm \
               -out "$output/installed-custody.cms" -outform DER "$cert"
           fi

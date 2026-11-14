@@ -689,8 +689,17 @@ def qualify(a, report):
         require(code == 0 and rolled.get("component") == built["component"], "component_rollback_failed")
         code, status, _ = fixtures[0][2].call("status", "--state-root", str(a.state_root), inputs=False, timeout=120)
         require(code == 0 and status.get("protection") == "configured-not-running", "rollback_status_failed")
+        # This exact synthetic update was created by this driver. Retire it
+        # through the bounded component entry point before native removal
+        # inventories the two installations and the preserved user state.
+        code, retired, _ = installed.component(a, a.agent_home, None, None, "remove", "--component",
+                                               update_row["component"], env=env)
+        require(code == 0 and retired.get("component") == update_row["component"], "synthetic_update_retirement_failed")
+        code, verified, _ = installed.component(a, a.agent_home, None, None, "verify", env=env)
+        require(code == 0 and verified.get("component") == built["component"], "restored_component_changed_after_retirement")
         done("update-rollback", started, update_source="synthetic identity-only component control",
-             updated_component=update_row["component"], restored_component=built["component"],
+             updated_component=update_row["component"], retired_synthetic_component=retired["component"],
+             restored_component=built["component"],
              coordinated_selection_recovery=coordinated)
         started = begin("remove-preserves-user-data")
         for name, chosen, _ in fixtures:
