@@ -397,6 +397,37 @@ def process_probe():
     return 0
 
 
+def capture_mixed_process_credentials(output, report, condition, custody):
+    """Retain source-bound mixed-credential observations for a failed preview."""
+    if not any(row["ownership"] == "mixed" for row in condition.get("process_refusals", [])):
+        return
+    observer = load(DRIVER, "sou243_session_metadata", "ci_pilot_user_session.py")
+    snapshot = observer.kernel_snapshot()
+    uid = os.getuid()
+    rows = {pid: row for pid, row in snapshot.items() if uid in row["uids"] and row["uids"] != [uid] * 4}
+    ancestors = {}
+    for row in rows.values():
+        parent = row["parent"]
+        for _ in range(16):
+            if not parent or str(parent) in ancestors:
+                break
+            try:
+                record = observer.raw_process(parent)
+            except (FileNotFoundError, ProcessLookupError):
+                break
+            ancestors[str(parent)] = record
+            parent = record["parent"]
+    require(len(rows) + len(ancestors) <= 64, "mixed_process_custody_bound")
+    original = {"source": report["source_before"], "boot_identity_sha256": report["environment"]["boot_identity_sha256"],
+                "uid": uid, "authorization": False, "rows": rows, "ancestors": ancestors}
+    raw = canonical(original)
+    require(len(raw) <= 128 * 1024, "mixed_process_custody_byte_bound")
+    condition["mixed_process_custody"] = custody.retain(
+        output, "mixed-credentials-" + condition["installation"] + "-" + str(condition["attempt"]) + ".json", raw)
+    if any(row["state"] != "Z" for row in rows.values()):
+        condition["mixed_process_live_observed"] = True
+
+
 def process_observation():
     """Read-only private diagnostics; never used to authorize removal."""
     observations = []
@@ -736,7 +767,12 @@ def qualify(a, report):
                 preview = operator(selected_args, env, "pilot-removal", "preview", *words)
                 observed = {"installation": label, "attempt": attempt + 1,
                     **{key: preview.get(key) for key in ("status", "blockers", "confirmation_sha256", "process_refusals")}}
-                if preview.get("status") == "blocked": observed["process_observation"] = process_observation()
+                if preview.get("status") == "blocked":
+                    observed["process_observation"] = process_observation()
+                    try:
+                        capture_mixed_process_credentials(a.output, report, observed, custody)
+                    except (KeyError, OSError, ValueError):
+                        observed["mixed_process_custody_unavailable"] = True
                 attempts.append(observed); report["removal_preview"] = observed
                 save(a.output / "report.json", report)
                 if preview.get("confirmation_sha256"): break

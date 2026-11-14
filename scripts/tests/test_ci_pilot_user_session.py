@@ -89,6 +89,21 @@ class UserExitBoundary(unittest.TestCase):
             run.assert_not_called()
 
 
+class MixedProcessSnapshot(unittest.TestCase):
+    def test_real_uid_is_considered_even_when_proc_owner_differs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            uid = m.os.getuid() + 1
+            for pid, ids in (("10", [uid, 0, 0, 0]), ("11", [0] * 4)):
+                (root / pid).mkdir()
+                (root / pid / "status").write_text("Uid: " + " ".join(map(str, ids)) + "\n")
+            row = {"uids": [uid, 0, 0, 0], "parent": 0}
+            read = mock.Mock(return_value=row)
+            with mock.patch.object(m.os, 'getuid', return_value=uid):
+                self.assertEqual(m.kernel_snapshot(root, read, 0), {"10": row})
+                read.assert_called_once_with(10)
+
+
 class Recipients(unittest.TestCase):
     def test_historical_and_fresh_recipients_are_distinct_and_pinned(self):
         legacy = m.process_recipient('sou216')

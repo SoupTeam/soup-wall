@@ -74,20 +74,29 @@ def identity(row):
     return H.digest({'pid': row['pid'], 'start': str(row['start_ticks'])})
 
 
-def kernel_snapshot():
+def kernel_snapshot(proc_root=Path("/proc"), reader=raw_process, observer_pid=None):
     rows = {}
-    entries = list(Path('/proc').iterdir()); require(len(entries) <= 8192, 'session_process_count_bound')
+    uid = os.getuid()
+    entries = list(proc_root.iterdir()); require(len(entries) <= 8192, 'session_process_count_bound')
     for path in entries:
         if not path.name.isdecimal(): continue
         try:
-            if path.stat().st_uid != os.getuid(): continue
-            rows[path.name] = raw_process(int(path.name))
+            info = path.stat()
+            status = raw_bytes(path / 'status', 16384)
+            credentials = [line for line in status.splitlines() if line.startswith(b'Uid:')]
+            require(len(credentials) == 1, 'session_process_credentials_missing')
+            uids = [int(n) for n in credentials[0][4:].split()]
+            require(len(uids) == 4, 'session_process_credentials_missing')
+            if info.st_uid != uid and uid not in uids: continue
+            row = reader(int(path.name))
+            require(row['uids'] == uids and path.stat().st_ino == info.st_ino, 'session_process_credentials_changed')
+            rows[path.name] = row
         except (FileNotFoundError, ProcessLookupError): pass
-    parent = os.getpid()
+    parent = os.getpid() if observer_pid is None else observer_pid
     for _ in range(16):
         if parent == 0: break
         key = str(parent)
-        if key not in rows: rows[key] = raw_process(parent)
+        if key not in rows: rows[key] = reader(parent)
         parent = rows[key]['parent']
     return rows
 
