@@ -1050,12 +1050,12 @@ def qualify(args, report):
             receiver_positive = receiver.count
             require(receiver_positive == 1, "front_door_receiver_calibration_missing")
             receiver.count = 0
-            target = args.project / "created.txt"
+            target = args.output / "file-observer-positive-control"
             with target.open("xb") as stream:
                 stream.write(b"owned calibration")
             file_positive = target.read_bytes() == b"owned calibration"
             target.unlink()
-            require(file_positive and QUAL.snapshot(args.project) == baseline["project"],
+            require(file_positive and not target.exists() and QUAL.snapshot(args.project) == baseline["project"],
                     "front_door_file_calibration_missing")
         row, results, _ = QUAL.run_case(args, door, report, "useful", proposals, cleanup_evidence=useful_cleanup)
         ids = [f"toolu_front_useful_{index}" for index in range(len(proposals))]
