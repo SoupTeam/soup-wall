@@ -122,8 +122,10 @@ DATA_FILES = (
     "docs/operations/AGENT_COMMAND_HELP.md",
     "docs/operations/AGENT_DIAGNOSTIC_DIFF.md",
     "profiles/mcp/git-linked-worktree-readonly-v1/contract.json",
+    "profiles/mcp/git-readonly-first-parent-v1/contract.json",
     "rule_baseline/git_readonly_v1/rule_baseline.py",
     "rule_baseline/git_readonly_file_revisions_v1/rule_baseline.py",
+    "rule_baseline/git_readonly_first_parent_v1/rule_baseline.py",
     "rule_baseline/git_readonly_local_refs_v1/rule_baseline.py",
     "rule_baseline/rule_baseline.py",
 )

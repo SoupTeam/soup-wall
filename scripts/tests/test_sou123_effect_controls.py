@@ -169,6 +169,11 @@ class GitEffectControls(unittest.TestCase):
         cases, _ = self.driver.inventory(EC, args)
         self.assertEqual({row["case_id"] for row in cases}, self.driver.CASE_IDS)
         self.assertEqual({row["arguments"]["target"] for row in cases if row["tool"] == "git_diff"}, {"HEAD~1"})
+        subset, skipped = self.driver.inventory(EC, SimpleNamespace(**vars(args), git_first_parent=True))
+        self.assertEqual(len(subset), 12)
+        self.assertEqual({row["case_id"] for row in subset}, self.driver.DIFF_IDS)
+        self.assertTrue(all(row["tool"] == "git_diff" and row["arguments"]["target"] == "HEAD~1" for row in subset))
+        self.assertEqual(sum(row["reason"] == "first_parent_measurement_diff_only" for row in skipped), 12)
         with tempfile.TemporaryDirectory() as temporary:
             tampered = Path(temporary) / "manifest.json"
             tampered.write_bytes(args.manifest.read_bytes() + b" ")

@@ -104,6 +104,21 @@ class Selection(unittest.TestCase):
                     self.assertEqual(classifier._bounded_git_read("git_show", {"repo_path": "/workspace",
                         "revision": revision}, {"tool_schema": schema, "pinned_schema": schema}), accepted)
 
+    def test_first_parent_classifier_changes_only_one_input_form(self):
+        manifest = json.loads((ROOT / G.ASSETS / "upstream-tools-list.json").read_bytes())["result"]["tools"]
+        for tool, field in (("git_diff", "target"), ("git_show", "revision")):
+            schema = next(item["inputSchema"] for item in manifest if item["name"] == tool)
+            event = {"tool_schema": schema, "pinned_schema": schema}
+            for name in G.PROFILES:
+                spec = importlib.util.spec_from_file_location("first_parent_classifier", G.classifier_path(name))
+                classifier = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(classifier)
+                for value in ("HEAD", "HEAD~1", "HEAD~2", "HEAD^1", "HEAD@{0}", "HEAD~1:notes.txt", "./HEAD~1"):
+                    expected = value == "HEAD" or (name == G.FIRST_PARENT and tool == "git_diff" and value == "HEAD~1")
+                    with self.subTest(profile=name, tool=tool, value=value):
+                        self.assertEqual(classifier._bounded_git_read(
+                            tool, {"repo_path": "/workspace", field: value}, event), expected)
+
     def test_repeated_cli_selection_refuses_without_effects(self):
         for script, words in (("pilot.py", ["preview", "--prefix", "/tmp/uncreated-sou162"]),
                               ("prepare-installed-pilot.py", [])):

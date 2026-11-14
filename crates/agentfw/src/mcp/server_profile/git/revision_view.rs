@@ -32,15 +32,28 @@ impl View {
     ) -> anyhow::Result<()> {
         anyhow::bail!("Git file-revision views require native Linux")
     }
+    pub(crate) fn validate_first_parent_call(
+        &self,
+        _tool: &str,
+        _args: &serde_json::Value,
+    ) -> anyhow::Result<()> {
+        anyhow::bail!("Git first-parent views require native Linux")
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg(any(target_os = "linux", test))]
 pub(super) enum Object {
-    Commit { tree: String },
+    Commit {
+        tree: String,
+        parents: Option<Vec<String>>,
+    },
     Tree(BTreeMap<Vec<u8>, (String, String)>),
     Blob,
-    Tag { target: String, target_is_tag: bool },
+    Tag {
+        target: String,
+        target_is_tag: bool,
+    },
     Unsupported,
 }
 
@@ -101,7 +114,14 @@ pub(super) fn decode_object(expected: &str, compressed: &[u8]) -> anyhow::Result
             let tree = oid(tree
                 .strip_prefix("tree ")
                 .context("Git commit tree invalid")?)?;
-            Ok(Object::Commit { tree })
+            // Only the selected first-parent view consumes these facts. Keep
+            // the earlier file-revision profile's handling of commit payloads.
+            let parents = lines
+                .take_while(|line| line.starts_with(b"parent "))
+                .map(|line| oid(std::str::from_utf8(&line[7..])?))
+                .collect::<anyhow::Result<Vec<_>>>()
+                .ok();
+            Ok(Object::Commit { tree, parents })
         }
         "blob" => Ok(Object::Blob),
         "tree" => {
@@ -282,13 +302,44 @@ pub(super) fn file_revision(value: &str) -> Option<(&str, &str)> {
     Some((revision, path))
 }
 
+#[cfg(target_os = "linux")]
+fn sealed_first_parent(objects: &BTreeMap<String, Object>, head: &str) -> Option<String> {
+    let Object::Commit {
+        tree,
+        parents: Some(parents),
+    } = objects.get(head)?
+    else {
+        return None;
+    };
+    let first = parents.first()?;
+    let Object::Commit {
+        tree: parent_tree,
+        parents: Some(_),
+    } = objects.get(first)?
+    else {
+        return None;
+    };
+    if matches!(objects.get(tree), Some(Object::Tree(_)))
+        && matches!(objects.get(parent_tree), Some(Object::Tree(_)))
+        && !parents.iter().any(|id| {
+            objects
+                .get(id)
+                .is_some_and(|object| !matches!(object, Object::Commit { .. }))
+        })
+    {
+        Some(first.clone())
+    } else {
+        None
+    }
+}
+
 #[cfg(any(target_os = "linux", test))]
 fn validate_path(
     objects: &BTreeMap<String, Object>,
     commit: &str,
     path: &str,
 ) -> anyhow::Result<()> {
-    let Some(Object::Commit { tree }) = objects.get(commit) else {
+    let Some(Object::Commit { tree, .. }) = objects.get(commit) else {
         anyhow::bail!("Git file revision is not an available local commit");
     };
     let mut current = tree.as_str();
@@ -377,6 +428,53 @@ mod tests {
     }
 
     #[test]
+    fn first_parent_grammar_is_literal_and_profile_specific() {
+        use super::super::{
+            linked_worktree, FILE_READS_FORMAT, FIRST_PARENT_FORMAT, FORMAT, LOCAL_REFS_FORMAT,
+            SHALLOW_FORMAT,
+        };
+        use crate::mcp::server_profile;
+        let manifest = super::super::original_manifest();
+        for format in [
+            FORMAT,
+            LOCAL_REFS_FORMAT,
+            FILE_READS_FORMAT,
+            SHALLOW_FORMAT,
+            linked_worktree::FORMAT,
+            server_profile::git_local_clone::FORMAT,
+            server_profile::git_tracked_symlinks::FORMAT,
+            FIRST_PARENT_FORMAT,
+        ] {
+            let tools = server_profile::classify_manifest_for(format, &manifest).unwrap();
+            for (target, accepted) in [
+                ("HEAD", true),
+                ("HEAD~1", format == FIRST_PARENT_FORMAT),
+                ("HEAD~2", false),
+                ("HEAD^1", false),
+                ("HEAD~01", false),
+                ("HEAD~1:notes.txt", false),
+                ("HEAD@{0}", false),
+                ("./HEAD~1", false),
+            ] {
+                assert_eq!(
+                    tools["git_diff"]
+                        .validate_arguments(&json!({
+                            "repo_path": "/workspace", "target": target, "context_lines": 3,
+                        }))
+                        .is_ok(),
+                    accepted,
+                    "{format}: {target}"
+                );
+            }
+            assert!(tools["git_show"]
+                .validate_arguments(&json!({
+                    "repo_path": "/workspace", "revision": "HEAD~1",
+                }))
+                .is_err());
+        }
+    }
+
+    #[test]
     fn selected_file_grammar_preserves_v1_and_rejects_combinations() {
         let selected = super::super::classify_manifest_with_extension(
             &super::super::original_manifest(),
@@ -443,7 +541,13 @@ mod tests {
         let tree = "c".repeat(40);
         let commit = "a".repeat(40);
         let mut objects = BTreeMap::from([
-            (commit.clone(), Object::Commit { tree: tree.clone() }),
+            (
+                commit.clone(),
+                Object::Commit {
+                    tree: tree.clone(),
+                    parents: None,
+                },
+            ),
             (
                 tree.clone(),
                 Object::Tree(BTreeMap::from([(

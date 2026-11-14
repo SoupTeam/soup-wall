@@ -425,3 +425,31 @@ second request, then checks its exact binding, distinct pending ID and zero new
 repository opens, worker reservations/workers or original result events before
 approval and after rejection. Events are never reset after the second send.
 All five Ask cases and the existing timing bounds still require qualification.
+
+## Opt-in first-parent diff (SOU-244)
+
+Select `git-readonly-first-parent-v1` with the installed pilot's `--git-profile`
+option on native Linux. For an independent private installation, select
+`--first-parent` in `scripts/install-sou68-git-profile.py` and pair the resulting
+profile and registry with `rule_baseline/git_readonly_first_parent_v1/rule_baseline.py`
+under the enforcing pilot policy. The [profile contract](../../profiles/mcp/git-readonly-first-parent-v1/contract.json)
+adds the single literal `HEAD~1` in `git_diff.target`.
+
+The original collector mounts one bounded sealed Git metadata and loose-object
+view. A diff using this literal requires typed, hash-verified HEAD and
+first-parent commits and their trees in that view. For a merge, stored parent
+order selects the first parent. A colliding workspace path, absent or invalid
+parent, or withdrawn view refuses the call. The retained descriptor watches
+and read leases are rechecked before dispatch and delivery. Packed objects,
+shallow data, replacement refs, grafts, commit graphs, alternates, and profiles
+combining revision extensions are outside this contract.
+
+The pinned original server receives `HEAD~1` unchanged inside the existing
+read-only sandbox. The enforcing policy inspects its full original result.
+The default and other Git profiles retain their existing input grammar.
+
+Use `eval/sou123/effect_controls.py --surface git --git-first-parent` to select
+the twelve frozen diff cases. With `--run` and the pinned offline runtime
+inputs, the report records original response, inspection, host delivery,
+continuation and effect witnesses. Benign result refusals remain false
+interruptions in the acceptance totals.

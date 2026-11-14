@@ -22,6 +22,7 @@ pub enum ReadExtension {
     None,
     LocalReferences,
     FileRevisions,
+    FirstParent,
 }
 /// Independently testable local object facts; no daemon attestation or relief.
 #[cfg(any(target_os = "linux", test))]
@@ -32,12 +33,19 @@ pub const FORMAT: &str = "sw-mcp/git-readonly/1";
 pub const SHALLOW_FORMAT: &str = "sw-mcp/git-readonly-shallow/1";
 pub const FILE_READS_FORMAT: &str = "sw-mcp/git-readonly-file-revisions/1";
 pub const LOCAL_REFS_FORMAT: &str = "sw-mcp/git-readonly-local-refs/1";
+pub const FIRST_PARENT_FORMAT: &str = "sw-mcp/git-readonly-first-parent/1";
+pub const FIRST_PARENT_TARGET: &str = "HEAD~1";
 pub const MAX_LOCAL_REF_BYTES: usize = 255;
 
 pub fn is_profile(format: &str) -> bool {
     matches!(
         format,
-        FORMAT | LOCAL_REFS_FORMAT | FILE_READS_FORMAT | SHALLOW_FORMAT | linked_worktree::FORMAT
+        FORMAT
+            | LOCAL_REFS_FORMAT
+            | FILE_READS_FORMAT
+            | FIRST_PARENT_FORMAT
+            | SHALLOW_FORMAT
+            | linked_worktree::FORMAT
     )
 }
 
@@ -200,9 +208,14 @@ pub fn validate_arguments_with_extension(
                 || (extension == ReadExtension::LocalReferences && is_local_reference(reference))
                 || (extension == ReadExtension::FileRevisions
                     && name == "git_show"
-                    && revision_view::file_revision(reference).is_some()),
+                    && revision_view::file_revision(reference).is_some())
+                || (extension == ReadExtension::FirstParent
+                    && name == "git_diff"
+                    && reference == FIRST_PARENT_TARGET),
             "{}",
-            if extension != ReadExtension::None {
+            if extension == ReadExtension::FirstParent {
+                "Git revision violates the selected first-parent contract"
+            } else if extension != ReadExtension::None {
                 "Git revision violates the selected local-reference contract"
             } else {
                 "only HEAD or a full SHA-1 revision is supported"
