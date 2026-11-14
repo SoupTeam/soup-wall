@@ -735,7 +735,7 @@ def qualify(a, report):
             for attempt in range(3):
                 preview = operator(selected_args, env, "pilot-removal", "preview", *words)
                 observed = {"installation": label, "attempt": attempt + 1,
-                    **{key: preview.get(key) for key in ("status", "blockers", "confirmation_sha256")}}
+                    **{key: preview.get(key) for key in ("status", "blockers", "confirmation_sha256", "process_refusals")}}
                 if preview.get("status") == "blocked": observed["process_observation"] = process_observation()
                 attempts.append(observed); report["removal_preview"] = observed
                 save(a.output / "report.json", report)
