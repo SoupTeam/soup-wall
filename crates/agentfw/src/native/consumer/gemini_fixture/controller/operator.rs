@@ -30,6 +30,8 @@ struct Config {
     parent_attempt: Option<ParentAttempt>,
     #[serde(default)]
     resume_http503: Option<ParentAttempt>,
+    #[serde(default)]
+    resume_count_unknown: Option<ParentAttempt>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -68,12 +70,21 @@ impl Config {
             );
         }
         ensure!(
-            self.resume_http503.is_none()
+            (self.resume_http503.is_none() && self.resume_count_unknown.is_none())
                 || (self.parent_attempt.is_none()
                     && self.metadata_recovery_started_sha256.is_none()),
             "gemini_resume_exclusive"
         );
-        for parent in self.parent_attempt.iter().chain(self.resume_http503.iter()) {
+        ensure!(
+            self.resume_http503.is_none() || self.resume_count_unknown.is_none(),
+            "gemini_resume_exclusive"
+        );
+        for parent in self
+            .parent_attempt
+            .iter()
+            .chain(self.resume_http503.iter())
+            .chain(self.resume_count_unknown.iter())
+        {
             ensure!(
                 parent.ledger.is_absolute()
                     && parent.ledger != self.ledger
@@ -108,6 +119,24 @@ fn gemini_operator_config_rejects_credentials_and_unconfirmed_access() {
     ] {
         let mut invalid = valid.clone();
         invalid[field] = value;
+        assert!(serde_json::from_value::<Config>(invalid)
+            .unwrap()
+            .validate()
+            .is_err());
+    }
+    let parent = json!({"ledger":"/private/parent", "report_sha256":"a".repeat(64)});
+    for other in [
+        "resume_http503",
+        "parent_attempt",
+        "metadata_recovery_started_sha256",
+    ] {
+        let mut invalid = valid.clone();
+        invalid["resume_count_unknown"] = parent.clone();
+        invalid[other] = if other == "metadata_recovery_started_sha256" {
+            json!("b".repeat(64))
+        } else {
+            parent.clone()
+        };
         assert!(serde_json::from_value::<Config>(invalid)
             .unwrap()
             .validate()
@@ -447,6 +476,9 @@ fn open() -> Result<(runner::Controller, Capture, usize)> {
     if config.resume_http503.is_some() {
         eprintln!("Explicit separate continuation after retained HTTP 503. Completed rows are inherited without provider replay. The failed row gets one new attempt; all original evidence remains unchanged. No automatic retry.");
     }
+    if config.resume_count_unknown.is_some() {
+        eprintln!("Explicit separate continuation after unknown countTokens write. Remote receipt remains unknown; original evidence is preserved. Completed responses are inherited without replay. One new attempt for the stopped row, no automatic retry.");
+    }
     confirm(
         &config.project,
         config.row_ceiling,
@@ -462,6 +494,15 @@ fn open() -> Result<(runner::Controller, Capture, usize)> {
     bind_parent_attempt(&config, &ledger, &hash(key.as_bytes()))?;
     if let Some(parent) = &config.resume_http503 {
         super::resume::bind(
+            &parent.ledger,
+            &parent.report_sha256,
+            &ledger,
+            &config.project,
+            &hash(key.as_bytes()),
+        )?;
+    }
+    if let Some(parent) = &config.resume_count_unknown {
+        super::resume::bind_count_unknown(
             &parent.ledger,
             &parent.report_sha256,
             &ledger,

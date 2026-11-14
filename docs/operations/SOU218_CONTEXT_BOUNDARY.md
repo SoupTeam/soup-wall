@@ -2186,3 +2186,35 @@ Offline validation: 35 Linux/WSL2 component tests and all three required child
 runs passed. Strict all-target/all-feature Clippy, formatting, launcher syntax,
 and private-journal preparation/restart refusal checks passed. No provider call
 was performed for this candidate during offline validation.
+
+### Explicit continuation after an unknown count write
+
+The support comparison retained 21 valid responses before a `countTokens` write
+failed with `gemini_write_unknown` at g12-a-replacement. No count response or
+provider generation response was retained for that row. The remote count outcome
+remains unknown; it is not relabeled as an HTTP503 or a never-attempted operation.
+The existing HTTP503 continuation remains restricted to definite retained503s.
+
+The separate `resume_count_unknown` operator setting requires an explicit fresh
+personal run. It validates the same project/key/profile/frozen corpus, the hashed
+parent report, all successful source-bound responses and every copied artifact.
+For the stopped row it requires the exact count-write failure and matching start
+record, and refuses count responses, count error bodies, generation fences,
+generation responses, reviews or conflicting failure records. Untouched later
+rows must have no attempt artifacts. Inherited answers are never requested again.
+
+The new child records the failed count and controller-fence hashes, retains the
+complete parent history, and accounts for its one fresh attempt separately. For
+this run:21 inherited, at most9 new,24 prior attempted rows including two HTTP503s
+and one unknown count write, combined ceiling33. The unknown request may have
+reached the provider; this is explicit new authorization, not an automatic retry.
+A bounded two-level HTTP503 history is validated, including hashes and artifact
+prefixes. A repeated unknown-count continuation is not automatically accepted.
+The receipt is included in the final report. Original journals remain untouched.
+
+Validation:35 component tests plus all three mandatory children passed on Linux/WSL2.
+The continuation test covers18 synthetic modes, including count-write acceptance
+and rejection of generation fences, count responses, changed start records and
+other failures. The actual-parent offline preview verified21 inherited rows and
+the ceiling33 without provider calls. Strict Clippy, fmt and documentation checks
+passed. Launch preparation and refusal of a populated journal were checked offline.

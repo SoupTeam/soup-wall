@@ -42,7 +42,37 @@ pub(super) fn bind(
     project: &str,
     key_hash: &str,
 ) -> Result<()> {
+    bind_kind(parent_path, report_hash, child, project, key_hash, false)
+}
+
+pub(super) fn bind_count_unknown(
+    parent_path: &std::path::Path,
+    report_hash: &str,
+    child: &Ledger,
+    project: &str,
+    key_hash: &str,
+) -> Result<()> {
+    bind_kind(parent_path, report_hash, child, project, key_hash, true)
+}
+
+fn bind_kind(
+    parent_path: &std::path::Path,
+    report_hash: &str,
+    child: &Ledger,
+    project: &str,
+    key_hash: &str,
+    count_unknown: bool,
+) -> Result<()> {
+    let receipt_name = if count_unknown {
+        "count-unknown-continuation.receipt"
+    } else {
+        "http503-continuation.receipt"
+    };
     let parent = Ledger::open(parent_path)?;
+    ensure!(
+        parent.read("count-unknown-continuation.receipt")?.is_none(),
+        "gemini_resume_count_repeat_forbidden"
+    );
     let parent_continuation = parent.read("http503-continuation.receipt")?;
     ensure!(
         parent.identity()? != child.identity()?,
@@ -92,6 +122,39 @@ pub(super) fn bind(
                 terminal["state"] == record["state"],
                 "gemini_resume_terminal"
             );
+            if i == completed && count_unknown {
+                ensure!(
+                    record["raw_sha256"].is_null(),
+                    "gemini_resume_count_response_conflict"
+                );
+                ensure!(
+                    required(&parent, &format!("{id}.count-failure"))? == b"gemini_write_unknown",
+                    "gemini_resume_not_count_write_unknown"
+                );
+                let start = value(&required(&parent, &format!("{id}.controller-started"))?)?;
+                ensure!(
+                    start["profile"] == profile_hash()
+                        && start["source"] == id
+                        && start["state"] == "started_unknown",
+                    "gemini_resume_count_start"
+                );
+                for suffix in [
+                    "started",
+                    "terminal",
+                    "response",
+                    "count-response",
+                    "count-error-response",
+                    "private-review",
+                    "failure",
+                    "publication-refused",
+                ] {
+                    ensure!(
+                        parent.read(&format!("{id}.{suffix}"))?.is_none(),
+                        "gemini_resume_count_conflict"
+                    );
+                }
+                continue;
+            }
             let raw = required(&parent, &format!("{id}.response"))?;
             ensure!(
                 record["raw_sha256"] == hash(&raw),
@@ -159,7 +222,34 @@ pub(super) fn bind(
         "combined_attempt_ceiling":31,"failed_source_sha256":rows[completed]["source_sha256"],
         "failed_response_sha256":rows[completed]["raw_sha256"],"inherited_artifact_manifest_sha256":hash(&serde_json::to_vec(&artifacts)?),
         "parent_unchanged":true,"policy_allow":false});
-    if let Some(bytes) = parent_continuation {
+    if count_unknown {
+        let failed_id = hash(row(completed)?.frame.as_bytes());
+        receipt["contract"] = json!("sw-explicit-count-unknown-continuation/1");
+        receipt["unknown_remote_count_outcome_preserved"] = json!(true);
+        receipt["failed_count_sha256"] = json!(hash(&required(
+            &parent,
+            &format!("{failed_id}.count-failure")
+        )?));
+        receipt["failed_controller_started_sha256"] = json!(hash(&required(
+            &parent,
+            &format!("{failed_id}.controller-started")
+        )?));
+        receipt["failed_controller_terminal_sha256"] = json!(hash(&required(
+            &parent,
+            &format!("{failed_id}.controller-terminal")
+        )?));
+        if let Some(bytes) = &parent_continuation {
+            let previous = value(bytes)?;
+            ensure!(report["continuation"] == previous, "gemini_resume_chain");
+            let depth = validate_http_history(&previous, completed, &artifacts, 0)?;
+            receipt["prior_attempted_rows"] = json!(completed + depth + 1);
+            receipt["combined_attempt_ceiling"] = json!(31 + depth);
+            receipt["parent_continuation_sha256"] = json!(hash(bytes));
+            receipt["parent_continuation"] = previous;
+        } else {
+            ensure!(report.get("continuation").is_none(), "gemini_resume_chain");
+        }
+    } else if let Some(bytes) = parent_continuation {
         let previous = value(&bytes)?;
         let inherited = previous["inherited_completed_rows"]
             .as_u64()
@@ -187,11 +277,18 @@ pub(super) fn bind(
         ensure!(report.get("continuation").is_none(), "gemini_resume_chain");
     }
     let receipt = serde_json::to_vec(&receipt)?;
-    match child.read("http503-continuation.receipt")? {
+    match child.read(receipt_name)? {
         Some(old) => ensure!(old == receipt, "gemini_resume_receipt_changed"),
         None => {
             ensure!(
-                child.read("batch.manifest")?.is_none(),
+                child.read("batch.manifest")?.is_none()
+                    && child
+                        .read(if count_unknown {
+                            "http503-continuation.receipt"
+                        } else {
+                            "count-unknown-continuation.receipt"
+                        })?
+                        .is_none(),
                 "gemini_resume_child_not_fresh"
             );
             for i in 0..30 {
@@ -203,7 +300,7 @@ pub(super) fn bind(
                     );
                 }
             }
-            child.create("http503-continuation.receipt", &receipt)?;
+            child.create(receipt_name, &receipt)?;
         }
     }
     // Append-only and idempotent after a local crash during import. Network work
@@ -215,6 +312,45 @@ pub(super) fn bind(
         }
     }
     Ok(())
+}
+
+// Accept at most the two already supported HTTP503 continuations, with each
+// original failed row and artifact-prefix accounting checked independently.
+fn validate_http_history(
+    v: &Value,
+    completed: usize,
+    artifacts: &[Value],
+    level: usize,
+) -> Result<usize> {
+    ensure!(level < 2, "gemini_resume_chain_depth");
+    let inherited = v["inherited_completed_rows"]
+        .as_u64()
+        .filter(|n| *n < completed as u64)
+        .ok_or_else(|| anyhow::anyhow!("gemini_resume_chain"))? as usize;
+    ensure!(
+        v["contract"] == "sw-explicit-http503-continuation/1"
+            && v["profile"] == profile_hash()
+            && v["new_attempt_budget"] == 30 - inherited
+            && v["failed_source_sha256"] == hash(row(inherited)?.frame.as_bytes())
+            && v["inherited_artifact_manifest_sha256"]
+                == hash(&serde_json::to_vec(&artifacts[..inherited * COPIED.len()])?),
+        "gemini_resume_chain"
+    );
+    let depth = if let Some(parent) = v.get("parent_continuation") {
+        ensure!(
+            v["parent_continuation_sha256"] == hash(&serde_json::to_vec(parent)?),
+            "gemini_resume_chain_hash"
+        );
+        1 + validate_http_history(parent, inherited, artifacts, level + 1)?
+    } else {
+        1
+    };
+    ensure!(
+        v["prior_attempted_rows"] == inherited + depth
+            && v["combined_attempt_ceiling"] == 30 + depth,
+        "gemini_resume_chain_accounting"
+    );
+    Ok(depth)
 }
 
 #[test]
@@ -234,7 +370,13 @@ fn gemini_http503_continuation_preserves_fifteen_and_rejects_unsafe_imports() {
         "dirty-child",
         "missing-artifact",
         "nested",
+        "count-valid",
+        "count-generation-fence",
+        "count-response",
+        "count-other-error",
+        "count-wrong-start",
     ] {
+        let count_mode = mode.starts_with("count-");
         let old = tempfile::tempdir().unwrap();
         let new = tempfile::tempdir().unwrap();
         for d in [&old, &new] {
@@ -262,7 +404,32 @@ fn gemini_http503_continuation_preserves_fifteen_and_rejects_unsafe_imports() {
             };
             let mut record =
                 json!({"case_id":r.id,"source_sha256":id,"state":state,"raw_sha256":null});
-            if i <= 15 {
+            if i == 15 && count_mode {
+                let start = serde_json::to_vec(&json!({"profile":profile_hash(),"source":if mode=="count-wrong-start" {"wrong".into()} else {id.clone()},"state":"started_unknown"})).unwrap();
+                let terminal = serde_json::to_vec(&json!({"state":"technical_stop"})).unwrap();
+                let failure = if mode == "count-other-error" {
+                    b"gemini_quota_stop".to_vec()
+                } else {
+                    b"gemini_write_unknown".to_vec()
+                };
+                for (suffix, bytes) in [
+                    ("controller-started", start),
+                    ("controller-terminal", terminal),
+                    ("count-failure", failure),
+                ] {
+                    let name = format!("{id}.{suffix}");
+                    parent.create(&name, &bytes).unwrap();
+                    original.push((name, bytes));
+                }
+                if mode == "count-generation-fence" {
+                    parent.create(&format!("{id}.started"), b"{}").unwrap();
+                }
+                if mode == "count-response" {
+                    parent
+                        .create(&format!("{id}.count-response"), b"{}")
+                        .unwrap();
+                }
+            } else if i <= 15 {
                 let quote = super::super::quote_catalog::candidates(&r.frame)[0];
                 let raw=serde_json::to_vec(&if i<15 {json!({"modelVersion":MODEL,"candidates":[{"finishReason":"STOP","content":{"role":"model","parts":[{"text":json!({"summary":"Synthetic untrusted evidence.","quotes":[quote]}).to_string()}]}}]})} else {json!({"error":{"code":if mode=="non-503" {429} else {503},"status":"UNAVAILABLE"}})}).unwrap();
                 record["raw_sha256"] = json!(hash(&raw));
@@ -336,18 +503,23 @@ fn gemini_http503_continuation_preserves_fifteen_and_rejects_unsafe_imports() {
         if mode == "dirty-child" {
             child.create("batch.manifest", b"{}").unwrap();
         }
-        let result = bind(
+        let binding = if count_mode { bind_count_unknown } else { bind };
+        let receipt_name = if count_mode {
+            "count-unknown-continuation.receipt"
+        } else {
+            "http503-continuation.receipt"
+        };
+        let result = binding(
             old.path(),
             &requested,
             &child,
             "test-project",
             if mode == "wrong-key" { "wrong" } else { &key },
         );
-        if matches!(mode, "valid" | "continued") {
+        if matches!(mode, "valid" | "continued" | "count-valid") {
             result.unwrap();
-            bind(old.path(), &digest, &child, "test-project", &key).unwrap();
-            let receipt =
-                value(&required(&child, "http503-continuation.receipt").unwrap()).unwrap();
+            binding(old.path(), &digest, &child, "test-project", &key).unwrap();
+            let receipt = value(&required(&child, receipt_name).unwrap()).unwrap();
             assert_eq!(receipt["inherited_completed_rows"], 15);
             assert_eq!(receipt["new_attempt_budget"], 15);
             assert_eq!(
@@ -363,10 +535,7 @@ fn gemini_http503_continuation_preserves_fifteen_and_rejects_unsafe_imports() {
             }
         } else {
             assert!(result.is_err(), "{mode}");
-            assert!(child
-                .read("http503-continuation.receipt")
-                .unwrap()
-                .is_none());
+            assert!(child.read(receipt_name).unwrap().is_none());
         }
         let parent = Ledger::open(old.path()).unwrap();
         for (name, data) in original {
@@ -416,4 +585,47 @@ fn manual_gemini_http503_resume_preview() {
         old
     );
     println!("Offline preview passed: {completed} exact inherited rows; {} remaining; no provider calls, no key read, original report unchanged.",30-completed);
+}
+
+#[test]
+#[ignore = "explicit offline count-write continuation preview; no provider or key input"]
+fn manual_gemini_count_unknown_resume_preview() {
+    use std::os::unix::fs::PermissionsExt;
+    let path =
+        std::path::PathBuf::from(std::env::var_os("SOUP_WALL_RESUME_PREVIEW_PARENT").unwrap());
+    let report = std::env::var("SOUP_WALL_RESUME_PREVIEW_REPORT").unwrap();
+    let parent = Ledger::open(&path).unwrap();
+    let manifest = value(&required(&parent, "batch.manifest").unwrap()).unwrap();
+    let old = required(&parent, &format!("report-{report}.json")).unwrap();
+    drop(parent);
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::set_permissions(tmp.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    let child = Ledger::open(tmp.path()).unwrap();
+    bind_count_unknown(
+        &path,
+        &report,
+        &child,
+        manifest["project"].as_str().unwrap(),
+        manifest["key_sha256"].as_str().unwrap(),
+    )
+    .unwrap();
+    let receipt = value(&required(&child, "count-unknown-continuation.receipt").unwrap()).unwrap();
+    assert_eq!(receipt["inherited_completed_rows"], 21);
+    assert_eq!(receipt["new_attempt_budget"], 9);
+    assert_eq!(receipt["combined_attempt_ceiling"], 33);
+    assert_eq!(receipt["unknown_remote_count_outcome_preserved"], true);
+    let parent = Ledger::open(&path).unwrap();
+    assert_eq!(
+        required(&parent, &format!("report-{report}.json")).unwrap(),
+        old
+    );
+    let failed = hash(row(21).unwrap().frame.as_bytes());
+    assert_eq!(
+        required(&parent, &format!("{failed}.count-failure")).unwrap(),
+        b"gemini_write_unknown"
+    );
+    for suffix in FENCES {
+        assert!(child.read(&format!("{failed}.{suffix}")).unwrap().is_none());
+    }
+    println!("Offline count-write preview passed:21 exact inherited rows,9 remaining,combined ceiling33;unknown parent outcome retained;no provider call.");
 }

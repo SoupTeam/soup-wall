@@ -637,6 +637,14 @@ impl Controller {
             let Strict(receipt) = serde_json::from_slice(&receipt)?;
             report["continuation"] = receipt;
         }
+        if let Some(receipt) = self.ledger.read("count-unknown-continuation.receipt")? {
+            ensure!(
+                report.get("continuation").is_none(),
+                "gemini_resume_conflicting_receipts"
+            );
+            let Strict(receipt) = serde_json::from_slice(&receipt)?;
+            report["continuation"] = receipt;
+        }
         Ok(report)
     }
 }
