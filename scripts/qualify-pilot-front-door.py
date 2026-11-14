@@ -86,14 +86,22 @@ class FrontDoor:
                 words.append("--allow-download")
         return words + [str(word) for word in extra]
 
-    def call(self, command, *extra, inputs=True, trace=None, env=None, timeout=900, prefix=None, project_roots=True):
+    def call(self, command, *extra, inputs=True, trace=None, env=None, timeout=900, prefix=None,
+             project_roots=True, observe=None):
         words = self.words(command, *extra, inputs=inputs, prefix=prefix, project_roots=project_roots)
         if trace is not None:
             words = [str(self.args.strace), "-f", "-qq", "-s", "256", "-e", "trace=execve,connect", "-o", str(trace), *words]
         result = subprocess.run(words, cwd=self.cwd, env=env or self.env, stdin=subprocess.DEVNULL,
                                 capture_output=True, timeout=timeout)
         lines = [line for line in result.stdout.decode("utf-8", "replace").splitlines() if line.strip()]
-        value = json.loads(lines[-1]) if lines else {}
+        try:
+            value = json.loads(lines[-1]) if lines else {}
+        except ValueError:
+            if observe is not None:
+                observe(result, {})
+            raise
+        if observe is not None and (result.returncode != 0 or value.get("status") in ("failed", "refused", "blocked")):
+            observe(result, value)
         return result.returncode, value, result.stderr.decode("utf-8", "replace")
 
 

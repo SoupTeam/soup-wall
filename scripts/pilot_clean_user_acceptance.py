@@ -200,11 +200,56 @@ def project(args, name, root, env, installed):
     return chosen, door, expected, proposals
 
 
+def retain_command_failure(a, stage, words, code, report, stderr=b"", stdout=b""):
+    """Keep bounded original diagnostics in the run's encrypted custody only."""
+    from base64 import b64encode
+    import pilot_evidence_custody as custody
+    parent = a.failure_report
+    refs = parent.setdefault("command_failures", [])
+    require(len(refs) < 12, "command_failure_inventory_bound")
+
+    def bounded(raw):
+        if isinstance(raw, str):
+            raw = raw.encode("utf-8", "replace")
+        return {"bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(),
+                "retained_prefix_b64": b64encode(raw[:32768]).decode("ascii")}
+    record = {"source": parent["source_before"], "stage": stage, "exit": code,
+              "argv_sha256": digest([str(word) for word in words]),
+              "stdout": bounded(stdout), "stderr": bounded(stderr),
+              "report": bounded(canonical(report))}
+    # Keep the raw report only when the whole record fits. The envelopes
+    # already carry length and digest for the original streams.
+    raw = canonical(record)
+    if len(raw) > 128 * 1024:
+        record["report"]["retained_prefix_b64"] = ""
+        raw = canonical(record)
+    require(len(raw) <= 128 * 1024, "command_failure_byte_bound")
+    ref = custody.retain(a.output, f"command-failure-{len(refs) + 1}.json", raw)
+    refs.append({"stage": stage, "exit": code, "ref": ref})
+    save(a.output / "report.json", parent)
+
+
+def door_call(a, door, stage, command, *words, **options):
+    def observe(process, value):
+        retain_command_failure(a, stage, process.args, process.returncode, value, process.stderr, process.stdout)
+
+    code, value, _ = door.call(command, *words, observe=observe, **options)
+    return code, value
+
+
 def operator(a, env, *words):
-    result = subprocess.run([str(a.agentfw), *map(str, words)], cwd=a.work, env=env,
+    command = [str(a.agentfw), *map(str, words)]
+    result = subprocess.run(command, cwd=a.work, env=env,
                             stdin=subprocess.DEVNULL, capture_output=True, timeout=600)
     require(len(result.stdout) <= 512 * 1024, "operator_report_bound")
-    value = json.loads(result.stdout)
+    try:
+        value = json.loads(result.stdout)
+    except ValueError:
+        retain_command_failure(a, "operator-invalid-report", command, result.returncode, {}, result.stderr, result.stdout)
+        raise
+    if result.returncode != 0 or value.get("status") in ("failed", "refused", "blocked"):
+        stage = "removal-" + words[1] if words[0] == "pilot-removal" else "installed-operator"
+        retain_command_failure(a, stage, command, result.returncode, value, result.stderr, result.stdout)
     reason = value.get("reason", "unknown")
     require(result.returncode == 0, "operator_refused:" + str(reason))
     return value
@@ -216,7 +261,7 @@ def coordinated_update(a, env, archive, built, fixture, installed, q, report):
     second = argparse.Namespace(**vars(chosen))
     second.prefix = a.output / "update-preparation"
     second_door = installed.InstalledDoor(second, env, a.work, a.agent_home)
-    code, prepared, _ = second_door.call("prepare", "--apply", timeout=3600)
+    code, prepared = door_call(a, second_door, "coordinated-update-prepare", "prepare", "--apply", timeout=3600)
     require(code == 0 and prepared.get("status") == "prepared-not-active", "update_prepare_failed")
     update = load(a.runtime_source, "sou216_product_update", "pilot_update.py")
     controller = a.output / "coordinator"
@@ -231,6 +276,8 @@ def coordinated_update(a, env, archive, built, fixture, installed, q, report):
     result = subprocess.run([str(a.agentfw), "lifecycle", "install", "sou216-entry", str(a.agentfw),
         "--sha256", sha(a.agentfw)], cwd=bootstrap, env=dict(env, HOME=str(bootstrap)),
         stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    if result.returncode != 0:
+        retain_command_failure(a, "bootstrap-install", result.args, result.returncode, {}, result.stderr, result.stdout)
     require(result.returncode == 0, "bootstrap_install_failed")
     entry = argparse.Namespace(**vars(a)); entry.agentfw = entry_home / "versions/agentfw-sou216-entry"
     require(entry.agentfw != a.agentfw and sha(entry.agentfw) == sha(a.agentfw), "bootstrap_copy_mismatch")
@@ -318,6 +365,9 @@ def archive_completed_runs(a, env, report):
     def call(*words):
         result = subprocess.run([str(a.component_python), "-I", "-B", str(script), *map(str, words)],
             cwd=a.work, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+        if result.returncode != 0:
+            retain_command_failure(a, "archive-" + str(words[0]), result.args, result.returncode, {},
+                                   result.stderr, result.stdout)
         require(len(result.stdout) <= 256 * 1024, "archive_report_bound")
         value = json.loads(result.stdout)
         require(result.returncode == 0, "archive_refused:" + str(value.get("reason", "excluded_or_incomplete")))
@@ -532,6 +582,7 @@ def qualify(a, report):
                 "observer_sources": custody.capture_observer_sources(a.output, a.runtime_source,
                                                                      ("procfs", "receiver", "dispatch"))}
     report["custody"] = retained
+    a.failure_report = report
     a.expected_commit = a.runtime_source_commit
     a.agent_output = None
     home = a.output / "user-home"; home.mkdir(mode=0o700)
@@ -584,7 +635,7 @@ def qualify(a, report):
     require(built["commit"] == a.runtime_source_commit, "accepted_component_identity_mismatch")
     a.component_python = a.component_python.resolve(strict=True)
     installed.install_component(a, a.agent_home, archive, built["archive_sha256"], built["component"], env, report)
-    code, verified, _ = installed.component(a, a.agent_home, None, None, "verify", env=env)
+    code, verified, _ = component("component-verify", None, None, "verify")
     require(code == 0 and verified.get("ok") is True, "installed_component_verify_failed")
     report["component"] = built
     done("component-install", started, archive_sha256=built["archive_sha256"], component_sha256=built["component"])
@@ -600,21 +651,11 @@ def qualify(a, report):
             report.setdefault("projects", {})[name] = {"expected_sha256": digest(expected),
                 "fixture_sha256": digest(PROJECTS[name]), "source_before_sha256": digest(baseline)}
             setup_started = time.monotonic()
-            code, plan, _ = door.call("preview", timeout=600)
+            code, plan = door_call(a, door, name + "-preview", "preview", timeout=600)
             require(code == 0 and plan.get("executed") is False and not chosen.prefix.exists(), "clean_preview_failed")
-            code, prepared, stderr = door.call("prepare", "--apply", timeout=3600)
-            if code != 0 or prepared.get("status") != "prepared-not-active":
-                diagnostic = {"source": runtime_identity, "project": name, "exit": code,
-                              "report": prepared, "stderr": stderr[-16384:]}
-                raw = canonical(diagnostic)
-                if len(raw) <= 128 * 1024:
-                    report["prepare_failure_custody"] = custody.retain(a.output, "prepare-failure.json", raw)
-                report["prepare_failure"] = {"exit": code, **{
-                    key: text for key in ("status", "stage", "reason")
-                    if isinstance(text := prepared.get(key), str)
-                    and re.fullmatch(r"[a-z][a-z0-9_-]{0,95}", text)}}
-                require(False, "clean_prepare_failed")
-            code, repeated, _ = door.call("prepare", "--apply", inputs=False, timeout=900)
+            code, prepared = door_call(a, door, name + "-prepare", "prepare", "--apply", timeout=3600)
+            require(code == 0 and prepared.get("status") == "prepared-not-active", "clean_prepare_failed")
+            code, repeated = door_call(a, door, name + "-reuse", "prepare", "--apply", inputs=False, timeout=900)
             require(code == 0 and repeated.get("status") == "reused", "clean_prepare_reuse_failed")
             selection = Path(prepared["selection"])
             ref = custody.capture_selection(a.output, name, selection, runtime_identity, selected_inputs, receipt["source"])
@@ -686,7 +727,8 @@ def qualify(a, report):
         # Reuse the documented generated-workspace walkthrough without changing its inventory.
         started = begin("documented-walkthrough")
         demo_door = installed.InstalledDoor(a, env, a.work, a.agent_home)
-        code, prepared, _ = demo_door.call("prepare", "--apply", project_roots=False, timeout=3600)
+        code, prepared = door_call(a, demo_door, "walkthrough-prepare", "prepare", "--apply",
+                                   project_roots=False, timeout=3600)
         require(code == 0, "walkthrough_preparation_failed")
         selection = Path(prepared["selection"])
         ref = custody.capture_selection(a.output, "walkthrough", selection, runtime_identity, selected_inputs, receipt["source"])
@@ -696,6 +738,8 @@ def qualify(a, report):
             "--run", "--selection", str(selection), "--expected-commit", a.runtime_source_commit,
             "--strace", str(a.strace), "--output", str(a.output / "walkthrough")],
             cwd=a.work, env=env, capture_output=True, timeout=1800)
+        if process.returncode != 0:
+            retain_command_failure(a, "walkthrough-execute", process.args, process.returncode, {}, process.stderr, process.stdout)
         demo, demo_sha = custody.read_child(a.output / "walkthrough/report.json")
         report["walkthrough"] = {key: demo.get(key) for key in ("format", "status", "reason", "elapsed_seconds", "fixture_cleanup")}
         report["walkthrough"]["cases"] = [
@@ -715,6 +759,8 @@ def qualify(a, report):
             words += ["--" + role.replace("_", "-"), files[role]["path"]]
         words += ["--strace", str(a.strace)]
         process = subprocess.run(words, cwd=a.work, env=env, capture_output=True, timeout=1200)
+        if process.returncode != 0:
+            retain_command_failure(a, "ask-once-replay", words, process.returncode, {}, process.stderr, process.stdout)
         ask, ask_sha = custody.read_child(a.output / "ask/qualification.json")
         report["ask_selection_sha256"] = ref["sha256"]
         report["ask"] = {key: ask.get(key) for key in ("contract_version", "status", "qualification_scope", "first_pending", "error")}
@@ -729,21 +775,28 @@ def qualify(a, report):
             (fixtures[0][1], fixtures[0][2]), installed, q, report)
         report["coordinated_update"] = coordinated
         update, update_row = installed.update_candidate(a, env)
-        code, installed_update, _ = installed.component(a, a.agent_home, update, update_row["archive_sha256"], "install", env=env)
+        def component(stage, archive, sha256, *options):
+            def observe(process, value):
+                retain_command_failure(a, stage, process.args, process.returncode, value, process.stderr, process.stdout)
+            return installed.component(a, a.agent_home, archive, sha256, *options, env=env, observe=observe)
+
+        code, installed_update, _ = component("component-update", update, update_row["archive_sha256"], "install")
         require(code == 0 and installed_update.get("previous") == built["component"], "component_update_failed")
-        _, stale, _ = fixtures[0][2].call("status", "--state-root", str(a.state_root), inputs=False, timeout=120)
+        _, stale = door_call(a, fixtures[0][2], "update-stale-status", "status", "--state-root", str(a.state_root),
+                             inputs=False, timeout=120)
         require(stale.get("selection", {}).get("reason") == "stale_source", "updated_source_not_refused")
-        code, rolled, _ = installed.component(a, a.agent_home, None, None, "rollback", env=env)
+        code, rolled, _ = component("component-rollback", None, None, "rollback")
         require(code == 0 and rolled.get("component") == built["component"], "component_rollback_failed")
-        code, status, _ = fixtures[0][2].call("status", "--state-root", str(a.state_root), inputs=False, timeout=120)
+        code, status = door_call(a, fixtures[0][2], "rollback-status", "status", "--state-root", str(a.state_root),
+                                 inputs=False, timeout=120)
         require(code == 0 and status.get("protection") == "configured-not-running", "rollback_status_failed")
         # This exact synthetic update was created by this driver. Retire it
         # through the bounded component entry point before native removal
         # inventories the two installations and the preserved user state.
-        code, retired, _ = installed.component(a, a.agent_home, None, None, "remove", "--component",
-                                               update_row["component"], env=env)
+        code, retired, _ = component("component-retire-update", None, None, "remove", "--component",
+                                            update_row["component"])
         require(code == 0 and retired.get("component") == update_row["component"], "synthetic_update_retirement_failed")
-        code, verified, _ = installed.component(a, a.agent_home, None, None, "verify", env=env)
+        code, verified, _ = component("component-verify", None, None, "verify")
         require(code == 0 and verified.get("component") == built["component"], "restored_component_changed_after_retirement")
         done("update-rollback", started, update_source="synthetic identity-only component control",
              updated_component=update_row["component"], retired_synthetic_component=retired["component"],

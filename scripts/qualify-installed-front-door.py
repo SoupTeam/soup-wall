@@ -134,7 +134,7 @@ class InstalledDoor(QUAL.FrontDoor):
         return result
 
 
-def component(args, home, archive, digest, *extra, env, trace=None, diagnostic=None):
+def component(args, home, archive, digest, *extra, env, trace=None, diagnostic=None, observe=None):
     words = [str(args.agentfw), "pilot-component", "--home", str(home), *extra]
     if archive is not None:
         words += [str(archive), "--sha256", digest, "--python", str(args.component_python)]
@@ -143,6 +143,8 @@ def component(args, home, archive, digest, *extra, env, trace=None, diagnostic=N
                  "-e", f"inject=rename:signal=SIGKILL:when={trace}", *words]
     result = subprocess.run(words, cwd=args.work, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=300)
     value, kind = component_output(result.stdout)
+    if observe is not None and (result.returncode != 0 or kind != "object"):
+        observe(result, value)
     if diagnostic is not None:
         stderr, cut = diagnostic_text(result.stderr)
         diagnostic.update(exit=result.returncode, stdout_kind=kind,
