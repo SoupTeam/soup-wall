@@ -22,6 +22,7 @@ sou218-gemini35-facts = ["sou218-gemini35-attribution"]
 sou218-gemini35-grounded = ["sou218-gemini35-facts"]
 sou218-gemini35-cited = ["sou218-gemini35-grounded"]
 sou218-gemini35-contextual = ["sou218-gemini35-cited"]
+sou218-gemini35-anchored = ["sou218-gemini35-contextual"]
 
 [lib]
 name = "agentfw"

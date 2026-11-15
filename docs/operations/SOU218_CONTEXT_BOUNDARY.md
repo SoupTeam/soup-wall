@@ -2533,3 +2533,31 @@ shared full sources, reports, per-case audit, offline log, both retained503
 responses/reports and SHA256SUMS. It has not been uploaded by this update.
 SHA-256: `23c595e943813460edcb64c050732a0cc121574245110c7048117b6bc80d8524`.
 No additional API run or key entry is needed for this report.
+
+
+### Citation-referenced candidate (November 16)
+
+The `sou218-gemini35-anchored` opt-in profile permits four generated quotations
+instead of the catalog profile's two-quote request cap. The existing decoder
+already permits1..4 distinct exact quotes, at most256 UTF-8 bytes each and at
+most8 source occurrences overall. None of those validation or security limits
+changes. The enum is still the same bounded untrusted catalog; complete source
+and contextual index remain unchanged. The profile identity differs; prior
+responses and run journals must not be reused as observations of this variant.
+
+Offline inspection confirmed that all six missing appended-request quotations
+were already available in the enum. This is a selection/support failure, not
+missing source bytes. The new prompt allocates quotes to distinct requests,
+links the Commands explanation to [Q1]..[Q4], keeps paraphrase short, omits
+unnecessary authors/order/count claims, preserves concrete planning conditions,
+and uses a fixed unverified/no-execution limitation sentence rather than
+restating source prerequisites. Citation references are model prose, not an
+implemented semantic enforcement mechanism or a grant of authority.
+
+Measure one complete fresh frozen6+24 comparison. Record full source/response
+hashes, all attempts including503, structural validity, each citation's action
+and object support, reference-index correctness, six-original usefulness,
+diff additions versus context and all authority errors. Independently inspect
+every response; a reference token or four literal quotes cannot prove meaning.
+Do not weaken acceptance, retry automatically or claim all issues solved before
+this evidence. Preserve source labels, native refusal baseline and old answers.

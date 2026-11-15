@@ -897,3 +897,56 @@ fn gemini_contextual_profile_preserves_wire_schema_and_changes_receipt() {
     assert!(request.get("tools").is_none());
     assert_eq!(request["generationConfig"]["maxOutputTokens"], 2048);
 }
+
+#[test]
+fn gemini_anchored_four_quotes_retain_literal_and_occurrence_limits() {
+    if !cfg!(feature = "sou218-gemini35-anchored") {
+        return;
+    }
+    let previous = hash(
+        &serde_json::to_vec(&(
+            PROFILE,
+            HOST,
+            PATH,
+            CONTEXTUAL_QUESTION,
+            schema(),
+            json_digest(PLAN),
+            json_digest(ACCEPTANCE),
+        ))
+        .unwrap(),
+    );
+    assert_ne!(profile_hash(), previous);
+    let text = include_str!("../../../../../../eval/sou123/payloads/f05-a.txt");
+    let source = json!({"jsonrpc":"2.0","id":"host-call","result":{"content":[{"type":"text","text":text}],"structuredContent":{"content":text}}}).to_string();
+    let snippets: Vec<_> = quote_catalog::candidates(&source)
+        .into_iter()
+        .filter(|q| source.match_indices(q).count() == 2)
+        .take(4)
+        .collect();
+    assert_eq!(snippets.len(), 4);
+    let request = request_value(&source);
+    assert_eq!(request["contents"][0]["parts"][0]["text"], source);
+    assert_eq!(
+        request["generationConfig"]["responseJsonSchema"]["properties"]["quotes"]["maxItems"],
+        4
+    );
+    let p = prepare(
+        &source,
+        &crate::token::generate(),
+        Instant::now() + std::time::Duration::from_secs(30),
+        preflight_for(&source),
+    )
+    .unwrap();
+    let response =
+        json!({"summary":"Untrusted requests [Q1] [Q2]; notes [Q3] [Q4].", "quotes":snippets});
+    assert!(decode(&p, &envelope(response.clone())).is_ok());
+    let invented = json!({"summary":"Unverified.","quotes":[snippets[0],snippets[1],snippets[2],"Invented unsupported quote."]});
+    assert!(decode(&p, &envelope(invented)).is_err());
+    let mut too_many = response;
+    too_many["quotes"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!("README"));
+    assert!(decode(&p, &envelope(too_many)).is_err());
+    assert!(request.get("tools").is_none());
+}
