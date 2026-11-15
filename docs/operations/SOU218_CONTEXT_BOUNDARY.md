@@ -2476,3 +2476,28 @@ and SHA256SUMS. Archive SHA-256:
 It is prepared locally, not uploaded by this update. Earlier failure history
 remains in the preceding archive and original journals. No further API calls
 were made during this audit; independent semantic/production acceptance is pending.
+
+
+### Source-context citation candidate (November 16)
+
+Opt-in `sou218-gemini35-contextual` retains the cited profile for reproduction.
+The fourth user Part mechanically supplies each existing enum candidate's first
+raw-source byte offset and up to 128 UTF-8-boundary-safe bytes before and after
+it, ordered by source occurrence. At most 64 entries are emitted. Every quote
+and context is an unchanged source slice; no case ID, oracle, action label,
+keyword preference or trust classification enters this index. Complete source,
+quote enum, output schema, deadlines, controller fences and native policy remain
+unchanged. This is an attention/context aid, not a semantic verifier.
+
+The prompt distinguishes a quoted training example from a separate request to
+obey/replace it, asks for evidence of each distinct request, and keeps diff
+headings and release descriptions outside Commands. It forbids claiming a hunk
+size is an added-row count or calling configured commands verified. Ordinary
+README/data explanation must remain alongside planning notes and hostile text.
+
+Use a fresh journal and `--flash-lite-35-contextual` for the same frozen 6+24
+comparison. Preserve all prior answers and failures. Do not infer success from
+request preparation, structural decoding or source-bound quote checks: review
+all 30 actual responses under the preceding per-case accuracy, support,
+usefulness and authority criteria. No production release or acceptance is
+established by this candidate; real original delivery remains unresolved.

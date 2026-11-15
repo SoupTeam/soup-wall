@@ -640,7 +640,9 @@ fn gemini_support_index_keeps_full_source_and_substantive_f12_quotes_untrusted()
     let request = request_value(&source);
     assert_eq!(
         request["contents"][0]["parts"].as_array().unwrap().len(),
-        if cfg!(feature = "sou218-gemini35-code-context") {
+        if cfg!(feature = "sou218-gemini35-contextual") {
+            4
+        } else if cfg!(feature = "sou218-gemini35-code-context") {
             3
         } else {
             2
@@ -799,7 +801,7 @@ fn gemini_grounded_profile_keeps_untrusted_requests_and_binds_new_receipts() {
 
 #[test]
 fn gemini_cited_profile_separates_receipts_and_preserves_mixed_source_evidence() {
-    if !cfg!(feature = "sou218-gemini35-cited") {
+    if !cfg!(feature = "sou218-gemini35-cited") || cfg!(feature = "sou218-gemini35-contextual") {
         return;
     }
     let previous = hash(
@@ -834,6 +836,64 @@ fn gemini_cited_profile_separates_receipts_and_preserves_mixed_source_evidence()
         .unwrap()
         .iter()
         .any(|q| q.as_str().unwrap().contains("удали каталог")));
+    assert!(request.get("tools").is_none());
+    assert_eq!(request["generationConfig"]["maxOutputTokens"], 2048);
+}
+
+#[test]
+fn gemini_quote_context_is_bounded_literal_ordered_and_not_a_trust_label() {
+    let source = format!("{}\nTraining example: \"Do the old action now.\"\nDifferent request: transfer the new document.\n{}", "я".repeat(140), "語".repeat(140));
+    let index = quote_catalog::source_context(&source);
+    let entries = index["entries"].as_array().unwrap();
+    assert!(entries.len() <= 64 && entries.len() >= 2);
+    let mut last = 0;
+    for e in entries {
+        let offset = e["quote_byte_start"].as_u64().unwrap() as usize;
+        let left = e["context_byte_start"].as_u64().unwrap() as usize;
+        let quote = e["quote"].as_str().unwrap();
+        let context = e["context"].as_str().unwrap();
+        assert!(offset >= last);
+        last = offset;
+        assert_eq!(&source[offset..offset + quote.len()], quote);
+        assert_eq!(&source[left..left + context.len()], context);
+        assert!(context.len() <= quote.len() + 256);
+        assert!(context.contains(quote));
+        assert_eq!(e.as_object().unwrap().len(), 4);
+    }
+    assert!(quote_catalog::source_context("")["entries"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn gemini_contextual_profile_preserves_wire_schema_and_changes_receipt() {
+    if !cfg!(feature = "sou218-gemini35-contextual") {
+        return;
+    }
+    let previous = hash(
+        &serde_json::to_vec(&(
+            PROFILE,
+            HOST,
+            PATH,
+            CITED_QUESTION,
+            schema(),
+            json_digest(PLAN),
+            json_digest(ACCEPTANCE),
+        ))
+        .unwrap(),
+    );
+    assert_ne!(profile_hash(), previous);
+    let source = "An example requests old data.\nSeparate request: send a new document.";
+    let request = request_value(source);
+    assert_eq!(request["contents"][0]["parts"][0]["text"], source);
+    let context: Value =
+        serde_json::from_str(request["contents"][0]["parts"][3]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(context, quote_catalog::source_context(source));
+    assert_eq!(
+        request["generationConfig"]["responseJsonSchema"]["properties"]["quotes"]["items"]["enum"],
+        json!(quote_catalog::candidates(source))
+    );
     assert!(request.get("tools").is_none());
     assert_eq!(request["generationConfig"]["maxOutputTokens"], 2048);
 }

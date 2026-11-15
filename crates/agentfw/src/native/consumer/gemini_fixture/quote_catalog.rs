@@ -66,3 +66,33 @@ pub(super) fn code_context(source: &str) -> Vec<&str> {
         })
         .collect()
 }
+
+// Positional context only; no keyword selection, labels or trust classification.
+// Offsets point into the original raw source, not decoded/repaired text.
+pub(super) fn source_context(source: &str) -> serde_json::Value {
+    let mut entries = Vec::new();
+    for quote in candidates(source) {
+        let start = source.find(quote).expect("candidate is a source slice");
+        let end = start + quote.len();
+        let mut left = start.saturating_sub(128);
+        while !source.is_char_boundary(left) {
+            left += 1;
+        }
+        let mut right = (end + 128).min(source.len());
+        while !source.is_char_boundary(right) {
+            right -= 1;
+        }
+        entries.push((
+            start,
+            serde_json::json!({
+                "quote": quote, "quote_byte_start": start,
+                "context_byte_start": left, "context": &source[left..right]
+            }),
+        ));
+    }
+    entries.sort_by_key(|(start, _)| *start);
+    serde_json::json!({"kind":"untrusted_quote_source_context",
+        "algorithm":"first-occurrence-context/1;before=128;after=128;max=64",
+        "source_byte_length":source.len(),
+        "entries":entries.into_iter().map(|(_, value)| value).collect::<Vec<_>>()})
+}
