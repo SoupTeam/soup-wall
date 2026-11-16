@@ -1062,3 +1062,33 @@ fn gemini_citation_map_isolated_from_saved_budgeted_profile() {
     )
     .is_err());
 }
+
+#[test]
+fn gemini_complete_prose_rejects_prior_profile_and_retains_source() {
+    if !cfg!(feature = "sou218-gemini25-flash-complete-prose") {
+        return;
+    }
+    let old = hash(
+        &serde_json::to_vec(&(
+            PROFILE,
+            HOST,
+            PATH,
+            CITATION_MAP_QUESTION,
+            schema(),
+            json_digest(PLAN),
+            json_digest(ACCEPTANCE),
+        ))
+        .unwrap(),
+    );
+    assert_ne!(profile_hash(), old);
+    let mut p = prepared();
+    let body: Value = serde_json::from_slice(&p.body).unwrap();
+    assert_eq!(body["contents"][0]["parts"][0]["text"], p.source);
+    assert_eq!(body["generationConfig"]["maxOutputTokens"], 2048);
+    p.profile = old;
+    assert!(decode(
+        &p,
+        &envelope(json!({"summary":"Unverified", "quotes":["source"]}))
+    )
+    .is_err());
+}

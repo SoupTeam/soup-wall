@@ -2692,3 +2692,20 @@ catalog, schema, occurrence limit eight, decoder and policy gates remain.
 The one-row probe uses a fresh journal and retains the original raw answer.
 Offline validation establishes isolation and request construction, not model
 compliance; fresh provider output and independent semantic review remain required.
+
+
+### Complete-action prose probe (November 16)
+
+The citation-map smoke (report
+`c3e439cbc7eff9b48383517a8e4e6495a5730e3c5b4b60ba06a67daf2a3b253a`)
+fixed output-array reference positions and moved commit metadata out of Commands,
+but returned incomplete phrases `requests to [Q1]` and `claims [Q2]`. The action
+and object were still not explained in prose. This remains a semantic failure.
+
+The separate `sou218-gemini25-flash-complete-prose` profile and
+`--flash-25-complete-prose` launcher require complete source-role/action/object
+sentences before appending citations, followed by reading the summary with all
+markers removed to check completeness. No case-specific expected answer is
+injected. Model, full sources, catalog, schema, decoder and policy stay unchanged.
+This is a prompt change, not a deterministic semantic validator: fresh output
+must still be reviewed. A separate one-row journal preserves the prior answer.
