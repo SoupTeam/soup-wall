@@ -12,6 +12,8 @@ pub(in crate::native) mod operator;
 mod resume;
 #[cfg(target_os = "linux")]
 pub(in crate::native) mod runner;
+#[cfg(target_os = "linux")]
+mod session;
 
 // Operator evidence is authenticated separately from model/source data. This
 // manual operator signs a local declaration; this cannot attest billing itself.

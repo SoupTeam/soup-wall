@@ -388,6 +388,24 @@ impl Controller {
     pub(in crate::native) async fn run(&mut self, capture: &mut impl Capture) -> Result<Value> {
         self.run_bounded(capture, 20).await
     }
+    pub(super) fn session_ceiling(
+        &self,
+        ceiling: usize,
+        new_budget: Option<usize>,
+    ) -> Result<usize> {
+        let Some(budget) = new_budget else {
+            return Ok(ceiling);
+        };
+        ensure!((1..=30).contains(&budget), "gemini_session_budget");
+        let mut attempted = 0;
+        for i in 0..30 {
+            let id = hash(row(i)?.frame.as_bytes());
+            if self.state(&id)? != State::Unrun {
+                attempted += 1;
+            }
+        }
+        Ok(ceiling.min((attempted + budget).min(30)))
+    }
     pub(super) async fn run_bounded(
         &mut self,
         capture: &mut impl Capture,
@@ -773,6 +791,8 @@ pub(in crate::native) async fn exercise_serial(capture: &mut impl Capture) {
             requests: 0,
         };
         if mode == "valid" {
+            assert_eq!(controller.session_ceiling(30, Some(1)).unwrap(), 1);
+            assert!(controller.session_ceiling(30, Some(0)).is_err());
             // Cancelling during pacing must not fence or disclose a row.
             assert!(tokio::time::timeout(
                 std::time::Duration::from_millis(20),
@@ -792,6 +812,9 @@ pub(in crate::native) async fn exercise_serial(capture: &mut impl Capture) {
                 .unwrap();
             assert_eq!(wire.generations, 20, "partial report: {partial}");
             assert_eq!(partial["rows"][20]["state"], "unrun");
+            assert_eq!(controller.session_ceiling(30, Some(1)).unwrap(), 21);
+            assert_eq!(controller.session_ceiling(20, Some(5)).unwrap(), 20);
+            assert_eq!(controller.session_ceiling(30, Some(30)).unwrap(), 30);
             let untouched = hash(row(20).unwrap().frame.as_bytes());
             assert!(controller
                 .ledger

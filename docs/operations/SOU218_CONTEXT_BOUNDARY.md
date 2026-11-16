@@ -2731,3 +2731,53 @@ the prepared first stage therefore caps cumulative rows at 17, subject to person
 current Free Tier/quota confirmation. Remaining rows require fresh quota and
 journal inspection; completed rows must not be replayed. Prompt compliance and
 semantic utility remain unverified until actual responses are reviewed.
+
+
+### Personally armed memory-only session (November 16)
+
+`scripts/sou218-session.py serve` adds an explicitly authorized alternative to
+per-run key entry. The user confirms the project, fixed Gemini 2.5 Flash model,
+current non-billed Free Tier, remaining row budget and expiry once, then enters
+the key through hidden terminal input. The existing manual launcher is unchanged.
+
+The supervisor does not write the key to files, command arguments, environment
+variables, socket responses or logs. It holds it in process memory and supplies
+an individual worker through an inherited anonymous pipe. Core dumps are disabled.
+Rust verifies the pipe type/owner, supervisor PID, exact config hash, project,
+model, expiry and per-job new-row limit; the input buffer and owned key are
+zeroizing. Python does not guarantee erasure of every transient memory copy.
+Closing the session discards its usable key; the session is never restored from
+files. Do not submit real keys to chat.
+
+A private same-user Unix socket accepts status, stop and explicit job submissions.
+Only the fixed project/model and `sou218-gemini25-flash-*` features are admitted.
+Jobs rebuild the current checkout, allowing reviewed prompt/code fixes without
+another key prompt. Ledger/evidence paths are confined to the authorized state
+root and the native token path is pinned from the startup template. Workers use
+an immutable private config snapshot. Source/model content is never a job request.
+
+The session reserves the requested worst-case NEW row attempts durably before
+key transfer. Reservations are not refunded on crashes, failed builds after
+reservation, technical stops or unused capacity. The effective cumulative ceiling
+is bounded by already attempted rows plus that job reservation; existing markers
+and completed rows are still checked by the original controller. New jobs are
+serial and explicit, with the existing 61-second row spacing. This is a local
+conservative budget, not a Google quota API. Other clients must not consume the
+same declared quota. There is no paid fallback, model switch, daily budget reset,
+automatic HTTP retry or automatic uncertain count/metadata recovery. A known
+HTTP503 continuation still requires inspected, bound parent evidence and existing
+controller validation. Changed prompts require a distinct profile/journal; their
+results cannot silently inherit responses from another prompt.
+
+The socket records non-secret reservation, key-transfer and completion events.
+A successful test exit is not semantic acceptance; inspect the retained report.
+Stop or Ctrl-C terminates an active worker; uncertain markers and reservations
+remain. Expiry and budget exhaustion prevent new work. A restarted session needs
+fresh personal quota confirmation and key entry. The agent can inspect the socket
+and logs while working, but this does not create a scheduled Codex automation.
+
+Offline validation includes synthetic pipe transfer with wrong-scope rejection,
+budget exhaustion/expiry, spawn failure without refund, path/permission checks,
+concurrent job rejection, secret absence from artifacts, and the existing connected
+serial-controller test with resumed cumulative ceilings. No real provider key is
+needed for these tests.

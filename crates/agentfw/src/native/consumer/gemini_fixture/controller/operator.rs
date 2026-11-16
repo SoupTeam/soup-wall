@@ -442,7 +442,7 @@ fn gemini_new_attempt_binds_parent_error_key_and_history() {
     }
 }
 
-fn open() -> Result<(runner::Controller, Capture, usize)> {
+fn open() -> Result<(runner::Controller, Capture, usize, Option<usize>)> {
     ensure!(
         std::env::args().nth(1).as_deref() == Some("pilot-launch"),
         "gemini_operator_explicit_launcher"
@@ -479,18 +479,33 @@ fn open() -> Result<(runner::Controller, Capture, usize)> {
     if config.resume_count_unknown.is_some() {
         eprintln!("Explicit separate continuation after unknown countTokens write. Remote receipt remains unknown; original evidence is preserved. Completed responses are inherited without replay. One new attempt for the stopped row, no automatic retry.");
     }
-    confirm(
-        &config.project,
-        config.row_ceiling,
-        config.metadata_recovery_started_sha256.as_deref(),
-    )?;
+    let mut session = super::session::receive(&bytes, &config.project)?;
+    if session.is_some() {
+        ensure!(
+            config.metadata_recovery_started_sha256.is_none()
+                && config.resume_count_unknown.is_none(),
+            "gemini_session_uncertain_recovery_forbidden"
+        );
+    } else {
+        confirm(
+            &config.project,
+            config.row_ceiling,
+            config.metadata_recovery_started_sha256.as_deref(),
+        )?;
+    }
     let config_name = format!("operator-config-{}.json", hash(&bytes));
     if let Some(old) = ledger.read(&config_name)? {
         ensure!(old == bytes, "gemini_operator_config_changed");
     } else {
         ledger.create(&config_name, &bytes)?;
     }
-    let mut key = super::super::manual_key::prompt()?;
+    let mut key = if let Some(grant) = session.as_mut() {
+        let receipt = serde_json::to_vec(&grant.receipt())?;
+        ledger.create(&format!("session-{}.receipt", hash(&receipt)), &receipt)?;
+        grant.take_key()
+    } else {
+        super::super::manual_key::prompt()?
+    };
     bind_parent_attempt(&config, &ledger, &hash(key.as_bytes()))?;
     if let Some(parent) = &config.resume_http503 {
         super::resume::bind(
@@ -525,7 +540,9 @@ fn open() -> Result<(runner::Controller, Capture, usize)> {
         quota_available: true,
         metadata_recovery_started_sha256: config.metadata_recovery_started_sha256,
         issued: now,
-        expires: now + 3600,
+        expires: session
+            .as_ref()
+            .map_or(now + 3600, |s| s.expires.min(now + 3600)),
         signature: String::new(),
     };
     claim.signature =
@@ -549,6 +566,7 @@ fn open() -> Result<(runner::Controller, Capture, usize)> {
             retained: None,
         },
         config.row_ceiling,
+        session.as_ref().map(|s| s.max_new_rows),
     ))
 }
 
@@ -558,7 +576,8 @@ fn manual_public_gemini_operator() {
     // Suppress potentially sensitive library error details. No key prompt or
     // request occurs unless all of open()'s explicit operator gates pass.
     let result = (|| -> Result<()> {
-        let (mut controller, mut capture, row_ceiling) = open()?;
+        let (mut controller, mut capture, row_ceiling, new_budget) = open()?;
+        let row_ceiling = controller.session_ceiling(row_ceiling, new_budget)?;
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
