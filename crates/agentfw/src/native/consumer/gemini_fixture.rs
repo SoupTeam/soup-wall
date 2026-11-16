@@ -24,10 +24,23 @@ pub(in crate::native) fn rejected_body(error: &anyhow::Error) -> Option<&[u8]> {
         .map(|r| r.body.as_slice())
 }
 
+#[cfg(feature = "sou218-gemini25-flash-budgeted")]
+const MODEL: &str = "gemini-2.5-flash";
+#[cfg(feature = "sou218-gemini25-flash-budgeted")]
+const PATH: &str = "/v1beta/models/gemini-2.5-flash:generateContent";
+#[cfg(feature = "sou218-gemini25-flash-budgeted")]
+const METADATA_PATH: &str = "/v1beta/models/gemini-2.5-flash";
+#[cfg(feature = "sou218-gemini25-flash-budgeted")]
+const COUNT_PATH: &str = "/v1beta/models/gemini-2.5-flash:countTokens";
+#[cfg(feature = "sou218-gemini25-flash-budgeted")]
+const PROFILE: &str = "sw-gemini-public-shadow/4;model=gemini-2.5-flash;free-only;usd=0;corpus=30;smoke=1;temperature=1;thinkingBudget=0;tokens=2048;request=2097152;body=65536;headers=8192;encrypted=131072;seconds=30;retry=0;wire=exact-public-frame/1";
 const HOST: &str = "generativelanguage.googleapis.com";
 #[cfg(not(any(feature = "sou218-gemini25-lite", feature = "sou218-gemini35-lite")))]
 const MODEL: &str = "gemini-3.8-flash";
-#[cfg(feature = "sou218-gemini35-lite")]
+#[cfg(all(
+    feature = "sou218-gemini35-lite",
+    not(feature = "sou218-gemini25-flash-budgeted")
+))]
 const MODEL: &str = "gemini-3.5-flash-lite";
 #[cfg(all(
     feature = "sou218-gemini25-lite",
@@ -36,7 +49,10 @@ const MODEL: &str = "gemini-3.5-flash-lite";
 const MODEL: &str = "gemini-2.5-flash-lite";
 #[cfg(not(any(feature = "sou218-gemini25-lite", feature = "sou218-gemini35-lite")))]
 const PATH: &str = "/v1beta/models/gemini-3.8-flash:generateContent";
-#[cfg(feature = "sou218-gemini35-lite")]
+#[cfg(all(
+    feature = "sou218-gemini35-lite",
+    not(feature = "sou218-gemini25-flash-budgeted")
+))]
 const PATH: &str = "/v1beta/models/gemini-3.5-flash-lite:generateContent";
 #[cfg(all(
     feature = "sou218-gemini25-lite",
@@ -45,7 +61,10 @@ const PATH: &str = "/v1beta/models/gemini-3.5-flash-lite:generateContent";
 const PATH: &str = "/v1beta/models/gemini-2.5-flash-lite:generateContent";
 #[cfg(not(any(feature = "sou218-gemini25-lite", feature = "sou218-gemini35-lite")))]
 const METADATA_PATH: &str = "/v1beta/models/gemini-3.8-flash";
-#[cfg(feature = "sou218-gemini35-lite")]
+#[cfg(all(
+    feature = "sou218-gemini35-lite",
+    not(feature = "sou218-gemini25-flash-budgeted")
+))]
 const METADATA_PATH: &str = "/v1beta/models/gemini-3.5-flash-lite";
 #[cfg(all(
     feature = "sou218-gemini25-lite",
@@ -54,7 +73,10 @@ const METADATA_PATH: &str = "/v1beta/models/gemini-3.5-flash-lite";
 const METADATA_PATH: &str = "/v1beta/models/gemini-2.5-flash-lite";
 #[cfg(not(any(feature = "sou218-gemini25-lite", feature = "sou218-gemini35-lite")))]
 const COUNT_PATH: &str = "/v1beta/models/gemini-3.8-flash:countTokens";
-#[cfg(feature = "sou218-gemini35-lite")]
+#[cfg(all(
+    feature = "sou218-gemini35-lite",
+    not(feature = "sou218-gemini25-flash-budgeted")
+))]
 const COUNT_PATH: &str = "/v1beta/models/gemini-3.5-flash-lite:countTokens";
 #[cfg(all(
     feature = "sou218-gemini25-lite",
@@ -232,7 +254,10 @@ const QUESTION: &str = if cfg!(feature = "sou218-gemini35-budgeted") {
 };
 #[cfg(not(any(feature = "sou218-gemini25-lite", feature = "sou218-gemini35-lite")))]
 const PROFILE: &str = "sw-gemini-public-shadow/1;model=gemini-3.8-flash;free-only;usd=0;corpus=30;smoke=1;temperature=1;thinking=LOW;tokens=2048;request=2097152;body=65536;headers=8192;encrypted=131072;seconds=30;retry=0;wire=exact-public-frame/1";
-#[cfg(feature = "sou218-gemini35-lite")]
+#[cfg(all(
+    feature = "sou218-gemini35-lite",
+    not(feature = "sou218-gemini25-flash-budgeted")
+))]
 const PROFILE: &str = "sw-gemini-public-shadow/3;model=gemini-3.5-flash-lite;free-only;usd=0;corpus=30;smoke=1;temperature=1;thinking=MINIMAL;tokens=2048;request=2097152;body=65536;headers=8192;encrypted=131072;seconds=30;retry=0;wire=exact-public-frame/1";
 #[cfg(all(
     feature = "sou218-gemini25-lite",
@@ -241,7 +266,9 @@ const PROFILE: &str = "sw-gemini-public-shadow/3;model=gemini-3.5-flash-lite;fre
 const PROFILE: &str = "sw-gemini-public-shadow/2;model=gemini-2.5-flash-lite;free-only;usd=0;corpus=30;smoke=1;temperature=1;thinkingBudget=0;tokens=2048;request=2097152;body=65536;headers=8192;encrypted=131072;seconds=30;retry=0;wire=exact-public-frame/1";
 
 fn thinking_config() -> Value {
-    if cfg!(feature = "sou218-gemini35-lite") {
+    if cfg!(feature = "sou218-gemini25-flash-budgeted") {
+        json!({"thinkingBudget":0})
+    } else if cfg!(feature = "sou218-gemini35-lite") {
         json!({"thinkingLevel":"MINIMAL"})
     } else if cfg!(feature = "sou218-gemini25-lite") {
         json!({"thinkingBudget":0})

@@ -206,7 +206,9 @@ fn gemini_profile_complete_public_data_only_and_fixed_request() {
     assert!(body["generationConfig"].get("candidateCount").is_none());
     assert_eq!(
         body["generationConfig"]["thinkingConfig"],
-        if cfg!(feature = "sou218-gemini35-lite") {
+        if cfg!(feature = "sou218-gemini25-flash-budgeted") {
+            json!({"thinkingBudget":0})
+        } else if cfg!(feature = "sou218-gemini35-lite") {
             json!({"thinkingLevel":"MINIMAL"})
         } else if cfg!(feature = "sou218-gemini25-lite") {
             json!({"thinkingBudget":0})

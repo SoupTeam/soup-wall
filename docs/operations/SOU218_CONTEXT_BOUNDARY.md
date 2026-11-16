@@ -2660,3 +2660,17 @@ tampered nested hashes/accounting and excessive depth, alongside existing key,
 profile, source, report, late-fence and dirty-child refusals. The original
 journals and failed responses remain unchanged. This controller correction
 does not change the model prompt, quote limit8, semantic acceptance or policy.
+
+
+### Separate Gemini 2.5 Flash availability probe (November 16)
+
+After four retained HTTP 503 responses from the budgeted Gemini 3.5 Flash-Lite
+comparison, prepare a separate one-row Gemini 2.5 Flash probe. The new feature
+`sou218-gemini25-flash-budgeted` and launcher flag `--flash-25-budgeted` reuse
+the complete budgeted prompt and quote catalog, but bind model identity, metadata,
+countTokens and generateContent paths to `gemini-2.5-flash`, with thinkingBudget 0.
+The profile hash separates these responses from all prior models. No inherited
+responses, automatic retries, paid fallback or policy Allow are introduced.
+Current non-billed Free Tier and quota require personal confirmation; a successful
+smoke test is not completion of the same 6+24 comparison or semantic acceptance.
+The reported 20 daily requests cannot cover all 30 cases in one day.

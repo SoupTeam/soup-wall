@@ -24,6 +24,7 @@ sou218-gemini35-cited = ["sou218-gemini35-grounded"]
 sou218-gemini35-contextual = ["sou218-gemini35-cited"]
 sou218-gemini35-anchored = ["sou218-gemini35-contextual"]
 sou218-gemini35-budgeted = ["sou218-gemini35-anchored"]
+sou218-gemini25-flash-budgeted = ["sou218-gemini35-budgeted"]
 
 [lib]
 name = "agentfw"
