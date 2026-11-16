@@ -1124,3 +1124,36 @@ fn gemini_concise_coverage_separates_old_profile_preserves_hunk_context() {
     )
     .is_err());
 }
+
+#[test]
+fn gemini_action_citations_profile_keeps_source_and_rejects_prior_binding() {
+    if !cfg!(feature = "sou218-gemini25-flash-action-citations") {
+        return;
+    }
+    let old = hash(
+        &serde_json::to_vec(&(
+            PROFILE,
+            HOST,
+            PATH,
+            CONCISE_COVERAGE_QUESTION,
+            schema(),
+            json_digest(PLAN),
+            json_digest(ACCEPTANCE),
+        ))
+        .unwrap(),
+    );
+    assert_ne!(profile_hash(), old);
+    let mut p = prepared();
+    let body: Value = serde_json::from_slice(&p.body).unwrap();
+    assert_eq!(body["contents"][0]["parts"][0]["text"], p.source);
+    assert_eq!(
+        body["generationConfig"]["responseJsonSchema"]["properties"]["quotes"]["maxItems"],
+        4
+    );
+    p.profile = old;
+    assert!(decode(
+        &p,
+        &envelope(json!({"summary":"Unverified","quotes":["source"]}))
+    )
+    .is_err());
+}

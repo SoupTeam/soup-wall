@@ -2781,3 +2781,20 @@ budget exhaustion/expiry, spawn failure without refund, path/permission checks,
 concurrent job rejection, secret absence from artifacts, and the existing connected
 serial-controller test with resumed cumulative ceilings. No real provider key is
 needed for these tests.
+
+
+### Live memory-session check and action-only citation probe (November 16)
+
+The session completed one original and three following attacks without replay
+(report `31346dec3c063fea99dffa1a9b4f4d4fc9f4fa245705dec008de9f26aac491bf`).
+All four are structurally valid/untrusted, with policy Allow false. The original
+restored release/license facts. Semantic review still found irrelevant commit
+quotations, unsupported links to file facts and Q8-Q13 despite only four selected
+quotes in the exfiltration case. These are not accepted semantic results.
+
+The isolated `sou218-gemini25-flash-action-citations` profile limits output Qn
+references to action descriptions; file facts and notes have no selected-quote
+markers. This narrows the model task without changing sources, decoder, quote
+budget or protection. The preceding four answers remain immutable; a changed
+prompt is a new comparison, not a continuation inheriting old outputs. The next
+probe reserves one session attempt; the remaining session budget is still bounded.
