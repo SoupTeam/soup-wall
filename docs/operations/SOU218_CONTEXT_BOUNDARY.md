@@ -2639,3 +2639,24 @@ changing the old catalog. Historical responses and acceptance rules remain
 unchanged. Use a new journal and `--flash-lite-35-budgeted`, with personal
 Free Tier/quota confirmation and hidden key input, for the next frozen6+24
 comparison. No automatic retry, paid fallback, or policy Allow is introduced.
+
+### Third explicit HTTP503 continuation (November 16)
+
+The budgeted comparison retained one response, stopped twice at g05 replacement
+with HTTP503, then obtained that response and stopped at g05 exfiltration.
+The third continuation initially failed offline with `gemini_resume_chain`:
+the HTTP503 importer only accepted a parent receipt without its own parent.
+
+The importer now uses the existing bounded history validator for up to two
+predecessor receipts, permitting a third explicit HTTP503 continuation. A
+verified503 may leave the completed-row count unchanged; equal inherited counts
+are valid only with the same source, profile, artifact-prefix and history hashes.
+Receipt accounting includes every retained failure: at most33 attempts for the
+same30 cases with three503 stops. The per-run ceiling remains30 and a fourth
+HTTP503 continuation is still rejected. This does not authorize automatic retry.
+
+Regressions cover a two-receipt parent, a predecessor making no progress,
+tampered nested hashes/accounting and excessive depth, alongside existing key,
+profile, source, report, late-fence and dirty-child refusals. The original
+journals and failed responses remain unchanged. This controller correction
+does not change the model prompt, quote limit8, semantic acceptance or policy.

@@ -251,26 +251,13 @@ fn bind_kind(
         }
     } else if let Some(bytes) = parent_continuation {
         let previous = value(&bytes)?;
-        let inherited = previous["inherited_completed_rows"]
-            .as_u64()
-            .filter(|n| *n <= completed as u64)
-            .ok_or_else(|| anyhow::anyhow!("gemini_resume_chain"))?
-            as usize;
-        ensure!(
-            previous["contract"] == "sw-explicit-http503-continuation/1"
-                && previous["profile"] == profile_hash()
-                && previous.get("parent_continuation").is_none()
-                && previous["prior_attempted_rows"] == inherited + 1
-                && previous["new_attempt_budget"] == 30 - inherited
-                && previous["combined_attempt_ceiling"] == 31
-                && previous["failed_source_sha256"] == hash(row(inherited)?.frame.as_bytes())
-                && report["continuation"] == previous
-                && previous["inherited_artifact_manifest_sha256"]
-                    == hash(&serde_json::to_vec(&artifacts[..inherited * COPIED.len()])?),
-            "gemini_resume_chain"
-        );
-        receipt["prior_attempted_rows"] = json!(completed + 2);
-        receipt["combined_attempt_ceiling"] = json!(32);
+        ensure!(report["continuation"] == previous, "gemini_resume_chain");
+        // Validate up to two retained predecessors, including a confirmed503
+        // that made no progress. This permits one third explicit continuation,
+        // not an unbounded retry chain; every older receipt remains hash-bound.
+        let depth = validate_http_history(&previous, completed, &artifacts, 0)?;
+        receipt["prior_attempted_rows"] = json!(completed + depth + 1);
+        receipt["combined_attempt_ceiling"] = json!(31 + depth);
         receipt["parent_continuation_sha256"] = json!(hash(&bytes));
         receipt["parent_continuation"] = previous;
     } else {
@@ -325,7 +312,7 @@ fn validate_http_history(
     ensure!(level < 2, "gemini_resume_chain_depth");
     let inherited = v["inherited_completed_rows"]
         .as_u64()
-        .filter(|n| *n < completed as u64)
+        .filter(|n| *n <= completed as u64)
         .ok_or_else(|| anyhow::anyhow!("gemini_resume_chain"))? as usize;
     ensure!(
         v["contract"] == "sw-explicit-http503-continuation/1"
@@ -360,6 +347,11 @@ fn gemini_http503_continuation_preserves_fifteen_and_rejects_unsafe_imports() {
         "valid",
         "continued",
         "changed-chain",
+        "continued-twice",
+        "continued-zero-progress",
+        "changed-deep-hash",
+        "changed-deep-accounting",
+        "too-deep",
         "wrong-key",
         "wrong-profile",
         "wrong-report",
@@ -474,12 +466,51 @@ fn gemini_http503_continuation_preserves_fifteen_and_rejects_unsafe_imports() {
             rows.push(record);
         }
         let mut report_value = json!({"profile":profile_hash(),"rows":rows});
-        if matches!(mode, "continued" | "changed-chain") {
+        if matches!(
+            mode,
+            "continued"
+                | "changed-chain"
+                | "continued-twice"
+                | "continued-zero-progress"
+                | "changed-deep-hash"
+                | "changed-deep-accounting"
+                | "too-deep"
+        ) {
             let first: Vec<_> = original[..2 * COPIED.len()]
                 .iter()
                 .map(|(n, b)| json!({"name":n,"sha256":hash(b)}))
                 .collect();
-            let previous = json!({"contract":"sw-explicit-http503-continuation/1","profile":profile_hash(),"inherited_completed_rows":2,"prior_attempted_rows":3,"new_attempt_budget":28,"combined_attempt_ceiling":31,"failed_source_sha256":hash(row(2).unwrap().frame.as_bytes()),"inherited_artifact_manifest_sha256":if mode=="changed-chain" {hash(b"changed")}else{hash(&serde_json::to_vec(&first).unwrap())}});
+            let mut previous = json!({"contract":"sw-explicit-http503-continuation/1","profile":profile_hash(),"inherited_completed_rows":2,"prior_attempted_rows":3,"new_attempt_budget":28,"combined_attempt_ceiling":31,"failed_source_sha256":hash(row(2).unwrap().frame.as_bytes()),"inherited_artifact_manifest_sha256":if mode=="changed-chain" {hash(b"changed")}else{hash(&serde_json::to_vec(&first).unwrap())}});
+            if matches!(
+                mode,
+                "continued-twice"
+                    | "continued-zero-progress"
+                    | "changed-deep-hash"
+                    | "changed-deep-accounting"
+                    | "too-deep"
+            ) {
+                if mode == "changed-deep-accounting" {
+                    previous["prior_attempted_rows"] = json!(99);
+                }
+                let inherited = if mode == "continued-zero-progress" {
+                    2
+                } else {
+                    5
+                };
+                let prefix: Vec<_> = original[..inherited * COPIED.len()]
+                    .iter()
+                    .map(|(n, b)| json!({"name":n,"sha256":hash(b)}))
+                    .collect();
+                let depth_limit = if mode == "too-deep" { 3 } else { 2 };
+                for depth in 2..=depth_limit {
+                    let parent_hash = if mode == "changed-deep-hash" {
+                        hash(b"tampered")
+                    } else {
+                        hash(&serde_json::to_vec(&previous).unwrap())
+                    };
+                    previous = json!({"contract":"sw-explicit-http503-continuation/1","profile":profile_hash(),"inherited_completed_rows":inherited,"prior_attempted_rows":inherited+depth,"new_attempt_budget":30-inherited,"combined_attempt_ceiling":30+depth,"failed_source_sha256":hash(row(inherited).unwrap().frame.as_bytes()),"inherited_artifact_manifest_sha256":hash(&serde_json::to_vec(&prefix).unwrap()),"parent_continuation_sha256":parent_hash,"parent_continuation":previous});
+                }
+            }
             parent
                 .create(
                     "http503-continuation.receipt",
@@ -516,7 +547,10 @@ fn gemini_http503_continuation_preserves_fifteen_and_rejects_unsafe_imports() {
             "test-project",
             if mode == "wrong-key" { "wrong" } else { &key },
         );
-        if matches!(mode, "valid" | "continued" | "count-valid") {
+        if matches!(
+            mode,
+            "valid" | "continued" | "count-valid" | "continued-twice" | "continued-zero-progress"
+        ) {
             result.unwrap();
             binding(old.path(), &digest, &child, "test-project", &key).unwrap();
             let receipt = value(&required(&child, receipt_name).unwrap()).unwrap();
@@ -524,7 +558,13 @@ fn gemini_http503_continuation_preserves_fifteen_and_rejects_unsafe_imports() {
             assert_eq!(receipt["new_attempt_budget"], 15);
             assert_eq!(
                 receipt["combined_attempt_ceiling"],
-                if mode == "continued" { 32 } else { 31 }
+                if matches!(mode, "continued-twice" | "continued-zero-progress") {
+                    33
+                } else if mode == "continued" {
+                    32
+                } else {
+                    31
+                }
             );
             let retry = hash(row(15).unwrap().frame.as_bytes());
             for suffix in FENCES {
