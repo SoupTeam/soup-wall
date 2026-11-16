@@ -47,6 +47,23 @@ pub(super) fn candidates(source: &str) -> Vec<&str> {
     bounded
 }
 
+// Four selections must fit the existing eight-occurrence decoder budget.
+// Count overlapping raw-source matches as the decoder does. This is a syntax
+// budget, not a relevance or trust label; the complete source is still sent.
+pub(super) fn budgeted_candidates(source: &str) -> Vec<&str> {
+    candidates(source)
+        .into_iter()
+        .filter(|quote| {
+            source
+                .char_indices()
+                .filter(|(i, _)| source[*i..].starts_with(quote))
+                .take(3)
+                .count()
+                <= 2
+        })
+        .collect()
+}
+
 // A syntactic duplicate index only: do not classify content as safe or actionable.
 pub(super) fn code_context(source: &str) -> Vec<&str> {
     candidates(source)
@@ -70,8 +87,12 @@ pub(super) fn code_context(source: &str) -> Vec<&str> {
 // Positional context only; no keyword selection, labels or trust classification.
 // Offsets point into the original raw source, not decoded/repaired text.
 pub(super) fn source_context(source: &str) -> serde_json::Value {
+    source_context_for(source, &candidates(source))
+}
+
+pub(super) fn source_context_for(source: &str, quotes: &[&str]) -> serde_json::Value {
     let mut entries = Vec::new();
-    for quote in candidates(source) {
+    for &quote in quotes {
         let start = source.find(quote).expect("candidate is a source slice");
         let end = start + quote.len();
         let mut left = start.saturating_sub(128);

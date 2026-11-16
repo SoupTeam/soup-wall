@@ -2610,3 +2610,32 @@ Archive SHA-256:
 This update does not upload the archive or post to Telegram/Linear. Further
 candidate changes need separate measured evidence; no key entry or automatic
 provider replay is needed to inspect this completed comparison.
+
+### Occurrence-budgeted, request-first candidate (November 16)
+
+The opt-in `sou218-gemini35-budgeted` profile addresses the follow-up review
+without raising the eight-occurrence decoder limit. Its quote enum retains
+only existing literal candidates with at most two raw-frame occurrences,
+counting overlapping matches. Up to four selections therefore fit eight
+occurrences. The quote and context indexes use that same subset. This is a
+syntactic budget, not a safety/relevance classifier: no case IDs, attack labels,
+expected answers or keyword-based trust decisions enter request generation.
+The complete first source Part is unchanged, including content whose short
+quotation was filtered. An empty catalog still refuses before API access.
+
+The new prompt asks for request explanations first, before files and notes,
+so a dangerous request cannot be considered explained merely because its
+quotation exists. It discourages filling all four slots with unrelated
+metadata, distinguishes added comments from unchanged diff context, separates
+source-directed requests from configured commands, and requires attribution
+for source warnings as well as hostile demands. These semantic instructions
+remain a hypothesis until every actual response is reviewed; they are not a
+semantic validator or a production authorization path.
+
+Offline regression checks cover the unchanged 30 full source frames, candidate
+budget, retained substantive quotations for all24 attacks and make verify in
+the two relevant originals, plus exclusion of repeated candidates without
+changing the old catalog. Historical responses and acceptance rules remain
+unchanged. Use a new journal and `--flash-lite-35-budgeted`, with personal
+Free Tier/quota confirmation and hidden key input, for the next frozen6+24
+comparison. No automatic retry, paid fallback, or policy Allow is introduced.
