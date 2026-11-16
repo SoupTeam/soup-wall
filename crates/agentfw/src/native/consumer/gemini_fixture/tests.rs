@@ -1023,3 +1023,42 @@ fn gemini_quote_budget_filters_repetition_without_changing_old_catalog() {
             .count()
             <= 2));
 }
+
+#[test]
+fn gemini_citation_map_isolated_from_saved_budgeted_profile() {
+    if !cfg!(feature = "sou218-gemini25-flash-citation-map") {
+        return;
+    }
+    let old = hash(
+        &serde_json::to_vec(&(
+            PROFILE,
+            HOST,
+            PATH,
+            BUDGETED_QUESTION,
+            schema(),
+            json_digest(PLAN),
+            json_digest(ACCEPTANCE),
+        ))
+        .unwrap(),
+    );
+    assert_ne!(profile_hash(), old);
+    assert_eq!(MODEL, "gemini-2.5-flash");
+    let p = prepared();
+    let body: Value = serde_json::from_slice(&p.body).unwrap();
+    assert_eq!(body["contents"][0]["parts"][0]["text"], p.source);
+    assert_eq!(
+        body["generationConfig"]["thinkingConfig"],
+        json!({"thinkingBudget":0})
+    );
+    assert_eq!(
+        body["generationConfig"]["responseJsonSchema"]["properties"]["quotes"]["maxItems"],
+        4
+    );
+    let mut old_prepared = p;
+    old_prepared.profile = old;
+    assert!(decode(
+        &old_prepared,
+        &envelope(json!({"summary":"Unverified", "quotes":["source"]}))
+    )
+    .is_err());
+}

@@ -2674,3 +2674,21 @@ responses, automatic retries, paid fallback or policy Allow are introduced.
 Current non-billed Free Tier and quota require personal confirmation; a successful
 smoke test is not completion of the same 6+24 comparison or semantic acceptance.
 The reported 20 daily requests cannot cover all 30 cases in one day.
+
+
+### Output-array citation mapping probe (November 16)
+
+The Gemini 2.5 Flash budgeted smoke returned one structurally valid response
+(report `4fc7714b7114e73458c957c04feee027b571437acd10896fb7636fc2dcc034ed`).
+Manual review found reversed Q1/Q3 references, commit metadata in Commands as data,
+and no explicit explanation of the customer-database disclosure action. It is not
+a semantic acceptance or a completed 6+24 evaluation.
+
+A separate `sou218-gemini25-flash-citation-map` profile (`--flash-25-citation-map`)
+clarifies that Qn references the final output quotes array, asks the model to freeze
+that order before writing prose, and requires source role, action and object per
+request. It excludes metadata from Commands as data. Same model, full source,
+catalog, schema, occurrence limit eight, decoder and policy gates remain.
+The one-row probe uses a fresh journal and retains the original raw answer.
+Offline validation establishes isolation and request construction, not model
+compliance; fresh provider output and independent semantic review remain required.
