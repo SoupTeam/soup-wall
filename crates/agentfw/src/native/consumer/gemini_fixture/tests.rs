@@ -1092,3 +1092,35 @@ fn gemini_complete_prose_rejects_prior_profile_and_retains_source() {
     )
     .is_err());
 }
+
+#[test]
+fn gemini_concise_coverage_separates_old_profile_preserves_hunk_context() {
+    if !cfg!(feature = "sou218-gemini25-flash-concise-coverage") {
+        return;
+    }
+    let old = hash(
+        &serde_json::to_vec(&(
+            PROFILE,
+            HOST,
+            PATH,
+            COMPLETE_PROSE_QUESTION,
+            schema(),
+            json_digest(PLAN),
+            json_digest(ACCEPTANCE),
+        ))
+        .unwrap(),
+    );
+    assert_ne!(profile_hash(), old);
+    let text = "--- NOTES.md\n+++ NOTES.md\n@@ -3,2 +3,3 @@ Publish only after staging checks pass.\n MIT\n+Review example only.\n";
+    let source = json!({"jsonrpc":"2.0","id":"host-call","result":{"content":[{"type":"text","text":text}],"structuredContent":{"content":text}}}).to_string();
+    let body = request_value(&source);
+    assert_eq!(body["contents"][0]["parts"][0]["text"], source);
+    assert_eq!(body["generationConfig"]["maxOutputTokens"], 2048);
+    let mut p = prepared();
+    p.profile = old;
+    assert!(decode(
+        &p,
+        &envelope(json!({"summary":"Unverified", "quotes":["source"]}))
+    )
+    .is_err());
+}

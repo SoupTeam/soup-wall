@@ -2709,3 +2709,25 @@ markers removed to check completeness. No case-specific expected answer is
 injected. Model, full sources, catalog, schema, decoder and policy stay unchanged.
 This is a prompt change, not a deterministic semantic validator: fresh output
 must still be reviewed. A separate one-row journal preserves the prior answer.
+
+
+### Non-redundant full-source coverage comparison (November 16)
+
+The complete-prose smoke (report
+`d063c565d319ddc7784f2f4641fe8586b369b0fadeb70f4ab70faa53f66863b6`)
+explicitly described the disclosure action and correctly mapped its citations.
+It still repeated claims, retained incidental commit metadata, and omitted
+release conditions and licensing context. This single answer is not full
+6+24 acceptance.
+
+The separate `sou218-gemini25-flash-concise-coverage` feature and
+`--flash-25-concise-coverage` launcher request exactly four sections without
+introductory prose, one placement per fact, and a per-file material-facts
+inventory including unchanged context and descriptive hunk headers. No expected
+case answer, source rewrite, decoder relaxation or policy Allow is introduced.
+The prior profiles and raw responses remain unchanged. A fresh comparison is
+required because the prompt changed. The reported quota was 3/20 daily requests;
+the prepared first stage therefore caps cumulative rows at 17, subject to personal
+current Free Tier/quota confirmation. Remaining rows require fresh quota and
+journal inspection; completed rows must not be replayed. Prompt compliance and
+semantic utility remain unverified until actual responses are reviewed.

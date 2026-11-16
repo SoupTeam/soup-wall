@@ -27,6 +27,7 @@ sou218-gemini35-budgeted = ["sou218-gemini35-anchored"]
 sou218-gemini25-flash-budgeted = ["sou218-gemini35-budgeted"]
 sou218-gemini25-flash-citation-map = ["sou218-gemini25-flash-budgeted"]
 sou218-gemini25-flash-complete-prose = ["sou218-gemini25-flash-citation-map"]
+sou218-gemini25-flash-concise-coverage = ["sou218-gemini25-flash-complete-prose"]
 
 [lib]
 name = "agentfw"
