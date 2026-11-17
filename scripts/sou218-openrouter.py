@@ -214,7 +214,19 @@ def check_continuation(plan, bundle, rows):
         raise ValueError('request_outside_continuation')
 
 
-def serve(directory, bundle_path, start_smoke=False, rows=20, plan_path=None):
+def checked_free_quota(raw, rows):
+    data = strict_json(raw)['data']['free_model_daily_requests']
+    values = {name: data[name] for name in ('used', 'limit', 'remaining')}
+    if any(type(v) is not int or v < 0 for v in values.values()):
+        raise ValueError('invalid_free_quota')
+    if values['remaining'] > values['limit'] or values['used'] + values['remaining'] != values['limit']:
+        raise ValueError('inconsistent_free_quota')
+    if values['remaining'] < rows:
+        raise ValueError('insufficient_free_quota')
+    return values
+
+
+def serve(directory, bundle_path, start_smoke=False, rows=20, plan_path=None, check_quota=False):
     if type(rows) is not int or not 1 <= rows <= 30:
         raise ValueError('session_budget')
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
@@ -247,6 +259,16 @@ def serve(directory, bundle_path, start_smoke=False, rows=20, plan_path=None):
     key = key.strip()
     if not key.startswith('sk-or-') or not key.isascii() or any(c.isspace() for c in key):
         raise ValueError('key_shape')
+    if check_quota:
+        try:
+            print('API KEY USE: read-only quota check; no generation yet.', flush=True)
+            quota = checked_free_quota(fetch('/key', key=key), rows)
+            save(directory / 'quota-check.json', json.dumps({'checked_at':time.time(), **quota}).encode())
+            print('Verified free requests remaining:', quota['remaining'], flush=True)
+        except Exception:
+            key = None
+            save(directory / 'stopped', b'quota check refused; no generation')
+            raise ValueError('quota_check_failed_no_generation') from None
     save(directory / 'armed.json', json.dumps({'expires': time.time()+7200, 'budget': rows, 'model': MODEL, 'provider': PROVIDER}).encode())
     if start_smoke:
         save(directory / 'job-smoke.json', raw_bundle)
@@ -352,13 +374,14 @@ def main():
     p.add_argument('--bundle', type=Path)
     p.add_argument('--rows', type=int, default=20, help='Personally confirmed cumulative session allowance, 1..30.')
     p.add_argument('--plan', type=Path, help='Frozen allowlist plus retained-response hashes; checked before each call.')
+    p.add_argument('--check-quota', action='store_true', help='Read current free daily quota before arming; refuse insufficient/unknown quota.')
     p.add_argument('--route', choices=sorted(ROUTES), default='ling')
     p.add_argument('--start-smoke', action='store_true', help='Explicitly submit one smoke immediately after hidden key entry.')
     a = p.parse_args()
     MODEL, PROVIDER, PROVIDER_NAME = ROUTES[a.route]
     REASONING_BUDGET = 512 if a.route == 'nemotron-reasoning' else 0
     if a.action == 'serve':
-        serve(a.session, a.bundle, a.start_smoke, a.rows, a.plan)
+        serve(a.session, a.bundle, a.start_smoke, a.rows, a.plan, a.check_quota)
     else:
         if not (a.session / 'armed.json').exists() or (a.session / 'stopped').exists():
             raise SystemExit('Session not armed')

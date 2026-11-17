@@ -146,3 +146,13 @@ including the two rejected outputs; those two are excluded from this continuatio
 Do not claim their errors were repaired by changing the new prompt. Combining the
 retained v9 answers with new v10 answers is explicitly mixed-profile evidence; the
 single-profile coverage tool correctly refuses to certify that combination.
+
+User identified an existing separate work OpenRouter account and authorized this
+12-case continuation there. The prepared session-09 launcher now requires
+`--check-quota`: after hidden key entry, a read-only `/key` request verifies a
+known, consistent daily free allowance of at least 12 before arming any generation.
+Only the used/limit/remaining counts and check timestamp are saved; account labels,
+key data and full account responses are not retained. Missing/insufficient quota
+closes the session without generation. Zero-price route guards remain in place.
+Thirty offline tests pass. No account check or provider generation was performed
+during this preparation; personal key entry is still required.

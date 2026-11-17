@@ -187,6 +187,14 @@ class AdapterTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'session_budget'):
                 a.serve(None,None,rows=rows)
 
+    def test_quota_requires_known_sufficient_consistent_daily_allowance(self):
+        def raw(used,limit,remaining):
+            return json.dumps({'data':{'label':'not retained','free_model_daily_requests':{'used':used,'limit':limit,'remaining':remaining}}}).encode()
+        self.assertEqual(a.checked_free_quota(raw(3,50,47),12),{'used':3,'limit':50,'remaining':47})
+        for value in [raw(40,50,10),raw(0,50,51),raw(1,50,50),raw(False,50,50),b'{"data":{}}']:
+            with self.assertRaises((ValueError,KeyError)):
+                a.checked_free_quota(value,12)
+
     def test_continuation_preserves_answers_and_exact_request_scope(self):
         with tempfile.TemporaryDirectory() as d:
             raw=Path(d)/'old.response';raw.write_bytes(b'unchanged evidence')
