@@ -103,11 +103,23 @@ def check_catalog(value):
 
 def request_body(bundle):
     old = bundle['request']
+    options = bundle.get('openrouter_options', {})
+    if set(options) - {'output_tokens', 'reasoning_tokens'}:
+        raise ValueError('unknown_request_option')
+    output_tokens = options.get('output_tokens', 4096)
+    if type(output_tokens) is not int or not 2048 <= output_tokens <= 8192:
+        raise ValueError('output_budget')
+    reasoning = ({'effort': 'low', 'exclude': True} if PROVIDER == 'baidu' else
+                 ({'max_tokens': REASONING_BUDGET, 'exclude': True} if REASONING_BUDGET else {'enabled': False}))
+    if 'reasoning_tokens' in options:
+        tokens = options['reasoning_tokens']
+        if type(tokens) is not int or not 128 <= tokens <= 2048 or tokens >= output_tokens:
+            raise ValueError('reasoning_budget')
+        reasoning = {'max_tokens': tokens, 'exclude': True}
     return {
-        'model': MODEL, 'stream': False, 'max_tokens': 4096,
+        'model': MODEL, 'stream': False, 'max_tokens': output_tokens,
         'temperature': 1,
-        **({'reasoning': {'effort': 'low', 'exclude': True}} if PROVIDER == 'baidu' else {}),
-        **({'reasoning': ({'max_tokens': REASONING_BUDGET, 'exclude': True} if REASONING_BUDGET else {'enabled': False})} if PROVIDER == 'nvidia' else {}),
+        **({'reasoning': reasoning} if PROVIDER in ('nvidia', 'baidu') or 'reasoning_tokens' in options else {}),
         'provider': {'only': [PROVIDER], 'allow_fallbacks': False,
                      'require_parameters': True, 'max_price': {'prompt': 0, 'completion': 0}},
         'messages': [
@@ -250,6 +262,8 @@ def serve(directory, bundle_path, start_smoke=False):
                     time.sleep(0.5)
                 if (directory / 'stop').exists() or time.monotonic() >= deadline:
                     return
+                if marker.exists():
+                    continue
                 save(fence, b'reserved-no-replay')
                 save(marker, json.dumps({'request_sha256': digest(job_body), 'time': time.time()}).encode())
                 remaining -= 1

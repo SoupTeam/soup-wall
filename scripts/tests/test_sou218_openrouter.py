@@ -171,4 +171,15 @@ class AdapterTests(unittest.TestCase):
             self.assertEqual(body['reasoning'],{'effort':'low','exclude':True})
             self.assertFalse(a.inspect_response(self.raw(model=model,provider=name),self.bundle())['policy_allow'])
 
+    def test_request_budget_keeps_room_for_answer(self):
+        b=self.bundle();b['openrouter_options']={'output_tokens':8192,'reasoning_tokens':1024}
+        body=a.request_body(b)
+        self.assertEqual(body['max_tokens'],8192)
+        self.assertEqual(body['reasoning'],{'max_tokens':1024,'exclude':True})
+        self.assertEqual(body['provider']['max_price'],{'prompt':0,'completion':0})
+    def test_request_budget_rejects_unbounded_or_unknown_options(self):
+        for options in [{'output_tokens':999999},{'reasoning_tokens':4096},{'output_tokens':True},{'endpoint':'other'}]:
+            b=self.bundle();b['openrouter_options']=options
+            with self.assertRaises(ValueError):a.request_body(b)
+
 if __name__=='__main__': unittest.main()

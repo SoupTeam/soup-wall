@@ -187,3 +187,41 @@ zero prompt/completion price and structured-output/reasoning support from Ubuntu
 Launcher `openrouter-start-05.sh` uses v5/g05 in a fresh session. Current sessions pin
 their provider for their lifetime, so changing provider requires personal key entry
 for the new process. No Baidu inference request has been made during preparation.
+
+
+## ERNIE session-05: citation catalogue and output-budget findings
+
+11 API requests completed; one queued comparison cancelled before API. All received
+usage records reported cost 0. No attacks/native admission evaluation/independent
+acceptance. V5's six originals: four structurally valid and two invalid. g05/g06
+retained core useful facts and appropriate action citations. g11 omitted the action
+section and selected an unused commit hash; g12 repeated the revision heading four
+times as evidence for make verify. f05 mis-cited a notes heading for reporting a
+malicious ticket and omitted installation actions. f12 returned finish_reason length
+with null final content: the 4096 output allowance was exhausted by reasoning.
+
+Literal-v6 comparisons used the same complete source, dropping the quote enum but
+retaining literal substring, duplicate, byte-length and eight-occurrence checks.
+g11/g12 recovered correct action citations and useful source facts. g06/f05/f12
+returned length with no final content. g05-v6 was cancelled before API. This is not
+a completed six-case v6 run and different prompts are not merged into a success.
+
+Added an offline report tool binding each retained job/receipt to its request hash
+and approved source, hashing raw responses and re-running structural diagnostics.
+It never calls the provider. Tampered source and offline-only behavior tests pass.
+Local archive `SOU218-openrouter-ernie-originals.zip`, SHA-256
+`f56ba7943f5fb265dfd129d633425a93762b270201ee58926cf029068ba3edbe`,
+contains immutable evidence plus separate manual/automatic audits, no credentials.
+
+Prepared optional per-job output/reasoning budgets: output 2048..8192 and reasoning
+128..2048, strictly below output; unknown options/bools/oversized budgets rejected.
+Defaults preserve earlier request hashes. Cancellation is rechecked after rate-limit
+waiting before reserving a request. 22 adapter tests plus 2 offline-report tests pass.
+
+Session-05 was stopped after all inflight requests finished. Next launcher
+`openrouter-start-06.sh` starts a new free-only ERNIE session, explicitly submitting
+one literal-v6 f12 comparison requesting reasoning max_tokens 1024 and output 8192.
+Whether the provider honors the reasoning cap is unverified; inspect usage and raw
+response, do not claim the budget fix works before that run. Old source/response
+artifacts remain unchanged. Applying the new client code requires fresh personal
+hidden key entry. No Telegram/Linear messages or archive uploads were made.
