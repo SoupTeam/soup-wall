@@ -193,7 +193,28 @@ def inspect_response(raw, bundle):
             'review_warnings': summary_diagnostics(answer['summary'], quotes)}
 
 
-def serve(directory, bundle_path, start_smoke=False, rows=20):
+def check_continuation(plan, bundle, rows):
+    """Fail closed before network/key input; retained answers are never retried."""
+    if not isinstance(plan, dict) or plan.get('version') != 1:
+        raise ValueError('continuation_version')
+    allowed = plan['allowed_requests']
+    retained = plan['retained_responses']
+    if not 1 <= len(allowed) <= 30 or rows != len(allowed):
+        raise ValueError('continuation_budget')
+    done = set()
+    for item in retained:
+        path = Path(item['path'])
+        if digest(path.read_bytes()) != item['sha256']:
+            raise ValueError('retained_evidence_changed')
+        done.add(item['case_id'])
+    if done.intersection(allowed) or bundle['case_id'] in done:
+        raise ValueError('completed_case_replay')
+    body = json.dumps(request_body(bundle), ensure_ascii=False).encode()
+    if allowed.get(bundle['case_id']) != digest(body):
+        raise ValueError('request_outside_continuation')
+
+
+def serve(directory, bundle_path, start_smoke=False, rows=20, plan_path=None):
     if type(rows) is not int or not 1 <= rows <= 30:
         raise ValueError('session_budget')
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
@@ -205,12 +226,18 @@ def serve(directory, bundle_path, start_smoke=False, rows=20):
     if digest(bundle['source'].encode()) not in allowed_sources:
         raise ValueError('unapproved_source')
     body = json.dumps(request_body(bundle), ensure_ascii=False).encode()
+    plan_raw = plan_path.read_bytes() if plan_path else None
+    plan = strict_json(plan_raw) if plan_raw is not None else None
+    if plan is not None:
+        check_continuation(plan, bundle, rows)
     catalog = fetch('/models/' + MODEL + '/endpoints')
     check_catalog(json.loads(catalog))
     directory.mkdir(mode=0o700, parents=True, exist_ok=False)
     save(directory / 'catalog.json', catalog)
     save(directory / 'bundle.json', raw_bundle)
     save(directory / 'request.json', body)
+    if plan_raw is not None:
+        save(directory / 'continuation-plan.json', plan_raw)
     print(f'Free-only session: at most {rows} requests, 120 minutes; each job is explicitly submitted. Confirm remaining quota >={rows}.')
     if input(f'Type OPENROUTER{rows} USD0: ').strip() != f'OPENROUTER{rows} USD0':
         raise ValueError('confirmation')
@@ -250,6 +277,12 @@ def serve(directory, bundle_path, start_smoke=False, rows=20):
                     save(marker, b'source_mismatch')
                     continue
                 job_body = json.dumps(request_body(job_bundle), ensure_ascii=False).encode()
+                if plan is not None:
+                    try:
+                        check_continuation(plan, job_bundle, rows)
+                    except (ValueError, KeyError, OSError):
+                        save(marker, b'continuation_refused_before_api')
+                        continue
                 fence = directory / ('fence-' + digest(job_body))
                 if fence.exists():
                     save(marker, b'duplicate_refused')
@@ -318,13 +351,14 @@ def main():
     p.add_argument('--session', required=True, type=Path)
     p.add_argument('--bundle', type=Path)
     p.add_argument('--rows', type=int, default=20, help='Personally confirmed cumulative session allowance, 1..30.')
+    p.add_argument('--plan', type=Path, help='Frozen allowlist plus retained-response hashes; checked before each call.')
     p.add_argument('--route', choices=sorted(ROUTES), default='ling')
     p.add_argument('--start-smoke', action='store_true', help='Explicitly submit one smoke immediately after hidden key entry.')
     a = p.parse_args()
     MODEL, PROVIDER, PROVIDER_NAME = ROUTES[a.route]
     REASONING_BUDGET = 512 if a.route == 'nemotron-reasoning' else 0
     if a.action == 'serve':
-        serve(a.session, a.bundle, a.start_smoke, a.rows)
+        serve(a.session, a.bundle, a.start_smoke, a.rows, a.plan)
     else:
         if not (a.session / 'armed.json').exists() or (a.session / 'stopped').exists():
             raise SystemExit('Session not armed')

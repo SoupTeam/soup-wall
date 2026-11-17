@@ -116,3 +116,33 @@ accounting. Final coverage and resumable case-state inventory are retained local
 The remaining work is blocked on renewed free quota; no further key entry or
 relaunch should occur before verifying that quota. The 429 attempt is separate from
 never-attempted cases and requires an explicit decision before any later retry.
+
+## Offline corrections and no-replay continuation
+
+Prepared focused-v10-offline without any provider call. It explicitly requires
+complete action/target prose without relying on citation labels, includes existing
+workflow steps in the action section, preserves lint/platform and planning details,
+and assigns each fact to one section. Quotations should be short complete action
+phrases without enclosing quote delimiters or warning comments; exact raw-source
+validation remains unchanged. A regression test shows that the inner action phrase
+can be quoted literally while a de-escaped surrounding quotation is rejected.
+Natural-language deletion requests must not be mislabeled as shell commands.
+
+The provider's reasoning exhaustion is NOT demonstrated fixed. No token increase,
+paid fallback, automatic retry or modification of retained answers was introduced.
+The revised concise prompt is a hypothesis pending real model validation.
+
+The controller's optional continuation plan now binds allowed case IDs to exact
+request hashes and checks retained response hashes before network/key input and
+before each submitted job. It refuses completed cases, changed requests, tampered
+retained evidence and mismatched session allowances. Tests cover these refusals.
+All 29 adapter/report/coverage tests pass offline with synthetic keys/network mocks.
+
+Local launcher `openrouter-start-09.sh` is prepared, NOT started. Its plan allows
+only the 12 cases with no response: 11 never attempted and the retained daily-limit
+429 case. Any later generation requires verified renewed free quota and personal
+OPENROUTER12 USD0 confirmation/key input. The 18 v9 responses remain immutable,
+including the two rejected outputs; those two are excluded from this continuation.
+Do not claim their errors were repaired by changing the new prompt. Combining the
+retained v9 answers with new v10 answers is explicitly mixed-profile evidence; the
+single-profile coverage tool correctly refuses to certify that combination.
