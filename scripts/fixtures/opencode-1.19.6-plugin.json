@@ -1,0 +1,34 @@
+[
+  {
+    "phase": "before",
+    "input": {
+      "tool": "demo_read_document",
+      "sessionID": "ses_e163e0e8effepNMQd5kJdU7aNJ",
+      "callID": "owned-0"
+    },
+    "output": {
+      "args": {
+        "name": "inventory"
+      }
+    }
+  },
+  {
+    "phase": "after",
+    "input": {
+      "tool": "demo_read_document",
+      "sessionID": "ses_e163e0e8effepNMQd5kJdU7aNJ",
+      "callID": "owned-0",
+      "args": {
+        "name": "inventory"
+      }
+    },
+    "output": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Owned inventory: 7 widgets."
+        }
+      ]
+    }
+  }
+]

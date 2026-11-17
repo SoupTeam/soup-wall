@@ -2200,6 +2200,15 @@ fn call_metadata(value: &Value) -> anyhow::Result<()> {
         value,
         &["claudecode/toolUseId", "threadId", "progressToken"],
     )?;
+    // OpenCode 1.19.6 sends only the SDK's safe nonnegative integer token.
+    // It is transport correlation, never a native identity or authority claim.
+    if value.as_object().is_some_and(|m| m.len() == 1)
+        && value["progressToken"]
+            .as_u64()
+            .is_some_and(|n| n <= 9_007_199_254_740_991)
+    {
+        return Ok(());
+    }
     // Gemini CLI 0.68.0 sends only a UUID v4 progress token. This is bounded
     // transport correlation, not a native session ID or authority credential.
     if value.as_object().is_some_and(|m| m.len() == 1)
@@ -2417,6 +2426,7 @@ where
     T: AsyncWrite + Unpin,
 {
     let mut pending: Option<Pending> = None;
+    let mut last_call: Option<Value> = None;
     let mut initialized = false;
     let mut notified = false;
     let mut ready = false;
@@ -2440,6 +2450,20 @@ where
                     if let Some(params) = value.get("params") { keys(params, &[])?; }
                     notified = true;
                     write(child, &raw).await?;
+                    continue;
+                }
+                if method == "notifications/cancelled" {
+                    // OpenCode 1.19.6 cancels the completed SDK request when its
+                    // tool scope closes. Only one no-op for the latest finished
+                    // call is accepted; active/unknown/repeated cancellation closes.
+                    ensure!(ready && pending.is_none() && value.get("id").is_none(), "unsupported MCP cancellation");
+                    let params = value.get("params").context("cancellation parameters absent")?;
+                    keys(params, &["requestId", "reason"])?;
+                    let request_id = params.get("requestId").context("cancellation ID absent")?;
+                    ensure!(last_call.as_ref() == Some(request_id)
+                        && params.get("reason").is_none_or(|v| v.as_str().is_some_and(|s| s.len() <= 1024 && !s.contains('\0'))),
+                        "unknown, repeated or malformed MCP cancellation");
+                    last_call = None;
                     continue;
                 }
                 ensure!(pending.is_none(), "concurrent MCP requests are not supported");
@@ -2484,6 +2508,7 @@ where
                     }
                     "ping" => { keys(&params, &[])?; Pending::Ping(request_id.clone()) }
                     "tools/call" => {
+                        last_call = Some(request_id.clone());
                         if let Some(root) = &collector.selected_root {
                             let workspace = collector.selected_workspace.as_deref().context("edit_workspace_absent")?;
                             ensure!(super::replace_file::inspect_workspace(workspace).as_ref().ok()==Some(root),"edit_root_changed");
