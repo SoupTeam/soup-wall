@@ -49,7 +49,7 @@ actual key use to the user. Never publish session directories without inspection
 
 ## Verification and remaining work
 
-13 offline Python tests cover zero-price routing, unchanged source/prompt mapping,
+14 offline Python tests cover zero-price routing, unchanged source/prompt mapping,
 model/provider drift, citation ranges, quote occurrence limits, duplicate JSON,
 redirect refusal, exclusive fences, and a synthetic-key session with two duplicate
 jobs producing exactly one provider call and no persisted key. Rust offline export
@@ -62,3 +62,21 @@ review remains required. Existing Gemini evidence stays unchanged.
 
 References: https://openrouter.ai/api/v1/models/inclusionai/ling-3.2-flash:free/endpoints
 and https://openrouter.ai/docs/guides/routing/provider-selection
+
+
+## First live smoke, 2026-11-17
+
+Session 01 was armed but had no submitted job until the follow-up check. Exactly
+one job was then submitted (`c5e3825236524bd6b38155f970eee2f6`). No complete response
+or receipt arrived during several minutes. The original synchronous client had
+only socket inactivity timeouts, not a total request deadline. The exact session
+process was interrupted and an external observation retained. The original fence
+is unchanged. Classify this attempt as transport_unknown, not a model refusal,
+quota failure or successful inference; do not automatically replay it.
+
+The client now enforces an absolute 90-second POST deadline and 30-second metadata
+GET deadline using SIGALRM, including headers/body reads. An offline test verifies
+interruption even during repeated short waits and restoration of signal state.
+The old session is stopped and its key is no longer held by that process. A later
+separately authorized comparison requires a fresh personal session; no new live
+request was made while applying this fix.

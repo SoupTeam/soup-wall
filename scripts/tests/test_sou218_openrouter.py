@@ -85,4 +85,14 @@ class AdapterTests(unittest.TestCase):
             for file in session.iterdir():
                 self.assertNotIn(b'sk-or-synthetic-test-only',file.read_bytes())
 
+    def test_absolute_deadline_interrupts_continuous_wait(self):
+        import signal
+        import time
+        previous=signal.getsignal(signal.SIGALRM)
+        with self.assertRaises(TimeoutError):
+            with a.total_deadline(0.05):
+                for _ in range(100): time.sleep(0.01)
+        self.assertEqual(signal.getsignal(signal.SIGALRM), previous)
+        self.assertEqual(signal.getitimer(signal.ITIMER_REAL)[0], 0)
+
 if __name__=='__main__': unittest.main()

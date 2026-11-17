@@ -13,6 +13,8 @@ import time
 import urllib.request
 import urllib.error
 import warnings
+import signal
+from contextlib import contextmanager
 
 MODEL = 'inclusionai/ling-3.2-flash:free'
 PROVIDER = 'antdigital/fp8'
@@ -48,17 +50,33 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise ValueError('redirect_refused')
 
 
+@contextmanager
+def total_deadline(seconds):
+    # Socket inactivity timeouts can be extended indefinitely by heartbeat bytes.
+    # SIGALRM bounds the entire synchronous request, headers and body included.
+    def expired(signum, frame):
+        raise TimeoutError('total_request_deadline')
+    previous = signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
 def fetch(path, body=None, key=None):
     headers = {'Content-Type': 'application/json'}
     if key:
         headers['Authorization'] = 'Bearer ' + key
     request = urllib.request.Request(BASE + path, data=body, headers=headers)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-    with opener.open(request, timeout=90) as response:
-        raw = response.read(LIMIT + 1)
-        if len(raw) > LIMIT:
-            raise ValueError('response_limit')
-        return raw
+    with total_deadline(90 if body is not None else 30):
+        with opener.open(request, timeout=30) as response:
+            raw = response.read(LIMIT + 1)
+            if len(raw) > LIMIT:
+                raise ValueError('response_limit')
+            return raw
 
 
 def check_catalog(value):
