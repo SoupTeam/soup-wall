@@ -51,15 +51,15 @@ def run_case(binary, parent, mode):
                "OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER":"1","NO_PROXY":"127.0.0.1,localhost",
                "SOUP_WALL_AGENTFW":str(fake),"SOUP_WALL_HOME":str(home),"SOUP_WALL_BINDING":str(root/"unused-binding")}
         try:
-            result = subprocess.run([str(binary),"run","--model","owned/fixture","--format","json","--title","Owned plugin fault","Run owned fixture."],
+            result = HOST.run_host([str(binary),"run","--model","owned/fixture","--format","json","--title","Owned plugin fault","Run owned fixture."],
                                     env=env,cwd=workspace,stdin=subprocess.DEVNULL,capture_output=True,text=True,timeout=60,umask=0o077)
-            case = {"case":mode,"host_exit":result.returncode,"provider_requests":len(provider.requests),
+            case = {"case":mode,"host_exit":result.returncode,"host_timed_out":result.timed_out,"provider_requests":len(provider.requests),
                     "executions":len(HOST.DEMO.lines(ledger)),"deliveries":len(receiver.bodies),"result_reached_provider":marker in json.dumps(provider.requests)}
             (parent/(mode+".host.json")).write_text(json.dumps({"stdout":result.stdout,"stderr":result.stderr,"requests":provider.requests},indent=2))
             executed = mode in {"defer", "after_deny", "missing_plugin"}
             released = mode in {"defer", "missing_plugin"}
             case["expected_boundary"] = "plugin_load_failure_not_enforcement" if mode == "missing_plugin" else "transport_characterization"
-            case["passed"] = (result.returncode==0 and len(provider.requests)==3 and case["executions"]==(2 if executed else 0)
+            case["passed"] = (not result.timed_out and result.returncode==0 and len(provider.requests)==3 and case["executions"]==(2 if executed else 0)
                               and case["deliveries"]==(1 if executed else 0) and case["result_reached_provider"]==released)
             return case
         finally:

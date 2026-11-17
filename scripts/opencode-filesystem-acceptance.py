@@ -123,7 +123,7 @@ def main():
                                 "options":{"baseURL":provider.url+"/v1","apiKey":"owned-synthetic"},
                                 "models":{"fixture":{"name":"Fixture","tool_call":True,"limit":{"context":32768,"output":4096}}}}}})
                         config_path.write_text(json.dumps(settings))
-                        result = subprocess.run([str(args.opencode.resolve()),"run","--model","owned/fixture","--format","json",
+                        result = ACCEPTANCE.run_host([str(args.opencode.resolve()),"run","--model","owned/fixture","--format","json",
                             "--title","Owned original filesystem","Run owned original-server test."],
                             env={"HOME":str(host_home),"PATH":"/usr/bin:/bin","XDG_CONFIG_HOME":str(host_home/"config"),
                                  "XDG_DATA_HOME":str(host_home/"data"),"XDG_CACHE_HOME":str(host_home/"cache"),"XDG_STATE_HOME":str(host_home/"state"),
@@ -131,7 +131,7 @@ def main():
                                  "OPENCODE_DISABLE_AUTOUPDATE":"1","OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER":"1","NO_PROXY":"127.0.0.1,localhost"},cwd=root,
                             stdin=subprocess.DEVNULL,capture_output=True,text=True,timeout=120,umask=0o077)
                         args.out.with_suffix(".host.json").write_text(json.dumps({"stdout":result.stdout,"stderr":result.stderr,"requests":provider.requests},indent=2))
-                        check("host_exit", result.returncode == 0)
+                        check("host_exit", not result.timed_out and result.returncode == 0)
                         check("complete_sequence", len(provider.requests) == len(steps) + 1)
                         calls = [json.loads(line)["part"] for line in result.stdout.splitlines() if json.loads(line).get("type")=="tool_use"]
                         check("host_outcomes", [c["state"]["status"] for c in calls] == ["completed","error","error","completed"]

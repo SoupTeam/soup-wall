@@ -7,6 +7,8 @@ import hashlib
 import http.server
 import importlib.util
 import json
+import os
+import signal
 import secrets
 import shlex
 from pathlib import Path
@@ -30,6 +32,29 @@ def identities(opencode):
                *sorted((ROOT / "scripts").glob("*opencode*"))]
     return {"source_files_sha256": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sources},
             "runtime_tree_sha256": hashlib.sha256(DEMO.canonical(files)).hexdigest(), "runtime_file_count": len(files)}
+
+
+def run_host(command, *, timeout, **kwargs):
+    """Bound an owned real-host process group and retain timeout diagnostics."""
+    kwargs.pop("capture_output", None)
+    process = subprocess.Popen(command, start_new_session=True, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, **kwargs)
+    timed_out = False
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        if process.poll() is None:
+            assert os.getpgid(process.pid) == process.pid
+            os.killpg(process.pid, signal.SIGTERM)
+        try:
+            stdout, stderr = process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            stdout, stderr = process.communicate(timeout=5)
+    result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+    result.timed_out = timed_out
+    return result
 
 
 class Provider:
@@ -229,12 +254,12 @@ def main():
                            "OPENCODE_DISABLE_AUTOUPDATE":"1","OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER":"1","NO_PROXY":"127.0.0.1,localhost"}
                     if args.hooks:
                         env.update({"SOUP_WALL_AGENTFW":str(installed),"SOUP_WALL_HOME":str(home),"SOUP_WALL_BINDING":str(binding)})
-                    result = subprocess.run([str(opencode),"run","--model","owned/fixture","--format","json",
+                    result = run_host([str(opencode),"run","--model","owned/fixture","--format","json",
                                              "--title","Owned Soup Wall acceptance","Run the owned fixture tool sequence."],
                                             env=env,cwd=root,stdin=subprocess.DEVNULL,capture_output=True,text=True,timeout=90,umask=0o077)
                     args.out.with_suffix(".host.json").write_text(json.dumps({"stdout": result.stdout, "stderr": result.stderr,
                                                                             "requests": provider.requests}, indent=2))
-                    check("real_host_exit", result.returncode == 0)
+                    check("real_host_exit", not result.timed_out and result.returncode == 0)
                     check("private_settings_after_host", config.stat().st_mode & 0o077 == 0)
                     check("real_host_completed_sequence", len(provider.requests) == len(steps) + 1)
                     witness = [json.loads(line)["params"] for line in DEMO.lines(stack.ledger)]
