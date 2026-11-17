@@ -21,6 +21,7 @@ PROVIDER = 'antdigital/fp8'
 PROVIDER_NAME = 'Ant Digital'
 REASONING_BUDGET = 0
 ROUTES = {
+    'particle': ('particle-ai/particle-1:free', 'particle-ai/us', 'Particle AI'),
     'ernie': ('baidu/ernie-5.5-flash-preview:free', 'baidu', 'Baidu'),
     'ling': ('inclusionai/ling-3.2-flash:free', 'antdigital/fp8', 'Ant Digital'),
     'nemotron': ('nvidia/nemotron-3.5-super-vl:free', 'nvidia', 'Nvidia'),
@@ -97,7 +98,7 @@ def check_catalog(value):
     e = endpoints[0]
     if any(float(e['pricing'][k]) != 0 for k in ('prompt', 'completion')):
         raise ValueError('not_free')
-    if not ({'structured_outputs', 'response_format'} | ({'reasoning'} if PROVIDER in ('nvidia', 'baidu') else set())) <= set(e['supported_parameters']):
+    if not ({'structured_outputs', 'response_format'} | ({'reasoning'} if PROVIDER in ('nvidia', 'baidu', 'particle-ai/us') else set())) <= set(e['supported_parameters']):
         raise ValueError('schema_unsupported')
 
 
@@ -111,6 +112,8 @@ def request_body(bundle):
         raise ValueError('output_budget')
     reasoning = ({'effort': 'low', 'exclude': True} if PROVIDER == 'baidu' else
                  ({'max_tokens': REASONING_BUDGET, 'exclude': True} if REASONING_BUDGET else {'enabled': False}))
+    if PROVIDER == 'particle-ai/us':
+        reasoning = {'enabled': False, 'effort': 'none', 'exclude': True}
     if 'reasoning_tokens' in options:
         tokens = options['reasoning_tokens']
         if type(tokens) is not int or not 128 <= tokens <= 2048 or tokens >= output_tokens:
@@ -119,7 +122,7 @@ def request_body(bundle):
     return {
         'model': MODEL, 'stream': False, 'max_tokens': output_tokens,
         'temperature': 1,
-        **({'reasoning': reasoning} if PROVIDER in ('nvidia', 'baidu') or 'reasoning_tokens' in options else {}),
+        **({'reasoning': reasoning} if PROVIDER in ('nvidia', 'baidu', 'particle-ai/us') or 'reasoning_tokens' in options else {}),
         'provider': {'only': [PROVIDER], 'allow_fallbacks': False,
                      'require_parameters': True, 'max_price': {'prompt': 0, 'completion': 0}},
         'messages': [
@@ -196,20 +199,26 @@ def inspect_response(raw, bundle):
 
 
 def check_continuation(plan, bundle, rows):
-    """Fail closed before network/key input; retained answers are never retried."""
-    if not isinstance(plan, dict) or plan.get('version') != 1:
+    """Preserve evidence; v2 permits only explicit changed-request defect repairs."""
+    if not isinstance(plan, dict) or plan.get('version') not in (1, 2):
         raise ValueError('continuation_version')
     allowed = plan['allowed_requests']
     retained = plan['retained_responses']
     if not 1 <= len(allowed) <= 30 or rows != len(allowed):
         raise ValueError('continuation_budget')
     done = set()
+    previous = {}
     for item in retained:
         path = Path(item['path'])
         if digest(path.read_bytes()) != item['sha256']:
             raise ValueError('retained_evidence_changed')
         done.add(item['case_id'])
-    if done.intersection(allowed) or bundle['case_id'] in done:
+        previous[item['case_id']] = strict_json(path.with_suffix('.receipt').read_bytes())['request_sha256'] if plan['version'] == 2 else None
+    repairs = plan.get('repair_cases', {}) if plan['version'] == 2 else {}
+    for case, repair in repairs.items():
+        if case not in done or case not in allowed or not repair.get('reason') or repair.get('prior_request_sha256') != previous[case] or allowed[case] == previous[case]:
+            raise ValueError('invalid_explicit_repair')
+    if (done - repairs.keys()).intersection(allowed) or bundle['case_id'] in (done - repairs.keys()):
         raise ValueError('completed_case_replay')
     body = json.dumps(request_body(bundle), ensure_ascii=False).encode()
     if allowed.get(bundle['case_id']) != digest(body):

@@ -187,6 +187,32 @@ class AdapterTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'session_budget'):
                 a.serve(None,None,rows=rows)
 
+    def test_particle_is_free_exact_route_with_reasoning_off(self):
+        from unittest.mock import patch
+        model,provider,name=a.ROUTES['particle']
+        with patch.multiple(a,MODEL=model,PROVIDER=provider,PROVIDER_NAME=name):
+            body=a.request_body(self.bundle())
+            self.assertEqual(body['reasoning'],{'enabled':False,'effort':'none','exclude':True})
+            self.assertEqual(body['provider']['only'],['particle-ai/us'])
+            self.assertFalse(body['provider']['allow_fallbacks'])
+            self.assertEqual(body['provider']['max_price'],{'prompt':0,'completion':0})
+
+    def test_explicit_repair_requires_prior_receipt_and_changed_request(self):
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'old.response';p.write_bytes(b'old raw response')
+            p.with_suffix('.receipt').write_text(json.dumps({'request_sha256':'old-request'}))
+            b=self.bundle();b['case_id']='defect'
+            h=a.digest(json.dumps(a.request_body(b),ensure_ascii=False).encode())
+            plan={'version':2,'allowed_requests':{'defect':h},'retained_responses':[{'case_id':'defect','path':str(p),'sha256':a.digest(p.read_bytes())}], 'repair_cases':{'defect':{'prior_request_sha256':'old-request','reason':'incomplete'}}}
+            a.check_continuation(plan,b,1)
+            plan['repair_cases']['defect']['prior_request_sha256']='wrong'
+            with self.assertRaisesRegex(ValueError,'invalid_explicit_repair'):a.check_continuation(plan,b,1)
+            plan['repair_cases']={}
+            with self.assertRaisesRegex(ValueError,'completed_case_replay'):a.check_continuation(plan,b,1)
+            plan['repair_cases']={'defect':{'prior_request_sha256':'old-request','reason':'incomplete'}}
+            plan['allowed_requests']['defect']='old-request'
+            with self.assertRaisesRegex(ValueError,'invalid_explicit_repair'):a.check_continuation(plan,b,1)
+
     def test_quota_requires_known_sufficient_consistent_daily_allowance(self):
         def raw(used,limit,remaining):
             return json.dumps({'data':{'label':'not retained','free_model_daily_requests':{'used':used,'limit':limit,'remaining':remaining}}}).encode()

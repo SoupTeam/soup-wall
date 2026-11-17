@@ -4,6 +4,7 @@ use super::*;
 
 fn provider_name(model: &str, slug: &str) -> Result<&'static str> {
     match (model, slug) {
+        ("particle-ai/particle-1:free", "particle-ai/us") => Ok("Particle AI"),
         ("baidu/ernie-5.5-flash-preview:free", "baidu") => Ok("Baidu"),
         ("nvidia/nemotron-3.5-super-vl:free", "nvidia") => Ok("Nvidia"),
         ("inclusionai/ling-3.2-flash:free", "antdigital/fp8") => Ok("Ant Digital"),
