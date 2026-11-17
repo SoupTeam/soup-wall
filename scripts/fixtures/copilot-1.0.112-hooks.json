@@ -1,0 +1,32 @@
+[
+  {
+    "phase": "before",
+    "value": {
+      "sessionId": "543a92aa-c4d9-4339-b24d-54100de23a2d",
+      "timestamp": 1794925512764,
+      "cwd": "/home/winux/Soup/soup-wall-harness-integrations/target/copilot-probe/owned/workspace",
+      "toolCallId": "owned-0",
+      "toolName": "demo-read_document",
+      "toolArgs": {
+        "name": "inventory"
+      }
+    }
+  },
+  {
+    "phase": "after",
+    "value": {
+      "sessionId": "543a92aa-c4d9-4339-b24d-54100de23a2d",
+      "timestamp": 1794925522676,
+      "cwd": "/home/winux/Soup/soup-wall-harness-integrations/target/copilot-probe/owned/workspace",
+      "toolCallId": "owned-0",
+      "toolName": "demo-read_document",
+      "toolArgs": {
+        "name": "inventory"
+      },
+      "toolResult": {
+        "resultType": "success",
+        "textResultForLlm": "Owned Copilot inventory: 7 widgets."
+      }
+    }
+  }
+]

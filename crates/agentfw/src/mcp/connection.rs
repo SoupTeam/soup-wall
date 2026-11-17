@@ -1872,6 +1872,7 @@ pub(crate) mod linux {
                     Ok("codex") => super::super::Host::Codex,
                     Ok("gemini") => super::super::Host::Gemini,
                     Ok("opencode") => super::super::Host::Opencode,
+                    Ok("copilot") => super::super::Host::Copilot,
                     _ => super::super::Host::Claude,
                 };
                 let mut config = ConfigFile::read_host(Path::new(&path), host).unwrap();
@@ -1906,6 +1907,7 @@ pub(crate) mod linux {
                 super::super::Host::Codex,
                 super::super::Host::Gemini,
                 super::super::Host::Opencode,
+                super::super::Host::Copilot,
             ] {
                 for mode in [
                     "write-before",
@@ -1925,6 +1927,9 @@ pub(crate) mod linux {
                     if host == super::super::Host::Opencode {
                         std::fs::write(&path, b"{/* retained */\"mcp\":{\"local\":{\"type\":\"local\",\"command\":[\"/usr/bin/env\"],},},\"settings\":{\"theme\":\"light\"},}").unwrap();
                     }
+                    if host == super::super::Host::Copilot {
+                        std::fs::write(&path, b"{\"mcpServers\":{\"local\":{\"type\":\"local\",\"command\":\"/usr/bin/env\",\"args\":[],\"tools\":[\"*\"]}},\"settings\":{\"theme\":\"light\"}}").unwrap();
+                    }
                     let before = std::fs::read(&path).unwrap();
                     let payload = dir.path().join("external.json");
                     let bytes = if host == super::super::Host::Codex {
@@ -1942,7 +1947,7 @@ pub(crate) mod linux {
                     std::fs::write(&payload, &bytes).unwrap();
                     let output = std::process::Command::new(std::env::current_exe().unwrap())
                     .args(["--exact", "mcp::connection::linux::tests::publication_boundary_conflicts_and_crashes_retain_versions", "--nocapture"])
-                    .env("SW_PUBLICATION_HOST", match host { super::super::Host::Codex => "codex", super::super::Host::Gemini => "gemini", super::super::Host::Opencode => "opencode", super::super::Host::Claude => "claude" })
+                    .env("SW_PUBLICATION_HOST", match host { super::super::Host::Codex => "codex", super::super::Host::Gemini => "gemini", super::super::Host::Opencode => "opencode", super::super::Host::Copilot => "copilot", super::super::Host::Claude => "claude" })
                     .env("LD_PRELOAD", &library).env("SW_PUBLICATION_MODE", mode)
                     .env("SW_PUBLICATION_EDIT", &payload).env("SW_PUBLICATION_CHILD", &path)
                     .output().unwrap();
