@@ -67,6 +67,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Codex CLI MCP connection](operations/CODEX_MCP_CONNECTION.md) | Linux TOML lifecycle, pinned wire acceptance and explicit coverage |
 | [Gemini CLI MCP and scoped callbacks](operations/GEMINI_MCP_CONNECTION.md) | JSONC lifecycle, signed callback binding, real-host acceptance and fault boundaries |
 | [OpenCode MCP and scoped plugin](operations/OPENCODE_MCP_CONNECTION.md) | Pinned 1.19.6 command-array lifecycle, signed plugin binding and actual-host checks |
+| [Copilot CLI MCP and scoped hooks](operations/COPILOT_MCP_CONNECTION.md) | Pinned 1.0.112 lifecycle, signed callbacks, actual-host checks and failure boundaries |
 | [Native resource admission](operations/NATIVE_RESOURCE_ADMISSION.md) | Resource permissions, receipt integrity and unsupported executor boundary |
 | [Provenance memory budgets](operations/PROVENANCE_MEMORY.md) | Retained-byte/context limits, saturation refusal, safe retirement and required owned Linux evidence |
 | [Constrained MCP file creation](operations/MCP_CREATE_FILE.md) | Linux create-only workspace files, bound authority, effect accounting and actual stdio verification |

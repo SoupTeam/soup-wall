@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "_meta": {
+      "com.github.copilot/toolCallId": "owned-0",
+      "progressToken": 2
+    },
+    "arguments": {
+      "name": "inventory"
+    },
+    "name": "read_document"
+  }
+}

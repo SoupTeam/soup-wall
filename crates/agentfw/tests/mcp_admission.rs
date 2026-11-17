@@ -1685,6 +1685,12 @@ async fn native_mcp_rejects_unknown_partial_and_unbounded_correlation_metadata()
         json!({"claudecode/toolUseId":"toolu_mcp_read","progressToken":1.5}),
         json!({"claudecode/toolUseId":"toolu_mcp_read","progressToken":9_007_199_254_740_992_u64}),
         json!({"claudecode/toolUseId":"toolu_mcp_read","progressToken":true}),
+        json!({"com.github.copilot/toolCallId":"owned"}),
+        json!({"com.github.copilot/toolCallId":true,"progressToken":1}),
+        json!({"com.github.copilot/toolCallId":"x".repeat(129),"progressToken":1}),
+        json!({"com.github.copilot/toolCallId":"owned","progressToken":-1}),
+        json!({"com.github.copilot/toolCallId":"owned","progressToken":1,"threadId":"forged"}),
+        json!({"com.github.copilot/toolCallId":"owned","progressToken":1,"authority":"allow"}),
         json!({"threadId":"codex-thread"}),
         json!({"threadId":123,"progressToken":0}),
         json!({"threadId":"","progressToken":0}),
@@ -1817,6 +1823,15 @@ async fn unbound_and_malformed_cancellation_close_without_execution() {
         assert!(fixture.exchange(&raw).await.is_none());
         assert!(executed(&fixture.ledger).is_empty());
     }
+}
+
+#[tokio::test]
+async fn native_mcp_accepts_copilot_id_without_granting_authority() {
+    let frame: Value = serde_json::from_str(include_str!(
+        "../../../scripts/fixtures/copilot-1.0.112-call.json"
+    ))
+    .unwrap();
+    host_metadata_acceptance(frame["params"]["_meta"].clone()).await;
 }
 
 #[tokio::test]

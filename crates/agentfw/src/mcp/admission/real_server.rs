@@ -264,6 +264,10 @@ fn metadata(params: &Value) -> anyhow::Result<Option<Value>> {
     let Some(meta) = params.get("_meta") else {
         return Ok(None);
     };
+    if meta.get("com.github.copilot/toolCallId").is_some() {
+        super::call_metadata(meta)?;
+        return Ok(meta.get("progressToken").cloned());
+    }
     if meta.get("x-codex-turn-metadata").is_some() {
         super::codex_turn_metadata(meta)?;
         return Ok(meta.get("progressToken").cloned());

@@ -1222,7 +1222,7 @@
         {
           "path": "crates/agentfw/src/mcp/admission.rs",
           "rule": "Strict visitor: duplicate JSON member and non-finite numbers rejected",
-          "sha256": "6abbb204c06bed2b3dd562393a0c4386e98396b98d460fce90334091d09a568d"
+          "sha256": "fe7f04796e546b56dccebadd1a1cccaa8b04d134128b4feeeee07198dab86983"
         }
       ]
     },
@@ -1238,7 +1238,7 @@
         {
           "path": "crates/agentfw/src/mcp/admission.rs",
           "rule": "Strict visitor: duplicate JSON member and non-finite numbers rejected",
-          "sha256": "6abbb204c06bed2b3dd562393a0c4386e98396b98d460fce90334091d09a568d"
+          "sha256": "fe7f04796e546b56dccebadd1a1cccaa8b04d134128b4feeeee07198dab86983"
         }
       ]
     },
@@ -1254,7 +1254,7 @@
         {
           "path": "crates/agentfw/src/mcp/admission.rs",
           "rule": "Strict visitor: duplicate JSON member and non-finite numbers rejected",
-          "sha256": "6abbb204c06bed2b3dd562393a0c4386e98396b98d460fce90334091d09a568d"
+          "sha256": "fe7f04796e546b56dccebadd1a1cccaa8b04d134128b4feeeee07198dab86983"
         }
       ]
     },
@@ -1270,7 +1270,7 @@
         {
           "path": "crates/agentfw/src/mcp/admission.rs",
           "rule": "Strict visitor: duplicate JSON member and non-finite numbers rejected",
-          "sha256": "6abbb204c06bed2b3dd562393a0c4386e98396b98d460fce90334091d09a568d"
+          "sha256": "fe7f04796e546b56dccebadd1a1cccaa8b04d134128b4feeeee07198dab86983"
         }
       ]
     }

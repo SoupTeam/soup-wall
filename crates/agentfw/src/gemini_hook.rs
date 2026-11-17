@@ -209,6 +209,12 @@ pub fn run(args: Args) -> Result<()> {
 }
 
 pub(crate) fn run_adapter(args: Args, translate: Translator) -> Result<()> {
+    let output = decide_adapter(&args, translate);
+    println!("{}", serde_json::to_string(&output)?);
+    Ok(())
+}
+
+pub(crate) fn decide_adapter(args: &Args, translate: Translator) -> Value {
     let result = (|| {
         let mut bytes = Vec::new();
         std::io::stdin()
@@ -218,11 +224,9 @@ pub(crate) fn run_adapter(args: Args, translate: Translator) -> Result<()> {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?
-            .block_on(exchange(&args, &bytes, translate))
+            .block_on(exchange(args, &bytes, translate))
     })();
-    let output = result.unwrap_or_else(|_: anyhow::Error| json!({"decision":"deny", "reason":"Soup Wall callback is unavailable, unsupported or unverified; the call/result is withheld."}));
-    println!("{}", serde_json::to_string(&output)?);
-    Ok(())
+    result.unwrap_or_else(|_: anyhow::Error| json!({"decision":"deny", "reason":"Soup Wall callback is unavailable, unsupported or unverified; the call/result is withheld."}))
 }
 
 #[cfg(test)]
