@@ -151,3 +151,5 @@ and offline npm cache. Reports record exact runtime/source identities and
 independent receiver/filesystem witnesses. Linux only; Windows/macOS runtime
 installation, multi-server authority provisioning and live-model effectiveness
 are outside this increment's evidence.
+
+[Recorded acceptance evidence](evidence/copilot-mcp-2026-11-17.json) binds the checks to the source and runtime hashes.
