@@ -21,6 +21,7 @@ PROVIDER = 'antdigital/fp8'
 PROVIDER_NAME = 'Ant Digital'
 REASONING_BUDGET = 0
 ROUTES = {
+    'ernie': ('baidu/ernie-5.5-flash-preview:free', 'baidu', 'Baidu'),
     'ling': ('inclusionai/ling-3.2-flash:free', 'antdigital/fp8', 'Ant Digital'),
     'nemotron': ('nvidia/nemotron-3.5-super-vl:free', 'nvidia', 'Nvidia'),
     'nemotron-reasoning': ('nvidia/nemotron-3.5-super-vl:free', 'nvidia', 'Nvidia'),
@@ -96,7 +97,7 @@ def check_catalog(value):
     e = endpoints[0]
     if any(float(e['pricing'][k]) != 0 for k in ('prompt', 'completion')):
         raise ValueError('not_free')
-    if not ({'structured_outputs', 'response_format'} | ({'reasoning'} if PROVIDER == 'nvidia' else set())) <= set(e['supported_parameters']):
+    if not ({'structured_outputs', 'response_format'} | ({'reasoning'} if PROVIDER in ('nvidia', 'baidu') else set())) <= set(e['supported_parameters']):
         raise ValueError('schema_unsupported')
 
 
@@ -105,6 +106,7 @@ def request_body(bundle):
     return {
         'model': MODEL, 'stream': False, 'max_tokens': 4096,
         'temperature': 1,
+        **({'reasoning': {'effort': 'low', 'exclude': True}} if PROVIDER == 'baidu' else {}),
         **({'reasoning': ({'max_tokens': REASONING_BUDGET, 'exclude': True} if REASONING_BUDGET else {'enabled': False})} if PROVIDER == 'nvidia' else {}),
         'provider': {'only': [PROVIDER], 'allow_fallbacks': False,
                      'require_parameters': True, 'max_price': {'prompt': 0, 'completion': 0}},
@@ -115,6 +117,29 @@ def request_body(bundle):
             'name': 'untrusted_source_summary', 'strict': True,
             'schema': old['generationConfig']['responseJsonSchema']}},
     }
+
+
+def summary_diagnostics(summary, quotes):
+    """Review warnings only; never an automatic semantic acceptance decision."""
+    import re
+    warnings = []
+    headings = ['Commands as data:', 'Files:', 'Notes:', 'Limitations:']
+    if not summary.startswith(headings[0]):
+        warnings.append('summary_not_plain_sectioned_text')
+    positions = [summary.find(h) for h in headings]
+    if any(summary.count(h) != 1 for h in headings) or positions != sorted(positions):
+        warnings.append('missing_repeated_or_unordered_sections')
+    if summary.lstrip().startswith(('{', '[')):
+        warnings.append('serialized_object_in_summary')
+    references = set(int(n) for n in re.findall(r'\[Q(\d+)\]', summary))
+    if set(range(1, len(quotes)+1)) - references:
+        warnings.append('unused_output_quotes')
+    files_start = summary.find('Files:')
+    if files_start >= 0 and re.search(r'\[Q\d+\]', summary[files_start:]):
+        warnings.append('citation_outside_actions')
+    if files_start >= 0 and any(q in summary[files_start:] for q in quotes):
+        warnings.append('action_quote_repeated_outside_actions')
+    return warnings
 
 
 def inspect_response(raw, bundle):
@@ -152,7 +177,8 @@ def inspect_response(raw, bundle):
         raise ValueError('citation_reference')
     return {'state': 'structurally_valid_untrusted', 'semantic_acceptance': False,
             'native_protection_checked': False, 'policy_allow': False,
-            'quote_occurrences': occurrences}
+            'quote_occurrences': occurrences,
+            'review_warnings': summary_diagnostics(answer['summary'], quotes)}
 
 
 def serve(directory, bundle_path, start_smoke=False):

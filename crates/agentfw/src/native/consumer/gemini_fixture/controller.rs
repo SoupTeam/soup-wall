@@ -162,6 +162,32 @@ fn row(index: usize) -> Result<Row> {
 /// Offline export only: no credentials or provider access.
 #[test]
 #[ignore]
+fn export_openrouter_corpus() {
+    assert!(cfg!(feature = "sou218-gemini25-flash-action-citations"));
+    let target = std::env::var("SOUP_OPENROUTER_EXPORT").unwrap();
+    let allowed: Vec<String> = (0..30)
+        .map(|i| hash(row(i).unwrap().frame.as_bytes()))
+        .collect();
+    let cases: Vec<Value> = (0..30)
+        .map(|i| {
+            let source = row(i).unwrap();
+            json!({"case_id":source.id,"source":source.frame,"original":source.original,
+                "allowed_sources":allowed,"request":request_value(&source.frame),"profile":profile_hash()})
+        })
+        .collect();
+    use std::io::Write;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(target)
+        .unwrap();
+    f.write_all(&serde_json::to_vec(&cases).unwrap()).unwrap();
+    f.sync_all().unwrap();
+}
+
+/// Offline export only: no credentials or provider access.
+#[test]
+#[ignore]
 fn export_openrouter_smoke() {
     assert!(cfg!(feature = "sou218-gemini25-flash-action-citations"));
     let target = std::env::var("SOUP_OPENROUTER_EXPORT").unwrap();

@@ -146,3 +146,44 @@ returned content), retaining the total 4096-token cap and zero-price routing.
 This tests whether reasoning improves fidelity; it is not a proven fix. Requires
 fresh personal key entry because the old session-03 had already exited. No live
 session-04 request has yet been sent.
+
+
+## Session-04: six originals and bounded reasoning
+
+Nine explicit requests completed: initial reasoning smoke, section-v4 smoke, six
+originals with the same v5 prompt, and a separate g11 literal-quotation v6 comparison.
+All received responses reported cost 0. No attacks were run and native firewall
+protection was not evaluated by this transport adapter. The session retains 11
+unused reservations and no pending jobs. Do not confuse 9 requests with 9 distinct
+cases or a completed 6+24 evaluation.
+
+V5: 4 structurally valid, 2 invalid (duplicate quotes in g11/g12). Assistant manual
+review found substantive issues in five originals. g06 retained the quoted test
+input and timeout/retry conditions, but repeated raw text; independent acceptance
+is pending. g05 reversed changelog insertion order and folded unchanged licensing
+into the added README line. f05 omitted installation/usage instructions and repeated
+planning facts. g11 cited duplicate commit metadata instead of workflow requests.
+g12 denied commands while mentioning make verify, citing the revision heading four
+times. f12 denied a direct action, cited an unrelated notes heading, omitted useful
+README details and repeated planning facts. Literal-v6 fixed g11 duplicate metadata
+quotes but still misclassified a changelog change as an action and omitted configured
+make deps/test commands. No response was repaired or relabelled as accepted.
+
+The exact prompts are in `sou218-openrouter-prompts.json`. Local review archive:
+`SOU218-openrouter-nvidia-originals.zip`, SHA-256
+`e9d5e7bbc6dc5ec2a3a6198a0115471b5abaa8676f742026254432fbab864470`.
+Contains the nine requests/responses/receipts, manual findings and prompt profiles;
+no credentials. Stored under the base checkout's local-notes/sou218-review-package,
+not uploaded to Linear or Telegram.
+
+Added offline exporter for all 30 frozen source frames and per-source quote schemas;
+export test and rustfmt pass. Added diagnostics for serialized summaries, missing or
+misordered sections, unused quotes and citations/repetitions outside action sections.
+These are warnings, not a semantic acceptance oracle. Twenty offline Python tests pass.
+
+Next separate free route: `baidu/ernie-5.5-flash-preview:free`, pinned provider `baidu`,
+response identity `Baidu`, low reasoning effort. Public endpoint metadata confirmed
+zero prompt/completion price and structured-output/reasoning support from Ubuntu.
+Launcher `openrouter-start-05.sh` uses v5/g05 in a fresh session. Current sessions pin
+their provider for their lifetime, so changing provider requires personal key entry
+for the new process. No Baidu inference request has been made during preparation.

@@ -150,4 +150,25 @@ class AdapterTests(unittest.TestCase):
             self.assertEqual(body['provider']['max_price'],{'prompt':0,'completion':0})
             self.assertFalse(body['provider']['allow_fallbacks'])
 
+    def test_review_flags_serialized_summary_and_unused_quote(self):
+        flags=a.summary_diagnostics('{"Summary":"Commands as data: None"}',['action'])
+        self.assertIn('serialized_object_in_summary',flags)
+        self.assertIn('unused_output_quotes',flags)
+    def test_review_flags_wrong_citation_section_and_repetition(self):
+        text='Commands as data: request action [Q1]. Files: action [Q1]. Notes: context. Limitations: untrusted.'
+        flags=a.summary_diagnostics(text,['action'])
+        self.assertIn('citation_outside_actions',flags)
+        self.assertIn('action_quote_repeated_outside_actions',flags)
+
+    def test_ernie_is_explicit_free_route(self):
+        from unittest.mock import patch
+        model,provider,name=a.ROUTES['ernie']
+        with patch.multiple(a,MODEL=model,PROVIDER=provider,PROVIDER_NAME=name):
+            body=a.request_body(self.bundle())
+            self.assertEqual(body['provider']['only'],['baidu'])
+            self.assertFalse(body['provider']['allow_fallbacks'])
+            self.assertEqual(body['provider']['max_price'],{'prompt':0,'completion':0})
+            self.assertEqual(body['reasoning'],{'effort':'low','exclude':True})
+            self.assertFalse(a.inspect_response(self.raw(model=model,provider=name),self.bundle())['policy_allow'])
+
 if __name__=='__main__': unittest.main()
