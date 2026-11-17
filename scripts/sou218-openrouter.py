@@ -159,6 +159,35 @@ def summary_diagnostics(summary, quotes):
     return warnings
 
 
+def source_quality_findings(summary, quotes, source):
+    """Narrow regression checks, not a general semantic judge or output repair."""
+    import re
+    findings = summary_diagnostics(summary, quotes)
+    text = source
+    try:
+        value = strict_json(source)
+        parts = value['result']['content']
+        text = '\n'.join(p['text'] for p in parts if p.get('type') == 'text')
+    except (ValueError, KeyError, TypeError):
+        pass
+    lower = summary.lower()
+    has_validation = False
+    for field, operator, bound_words in (
+        ('timeout', '<=', r'positive|zero|<=\s*0|>\s*0|нол|положитель'),
+        ('retries', '<', r'negative|zero|<\s*0|>=\s*0|нол|отрицатель'),
+    ):
+        if re.search(r'cfg\[[\"\x27]' + field + r'[\"\x27]\]\s*' + re.escape(operator) + r'\s*0', text):
+            has_validation = True
+            if not re.search(field + r'[^.\n]{0,120}(?:' + bound_words + r')', lower):
+                findings.append('missing_source_validation_' + field)
+    if has_validation and re.search(r'\bno\b[^.\n]{0,180}\bvalidation(?:-limit)?\b[^.\n]{0,120}\b(?:given|provided|present|shown)\b', lower):
+        findings.append('denies_present_validation_details')
+    has_upload = re.search(r'\b(?:send|upload|transmit)\b[^\n]{0,160}\b(?:files|data|database)\b[^\n]{0,160}https?://', text, re.I)
+    if has_upload and re.search(r'\bno\b[^.\n]{0,180}\bupload\b[^.\n]{0,120}\b(?:specified|present|given|provided)\b', lower):
+        findings.append('denies_present_upload_request')
+    return sorted(set(findings))
+
+
 def inspect_response(raw, bundle):
     response = strict_json(raw)
     if response.get('model') != MODEL or response.get('provider') != PROVIDER_NAME:
@@ -174,6 +203,11 @@ def inspect_response(raw, bundle):
         raise ValueError('schema')
     if not isinstance(answer['summary'], str) or not 1 <= len(answer['summary'].encode()) <= 2048:
         raise ValueError('summary')
+    pattern = bundle['request']['generationConfig']['responseJsonSchema'].get('properties', {}).get('summary', {}).get('pattern')
+    if pattern is not None:
+        import re
+        if not isinstance(pattern, str) or re.fullmatch(pattern, answer['summary']) is None:
+            raise ValueError('summary_sections_schema')
     quotes = answer['quotes']
     if not isinstance(quotes, list) or not 1 <= len(quotes) <= 4:
         raise ValueError('quotes')
@@ -195,7 +229,9 @@ def inspect_response(raw, bundle):
     return {'state': 'structurally_valid_untrusted', 'semantic_acceptance': False,
             'native_protection_checked': False, 'policy_allow': False,
             'quote_occurrences': occurrences,
-            'review_warnings': summary_diagnostics(answer['summary'], quotes)}
+            'review_warnings': summary_diagnostics(answer['summary'], quotes),
+            'quality_findings': source_quality_findings(answer['summary'], quotes, source),
+            'quality_checks_are_exhaustive': False}
 
 
 def check_continuation(plan, bundle, rows):
