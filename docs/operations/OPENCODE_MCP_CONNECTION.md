@@ -133,3 +133,5 @@ Reports distinguish runtime/source identities, native enforcement checks and
 host/plugin failure characterization. Linux only; Windows/macOS installation,
 V2 APIs, multi-server launch provisioning and whole-session protection are not
 qualified by this increment.
+
+[Recorded acceptance evidence](evidence/opencode-mcp-2026-11-17.json) binds the checks to the source and runtime hashes.

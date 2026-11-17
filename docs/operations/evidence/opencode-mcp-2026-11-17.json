@@ -1,0 +1,728 @@
+{
+  "format": "soup-wall/opencode-mcp-acceptance/1",
+  "recorded_date": "2026-11-17",
+  "base_sha": "5f4fc2b1c4baa5a100a3555fbfcc616a05f76ddf",
+  "implementation_sha": "614279971c81b893018f3d404b6ab1b00a02bfa0",
+  "environment": "Ubuntu 24.04 under WSL2, Linux x86_64",
+  "local_rust": "1.100.0; repository CI pins 1.99.1",
+  "acceptance": {
+    "generic_stdio": {
+      "source_sha": "614279971c81b893018f3d404b6ab1b00a02bfa0",
+      "opencode_version": "1.19.6",
+      "agentfw_sha256": "321907873bc1963352ec088772aa2c5991458d2f0e90da501079edded5689187",
+      "opencode_entry_sha256": "aab0a58cd7fc5a1f17495b76c08e79989d331653d8b63156aca2f6e9e36d1173",
+      "external_provider_requests": 0,
+      "checks": [
+        {
+          "check": "pinned_host_version",
+          "passed": true
+        },
+        {
+          "check": "preview_exit_1",
+          "passed": true
+        },
+        {
+          "check": "preview_redacted_2",
+          "passed": true
+        },
+        {
+          "check": "preview_no_write",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_4",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_5",
+          "passed": true
+        },
+        {
+          "check": "connect_configured",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_7",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_8",
+          "passed": true
+        },
+        {
+          "check": "reconnect_idempotent",
+          "passed": true
+        },
+        {
+          "check": "unrelated_bytes_preserved",
+          "passed": true
+        },
+        {
+          "check": "inspect_exit_11",
+          "passed": true
+        },
+        {
+          "check": "inspect_redacted_12",
+          "passed": true
+        },
+        {
+          "check": "probe_verified",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_14",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_15",
+          "passed": true
+        },
+        {
+          "check": "disconnect_restores_selected_entry",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_17",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_18",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_19",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_20",
+          "passed": true
+        },
+        {
+          "check": "unrelated_edit_survives",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_22",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_23",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_24",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_25",
+          "passed": true
+        },
+        {
+          "check": "selected_conflict_preserved",
+          "passed": true
+        },
+        {
+          "check": "real_host_exit",
+          "passed": true
+        },
+        {
+          "check": "private_settings_after_host",
+          "passed": true
+        },
+        {
+          "check": "real_host_completed_sequence",
+          "passed": true
+        },
+        {
+          "check": "exact_server_executions",
+          "passed": true
+        },
+        {
+          "check": "only_allowed_delivery",
+          "passed": true
+        },
+        {
+          "check": "delete_denied",
+          "passed": true
+        },
+        {
+          "check": "useful_read",
+          "passed": true
+        },
+        {
+          "check": "result_withheld",
+          "passed": true
+        },
+        {
+          "check": "ask_withheld",
+          "passed": true
+        },
+        {
+          "check": "builtin_coverage_boundary",
+          "passed": true
+        },
+        {
+          "check": "host_result_correlations",
+          "passed": true
+        },
+        {
+          "check": "outage_no_execution",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "selected_stdio_mcp": "tested_below",
+        "builtin_tools": "not_enforced",
+        "hooks": "not_installed"
+      },
+      "runtime_tree_sha256": "ec42cb4d0b8d71cefc12c631218216e587e2d1039c5982dc9c86290cc8d0e261",
+      "runtime_file_count": 9,
+      "host_calls": [
+        {
+          "tool": "demo_read_document",
+          "status": "completed"
+        },
+        {
+          "tool": "demo_send_http",
+          "status": "completed"
+        },
+        {
+          "tool": "demo_send_http",
+          "status": "error"
+        },
+        {
+          "tool": "demo_delete_note",
+          "status": "error"
+        },
+        {
+          "tool": "demo_send_http",
+          "status": "error"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "error"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "completed"
+        },
+        {
+          "tool": "write",
+          "status": "completed"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "error"
+        }
+      ],
+      "server_witness_sha256": "3b32fb0a002f233fc1987b40c99f01c1be574bf06a2eec4e080fd0a0a051ca73",
+      "passed": true,
+      "source_file_count": 252,
+      "source_files_manifest_sha256": "3314803e29567935f5015b224e543d4ac718c1a2328a0006be91573e7dd08a76",
+      "source_files_sha256": {
+        "Cargo.lock": "cf588b3b510deac853e55b4bcf0547f26757b33a202b66f244fcdb454ee5c78f",
+        "crates/agentfw/src/gemini_hook.rs": "1b5628b7f04a338749f69c05d52892eb2c8aed5e00210ddd6c7a41cbe403ba1f",
+        "crates/agentfw/src/mcp/admission.rs": "6abbb204c06bed2b3dd562393a0c4386e98396b98d460fce90334091d09a568d",
+        "crates/agentfw/src/mcp/connection/host_config.rs": "4ed3cacaf4b80f4e6a825e5aeb3c230e5da77688f3ef714dd8b7fac14f6804a4",
+        "crates/agentfw/src/mcp/connection.rs": "2957c765f3f5ec4acb04f4fdab3c525f0464891621f9e50857a863cc0f740cc0",
+        "crates/agentfw/src/opencode_hook.rs": "feeb3de0b5d9bcfa530de75e77777c7e5ebb611cf38e37d40e0d3989be2c3677",
+        "scripts/opencode-filesystem-acceptance.py": "92a642aea811d918ca4e4fef63c10b659295275c247a34df7fb9da084cafb2e6",
+        "scripts/opencode-mcp-acceptance.py": "9fba79274c5b7e18bf8944c36e4a75256c3a0bb4658f2bae16853702fadc91ab",
+        "scripts/opencode-plugin-fault-acceptance.py": "c48dbd111ce9ea20361d0442d761cdb44de931b03c1915f0cefebc804fb570b2",
+        "scripts/soup-wall-opencode.mjs": "2d95b9da0b7bc1ade47f8a04810cc46a77c660639399bafae5d12c39b6015e85"
+      },
+      "live_model_evaluation": false
+    },
+    "signed_plugin": {
+      "source_sha": "614279971c81b893018f3d404b6ab1b00a02bfa0",
+      "opencode_version": "1.19.6",
+      "agentfw_sha256": "321907873bc1963352ec088772aa2c5991458d2f0e90da501079edded5689187",
+      "opencode_entry_sha256": "aab0a58cd7fc5a1f17495b76c08e79989d331653d8b63156aca2f6e9e36d1173",
+      "external_provider_requests": 0,
+      "checks": [
+        {
+          "check": "pinned_host_version",
+          "passed": true
+        },
+        {
+          "check": "preview_exit_1",
+          "passed": true
+        },
+        {
+          "check": "preview_redacted_2",
+          "passed": true
+        },
+        {
+          "check": "preview_no_write",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_4",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_5",
+          "passed": true
+        },
+        {
+          "check": "connect_configured",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_7",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_8",
+          "passed": true
+        },
+        {
+          "check": "reconnect_idempotent",
+          "passed": true
+        },
+        {
+          "check": "unrelated_bytes_preserved",
+          "passed": true
+        },
+        {
+          "check": "inspect_exit_11",
+          "passed": true
+        },
+        {
+          "check": "inspect_redacted_12",
+          "passed": true
+        },
+        {
+          "check": "probe_verified",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_14",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_15",
+          "passed": true
+        },
+        {
+          "check": "disconnect_restores_selected_entry",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_17",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_18",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_19",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_20",
+          "passed": true
+        },
+        {
+          "check": "unrelated_edit_survives",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_22",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_23",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_24",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_25",
+          "passed": true
+        },
+        {
+          "check": "selected_conflict_preserved",
+          "passed": true
+        },
+        {
+          "check": "real_host_exit",
+          "passed": true
+        },
+        {
+          "check": "private_settings_after_host",
+          "passed": true
+        },
+        {
+          "check": "real_host_completed_sequence",
+          "passed": true
+        },
+        {
+          "check": "exact_server_executions",
+          "passed": true
+        },
+        {
+          "check": "only_allowed_delivery",
+          "passed": true
+        },
+        {
+          "check": "delete_denied",
+          "passed": true
+        },
+        {
+          "check": "useful_read",
+          "passed": true
+        },
+        {
+          "check": "result_withheld",
+          "passed": true
+        },
+        {
+          "check": "ask_withheld",
+          "passed": true
+        },
+        {
+          "check": "builtin_coverage_boundary",
+          "passed": true
+        },
+        {
+          "check": "host_result_correlations",
+          "passed": true
+        },
+        {
+          "check": "outage_no_execution",
+          "passed": true
+        },
+        {
+          "check": "shared_authenticated_session",
+          "passed": true
+        },
+        {
+          "check": "wrong_token_and_proof_no_execution_then_recovery",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "selected_stdio_mcp": "tested_below",
+        "builtin_tools": "refused_when_callback_runs; plugin_load_failure_remains_outside_coverage",
+        "hooks": "one_signed_native_mcp_binding"
+      },
+      "runtime_tree_sha256": "ec42cb4d0b8d71cefc12c631218216e587e2d1039c5982dc9c86290cc8d0e261",
+      "runtime_file_count": 9,
+      "host_calls": [
+        {
+          "tool": "demo_read_document",
+          "status": "completed"
+        },
+        {
+          "tool": "demo_send_http",
+          "status": "completed"
+        },
+        {
+          "tool": "demo_send_http",
+          "status": "error"
+        },
+        {
+          "tool": "demo_delete_note",
+          "status": "error"
+        },
+        {
+          "tool": "demo_send_http",
+          "status": "error"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "error"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "completed"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "error"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "error"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "completed"
+        },
+        {
+          "tool": "write",
+          "status": "error"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "error"
+        }
+      ],
+      "shared_identity_witness": {
+        "native_calls": 5,
+        "before_callbacks": 8,
+        "after_callbacks": 4
+      },
+      "binding_sha256": "9dde637b73618d591dc98055aa8ff066392fc44fa35fb2f7ae2c0bd665375d7a",
+      "server_witness_sha256": "030a60cb6499c9434b548f531ea72e2b6c5fa61ae16c2632a7d7183e78125d02",
+      "passed": true,
+      "source_file_count": 252,
+      "source_files_manifest_sha256": "3314803e29567935f5015b224e543d4ac718c1a2328a0006be91573e7dd08a76",
+      "source_files_sha256": {
+        "Cargo.lock": "cf588b3b510deac853e55b4bcf0547f26757b33a202b66f244fcdb454ee5c78f",
+        "crates/agentfw/src/gemini_hook.rs": "1b5628b7f04a338749f69c05d52892eb2c8aed5e00210ddd6c7a41cbe403ba1f",
+        "crates/agentfw/src/mcp/admission.rs": "6abbb204c06bed2b3dd562393a0c4386e98396b98d460fce90334091d09a568d",
+        "crates/agentfw/src/mcp/connection/host_config.rs": "4ed3cacaf4b80f4e6a825e5aeb3c230e5da77688f3ef714dd8b7fac14f6804a4",
+        "crates/agentfw/src/mcp/connection.rs": "2957c765f3f5ec4acb04f4fdab3c525f0464891621f9e50857a863cc0f740cc0",
+        "crates/agentfw/src/opencode_hook.rs": "feeb3de0b5d9bcfa530de75e77777c7e5ebb611cf38e37d40e0d3989be2c3677",
+        "scripts/opencode-filesystem-acceptance.py": "92a642aea811d918ca4e4fef63c10b659295275c247a34df7fb9da084cafb2e6",
+        "scripts/opencode-mcp-acceptance.py": "9fba79274c5b7e18bf8944c36e4a75256c3a0bb4658f2bae16853702fadc91ab",
+        "scripts/opencode-plugin-fault-acceptance.py": "c48dbd111ce9ea20361d0442d761cdb44de931b03c1915f0cefebc804fb570b2",
+        "scripts/soup-wall-opencode.mjs": "2d95b9da0b7bc1ade47f8a04810cc46a77c660639399bafae5d12c39b6015e85"
+      },
+      "live_model_evaluation": false
+    },
+    "plugin_fault_characterization": {
+      "kind": "host_plugin_contract_characterization_not_native_enforcement_qualification",
+      "opencode_version": "1.19.6",
+      "source_sha": "614279971c81b893018f3d404b6ab1b00a02bfa0",
+      "opencode_sha256": "aab0a58cd7fc5a1f17495b76c08e79989d331653d8b63156aca2f6e9e36d1173",
+      "external_provider_requests": 0,
+      "cases": [
+        {
+          "case": "defer",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 2,
+          "deliveries": 1,
+          "result_reached_provider": true,
+          "expected_boundary": "transport_characterization",
+          "passed": true
+        },
+        {
+          "case": "deny",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 0,
+          "deliveries": 0,
+          "result_reached_provider": false,
+          "expected_boundary": "transport_characterization",
+          "passed": true
+        },
+        {
+          "case": "after_deny",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 2,
+          "deliveries": 1,
+          "result_reached_provider": false,
+          "expected_boundary": "transport_characterization",
+          "passed": true
+        },
+        {
+          "case": "exit1",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 0,
+          "deliveries": 0,
+          "result_reached_provider": false,
+          "expected_boundary": "transport_characterization",
+          "passed": true
+        },
+        {
+          "case": "timeout",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 0,
+          "deliveries": 0,
+          "result_reached_provider": false,
+          "expected_boundary": "transport_characterization",
+          "passed": true
+        },
+        {
+          "case": "malformed",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 0,
+          "deliveries": 0,
+          "result_reached_provider": false,
+          "expected_boundary": "transport_characterization",
+          "passed": true
+        },
+        {
+          "case": "missing_plugin",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 2,
+          "deliveries": 1,
+          "result_reached_provider": true,
+          "expected_boundary": "plugin_load_failure_not_enforcement",
+          "passed": true
+        }
+      ],
+      "passed": true,
+      "runtime_tree_sha256": "ec42cb4d0b8d71cefc12c631218216e587e2d1039c5982dc9c86290cc8d0e261",
+      "runtime_file_count": 9,
+      "source_file_count": 252,
+      "source_files_manifest_sha256": "3314803e29567935f5015b224e543d4ac718c1a2328a0006be91573e7dd08a76",
+      "source_files_sha256": {
+        "Cargo.lock": "cf588b3b510deac853e55b4bcf0547f26757b33a202b66f244fcdb454ee5c78f",
+        "crates/agentfw/src/gemini_hook.rs": "1b5628b7f04a338749f69c05d52892eb2c8aed5e00210ddd6c7a41cbe403ba1f",
+        "crates/agentfw/src/mcp/admission.rs": "6abbb204c06bed2b3dd562393a0c4386e98396b98d460fce90334091d09a568d",
+        "crates/agentfw/src/mcp/connection/host_config.rs": "4ed3cacaf4b80f4e6a825e5aeb3c230e5da77688f3ef714dd8b7fac14f6804a4",
+        "crates/agentfw/src/mcp/connection.rs": "2957c765f3f5ec4acb04f4fdab3c525f0464891621f9e50857a863cc0f740cc0",
+        "crates/agentfw/src/opencode_hook.rs": "feeb3de0b5d9bcfa530de75e77777c7e5ebb611cf38e37d40e0d3989be2c3677",
+        "scripts/opencode-filesystem-acceptance.py": "92a642aea811d918ca4e4fef63c10b659295275c247a34df7fb9da084cafb2e6",
+        "scripts/opencode-mcp-acceptance.py": "9fba79274c5b7e18bf8944c36e4a75256c3a0bb4658f2bae16853702fadc91ab",
+        "scripts/opencode-plugin-fault-acceptance.py": "c48dbd111ce9ea20361d0442d761cdb44de931b03c1915f0cefebc804fb570b2",
+        "scripts/soup-wall-opencode.mjs": "2d95b9da0b7bc1ade47f8a04810cc46a77c660639399bafae5d12c39b6015e85"
+      },
+      "live_model_evaluation": false
+    },
+    "original_filesystem": {
+      "source_sha": "614279971c81b893018f3d404b6ab1b00a02bfa0",
+      "opencode_version": "1.19.6",
+      "server": "@modelcontextprotocol/server-filesystem@2026.8.31",
+      "checks": [
+        {
+          "check": "host_version",
+          "passed": true
+        },
+        {
+          "check": "original_write_positive_control",
+          "passed": true
+        },
+        {
+          "check": "daemon_ready",
+          "passed": true
+        },
+        {
+          "check": "preview",
+          "passed": true
+        },
+        {
+          "check": "connect",
+          "passed": true
+        },
+        {
+          "check": "inspect",
+          "passed": true
+        },
+        {
+          "check": "host_exit",
+          "passed": true
+        },
+        {
+          "check": "complete_sequence",
+          "passed": true
+        },
+        {
+          "check": "host_outcomes",
+          "passed": true
+        },
+        {
+          "check": "useful_original_read",
+          "passed": true
+        },
+        {
+          "check": "result_injection_withheld",
+          "passed": true
+        },
+        {
+          "check": "write_witness_unchanged",
+          "passed": true
+        },
+        {
+          "check": "disconnect",
+          "passed": true
+        }
+      ],
+      "external_provider_requests": 0,
+      "live_model_evaluation": false,
+      "passed": true,
+      "runtime_tree_sha256": "ec42cb4d0b8d71cefc12c631218216e587e2d1039c5982dc9c86290cc8d0e261",
+      "runtime_file_count": 9,
+      "pins": {
+        "profile_sha256": "0e304569fe089184b959a8725fba2b3bcca936e0368ec94896cd29407dcc6574",
+        "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+        "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+        "package_lock_sha256": "c320d8152786bcb785e41339c262c980c2c4c2106286e44fa7fd7d8ce92d23a7",
+        "node_version": "v22.23.5",
+        "bwrap_version": "bubblewrap 0.13.1"
+      },
+      "agentfw_sha256": "321907873bc1963352ec088772aa2c5991458d2f0e90da501079edded5689187",
+      "host_calls": [
+        {
+          "tool": "notes_read_text_file",
+          "status": "completed"
+        },
+        {
+          "tool": "notes_write_file",
+          "status": "error"
+        },
+        {
+          "tool": "notes_read_text_file",
+          "status": "error"
+        },
+        {
+          "tool": "notes_read_text_file",
+          "status": "completed"
+        }
+      ],
+      "source_file_count": 252,
+      "source_files_manifest_sha256": "3314803e29567935f5015b224e543d4ac718c1a2328a0006be91573e7dd08a76",
+      "source_files_sha256": {
+        "Cargo.lock": "cf588b3b510deac853e55b4bcf0547f26757b33a202b66f244fcdb454ee5c78f",
+        "crates/agentfw/src/gemini_hook.rs": "1b5628b7f04a338749f69c05d52892eb2c8aed5e00210ddd6c7a41cbe403ba1f",
+        "crates/agentfw/src/mcp/admission.rs": "6abbb204c06bed2b3dd562393a0c4386e98396b98d460fce90334091d09a568d",
+        "crates/agentfw/src/mcp/connection/host_config.rs": "4ed3cacaf4b80f4e6a825e5aeb3c230e5da77688f3ef714dd8b7fac14f6804a4",
+        "crates/agentfw/src/mcp/connection.rs": "2957c765f3f5ec4acb04f4fdab3c525f0464891621f9e50857a863cc0f740cc0",
+        "crates/agentfw/src/opencode_hook.rs": "feeb3de0b5d9bcfa530de75e77777c7e5ebb611cf38e37d40e0d3989be2c3677",
+        "scripts/opencode-filesystem-acceptance.py": "92a642aea811d918ca4e4fef63c10b659295275c247a34df7fb9da084cafb2e6",
+        "scripts/opencode-mcp-acceptance.py": "9fba79274c5b7e18bf8944c36e4a75256c3a0bb4658f2bae16853702fadc91ab",
+        "scripts/opencode-plugin-fault-acceptance.py": "c48dbd111ce9ea20361d0442d761cdb44de931b03c1915f0cefebc804fb570b2",
+        "scripts/soup-wall-opencode.mjs": "2d95b9da0b7bc1ade47f8a04810cc46a77c660639399bafae5d12c39b6015e85"
+      }
+    }
+  },
+  "validation": {
+    "rust_workspace_serial": {
+      "source_sha": "051ee539efb41f2d8182c4fb03639f8ef44fc728",
+      "passed": 2484,
+      "failed": 0,
+      "ignored": 40,
+      "binaries": 89
+    },
+    "connection_after_interpolation_refusal": {
+      "source_sha": "db13a79b6e972bcc2326ed7d47c3bb5a8b71edcd",
+      "passed": 39,
+      "failed": 0
+    },
+    "clippy_workspace_all_targets": "passed; final Rust sources unchanged since db13a79b",
+    "eval_unittests": 112,
+    "release_docs_unittests": 22,
+    "documentation_links_before_evidence_link": 1512
+  },
+  "limits": [
+    "Only the published 1.19.6 V1 configuration and plugin API are qualified; current website V2 examples are not this contract.",
+    "One selected Linux stdio MCP connection; no Windows/macOS lifecycle qualification.",
+    "Signed plugin binding requires an explicit trusted run owner; no persistent launcher or multi-server binding installer.",
+    "Loaded plugin blocks bridge failure, malformed output and timeout; a missing plugin is ignored by the actual host and cannot enforce.",
+    "AfterTool denial withholds a result, not an already executed effect; MCP errors do not fire OpenCode after callbacks.",
+    "Late completed cancellation is an idle no-op, not a new pre-effect cancellation guarantee.",
+    "Built-ins, hosted tools, background shell and subagents remain outside native selected-MCP coverage.",
+    "Ask remains held, no interactive approval UI or combined single-use grant flow; local scripted providers and owned fixtures only, USD0.",
+    "An earlier db13a79b fault rerun exceeded the 60-second host deadline before its first case completed. It remains a failed run; later results are recorded separately. The final fixture retains timeout diagnostics and bounds its own process group."
+  ]
+}
