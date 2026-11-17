@@ -446,6 +446,7 @@ pub(super) fn collector(
         "collector runtime identity changed"
     );
     let o = Options {
+        host: crate::mcp::connection::Host::Claude,
         path: home.join("unused.json"),
         server: id.into(),
         home: home.into(),

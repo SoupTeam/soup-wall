@@ -209,6 +209,7 @@ async fn preview_selected(selection: &Selection) -> Result<Preview> {
     .context("invalid reviewed Agent policy")?;
     let host_before = connection::read_file(&selection.host_config, FILE_LIMIT)?;
     let options = Options {
+        host: crate::mcp::connection::Host::Claude,
         path: selection.host_config.clone(),
         server: selection.server.clone(),
         home: selection.home.clone(),
@@ -544,6 +545,7 @@ mod tests {
         let selection = &fixture.selection;
         let before = std::fs::read(&selection.host_config).unwrap();
         let options = Options {
+            host: crate::mcp::connection::Host::Claude,
             path: selection.host_config.clone(),
             server: selection.server.clone(),
             home: selection.home.clone(),

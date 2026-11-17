@@ -605,6 +605,7 @@ async fn diagnose(args: &DoctorArgs) -> Report {
     if let (Some(path), Some(server), Some(agent)) = (&args.host_config, &args.server, &args.agent)
     {
         let options = crate::mcp::connection::Options {
+            host: crate::mcp::connection::Host::Claude,
             path: path.clone(),
             server: server.clone(),
             home: home.clone(),

@@ -2193,6 +2193,9 @@ fn discovery_params(value: &Value) -> anyhow::Result<()> {
 /// Observed Claude and Codex identifiers are transport correlation only. They
 /// never supply native session identity, arguments, authority or provenance.
 fn call_metadata(value: &Value) -> anyhow::Result<()> {
+    if value.get("x-codex-turn-metadata").is_some() {
+        return codex_turn_metadata(value);
+    }
     keys(
         value,
         &["claudecode/toolUseId", "threadId", "progressToken"],
@@ -2207,6 +2210,107 @@ fn call_metadata(value: &Value) -> anyhow::Result<()> {
             && progress_token(&value["progressToken"]),
         "unsupported MCP call correlation metadata"
     );
+    Ok(())
+}
+
+/// Captured CLI 0.169.0-alpha.11.1 shape. Every byte remains in the original
+/// frame/hash binding; none of these host assertions supplies native authority.
+fn codex_turn_metadata(value: &Value) -> anyhow::Result<()> {
+    const OUTER: &[&str] = &[
+        "callId",
+        "threadId",
+        "sessionId",
+        "windowId",
+        "itemId",
+        "progressToken",
+        "x-codex-turn-metadata",
+    ];
+    const TEXT: &[&str] = &[
+        "session_id",
+        "thread_id",
+        "model",
+        "turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "codex_version",
+    ];
+    const FLAGS: &[&str] = &[
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+    ];
+    let bounded = |v: &Value| {
+        v.as_str()
+            .is_some_and(|s| !s.is_empty() && s.len() <= 256 && !s.chars().any(char::is_control))
+    };
+    keys(value, OUTER)?;
+    ensure!(
+        value.as_object().is_some_and(|m| m.len() == OUTER.len())
+            && OUTER[..5].iter().all(|k| bounded(&value[k]))
+            && correlation_id(&value["threadId"])
+            && progress_token(&value["progressToken"]),
+        "unsupported Codex correlation metadata"
+    );
+    let turn = &value["x-codex-turn-metadata"];
+    let fields: Vec<_> = TEXT
+        .iter()
+        .chain(FLAGS)
+        .copied()
+        .chain(["turn_started_at_unix_ms", "workspaces"])
+        .collect();
+    keys(turn, &fields)?;
+    ensure!(
+        turn.as_object().is_some_and(
+            |m| m.len() == fields.len() - usize::from(turn.get("workspaces").is_none())
+        ) && TEXT.iter().all(|k| bounded(&turn[k]))
+            && FLAGS.iter().all(|k| turn[k].is_boolean())
+            && progress_token(&turn["turn_started_at_unix_ms"])
+            && turn["codex_version"] == "0.169.0-alpha.11.1"
+            && turn["thread_id"] == value["threadId"]
+            && turn["session_id"] == value["sessionId"],
+        "unsupported Codex turn metadata"
+    );
+    if let Some(workspaces) = turn.get("workspaces") {
+        let map = workspaces.as_object().context("invalid Codex workspaces")?;
+        ensure!(map.len() <= 16, "too many Codex workspaces");
+        for (path, workspace) in map {
+            ensure!(
+                !path.is_empty() && path.len() <= 4096 && !path.chars().any(char::is_control),
+                "invalid Codex workspace path"
+            );
+            keys(
+                workspace,
+                &[
+                    "associated_remote_urls",
+                    "latest_git_commit_hash",
+                    "has_changes",
+                ],
+            )?;
+            ensure!(
+                workspace.as_object().is_some_and(|m| m.len() == 3)
+                    && workspace["has_changes"].is_boolean()
+                    && workspace["latest_git_commit_hash"]
+                        .as_str()
+                        .is_some_and(|s| s.len() == 40 && s.bytes().all(|b| b.is_ascii_hexdigit())),
+                "invalid Codex workspace metadata"
+            );
+            let remotes = workspace["associated_remote_urls"]
+                .as_object()
+                .context("invalid Codex remotes")?;
+            ensure!(
+                remotes.len() <= 16
+                    && remotes.iter().all(|(name, url)| !name.is_empty()
+                        && name.len() <= 128
+                        && !name.chars().any(char::is_control)
+                        && url.as_str().is_some_and(|u| !u.is_empty()
+                            && u.len() <= 2048
+                            && !u.chars().any(char::is_control))),
+                "invalid Codex remote metadata"
+            );
+        }
+    }
     Ok(())
 }
 
