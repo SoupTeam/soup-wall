@@ -485,7 +485,6 @@ async fn an_approval_does_not_authorize_a_different_command() {
     );
 }
 
-
 #[tokio::test]
 async fn adapter_receipts_require_authentication_and_never_auto_approve() {
     let dir = tempfile::tempdir().unwrap();
@@ -497,7 +496,10 @@ async fn adapter_receipts_require_authentication_and_never_auto_approve() {
     }
     let (status, value) = post_route(st, "/hook/decision/v1", body, Some(&bearer())).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(value, serde_json::json!({"decision":"defer","reason":null,"phase":"before","shadow":false}));
+    assert_eq!(
+        value,
+        serde_json::json!({"decision":"defer","reason":null,"phase":"before","shadow":false})
+    );
 }
 
 #[tokio::test]
@@ -505,12 +507,20 @@ async fn adapter_holds_incomplete_results_and_preserves_shadow_and_legacy_wire()
     let body = r#"{"session_id":"adapter","hook_event_name":"PostToolUse","tool_name":"Read","tool_input":{"file_path":"/owned/readme"},"tool_response":"ninebytes"}"#;
     for enforce in [true, false] {
         let dir = tempfile::tempdir().unwrap();
-        let st = state_with_config(Config {enforce, max_record_bytes:8, ..Config::default()}, dir.path());
-        let (status, value) = post_route(st.clone(), "/hook/decision/v1", body, Some(&bearer())).await;
+        let st = state_with_config(
+            Config {
+                enforce,
+                max_record_bytes: 8,
+                ..Config::default()
+            },
+            dir.path(),
+        );
+        let (status, value) =
+            post_route(st.clone(), "/hook/decision/v1", body, Some(&bearer())).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(value["phase"], "after");
         assert_eq!(value["shadow"], !enforce);
-        assert_eq!(value["decision"], if enforce {"deny"} else {"defer"});
+        assert_eq!(value["decision"], if enforce { "deny" } else { "defer" });
         let (_, legacy) = post(st, body, Some(&bearer())).await;
         assert_eq!(legacy, serde_json::json!({}));
     }

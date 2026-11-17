@@ -1898,7 +1898,11 @@ pub(crate) mod linux {
                 "{}",
                 String::from_utf8_lossy(&output.stderr)
             );
-            for host in [super::super::Host::Claude, super::super::Host::Codex, super::super::Host::Gemini] {
+            for host in [
+                super::super::Host::Claude,
+                super::super::Host::Codex,
+                super::super::Host::Gemini,
+            ] {
                 for mode in [
                     "write-before",
                     "replace-before",

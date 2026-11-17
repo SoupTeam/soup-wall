@@ -1212,10 +1212,13 @@ async fn hook_common(
     });
 
     if adapter_receipt {
-        return (StatusCode::OK, Json(serde_json::json!({
-            "decision":d.permission_decision, "reason":d.reason,
-            "phase":if is_pre { "before" } else { "after" }, "shadow":d.shadow,
-        })));
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "decision":d.permission_decision, "reason":d.reason,
+                "phase":if is_pre { "before" } else { "after" }, "shadow":d.shadow,
+            })),
+        );
     }
 
     // Only PreToolUse carries a decision. Everything else mutates state only —

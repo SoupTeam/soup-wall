@@ -1780,7 +1780,10 @@ async fn native_mcp_rejects_altered_current_codex_metadata_before_execution() {
 
 #[tokio::test]
 async fn native_mcp_accepts_gemini_uuid_without_granting_authority() {
-    let frame: Value = serde_json::from_str(include_str!("../../../scripts/fixtures/gemini-0.68.0-call.json")).unwrap();
+    let frame: Value = serde_json::from_str(include_str!(
+        "../../../scripts/fixtures/gemini-0.68.0-call.json"
+    ))
+    .unwrap();
     host_metadata_acceptance(frame["params"]["_meta"].clone()).await;
 }
 
@@ -1883,7 +1886,8 @@ async fn host_metadata_acceptance(metadata: Value) {
             .filter(|entry| entry["event"] == "native_call")
             .all(|entry| entry["session"]
                 .as_str()
-                .is_some_and(|session| session != thread && Some(session) != metadata["progressToken"].as_str())),
+                .is_some_and(|session| session != thread
+                    && Some(session) != metadata["progressToken"].as_str())),
         "host thread IDs must not replace the collector-owned native session"
     );
 }
