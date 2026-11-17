@@ -155,3 +155,5 @@ Other Claude/Codex metadata shapes retain their previous validation.
 Upstream contracts: [MCP settings](https://geminicli.com/docs/tools/mcp-server/)
 and [hooks reference](https://geminicli.com/docs/hooks/reference/). Qualification
 is tied to the pinned actual runtime and witnesses above.
+
+[Recorded acceptance evidence](evidence/gemini-mcp-2026-11-17.json) binds these checks to the implementation and runtime hashes.
