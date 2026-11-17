@@ -109,4 +109,45 @@ class AdapterTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 a.inspect_response(self.raw(model=model,provider='Ant Digital'),self.bundle())
 
+    def test_http_failure_pauses_and_reuses_key_only_after_resume(self):
+        from unittest.mock import patch, Mock
+        import io
+        catalog={'data':{'id':a.MODEL,'endpoints':[{'tag':a.PROVIDER,'pricing':{'prompt':'0','completion':'0'},'supported_parameters':['structured_outputs','response_format']}]}}
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);session=root/'session';bundle=root/'bundle.json'
+            bundle.write_text(json.dumps(self.bundle()))
+            calls=[];ticks=[]
+            def fetch(path,body=None,key=None):
+                if body is None:return json.dumps(catalog).encode()
+                calls.append(key)
+                if len(calls)==1:
+                    raise a.urllib.error.HTTPError('https://openrouter.ai',400,'bad',{},io.BytesIO(b'bad schema sk-or-synthetic-test-only'))
+                return self.raw()
+            def sleep(seconds):
+                ticks.append(1)
+                if (session/'job-smoke.paused').exists() and not (session/'job-next.json').exists():
+                    b=self.bundle();b['request']['systemInstruction']['parts'][0]['text']='new explicit comparison'
+                    a.save(session/'job-next.json',json.dumps(b).encode())
+                elif (session/'job-next.receipt').exists():
+                    a.save(session/'stop',b'stop')
+                elif len(ticks)==3:
+                    self.assertEqual(len(calls),1)
+                    a.save(session/'resume-test.json',b'explicit')
+            libc=Mock();libc.prctl.return_value=0
+            with patch.object(a.ctypes,'CDLL',return_value=libc),patch.object(a.resource,'setrlimit'),patch('builtins.input',return_value='OPENROUTER20 USD0'),patch.object(a.getpass,'getpass',return_value='sk-or-synthetic-test-only') as getkey,patch.object(a,'fetch',side_effect=fetch),patch.object(a.time,'sleep',side_effect=sleep),patch.object(a.time,'monotonic',side_effect=range(100,10000,70)):
+                a.serve(session,bundle,start_smoke=True)
+            self.assertEqual(getkey.call_count,1)
+            self.assertEqual(len(calls),2)
+            self.assertEqual((session/'job-smoke.error-body').read_bytes(),b'bad schema [REDACTED]')
+            self.assertTrue((session/'job-next.receipt').exists())
+
+    def test_bounded_reasoning_still_free_and_pinned(self):
+        from unittest.mock import patch
+        model,provider,name=a.ROUTES['nemotron-reasoning']
+        with patch.multiple(a,MODEL=model,PROVIDER=provider,PROVIDER_NAME=name,REASONING_BUDGET=512):
+            body=a.request_body(self.bundle())
+            self.assertEqual(body['reasoning'],{'max_tokens':512,'exclude':True})
+            self.assertEqual(body['provider']['max_price'],{'prompt':0,'completion':0})
+            self.assertFalse(body['provider']['allow_fallbacks'])
+
 if __name__=='__main__': unittest.main()

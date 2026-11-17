@@ -19,9 +19,11 @@ from contextlib import contextmanager
 MODEL = 'inclusionai/ling-3.2-flash:free'
 PROVIDER = 'antdigital/fp8'
 PROVIDER_NAME = 'Ant Digital'
+REASONING_BUDGET = 0
 ROUTES = {
     'ling': ('inclusionai/ling-3.2-flash:free', 'antdigital/fp8', 'Ant Digital'),
     'nemotron': ('nvidia/nemotron-3.5-super-vl:free', 'nvidia', 'Nvidia'),
+    'nemotron-reasoning': ('nvidia/nemotron-3.5-super-vl:free', 'nvidia', 'Nvidia'),
 }
 BASE = 'https://openrouter.ai/api/v1'
 LIMIT = 262144
@@ -103,7 +105,7 @@ def request_body(bundle):
     return {
         'model': MODEL, 'stream': False, 'max_tokens': 4096,
         'temperature': 1,
-        **({'reasoning': {'enabled': False}} if PROVIDER == 'nvidia' else {}),
+        **({'reasoning': ({'max_tokens': REASONING_BUDGET, 'exclude': True} if REASONING_BUDGET else {'enabled': False})} if PROVIDER == 'nvidia' else {}),
         'provider': {'only': [PROVIDER], 'allow_fallbacks': False,
                      'require_parameters': True, 'max_price': {'prompt': 0, 'completion': 0}},
         'messages': [
@@ -185,8 +187,17 @@ def serve(directory, bundle_path, start_smoke=False):
     deadline = time.monotonic() + 7200
     remaining = 20
     last_call = 0.0
+    paused = False
+    resume_seen = set()
     try:
         while time.monotonic() < deadline and remaining > 0 and not (directory / 'stop').exists():
+            if paused:
+                signals = set(directory.glob('resume-*.json')) - resume_seen
+                if not signals:
+                    time.sleep(0.5)
+                    continue
+                resume_seen.update(signals)
+                paused = False
             for job in sorted(directory.glob('job-*.json')):
                 marker = job.with_suffix('.started')
                 if marker.exists():
@@ -225,6 +236,14 @@ def serve(directory, bundle_path, start_smoke=False):
                     result = inspect_response(raw, job_bundle)
                 except urllib.error.HTTPError as e:
                     result = {'state': 'http_error', 'status': e.code, 'retry': False}
+                    try:
+                        with total_deadline(3):
+                            error_body = e.read(65537)
+                        if len(error_body) <= 65536:
+                            save(job.with_suffix('.error-body'), error_body.replace(key.encode(), b'[REDACTED]'))
+                            result['error_body_sanitized'] = True
+                    except Exception:
+                        result['error_body_unavailable'] = True
                 except Exception as e:
                     result = {'state': 'invalid_response' if raw is not None else 'transport_unknown',
                               'error_type': type(e).__name__, 'reason': ('total_request_deadline' if str(e) == 'total_request_deadline' else 'socket_inactivity_timeout') if isinstance(e, TimeoutError) else (str(e) if isinstance(e, ValueError) else 'inspect_retained_evidence'), 'retry': False}
@@ -236,9 +255,13 @@ def serve(directory, bundle_path, start_smoke=False):
                 result['request_sha256'] = digest(job_body)
                 save(job.with_suffix('.receipt'), json.dumps(result).encode())
                 print('Job finished. Inspect receipt and raw response; no automatic retry.', flush=True)
-                # A transport/provider failure closes the session, never drains quota in a loop.
+                # Preserve the in-memory key but require an explicit resume command.
+                # Existing fences still forbid retrying the same request.
                 if result['state'] in ('transport_unknown', 'http_error'):
-                    return
+                    paused = True
+                    resume_seen.update(directory.glob('resume-*.json'))
+                    save(job.with_suffix('.paused'), b'explicit resume required; no automatic retry')
+                    print('Paused after failure. Key remains in memory until expiry/stop. Codex must inspect before explicit resume.', flush=True)
                 break
             time.sleep(0.5)
     finally:
@@ -247,15 +270,16 @@ def serve(directory, bundle_path, start_smoke=False):
 
 
 def main():
-    global MODEL, PROVIDER, PROVIDER_NAME
+    global MODEL, PROVIDER, PROVIDER_NAME, REASONING_BUDGET
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('action', choices=['serve', 'submit', 'stop'])
+    p.add_argument('action', choices=['serve', 'submit', 'stop', 'resume'])
     p.add_argument('--session', required=True, type=Path)
     p.add_argument('--bundle', type=Path)
     p.add_argument('--route', choices=sorted(ROUTES), default='ling')
     p.add_argument('--start-smoke', action='store_true', help='Explicitly submit one smoke immediately after hidden key entry.')
     a = p.parse_args()
     MODEL, PROVIDER, PROVIDER_NAME = ROUTES[a.route]
+    REASONING_BUDGET = 512 if a.route == 'nemotron-reasoning' else 0
     if a.action == 'serve':
         serve(a.session, a.bundle, a.start_smoke)
     else:
@@ -263,6 +287,9 @@ def main():
             raise SystemExit('Session not armed')
         if a.action == 'stop':
             save(a.session / 'stop', b'explicit')
+        elif a.action == 'resume':
+            import uuid
+            save(a.session / ('resume-' + uuid.uuid4().hex + '.json'), b'explicit')
         else:
             import uuid
             bundle_path = a.bundle or (a.session / 'bundle.json')

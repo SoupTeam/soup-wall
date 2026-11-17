@@ -116,3 +116,33 @@ NVIDIA identity, reasoning disabled, zero-price routing and provider drift check
 
 Model reference: https://openrouter.ai/nvidia/nemotron-3.5-super-vl:free
 Reasoning option: https://openrouter.ai/docs/guides/best-practices/reasoning-tokens
+
+
+## NVIDIA session-03 audit and controller correction
+
+Four explicit requests on g05-a-original (one initial and three distinct prompt/
+schema comparisons). Three responses were received in 2.5-5.7 seconds, all reporting
+cost 0. None passed semantic review. The initial response duplicated quotes,
+omitted the release condition and described unchanged licensing as added. Compact
+v1 serialized JSON inside summary, called the quoted hostile request absent and
+cited its warning. Source-only v2 described the hostile action correctly but omitted
+its citation marker, invented a date, omitted the release condition, and again
+misclassified unchanged licensing. Schema-v3 received HTTP 400; the old controller
+did not retain the error body, so its exact reason is unknown. No native protection
+claim or independent acceptance. Old responses/receipts remain unchanged; manual
+findings are in session-03/manual-review.json. Seventeen offline tests now pass.
+
+Future HTTP/unknown failures PAUSE rather than destroy the in-memory key. An explicit
+`resume --session ...` is required; it does not remove fences or permit an identical
+request replay. Budget and expiry remain unchanged. Stop/expiry still clear process
+state. Bounded HTTP error bodies are retained with exact key bytes redacted; receipts
+identify sanitized evidence. The regression test exercises HTTP 400, redaction,
+paused non-execution, explicit resume, changed comparison and one key input.
+
+Next launcher `openrouter-start-04.sh` uses fresh session-04 with the source-only v2
+prompt, baseline JSON schema and pinned free NVIDIA route. The separate
+`nemotron-reasoning` profile requests at most 512 reasoning tokens (excluded from
+returned content), retaining the total 4096-token cap and zero-price routing.
+This tests whether reasoning improves fidelity; it is not a proven fix. Requires
+fresh personal key entry because the old session-03 had already exited. No live
+session-04 request has yet been sent.
