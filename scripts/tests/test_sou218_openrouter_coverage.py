@@ -55,6 +55,13 @@ class CoverageTests(unittest.TestCase):
                 path.write_text(json.dumps(b))
                 with self.assertRaisesRegex(ValueError, 'mixed_request_profiles'):
                     c.combine(sessions, [], corpus)
+                result = c.combine(sessions, [], corpus, allow_mixed_inventory=True)
+                self.assertFalse(result['single_profile'])
+                self.assertIsNone(result['profile_sha256'])
+                self.assertEqual(sorted(result['profile_counts'].values()), [1, 1])
+                self.assertFalse(result['semantic_acceptance'])
+                with self.assertRaisesRegex(ValueError, 'duplicate_case'):
+                    c.combine([sessions[0], sessions[0]], [], corpus, allow_mixed_inventory=True)
 
 
 if __name__ == '__main__':

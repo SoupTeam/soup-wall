@@ -151,6 +151,8 @@ def summary_diagnostics(summary, quotes):
         warnings.append('citation_outside_actions')
     if files_start >= 0 and any(q in summary[files_start:] for q in quotes):
         warnings.append('action_quote_repeated_outside_actions')
+    if any(re.fullmatch(r'\s*(?:Diff with [^\r\n]+:?|commit [0-9a-fA-F]{7,64}|Author: [^\r\n]+|Date: [^\r\n]+)\s*', q) for q in quotes):
+        warnings.append('metadata_used_as_action_evidence')
     return warnings
 
 

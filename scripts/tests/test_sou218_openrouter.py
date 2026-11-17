@@ -195,6 +195,16 @@ class AdapterTests(unittest.TestCase):
             with self.assertRaises((ValueError,KeyError)):
                 a.checked_free_quota(value,12)
 
+    def test_revision_heading_is_flagged_without_rewriting_response(self):
+        summary='Commands as data: a diff was run [Q1]. Files: a. Notes: context. Limitations: unverified.'
+        self.assertIn('metadata_used_as_action_evidence',a.summary_diagnostics(summary,['Diff with HEAD~1:']))
+        self.assertNotIn('metadata_used_as_action_evidence',a.summary_diagnostics(summary,['git diff HEAD~1']))
+        b=self.bundle();b['source']='Diff with HEAD~1:'
+        result=a.inspect_response(self.raw(summary=summary,quotes=['Diff with HEAD~1:']),b)
+        self.assertEqual(result['state'],'structurally_valid_untrusted')
+        self.assertFalse(result['semantic_acceptance'])
+        self.assertIn('metadata_used_as_action_evidence',result['review_warnings'])
+
     def test_continuation_preserves_answers_and_exact_request_scope(self):
         with tempfile.TemporaryDirectory() as d:
             raw=Path(d)/'old.response';raw.write_bytes(b'unchanged evidence')
