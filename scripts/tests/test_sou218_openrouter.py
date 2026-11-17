@@ -78,10 +78,10 @@ class AdapterTests(unittest.TestCase):
                     a.save(session/'stop',b'stop')
             libc=Mock();libc.prctl.return_value=0
             with patch.object(a.ctypes,'CDLL',return_value=libc), patch.object(a.resource,'setrlimit'), patch('builtins.input',return_value='OPENROUTER20 USD0'), patch.object(a.getpass,'getpass',return_value='sk-or-synthetic-test-only') as getkey, patch.object(a,'fetch',side_effect=fetch), patch.object(a.time,'sleep',side_effect=sleep):
-                a.serve(session,bundle)
+                a.serve(session,bundle,start_smoke=True)
             self.assertEqual(getkey.call_count,1)
             self.assertEqual(calls,['sk-or-synthetic-test-only'])
-            self.assertEqual(json.loads((session/'job-a.receipt').read_text())['remaining_budget'],19)
+            self.assertEqual(json.loads((session/'job-smoke.receipt').read_text())['remaining_budget'],19)
             for file in session.iterdir():
                 self.assertNotIn(b'sk-or-synthetic-test-only',file.read_bytes())
 

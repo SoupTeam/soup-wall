@@ -147,7 +147,7 @@ def inspect_response(raw, bundle):
             'quote_occurrences': occurrences}
 
 
-def serve(directory, bundle_path):
+def serve(directory, bundle_path, start_smoke=False):
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     if ctypes.CDLL(None).prctl(4, 0, 0, 0, 0) != 0:
         raise ValueError('cannot_disable_dump')
@@ -171,7 +171,9 @@ def serve(directory, bundle_path):
     if not key.startswith('sk-or-') or not key.isascii() or any(c.isspace() for c in key):
         raise ValueError('key_shape')
     save(directory / 'armed.json', json.dumps({'expires': time.time()+7200, 'budget': 20}).encode())
-    print('Key held in memory. Waiting for explicit submit; do not close this terminal.', flush=True)
+    if start_smoke:
+        save(directory / 'job-smoke.json', raw_bundle)
+    print('Key held in memory. ' + ('Starting the explicitly requested smoke.' if start_smoke else 'Waiting for explicit submit;') + ' Do not close this terminal.', flush=True)
     deadline = time.monotonic() + 7200
     remaining = 20
     last_call = 0.0
@@ -237,9 +239,10 @@ def main():
     p.add_argument('action', choices=['serve', 'submit', 'stop'])
     p.add_argument('--session', required=True, type=Path)
     p.add_argument('--bundle', type=Path)
+    p.add_argument('--start-smoke', action='store_true', help='Explicitly submit one smoke immediately after hidden key entry.')
     a = p.parse_args()
     if a.action == 'serve':
-        serve(a.session, a.bundle)
+        serve(a.session, a.bundle, a.start_smoke)
     else:
         if not (a.session / 'armed.json').exists() or (a.session / 'stopped').exists():
             raise SystemExit('Session not armed')

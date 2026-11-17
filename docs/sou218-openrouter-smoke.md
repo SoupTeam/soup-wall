@@ -80,3 +80,15 @@ interruption even during repeated short waits and restoration of signal state.
 The old session is stopped and its key is no longer held by that process. A later
 separately authorized comparison requires a fresh personal session; no new live
 request was made while applying this fix.
+
+
+## Explicit second smoke
+
+The user requested another separate probe after the uncertain first request.
+`openrouter-start-02.sh` selects a fresh session-02 and passes `--start-smoke`.
+After personal quota confirmation and hidden key entry this queues exactly one
+initial job, so there is no additional wait for Codex to submit it. It is a new
+explicit comparison, not recovery or replay by the controller. Session-01 and its
+unknown marker remain intact. The absolute POST timeout is 90 seconds. Remaining
+jobs still require explicit submit. The synthetic session test verifies automatic
+initial submission uses the key once and duplicate jobs cause no further calls.
