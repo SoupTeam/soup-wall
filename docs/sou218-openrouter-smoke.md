@@ -92,3 +92,27 @@ explicit comparison, not recovery or replay by the controller. Session-01 and it
 unknown marker remain intact. The absolute POST timeout is 90 seconds. Remaining
 jobs still require explicit submit. The synthetic session test verifies automatic
 initial submission uses the key once and duplicate jobs cause no further calls.
+
+
+## Second result and alternative route
+
+Session-02 used its key for exactly one POST. The receipt records transport_unknown
+with TimeoutError and no retained response, remaining budget 19. Session stopped.
+This does not establish a provider refusal or semantic failure. The old receipt
+cannot distinguish socket versus total timeout; the next version records that
+reason explicitly, along with elapsed seconds and completion timestamp.
+
+Unauthenticated catalog requests from Ubuntu returned in 0.46-0.59 seconds.
+The next explicit comparison selects `--route nemotron`, pinning
+`nvidia/nemotron-3.5-super-vl:free` to `nvidia` (response provider `Nvidia`). The live
+catalog reports zero input/output price and structured_outputs/response_format/
+reasoning support. Reasoning is explicitly disabled to test the response path
+without a reasoning budget. This is a hypothesis for latency, not a proven cause
+of the Ling timeouts. No automatic fallback is enabled. Same source/prompt/schema.
+The operator launcher is `openrouter-start-03.sh`, session-03. No authenticated
+NVIDIA call has been made during preparation. Personal key entry is required
+because the prior process exited. Fifteen offline tests pass, including pinned
+NVIDIA identity, reasoning disabled, zero-price routing and provider drift checks.
+
+Model reference: https://openrouter.ai/nvidia/nemotron-3.5-super-vl:free
+Reasoning option: https://openrouter.ai/docs/guides/best-practices/reasoning-tokens

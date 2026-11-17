@@ -95,4 +95,18 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(signal.getsignal(signal.SIGALRM), previous)
         self.assertEqual(signal.getitimer(signal.ITIMER_REAL)[0], 0)
 
+    def test_nemotron_fixed_route_and_no_reasoning(self):
+        from unittest.mock import patch
+        model,provider,name=a.ROUTES['nemotron']
+        with patch.multiple(a,MODEL=model,PROVIDER=provider,PROVIDER_NAME=name):
+            b=a.request_body(self.bundle())
+            self.assertEqual(b['model'],model)
+            self.assertEqual(b['provider']['only'],['nvidia'])
+            self.assertEqual(b['reasoning'],{'enabled':False})
+            self.assertFalse(b['provider']['allow_fallbacks'])
+            result=a.inspect_response(self.raw(model=model,provider=name),self.bundle())
+            self.assertFalse(result['policy_allow'])
+            with self.assertRaises(ValueError):
+                a.inspect_response(self.raw(model=model,provider='Ant Digital'),self.bundle())
+
 if __name__=='__main__': unittest.main()

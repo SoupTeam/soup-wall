@@ -18,6 +18,11 @@ from contextlib import contextmanager
 
 MODEL = 'inclusionai/ling-3.2-flash:free'
 PROVIDER = 'antdigital/fp8'
+PROVIDER_NAME = 'Ant Digital'
+ROUTES = {
+    'ling': ('inclusionai/ling-3.2-flash:free', 'antdigital/fp8', 'Ant Digital'),
+    'nemotron': ('nvidia/nemotron-3.5-super-vl:free', 'nvidia', 'Nvidia'),
+}
 BASE = 'https://openrouter.ai/api/v1'
 LIMIT = 262144
 
@@ -89,7 +94,7 @@ def check_catalog(value):
     e = endpoints[0]
     if any(float(e['pricing'][k]) != 0 for k in ('prompt', 'completion')):
         raise ValueError('not_free')
-    if not {'structured_outputs', 'response_format'} <= set(e['supported_parameters']):
+    if not ({'structured_outputs', 'response_format'} | ({'reasoning'} if PROVIDER == 'nvidia' else set())) <= set(e['supported_parameters']):
         raise ValueError('schema_unsupported')
 
 
@@ -98,6 +103,7 @@ def request_body(bundle):
     return {
         'model': MODEL, 'stream': False, 'max_tokens': 4096,
         'temperature': 1,
+        **({'reasoning': {'enabled': False}} if PROVIDER == 'nvidia' else {}),
         'provider': {'only': [PROVIDER], 'allow_fallbacks': False,
                      'require_parameters': True, 'max_price': {'prompt': 0, 'completion': 0}},
         'messages': [
@@ -111,7 +117,7 @@ def request_body(bundle):
 
 def inspect_response(raw, bundle):
     response = strict_json(raw)
-    if response.get('model') != MODEL or response.get('provider') != 'Ant Digital':
+    if response.get('model') != MODEL or response.get('provider') != PROVIDER_NAME:
         raise ValueError('model_or_provider_identity')
     choices = response['choices']
     if len(choices) != 1 or choices[0]['finish_reason'] != 'stop':
@@ -157,8 +163,10 @@ def serve(directory, bundle_path, start_smoke=False):
     if digest(bundle['source'].encode()) not in allowed_sources:
         raise ValueError('unapproved_source')
     body = json.dumps(request_body(bundle), ensure_ascii=False).encode()
-    check_catalog(json.loads(fetch('/models/' + MODEL + '/endpoints')))
+    catalog = fetch('/models/' + MODEL + '/endpoints')
+    check_catalog(json.loads(catalog))
     directory.mkdir(mode=0o700, parents=True, exist_ok=False)
+    save(directory / 'catalog.json', catalog)
     save(directory / 'bundle.json', raw_bundle)
     save(directory / 'request.json', body)
     print('Free-only session: at most 20 requests, 120 minutes; each job is explicitly submitted. Confirm remaining quota >=20.')
@@ -170,7 +178,7 @@ def serve(directory, bundle_path, start_smoke=False):
     key = key.strip()
     if not key.startswith('sk-or-') or not key.isascii() or any(c.isspace() for c in key):
         raise ValueError('key_shape')
-    save(directory / 'armed.json', json.dumps({'expires': time.time()+7200, 'budget': 20}).encode())
+    save(directory / 'armed.json', json.dumps({'expires': time.time()+7200, 'budget': 20, 'model': MODEL, 'provider': PROVIDER}).encode())
     if start_smoke:
         save(directory / 'job-smoke.json', raw_bundle)
     print('Key held in memory. ' + ('Starting the explicitly requested smoke.' if start_smoke else 'Waiting for explicit submit;') + ' Do not close this terminal.', flush=True)
@@ -219,7 +227,11 @@ def serve(directory, bundle_path, start_smoke=False):
                     result = {'state': 'http_error', 'status': e.code, 'retry': False}
                 except Exception as e:
                     result = {'state': 'invalid_response' if raw is not None else 'transport_unknown',
-                              'error_type': type(e).__name__, 'reason': str(e) if isinstance(e, ValueError) else 'inspect_retained_evidence', 'retry': False}
+                              'error_type': type(e).__name__, 'reason': ('total_request_deadline' if str(e) == 'total_request_deadline' else 'socket_inactivity_timeout') if isinstance(e, TimeoutError) else (str(e) if isinstance(e, ValueError) else 'inspect_retained_evidence'), 'retry': False}
+                result['completed_at'] = time.time()
+                result['elapsed_seconds'] = round(time.monotonic() - last_call, 3)
+                result['model'] = MODEL
+                result['provider'] = PROVIDER
                 result['remaining_budget'] = remaining
                 result['request_sha256'] = digest(job_body)
                 save(job.with_suffix('.receipt'), json.dumps(result).encode())
@@ -235,12 +247,15 @@ def serve(directory, bundle_path, start_smoke=False):
 
 
 def main():
+    global MODEL, PROVIDER, PROVIDER_NAME
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('action', choices=['serve', 'submit', 'stop'])
     p.add_argument('--session', required=True, type=Path)
     p.add_argument('--bundle', type=Path)
+    p.add_argument('--route', choices=sorted(ROUTES), default='ling')
     p.add_argument('--start-smoke', action='store_true', help='Explicitly submit one smoke immediately after hidden key entry.')
     a = p.parse_args()
+    MODEL, PROVIDER, PROVIDER_NAME = ROUTES[a.route]
     if a.action == 'serve':
         serve(a.session, a.bundle, a.start_smoke)
     else:
