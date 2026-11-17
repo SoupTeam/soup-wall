@@ -64,7 +64,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Windows MCP resource budgets](operations/MCP_WINDOWS_RESOURCE_BUDGETS.md) | Opt-in aggregate Job memory, process and user-CPU budgets with pre-execution ownership and native standard-user witnesses |
 | [Linux MCP crash supervision](operations/MCP_LINUX_CRASH_SUPERVISION.md) | Owned collector-loss cleanup, private PID 1 supervision, restart isolation and independent native witnesses |
 | [Claude Code MCP connection](operations/CLAUDE_MCP_CONNECTION.md) | Selected-server preview, transactional setup, controlled verification and safe disconnect |
-- [Codex CLI MCP connection](operations/CODEX_MCP_CONNECTION.md): Linux TOML lifecycle, pinned wire acceptance and explicit coverage.
+| [Codex CLI MCP connection](operations/CODEX_MCP_CONNECTION.md) | Linux TOML lifecycle, pinned wire acceptance and explicit coverage |
 | [Native resource admission](operations/NATIVE_RESOURCE_ADMISSION.md) | Resource permissions, receipt integrity and unsupported executor boundary |
 | [Provenance memory budgets](operations/PROVENANCE_MEMORY.md) | Retained-byte/context limits, saturation refusal, safe retirement and required owned Linux evidence |
 | [Constrained MCP file creation](operations/MCP_CREATE_FILE.md) | Linux create-only workspace files, bound authority, effect accounting and actual stdio verification |
