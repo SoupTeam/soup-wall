@@ -639,7 +639,12 @@
       "skipped": 19,
       "passed": 190
     },
-    "docs_links": "passed"
+    "docs_links": "passed",
+    "evaluation_runner": {
+      "ran": 112,
+      "passed": 112,
+      "log_sha256": "633717e5f83903750dd77e7e1f3cabb71787e11c41e4f501ae995ba35669f2f5"
+    }
   },
   "initial_failures_and_resolution": [
     {
@@ -653,6 +658,10 @@
     {
       "case": "pilot storage fixture",
       "outcome": "10-second subprocess timeout during concurrent large builds; isolated retry passed, one explicit platform skip."
+    },
+    {
+      "case": "Ready CI evaluation source drift",
+      "outcome": "The unchanged strict JSON visitor was re-cited after adding bounded Codex transport metadata. Exactly four admission.rs source SHA-256 citations were refreshed with the existing deterministic builder. The 89-case corpus is byte-identical (fc5c920b4103db4792c8aa0a4b06c6ac793392118bd51baded03ed2bed3875f1); labels, relations, payloads and expected outcomes are unchanged. All 112 evaluation-runner tests passed."
     }
   ],
   "not_qualified": [
