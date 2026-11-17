@@ -13,6 +13,7 @@ pub(in crate::native) mod controller;
 #[cfg(target_os = "linux")]
 pub(in crate::native) mod ledger;
 mod manual_key;
+mod openrouter;
 mod quote_catalog;
 mod tests;
 mod transport;
@@ -651,6 +652,11 @@ pub(in crate::native) fn decode(prepared: &Prepared, bytes: &[u8]) -> Result<Vec
     let text = parts[0]["text"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("gemini_nontext_part"))?;
+    decode_result(&prepared.source, &prepared.nonce, text)
+}
+
+/// Shared pure result contract; never mints a grant or releases source content.
+fn decode_result(source: &str, nonce: &str, text: &str) -> Result<Vec<u8>> {
     let Strict(result) =
         serde_json::from_str(text).map_err(|_| anyhow::anyhow!("gemini_result_json"))?;
     ensure!(
@@ -683,8 +689,8 @@ pub(in crate::native) fn decode(prepared: &Prepared, bytes: &[u8]) -> Result<Vec
         let mut found = false;
         // Enumerate overlapping occurrences too. No first-match selection or
         // de-escaping. str boundaries prevent split UTF-8 citations.
-        for (start, _) in prepared.source.char_indices() {
-            if prepared.source[start..].starts_with(quote) {
+        for (start, _) in source.char_indices() {
+            if source[start..].starts_with(quote) {
                 found = true;
                 citations.push(
                     json!({"start":start,"end":start+quote.len(),"sha256":hash(quote.as_bytes())}),
@@ -695,12 +701,12 @@ pub(in crate::native) fn decode(prepared: &Prepared, bytes: &[u8]) -> Result<Vec
         ensure!(found, "gemini_quote_absent");
     }
     let frame = serde_json::to_vec(
-        &json!({"contract":OUTPUT,"attempt":prepared.nonce,"source_sha256":hash(prepared.source.as_bytes()),"source_bytes":prepared.source.len(),"summary":summary,"citations":citations}),
+        &json!({"contract":OUTPUT,"attempt":nonce,"source_sha256":hash(source.as_bytes()),"source_bytes":source.len(),"summary":summary,"citations":citations}),
     )?;
     ensure!(frame.len() <= FRAME_LIMIT, "gemini_result_limit");
     super::result_contract::ProposedAttempt {
-        nonce: &prepared.nonce,
-        source: &prepared.source,
+        nonce,
+        source,
     }
     .decode(&frame)
     .map_err(|_| anyhow::anyhow!("gemini_result_contract"))?;

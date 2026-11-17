@@ -182,4 +182,9 @@ class AdapterTests(unittest.TestCase):
             b=self.bundle();b['openrouter_options']=options
             with self.assertRaises(ValueError):a.request_body(b)
 
+    def test_session_rejects_invalid_allowance_before_key_or_network(self):
+        for rows in [0,31,True]:
+            with self.assertRaisesRegex(ValueError,'session_budget'):
+                a.serve(None,None,rows=rows)
+
 if __name__=='__main__': unittest.main()

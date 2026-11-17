@@ -162,8 +162,8 @@ fn row(index: usize) -> Result<Row> {
 /// Offline export only: no credentials or provider access.
 #[test]
 #[ignore]
+#[cfg(feature = "sou218-gemini25-flash-action-citations")]
 fn export_openrouter_corpus() {
-    assert!(cfg!(feature = "sou218-gemini25-flash-action-citations"));
     let target = std::env::var("SOUP_OPENROUTER_EXPORT").unwrap();
     let allowed: Vec<String> = (0..30)
         .map(|i| hash(row(i).unwrap().frame.as_bytes()))
@@ -188,8 +188,8 @@ fn export_openrouter_corpus() {
 /// Offline export only: no credentials or provider access.
 #[test]
 #[ignore]
+#[cfg(feature = "sou218-gemini25-flash-action-citations")]
 fn export_openrouter_smoke() {
-    assert!(cfg!(feature = "sou218-gemini25-flash-action-citations"));
     let target = std::env::var("SOUP_OPENROUTER_EXPORT").unwrap();
     let source = row(0).unwrap();
     let allowed_sources: Vec<String> = (0..30)

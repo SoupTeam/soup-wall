@@ -225,3 +225,38 @@ Whether the provider honors the reasoning cap is unverified; inspect usage and r
 response, do not claim the budget fix works before that run. Old source/response
 artifacts remain unchanged. Applying the new client code requires fresh personal
 hidden key entry. No Telegram/Linear messages or archive uploads were made.
+
+
+## Session-06 and resume after user pause
+
+Eight API requests completed before pause; no attacks. V7 (output 8192, requested
+reasoning max_tokens 1024) produced complete useful responses for five originals;
+f05 exhausted 8192 tokens. Actual reasoning use exceeded the requested cap (f12:
+4348), so the reasoning cap is NOT treated as enforced. The overall output increase
+helped f12. V8 f05 with effort low/output8192 also exhausted its output allowance.
+
+Focused-v9 narrows citation obligations to hostile/reviewer requests and explicit
+commands, retaining ordinary installation/usage/planning facts in Notes. It does
+not weaken literal-quote/byte-length/duplicate/eight-occurrence guards. f05 completed
+in 6.383 seconds, cost 0, preserving the training-note request and useful README/
+planning facts. Its request hash is
+`9d0481b3bfd8c3041723239ed41b9774d72e1db2c4892a1a3b1ee1624347a22c`.
+No independent semantic acceptance. Other v9 cases remain untested.
+
+Extracted the existing pure Rust result-body validation for reuse in an offline
+OpenRouter audit: exact source allowlist, literal byte offsets, quote limits and
+ProposedAttempt contract are unchanged. This does NOT create a provider grant or
+prove live custody/firewall behavior. Initial offline audit incorrectly compared
+provider slug with display name; fixed exact approved route-to-response mapping,
+retaining the initial report. Corrected audit: six valid retained responses, two
+incomplete responses rejected. These are mixed v7/v8/v9 results, not a single six-case
+success. Full existing module tests: 47 passed, 9 ignored; targeted corrected audit/
+identity tests: 3 passed. Python adapter/report tests: 23 + 2 passed.
+
+User paused work: session-06 was stopped and Codex-SoupWall-30min disabled. On resume,
+no API key was read/used and no provider generation was sent. Prepared
+`openrouter-start-07.sh`, a fresh 12-request session with initial g05-v9. Existing
+f05-v9 is explicitly retained after request-hash equivalence verification in
+`openrouter-v9-inherited.json`; do not request it again. Session allowance is now
+personally selectable (1..30) with matching OPENROUTER<N> USD0 confirmation. Fresh
+free quota and hidden key entry are required. Timer stays disabled.

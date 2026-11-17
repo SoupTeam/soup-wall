@@ -193,7 +193,9 @@ def inspect_response(raw, bundle):
             'review_warnings': summary_diagnostics(answer['summary'], quotes)}
 
 
-def serve(directory, bundle_path, start_smoke=False):
+def serve(directory, bundle_path, start_smoke=False, rows=20):
+    if type(rows) is not int or not 1 <= rows <= 30:
+        raise ValueError('session_budget')
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     if ctypes.CDLL(None).prctl(4, 0, 0, 0, 0) != 0:
         raise ValueError('cannot_disable_dump')
@@ -209,8 +211,8 @@ def serve(directory, bundle_path, start_smoke=False):
     save(directory / 'catalog.json', catalog)
     save(directory / 'bundle.json', raw_bundle)
     save(directory / 'request.json', body)
-    print('Free-only session: at most 20 requests, 120 minutes; each job is explicitly submitted. Confirm remaining quota >=20.')
-    if input('Type OPENROUTER20 USD0: ').strip() != 'OPENROUTER20 USD0':
+    print(f'Free-only session: at most {rows} requests, 120 minutes; each job is explicitly submitted. Confirm remaining quota >={rows}.')
+    if input(f'Type OPENROUTER{rows} USD0: ').strip() != f'OPENROUTER{rows} USD0':
         raise ValueError('confirmation')
     with warnings.catch_warnings():
         warnings.simplefilter('error', getpass.GetPassWarning)
@@ -218,12 +220,12 @@ def serve(directory, bundle_path, start_smoke=False):
     key = key.strip()
     if not key.startswith('sk-or-') or not key.isascii() or any(c.isspace() for c in key):
         raise ValueError('key_shape')
-    save(directory / 'armed.json', json.dumps({'expires': time.time()+7200, 'budget': 20, 'model': MODEL, 'provider': PROVIDER}).encode())
+    save(directory / 'armed.json', json.dumps({'expires': time.time()+7200, 'budget': rows, 'model': MODEL, 'provider': PROVIDER}).encode())
     if start_smoke:
         save(directory / 'job-smoke.json', raw_bundle)
     print('Key held in memory. ' + ('Starting the explicitly requested smoke.' if start_smoke else 'Waiting for explicit submit;') + ' Do not close this terminal.', flush=True)
     deadline = time.monotonic() + 7200
-    remaining = 20
+    remaining = rows
     last_call = 0.0
     paused = False
     resume_seen = set()
@@ -315,13 +317,14 @@ def main():
     p.add_argument('action', choices=['serve', 'submit', 'stop', 'resume'])
     p.add_argument('--session', required=True, type=Path)
     p.add_argument('--bundle', type=Path)
+    p.add_argument('--rows', type=int, default=20, help='Personally confirmed cumulative session allowance, 1..30.')
     p.add_argument('--route', choices=sorted(ROUTES), default='ling')
     p.add_argument('--start-smoke', action='store_true', help='Explicitly submit one smoke immediately after hidden key entry.')
     a = p.parse_args()
     MODEL, PROVIDER, PROVIDER_NAME = ROUTES[a.route]
     REASONING_BUDGET = 512 if a.route == 'nemotron-reasoning' else 0
     if a.action == 'serve':
-        serve(a.session, a.bundle, a.start_smoke)
+        serve(a.session, a.bundle, a.start_smoke, a.rows)
     else:
         if not (a.session / 'armed.json').exists() or (a.session / 'stopped').exists():
             raise SystemExit('Session not armed')
