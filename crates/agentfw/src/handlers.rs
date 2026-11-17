@@ -650,6 +650,26 @@ pub async fn hook(
     headers: HeaderMap,
     body: axum::body::Body,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    hook_common(st, headers, body, false).await
+}
+
+/// Authenticated adapter receipt. Unlike the legacy Claude wire endpoint, this
+/// returns an explicit disposition for both the call and the inspected result.
+/// Empty/legacy early-refusal replies are deliberately not valid success receipts.
+pub async fn hook_decision(
+    State(st): State<Shared>,
+    headers: HeaderMap,
+    body: axum::body::Body,
+) -> (StatusCode, Json<serde_json::Value>) {
+    hook_common(st, headers, body, true).await
+}
+
+async fn hook_common(
+    st: Shared,
+    headers: HeaderMap,
+    body: axum::body::Body,
+    adapter_receipt: bool,
+) -> (StatusCode, Json<serde_json::Value>) {
     let auth = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
@@ -1142,6 +1162,11 @@ pub async fn hook(
         }
     }
 
+    if adapter_receipt && mapped.truncated && payload.event == HookEvent::PostToolUse {
+        verdict = Verdict::Deny;
+        decision_rule = Some("hook-result-truncated".into());
+        decision_message = Some("The complete result could not be inspected.".into());
+    }
     let d = decision::decide(
         verdict,
         decision_rule.as_deref(),
@@ -1185,6 +1210,16 @@ pub async fn hook(
         truncated: mapped.truncated,
         raw: None,
     });
+
+    if adapter_receipt {
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "decision":d.permission_decision, "reason":d.reason,
+                "phase":if is_pre { "before" } else { "after" }, "shadow":d.shadow,
+            })),
+        );
+    }
 
     // Only PreToolUse carries a decision. Everything else mutates state only —
     // this is what "detect and gate, never rewrite" means concretely.

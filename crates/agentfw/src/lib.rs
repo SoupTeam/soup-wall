@@ -11,6 +11,7 @@ pub mod configuration_recovery;
 pub mod decision;
 pub mod doctor;
 pub mod edit_session;
+pub mod gemini_hook;
 pub mod grant;
 pub mod handlers;
 pub mod hook;
@@ -96,6 +97,11 @@ pub fn app_with_diagnostics(
         .route(
             "/hook",
             post(handlers::hook).layer(axum::extract::DefaultBodyLimit::max(MAX_ROUTE_BODY)),
+        )
+        .route(
+            "/hook/decision/v1",
+            post(handlers::hook_decision)
+                .layer(axum::extract::DefaultBodyLimit::max(MAX_ROUTE_BODY)),
         )
         .route(
             "/mcp",

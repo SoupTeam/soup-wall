@@ -1720,12 +1720,12 @@ fn codex_current_metadata() -> Value {
 
 #[tokio::test]
 async fn native_mcp_accepts_codex_discovery_and_calls_without_granting_authority() {
-    codex_metadata_acceptance(false).await;
+    host_metadata_acceptance(json!({"threadId":"codex-thread","progressToken":1})).await;
 }
 
 #[tokio::test]
 async fn native_mcp_accepts_current_codex_without_granting_authority() {
-    codex_metadata_acceptance(true).await;
+    host_metadata_acceptance(codex_current_metadata()).await;
 }
 
 #[tokio::test]
@@ -1778,7 +1778,36 @@ async fn native_mcp_rejects_altered_current_codex_metadata_before_execution() {
     }
 }
 
-async fn codex_metadata_acceptance(modern: bool) {
+#[tokio::test]
+async fn native_mcp_accepts_gemini_uuid_without_granting_authority() {
+    let frame: Value = serde_json::from_str(include_str!(
+        "../../../scripts/fixtures/gemini-0.68.0-call.json"
+    ))
+    .unwrap();
+    host_metadata_acceptance(frame["params"]["_meta"].clone()).await;
+}
+
+#[tokio::test]
+async fn native_mcp_rejects_altered_gemini_metadata_before_execution() {
+    for metadata in [
+        json!({"progressToken":""}),
+        json!({"progressToken":"2e12c374-8841-3b0f-87f5-16aa14f69c28"}),
+        json!({"progressToken":"2e12c374-8841-4b0f-07f5-16aa14f69c28"}),
+        json!({"progressToken":"2e12c374-8841-4b0f-87f5-16aa14f69c28\n"}),
+        json!({"progressToken":"x".repeat(129)}),
+        json!({"progressToken":"2e12c374-8841-4b0f-87f5-16aa14f69c28","authority":"allow"}),
+        json!({"progressToken":"2e12c374-8841-4b0f-87f5-16aa14f69c28","threadId":"forged"}),
+    ] {
+        let mut fixture = Fixture::new("normal", true).await;
+        fixture.ready().await;
+        let request = json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
+            "name":"read_document","arguments":{},"_meta":metadata}});
+        assert!(fixture.exchange(&request.to_string()).await.is_none());
+        assert!(executed(&fixture.ledger).is_empty());
+    }
+}
+
+async fn host_metadata_acceptance(metadata: Value) {
     let mut fixture = Fixture::new("discovery-tap", true).await;
     assert!(fixture.exchange(r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{"elicitation":{"form":{},"url":{}}},"clientInfo":{"name":"codex-mcp-client","title":"Codex","version":"0.148.0"}}}"#).await.is_some());
     fixture
@@ -1796,11 +1825,6 @@ async fn codex_metadata_acceptance(modern: bool) {
     );
 
     let thread = "codex-thread";
-    let metadata = if modern {
-        codex_current_metadata()
-    } else {
-        json!({"threadId":thread,"progressToken":1})
-    };
     let read = format!(" {{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{{\"name\":\"read_document\",\"arguments\":{{}},\"_meta\":{metadata}}}}} ");
     assert_eq!(fixture.exchange(&read).await.as_deref(), Some(READ_RESULT));
     assert_eq!(
@@ -1838,7 +1862,7 @@ async fn codex_metadata_acceptance(modern: bool) {
         assert_eq!(
             executed(&fixture.ledger).len(),
             1,
-            "Codex metadata cannot release Deny or Ask"
+            "Host metadata cannot release Deny or Ask"
         );
     }
     let followup = json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{
@@ -1862,7 +1886,8 @@ async fn codex_metadata_acceptance(modern: bool) {
             .filter(|entry| entry["event"] == "native_call")
             .all(|entry| entry["session"]
                 .as_str()
-                .is_some_and(|session| session != thread)),
+                .is_some_and(|session| session != thread
+                    && Some(session) != metadata["progressToken"].as_str())),
         "host thread IDs must not replace the collector-owned native session"
     );
 }

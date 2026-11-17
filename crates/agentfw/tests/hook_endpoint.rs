@@ -51,7 +51,16 @@ async fn post(
     body: &str,
     auth: Option<&str>,
 ) -> (StatusCode, serde_json::Value) {
-    let mut req = Request::builder().method("POST").uri("/hook");
+    post_route(st, "/hook", body, auth).await
+}
+
+async fn post_route(
+    st: agentfw::Shared,
+    path: &str,
+    body: &str,
+    auth: Option<&str>,
+) -> (StatusCode, serde_json::Value) {
+    let mut req = Request::builder().method("POST").uri(path);
     if let Some(a) = auth {
         req = req.header("authorization", a);
     }
@@ -474,4 +483,45 @@ async fn an_approval_does_not_authorize_a_different_command() {
         pd == "ask" || pd == "deny",
         "an approval for another command must not clear this one: {j}"
     );
+}
+
+#[tokio::test]
+async fn adapter_receipts_require_authentication_and_never_auto_approve() {
+    let dir = tempfile::tempdir().unwrap();
+    let st = state(true, dir.path());
+    let body = r#"{"session_id":"adapter","hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"/owned/readme"}}"#;
+    for auth in [None, Some("Bearer wrong")] {
+        let (status, _) = post_route(st.clone(), "/hook/decision/v1", body, auth).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+    let (status, value) = post_route(st, "/hook/decision/v1", body, Some(&bearer())).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        value,
+        serde_json::json!({"decision":"defer","reason":null,"phase":"before","shadow":false})
+    );
+}
+
+#[tokio::test]
+async fn adapter_holds_incomplete_results_and_preserves_shadow_and_legacy_wire() {
+    let body = r#"{"session_id":"adapter","hook_event_name":"PostToolUse","tool_name":"Read","tool_input":{"file_path":"/owned/readme"},"tool_response":"ninebytes"}"#;
+    for enforce in [true, false] {
+        let dir = tempfile::tempdir().unwrap();
+        let st = state_with_config(
+            Config {
+                enforce,
+                max_record_bytes: 8,
+                ..Config::default()
+            },
+            dir.path(),
+        );
+        let (status, value) =
+            post_route(st.clone(), "/hook/decision/v1", body, Some(&bearer())).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(value["phase"], "after");
+        assert_eq!(value["shadow"], !enforce);
+        assert_eq!(value["decision"], if enforce { "deny" } else { "defer" });
+        let (_, legacy) = post(st, body, Some(&bearer())).await;
+        assert_eq!(legacy, serde_json::json!({}));
+    }
 }

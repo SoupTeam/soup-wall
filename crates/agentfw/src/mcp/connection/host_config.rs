@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
 
+#[cfg(any(target_os = "linux", test))]
+mod jsonc;
+
 /// Configuration syntax only; the host name never authenticates authority.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -13,6 +16,7 @@ pub enum Host {
     #[default]
     Claude,
     Codex,
+    Gemini,
 }
 
 impl Host {
@@ -25,12 +29,13 @@ impl Host {
         match self {
             Self::Claude => legacy,
             Self::Codex => legacy.replacen("claude-", "codex-", 1),
+            Self::Gemini => legacy.replacen("claude-", "gemini-", 1),
         }
     }
     #[cfg(any(target_os = "linux", test))]
     pub(super) fn servers_key(self) -> &'static str {
         match self {
-            Self::Claude => "mcpServers",
+            Self::Claude | Self::Gemini => "mcpServers",
             Self::Codex => "mcp_servers",
         }
     }
@@ -42,19 +47,20 @@ impl Host {
                     .map_err(|_| anyhow::anyhow!("invalid or duplicate JSON fields"))?;
                 Ok(value)
             }
+            Self::Gemini => jsonc::parse(bytes),
             Self::Codex => toml_edit::de::from_slice(bytes)
                 .map_err(|_| anyhow::anyhow!("invalid or duplicate TOML fields")),
         }
     }
     #[cfg(any(target_os = "linux", test))]
     pub(super) fn validate(self, entry: &Value) -> Result<()> {
-        if self == Self::Codex {
+        if self != Self::Claude {
             // Do not silently reinterpret cwd, env_vars, filters or approval flags.
             ensure!(
                 entry.as_object().is_some_and(|m| m
                     .keys()
                     .all(|k| ["command", "args", "env"].contains(&k.as_str()))),
-                "unsupported selected Codex server field"
+                "unsupported selected host server field"
             );
         }
         Ok(())
@@ -67,6 +73,7 @@ impl Host {
                 value[self.servers_key()][name] = entry.clone();
                 Ok(serde_json::to_vec_pretty(&value)?)
             }
+            Self::Gemini => jsonc::replace(bytes, self.servers_key(), name, entry),
             Self::Codex => {
                 let mut doc = std::str::from_utf8(bytes)
                     .ok()

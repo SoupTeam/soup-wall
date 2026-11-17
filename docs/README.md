@@ -65,6 +65,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Linux MCP crash supervision](operations/MCP_LINUX_CRASH_SUPERVISION.md) | Owned collector-loss cleanup, private PID 1 supervision, restart isolation and independent native witnesses |
 | [Claude Code MCP connection](operations/CLAUDE_MCP_CONNECTION.md) | Selected-server preview, transactional setup, controlled verification and safe disconnect |
 | [Codex CLI MCP connection](operations/CODEX_MCP_CONNECTION.md) | Linux TOML lifecycle, pinned wire acceptance and explicit coverage |
+| [Gemini CLI MCP and scoped callbacks](operations/GEMINI_MCP_CONNECTION.md) | JSONC lifecycle, signed callback binding, real-host acceptance and fault boundaries |
 | [Native resource admission](operations/NATIVE_RESOURCE_ADMISSION.md) | Resource permissions, receipt integrity and unsupported executor boundary |
 | [Provenance memory budgets](operations/PROVENANCE_MEMORY.md) | Retained-byte/context limits, saturation refusal, safe retirement and required owned Linux evidence |
 | [Constrained MCP file creation](operations/MCP_CREATE_FILE.md) | Linux create-only workspace files, bound authority, effect accounting and actual stdio verification |
