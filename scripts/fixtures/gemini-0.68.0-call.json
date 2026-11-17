@@ -1,0 +1,14 @@
+{
+  "method": "tools/call",
+  "params": {
+    "name": "read_document",
+    "arguments": {
+      "name": "inventory"
+    },
+    "_meta": {
+      "progressToken": "2e12c374-8841-4b0f-87f5-16aa14f69c28"
+    }
+  },
+  "jsonrpc": "2.0",
+  "id": 2
+}
