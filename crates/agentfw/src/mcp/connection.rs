@@ -556,10 +556,12 @@ pub(crate) mod linux {
                 .and_then(Value::as_object)
                 .context("host MCP servers must be an object")?;
             ensure!(servers.len() <= 256, "too many MCP servers");
-            let entry = servers.get(name).context("selected server not found")?;
-            self.host.validate(entry)?;
-            validate_entry(entry)?;
-            Ok(entry.clone())
+            let entry = self
+                .host
+                .decode(servers.get(name).context("selected server not found")?)?;
+            self.host.validate(&entry)?;
+            validate_entry(&entry)?;
+            Ok(entry)
         }
 
         fn replacement(&self, name: &str, entry: &Value) -> Result<Vec<u8>> {
@@ -1869,6 +1871,7 @@ pub(crate) mod linux {
                 let host = match std::env::var("SW_PUBLICATION_HOST").as_deref() {
                     Ok("codex") => super::super::Host::Codex,
                     Ok("gemini") => super::super::Host::Gemini,
+                    Ok("opencode") => super::super::Host::Opencode,
                     _ => super::super::Host::Claude,
                 };
                 let mut config = ConfigFile::read_host(Path::new(&path), host).unwrap();
@@ -1902,6 +1905,7 @@ pub(crate) mod linux {
                 super::super::Host::Claude,
                 super::super::Host::Codex,
                 super::super::Host::Gemini,
+                super::super::Host::Opencode,
             ] {
                 for mode in [
                     "write-before",
@@ -1918,11 +1922,17 @@ pub(crate) mod linux {
                     if host == super::super::Host::Gemini {
                         std::fs::write(&path, b"{/* retained */\"mcpServers\":{\"local\":{\"command\":\"/usr/bin/env\",\"args\":[],},},\"settings\":{\"theme\":\"light\"},}").unwrap();
                     }
+                    if host == super::super::Host::Opencode {
+                        std::fs::write(&path, b"{/* retained */\"mcp\":{\"local\":{\"type\":\"local\",\"command\":[\"/usr/bin/env\"],},},\"settings\":{\"theme\":\"light\"},}").unwrap();
+                    }
                     let before = std::fs::read(&path).unwrap();
                     let payload = dir.path().join("external.json");
                     let bytes = if host == super::super::Host::Codex {
                         [before.as_slice(), b"# external committed edit\n"].concat()
-                    } else if host == super::super::Host::Gemini {
+                    } else if matches!(
+                        host,
+                        super::super::Host::Gemini | super::super::Host::Opencode
+                    ) {
                         [before.as_slice(), b"// external committed edit\n"].concat()
                     } else {
                         let mut external: Value = serde_json::from_slice(&before).unwrap();
@@ -1932,7 +1942,7 @@ pub(crate) mod linux {
                     std::fs::write(&payload, &bytes).unwrap();
                     let output = std::process::Command::new(std::env::current_exe().unwrap())
                     .args(["--exact", "mcp::connection::linux::tests::publication_boundary_conflicts_and_crashes_retain_versions", "--nocapture"])
-                    .env("SW_PUBLICATION_HOST", match host { super::super::Host::Codex => "codex", super::super::Host::Gemini => "gemini", super::super::Host::Claude => "claude" })
+                    .env("SW_PUBLICATION_HOST", match host { super::super::Host::Codex => "codex", super::super::Host::Gemini => "gemini", super::super::Host::Opencode => "opencode", super::super::Host::Claude => "claude" })
                     .env("LD_PRELOAD", &library).env("SW_PUBLICATION_MODE", mode)
                     .env("SW_PUBLICATION_EDIT", &payload).env("SW_PUBLICATION_CHILD", &path)
                     .output().unwrap();

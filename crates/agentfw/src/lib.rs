@@ -27,6 +27,7 @@ pub mod map;
 pub mod mcp;
 pub mod native;
 pub mod onboarding;
+pub mod opencode_hook;
 pub mod pilot_approval;
 pub mod pilot_budget;
 #[cfg(target_os = "linux")]

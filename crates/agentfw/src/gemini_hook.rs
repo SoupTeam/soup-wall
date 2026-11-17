@@ -23,19 +23,19 @@ pub struct Args {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Binding {
-    contract_version: String,
-    host_session: String,
-    host_server: String,
-    native_server: String,
-    child_authority: String,
+pub(crate) struct Binding {
+    pub(crate) contract_version: String,
+    pub(crate) host_session: String,
+    pub(crate) host_server: String,
+    pub(crate) native_server: String,
+    pub(crate) child_authority: String,
 }
 
-fn bounded(value: &str, max: usize) -> bool {
+pub(crate) fn bounded(value: &str, max: usize) -> bool {
     !value.is_empty() && value.len() <= max && !value.chars().any(char::is_control)
 }
 
-fn strict(bytes: &[u8]) -> Result<Value> {
+pub(crate) fn strict(bytes: &[u8]) -> Result<Value> {
     let crate::mcp::admission::Strict(value) = serde_json::from_slice(bytes)
         .map_err(|_| anyhow::anyhow!("invalid or duplicate callback fields"))?;
     Ok(value)
@@ -162,8 +162,10 @@ fn render(receipt: &Value, phase: &str) -> Result<Value> {
     }
 }
 
-async fn exchange(args: &Args, input: &[u8]) -> Result<Value> {
-    ensure!(cfg!(target_os = "linux"), "Gemini callback requires Linux");
+type Translator = fn(&[u8], &Binding) -> Result<(Value, &'static str)>;
+
+async fn exchange(args: &Args, input: &[u8], translate: Translator) -> Result<Value> {
+    ensure!(cfg!(target_os = "linux"), "Host callback requires Linux");
     let config = crate::doctor::read_private(&args.home.join("config.yaml"), MAX_INPUT as u64)?;
     let config = crate::Config::from_yaml(std::str::from_utf8(&config)?)?;
     let token = crate::doctor::read_private(&args.home.join("token"), 4096)?;
@@ -203,6 +205,10 @@ async fn exchange(args: &Args, input: &[u8]) -> Result<Value> {
 /// still fail open if this executable cannot start, is killed, or its host-side
 /// timeout expires. The native MCP collector remains the execution boundary.
 pub fn run(args: Args) -> Result<()> {
+    run_adapter(args, translate)
+}
+
+pub(crate) fn run_adapter(args: Args, translate: Translator) -> Result<()> {
     let result = (|| {
         let mut bytes = Vec::new();
         std::io::stdin()
@@ -212,7 +218,7 @@ pub fn run(args: Args) -> Result<()> {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?
-            .block_on(exchange(&args, &bytes))
+            .block_on(exchange(&args, &bytes, translate))
     })();
     let output = result.unwrap_or_else(|_: anyhow::Error| json!({"decision":"deny", "reason":"Soup Wall callback is unavailable, unsupported or unverified; the call/result is withheld."}));
     println!("{}", serde_json::to_string(&output)?);

@@ -1669,7 +1669,11 @@ async fn native_mcp_accepts_observed_claude_correlation_metadata_without_changin
 async fn native_mcp_rejects_unknown_partial_and_unbounded_correlation_metadata() {
     let invalid = [
         json!({}),
-        json!({"progressToken":0}),
+        json!({"progressToken":-1}),
+        json!({"progressToken":1.5}),
+        json!({"progressToken":true}),
+        json!({"progressToken":9_007_199_254_740_992_u64}),
+        json!({"progressToken":0,"authority":"allow"}),
         json!({"claudecode/toolUseId":"toolu_mcp_read"}),
         json!({"claudecode/toolUseId":"toolu_mcp_read","progressToken":0,"authority":"allow"}),
         json!({"claudecode/toolUseId":123,"progressToken":0}),
@@ -1776,6 +1780,52 @@ async fn native_mcp_rejects_altered_current_codex_metadata_before_execution() {
         assert!(fixture.exchange(&request.to_string()).await.is_none());
         assert!(executed(&fixture.ledger).is_empty());
     }
+}
+
+#[tokio::test]
+async fn completed_call_cancellation_is_a_single_noop_not_a_replay() {
+    let mut fixture = Fixture::new("normal", true).await;
+    fixture.ready().await;
+    let read = r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{},"_meta":{"progressToken":2}}}"#;
+    assert_eq!(fixture.exchange(read).await.as_deref(), Some(READ_RESULT));
+    let cancel = r#"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":3,"reason":"AbortError: The operation was aborted."}}"#;
+    fixture
+        .input
+        .write_all(format!("{cancel}\n").as_bytes())
+        .await
+        .unwrap();
+    fixture.input.flush().await.unwrap();
+    let followup = read.replace("\"id\":3", "\"id\":4");
+    assert!(fixture.exchange(&followup).await.is_some());
+    assert_eq!(executed(&fixture.ledger).len(), 2);
+    // A stale cancellation cannot target the newer completed call.
+    assert!(fixture.exchange(cancel).await.is_none());
+    assert_eq!(executed(&fixture.ledger).len(), 2);
+}
+
+#[tokio::test]
+async fn unbound_and_malformed_cancellation_close_without_execution() {
+    for params in [
+        json!({"requestId":99}),
+        json!({"requestId":3,"reason":true}),
+        json!({"requestId":3,"authority":"allow"}),
+    ] {
+        let mut fixture = Fixture::new("normal", true).await;
+        fixture.ready().await;
+        let raw =
+            json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":params}).to_string();
+        assert!(fixture.exchange(&raw).await.is_none());
+        assert!(executed(&fixture.ledger).is_empty());
+    }
+}
+
+#[tokio::test]
+async fn native_mcp_accepts_opencode_integer_without_granting_authority() {
+    let frame: Value = serde_json::from_str(include_str!(
+        "../../../scripts/fixtures/opencode-1.19.6-call.json"
+    ))
+    .unwrap();
+    host_metadata_acceptance(frame["params"]["_meta"].clone()).await;
 }
 
 #[tokio::test]
@@ -2475,6 +2525,7 @@ async fn native_mcp_cancellation_while_call_admission_is_stalled_is_fail_closed(
         let rows = assert_real_baseline_calls(&fixture.stderr, &fixture.ledger, &[call]);
         let stderr = std::fs::read_to_string(&fixture.stderr).unwrap();
         let explicit_cancellation_refusal = stderr.contains("unsupported MCP notification")
+            || stderr.contains("unsupported MCP cancellation")
             || stderr.contains("unsupported MCP method")
             || stderr.contains("concurrent MCP requests");
         let (test, outcome, cancellation_handling) = if release_admission {

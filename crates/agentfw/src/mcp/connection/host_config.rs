@@ -17,6 +17,7 @@ pub enum Host {
     Claude,
     Codex,
     Gemini,
+    Opencode,
 }
 
 impl Host {
@@ -30,6 +31,7 @@ impl Host {
             Self::Claude => legacy,
             Self::Codex => legacy.replacen("claude-", "codex-", 1),
             Self::Gemini => legacy.replacen("claude-", "gemini-", 1),
+            Self::Opencode => legacy.replacen("claude-", "opencode-", 1),
         }
     }
     #[cfg(any(target_os = "linux", test))]
@@ -37,6 +39,7 @@ impl Host {
         match self {
             Self::Claude | Self::Gemini => "mcpServers",
             Self::Codex => "mcp_servers",
+            Self::Opencode => "mcp",
         }
     }
     #[cfg(any(target_os = "linux", test))]
@@ -47,13 +50,52 @@ impl Host {
                     .map_err(|_| anyhow::anyhow!("invalid or duplicate JSON fields"))?;
                 Ok(value)
             }
-            Self::Gemini => jsonc::parse(bytes),
+            Self::Gemini | Self::Opencode => jsonc::parse(bytes),
             Self::Codex => toml_edit::de::from_slice(bytes)
                 .map_err(|_| anyhow::anyhow!("invalid or duplicate TOML fields")),
         }
     }
+    // Canonical launch records keep the existing private journal and probe path.
+    // Only the selected OpenCode 1.19.6 entry is decoded; unrelated fields stay raw.
+    #[cfg(any(target_os = "linux", test))]
+    pub(super) fn decode(self, entry: &Value) -> Result<Value> {
+        if self != Self::Opencode {
+            return Ok(entry.clone());
+        }
+        let map = entry
+            .as_object()
+            .context("selected OpenCode server must be an object")?;
+        ensure!(
+            map.keys()
+                .all(|k| ["type", "command", "environment"].contains(&k.as_str()))
+                && entry["type"] == "local",
+            "unsupported selected OpenCode server field or transport"
+        );
+        let command = entry["command"]
+            .as_array()
+            .filter(|a| !a.is_empty())
+            .context("OpenCode command must be a nonempty array")?;
+        let mut out = serde_json::json!({"command": command[0], "args": command[1..]});
+        if let Some(env) = map.get("environment") {
+            out["env"] = env.clone();
+        }
+        Ok(out)
+    }
+
     #[cfg(any(target_os = "linux", test))]
     pub(super) fn validate(self, entry: &Value) -> Result<()> {
+        if self == Self::Opencode {
+            // OpenCode resolves these strings before spawning the wrapper. A
+            // reviewed launch must not turn into environment/file-derived argv.
+            ensure!(
+                std::iter::once(&entry["command"])
+                    .chain(entry["args"].as_array().into_iter().flatten())
+                    .all(|v| v
+                        .as_str()
+                        .is_none_or(|s| !s.contains("{env:") && !s.contains("{file:"))),
+                "OpenCode launch interpolation is unsupported"
+            );
+        }
         if self != Self::Claude {
             // Do not silently reinterpret cwd, env_vars, filters or approval flags.
             ensure!(
@@ -74,6 +116,15 @@ impl Host {
                 Ok(serde_json::to_vec_pretty(&value)?)
             }
             Self::Gemini => jsonc::replace(bytes, self.servers_key(), name, entry),
+            Self::Opencode => {
+                let mut command = vec![entry["command"].clone()];
+                command.extend(entry["args"].as_array().into_iter().flatten().cloned());
+                let mut encoded = serde_json::json!({"type":"local", "command":command});
+                if let Some(env) = entry.get("env") {
+                    encoded["environment"] = env.clone();
+                }
+                jsonc::replace(bytes, self.servers_key(), name, &encoded)
+            }
             Self::Codex => {
                 let mut doc = std::str::from_utf8(bytes)
                     .ok()
@@ -180,5 +231,49 @@ mod tests {
             Host::Codex.server_id(Path::new("/a"), "s"),
             Host::Claude.server_id(Path::new("/a"), "s")
         );
+    }
+
+    #[test]
+    fn opencode_array_launch_roundtrip_preserves_unrelated_jsonc() {
+        let prefix = "{/* keep */\"mcp\":{\"demo\":";
+        let suffix = ",\"other\":{\"type\":\"remote\",\"url\":\"https://example.invalid\",\"headers\":{\"token\":\"synthetic-secret\"}},},\"model\":\"owned/fixture\",}";
+        let original = json!({"type":"local","command":["/usr/bin/python3","argument with spaces"],"environment":{}});
+        let input = format!("{prefix}{original}{suffix}");
+        let decoded = Host::Opencode.decode(&original).unwrap();
+        assert_eq!(
+            decoded,
+            json!({"command":"/usr/bin/python3","args":["argument with spaces"],"env":{}})
+        );
+        for arg in ["{env:OWNED_FIXTURE}", "prefix{file:/owned/value}"] {
+            assert!(Host::Opencode
+                .validate(&json!({"command":"/bin/true","args":[arg]}))
+                .is_err());
+        }
+        let wrapped = json!({"command":"/usr/bin/env","args":["-i","/private/agentfw"],"env":{}});
+        let output = Host::Opencode
+            .replace(input.as_bytes(), "demo", &wrapped)
+            .unwrap();
+        let text = std::str::from_utf8(&output).unwrap();
+        assert!(text.starts_with(prefix) && text.ends_with(suffix));
+        assert_eq!(
+            Host::Opencode
+                .decode(&Host::Opencode.parse(&output).unwrap()["mcp"]["demo"])
+                .unwrap(),
+            wrapped
+        );
+        let restored = Host::Opencode.replace(&output, "demo", &decoded).unwrap();
+        assert_eq!(
+            Host::Opencode.parse(&restored).unwrap(),
+            Host::Opencode.parse(input.as_bytes()).unwrap()
+        );
+        for bad in [
+            json!({"type":"remote","command":["/bin/true"]}),
+            json!({"type":"local","command":[]}),
+            json!({"type":"local","command":"/bin/true"}),
+            json!({"type":"local","command":["/bin/true"],"enabled":false}),
+            json!({"type":"local","command":["/bin/true"],"cwd":"/owned"}),
+        ] {
+            assert!(Host::Opencode.decode(&bad).is_err());
+        }
     }
 }
