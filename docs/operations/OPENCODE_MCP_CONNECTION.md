@@ -32,7 +32,9 @@ agentfw mcp-connection inspect --host opencode --path /private/opencode.jsonc \
 Only `type: local`, a nonempty command array with an absolute executable, and
 an optional empty `environment` are supported in the selected entry. Remote
 transport, environment credentials, `cwd`, enable/disable flags, timeouts and
-other selected options are refused. Unrelated settings remain byte-for-byte
+other selected options are refused. `{env:...}` and `{file:...}` launch
+interpolation are also refused so the reviewed argv cannot change at host load.
+Unrelated settings remain byte-for-byte
 unchanged. JSONC comments/trailing commas are retained outside the selected
 entry; duplicate keys are refused. Private publication, conflict and crash
 recovery use the existing connection journal with canonical launch records.

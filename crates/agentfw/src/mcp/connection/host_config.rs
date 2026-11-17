@@ -84,6 +84,18 @@ impl Host {
 
     #[cfg(any(target_os = "linux", test))]
     pub(super) fn validate(self, entry: &Value) -> Result<()> {
+        if self == Self::Opencode {
+            // OpenCode resolves these strings before spawning the wrapper. A
+            // reviewed launch must not turn into environment/file-derived argv.
+            ensure!(
+                std::iter::once(&entry["command"])
+                    .chain(entry["args"].as_array().into_iter().flatten())
+                    .all(|v| v
+                        .as_str()
+                        .is_none_or(|s| !s.contains("{env:") && !s.contains("{file:"))),
+                "OpenCode launch interpolation is unsupported"
+            );
+        }
         if self != Self::Claude {
             // Do not silently reinterpret cwd, env_vars, filters or approval flags.
             ensure!(
@@ -232,6 +244,11 @@ mod tests {
             decoded,
             json!({"command":"/usr/bin/python3","args":["argument with spaces"],"env":{}})
         );
+        for arg in ["{env:OWNED_FIXTURE}", "prefix{file:/owned/value}"] {
+            assert!(Host::Opencode
+                .validate(&json!({"command":"/bin/true","args":[arg]}))
+                .is_err());
+        }
         let wrapped = json!({"command":"/usr/bin/env","args":["-i","/private/agentfw"],"env":{}});
         let output = Host::Opencode
             .replace(input.as_bytes(), "demo", &wrapped)
