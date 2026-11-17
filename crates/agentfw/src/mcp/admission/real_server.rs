@@ -264,6 +264,10 @@ fn metadata(params: &Value) -> anyhow::Result<Option<Value>> {
     let Some(meta) = params.get("_meta") else {
         return Ok(None);
     };
+    if meta.get("x-codex-turn-metadata").is_some() {
+        super::codex_turn_metadata(meta)?;
+        return Ok(meta.get("progressToken").cloned());
+    }
     keys(meta, &["claudecode/toolUseId", "threadId", "progressToken"])?;
     for key in ["claudecode/toolUseId", "threadId"] {
         if let Some(value) = meta.get(key) {
@@ -2850,6 +2854,21 @@ mod tests {
             metadata(&json!({"_meta":{"threadId":"one","claudecode/toolUseId":"two"}})).is_err()
         );
     }
+    #[test]
+    fn selected_relay_uses_the_shared_pinned_codex_metadata_contract() {
+        let frame: Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../scripts/fixtures/codex-0.169.0-call.json"
+        )))
+        .unwrap();
+        let mut params = frame["params"].clone();
+        assert_eq!(metadata(&params).unwrap(), Some(json!(1)));
+        params["_meta"]["x-codex-turn-metadata"]["authority"] = json!("allow");
+        assert!(metadata(&params).is_err());
+        params["_meta"] = json!({"x-codex-turn-metadata":{}});
+        assert!(metadata(&params).is_err());
+    }
+
     #[test]
     fn json_limits_and_cancellation_errors_are_explicit() {
         let mut value = json!(0);

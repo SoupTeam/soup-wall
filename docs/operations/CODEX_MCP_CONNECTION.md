@@ -90,7 +90,8 @@ Native identity still comes from the authenticated collector/daemon protocol.
 | Built-in shell / `write_stdin` | Outside this MCP connection; acceptance deliberately demonstrates an interactive file write |
 | Built-in file tools, subagents, hosted tools | Not enrolled; no cross-tool native session or inherited taint claim |
 | Native Ask | Existing native grant machinery retained; this acceptance verifies unconfirmed Ask stays blocked, not a Codex approval UI integration |
-| Selected filesystem/Git sandbox profiles | Existing explicit profile launch checks retained; Codex original-server qualification not established by the generic fixture |
+| Original filesystem sandbox profile | Live read/write-refusal/result-withholding/continuation verified with the pinned upstream server, Node and bubblewrap; installer and launch pins retained |
+| Original Git sandbox profiles | Launch validation retained; live Codex qualification not yet run |
 | Profile transitions | Refused for Codex until an authenticated launcher lifecycle is implemented |
 | Windows/macOS Codex lifecycle | Explicitly unsupported in this increment |
 
@@ -116,3 +117,21 @@ receiver. No paid model or personal Codex credentials are used. It records the
 source SHA, source-file and executable hashes, exact host version, checks and
 coverage. Its companion `.host.json` contains only fixture transcripts. Keep
 failed reports as failures; an unavailable host is not a passed integration.
+
+For the **original** filesystem server, provide the pinned Node/npm and
+bubblewrap described in [the profile guide](MCP_REAL_FILESYSTEM.md), plus an npm
+cache containing its committed package lock. The installer verifies runtime,
+package, schema and library identities, disables lifecycle scripts and runs
+`npm ci --offline`. Every fixture and installed profile is disposable:
+
+```sh
+python3 scripts/codex-filesystem-acceptance.py --agentfw target/debug/agentfw \
+  --codex "$(command -v codex)" --node /pinned/node/bin/node \
+  --npm /pinned/node/bin/npm --bwrap /pinned/bubblewrap/bwrap \
+  --npm-cache /private/locked-npm-cache --out target/codex-acceptance/filesystem.json
+```
+
+The unguarded original-server positive control first creates a harmless file.
+The protected Codex run reads an inventory, refuses a write (independent workspace
+hash witness), withholds an injected original result and reads again. This is
+one selected read-only profile, not arbitrary filesystem/server coverage.
