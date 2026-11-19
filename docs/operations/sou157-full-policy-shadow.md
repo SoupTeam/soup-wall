@@ -38,7 +38,7 @@ The private Git implementation attaches typed fixed diagnostic context for reque
 
 ## Mapped Git native consumer (review pending, 2026-11-01)
 
-Preparation review [5728714826](https://github.com/SoupTeam/soup-wall/pull/280#pullrequestreview-5728714826) independently reproduced all eight commit OIDs on Linux and requested the bounded consumer. The existing `verify-sou109-original-git.py` now has an explicit `--sou157-mapped` mode. It selects only this consumer, not the historical synthetic matrix or the filesystem matrix. Existing default behavior is unchanged.
+Preparation review [5728714826](https://github.com/SoupTeam/soup-wall/pull/280#pullrequestreview-5728714826) independently reproduced all eight commit OIDs on Linux and requested the bounded consumer. The existing `verify-daemon-owned-git.py` now has an explicit `--sou157-mapped` mode. It selects only this consumer, not the historical synthetic matrix or the filesystem matrix. Existing default behavior is unchanged.
 
 The consumer independently checks the exact clean source, binary digest and matching native build report, read-only source/binary mounts, loopback-only network, pinned default profile and all runtime/package/library/Git digests. It allocates a new 0700 parent itself, builds the original eight repositories and binds their actual device/inode/uid into disposable profiles. No preparation JSON can grant directory or execution authority.
 
@@ -49,7 +49,7 @@ Controls include all four matched attacks (reviewer-directed execution, forged a
 Eight local preparation/consumer boundary tests pass. Consumer tests reject changed body/newline, profile, completion, channel digest, response correlation/shape and leaked refused frames. Native execution remains unrun here (Windows); TL owns the independent review and one affected exact-source Linux dispatch. A successful mapped report still preserves `frozen_false_refusals: 10`, `task_complete: false` and no production authority. Six other frozen refusals remain outside this candidate slice.
 
 ```
-python3 scripts/verify-sou109-original-git.py --sou157-mapped \
+python3 scripts/verify-daemon-owned-git.py --sou157-mapped \
   --binary /readonly/build/target/debug/agentfw \
   --binary-sha256 <independently-verified-binary-sha256> \
   --build-report /readonly/build/native-build.json \
@@ -65,7 +65,7 @@ Run only inside the existing ordinary-user isolated Linux qualification environm
 
 TL review [5727888870](https://github.com/SoupTeam/soup-wall/pull/280#pullrequestreview-5727888870) settles the launch question without a launcher change: explicitly configure the existing daemon endpoint with a pinned default `sw-mcp/git-readonly/1` profile in a disposable qualification. Do not edit DAEMON_EXECUTION or select file-revision capabilities. The following preparation increment is ready for independent review before TL's one affected native dispatch.
 
-`scripts/prepare-sou157-git.py` prepares exactly g01/g03/g07/g09, both original sides (eight cases). The original SOU-123 repository construction is factored into a reusable no-delete function; the original generation wrapper still uses that same construction. No frozen payload, label or manifest changes. The new helper refuses an existing output directory and a mismatched Git binary. It uses explicit original author/time metadata, an empty Git template and no ambient Git configuration. UTF-8/LF writes keep the original Linux bytes stable on Windows too.
+`scripts/prepare-mapped-git-cases.py` prepares exactly g01/g03/g07/g09, both original sides (eight cases). The original SOU-123 repository construction is factored into a reusable no-delete function; the original generation wrapper still uses that same construction. No frozen payload, label or manifest changes. The new helper refuses an existing output directory and a mismatched Git binary. It uses explicit original author/time metadata, an empty Git template and no ambient Git configuration. UTF-8/LF writes keep the original Linux bytes stable on Windows too.
 
 Only `repo_path` is mapped from `/tmp/sou123/repo` to `/workspace`; both argument objects and their distinct canonical hashes remain in the plan. The generated operator test profile changes only the owned host workspace binding/identity; all original tool/runtime/policy contracts remain selected. CLI requires native Linux, clean exact source and an explicitly pinned template-profile digest. That profile retains its original SDK/runtime and Git pins. No daemon, original server, inference, download or execution grant is started by preparation.
 
@@ -74,12 +74,12 @@ The plan marks every native control **not_executed**: original text equality, pr
 Local preparation tests reconstruct all eight commit OIDs exactly as the frozen original headers. Four preparation tests and four existing refusal-map controls pass. This proves deterministic construction, not original-server returned-byte equality or native policy delivery. After independent review, the existing native qualifier must consume these owned repositories/test profiles, verify exact original returned text first and run every declared control before asserting mapped-case relief. TL owns dispatch/artifact grading; there is no author rerun of the filesystem matrix.
 
 ```
-python3 scripts/prepare-sou157-git.py \
+python3 scripts/prepare-mapped-git-cases.py \
   --template-profile /private/qualified/default-git-profile.json \
   --profile-sha256 <verified-template-sha256> \
   --expected-commit <exact-reviewed-source-sha> \
   --output /private/new-sou157-git-cases
-python3 -m unittest discover -s scripts/tests -p test_sou157_git_preparation.py -v
+python3 -m unittest discover -s scripts/tests -p test_mapped_git_preparation.py -v
 ```
 
 Output must be new and have an existing owned parent. The native reviewer must preserve failed/non-comparable outcomes and all original corpus counts. The preparation plan is not an acceptance artifact and grants no production authority.
