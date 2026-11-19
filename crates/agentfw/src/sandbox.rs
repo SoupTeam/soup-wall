@@ -1060,11 +1060,6 @@ pub fn read_workspace_file(workspace: &Path, requested: &Path) -> anyhow::Result
     pinned.read_file(requested)
 }
 
-#[allow(dead_code)]
-pub fn read_workspace_file_confined(workspace: &Path, requested: &Path) -> anyhow::Result<String> {
-    read_workspace_file(workspace, requested)
-}
-
 fn delete_workspace_file(target: &Path) -> anyhow::Result<bool> {
     let metadata = fs::symlink_metadata(target).context("guarded file delete target is missing")?;
     if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {

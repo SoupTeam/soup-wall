@@ -1373,7 +1373,7 @@ mod tests {
     fn env(approval: Option<u64>) -> Env {
         let dir = tempfile::tempdir().unwrap();
         let schema = "a".repeat(64);
-        #[allow(unused_mut)]
+        #[cfg_attr(not(unix), allow(unused_mut))]
         let mut tools = vec![
             json!({"name": "delete_note", "schema_sha256": schema, "action_class": "destructive",
              "result_provenance": "untrusted", "egress": []}),
