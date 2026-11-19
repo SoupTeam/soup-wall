@@ -2,9 +2,9 @@
 //! Explicit current-user launchd jobs, composed with the existing lifecycle journal.
 //! No LaunchAgents directory, enable/disable override, shell, or root service is used.
 
+use crate::hashing::sha256_hex;
 use anyhow::{bail, ensure, Context, Result};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -105,7 +105,7 @@ impl Service {
         let home = home.canonicalize()?;
         let name = format!(
             "org.soup-wall.agentfw.{}",
-            digest(home.as_os_str().as_encoded_bytes())
+            sha256_hex(home.as_os_str().as_encoded_bytes())
         );
         Ok(Self {
             root: home.join("service"),
@@ -178,7 +178,7 @@ impl Service {
             home: self.home.clone(),
             domain,
             unit: self.unit_path(),
-            unit_digest: digest(preview.unit.as_bytes()),
+            unit_digest: sha256_hex(preview.unit.as_bytes()),
             launcher: self.launcher(),
             launcher_digest: sha256_file(&source)?,
             unit_identity: None,
@@ -785,7 +785,7 @@ impl Service {
             "service ownership does not match this profile and user"
         );
         ensure!(
-            record.unit_digest == digest(self.preview()?.unit.as_bytes()),
+            record.unit_digest == sha256_hex(self.preview()?.unit.as_bytes()),
             "recorded plist does not match supported definition"
         );
         Ok(record)
@@ -986,9 +986,6 @@ fn xml(text: &str) -> String {
 }
 fn uid() -> u32 {
     unsafe { libc::geteuid() }
-}
-fn digest(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
 }
 fn private_file(path: &Path) -> Result<()> {
     ensure!(

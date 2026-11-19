@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::hashing::sha256_hex;
 use anyhow::{bail, ensure, Context, Result};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -953,8 +953,8 @@ impl Manager {
     pub(crate) fn config_digest(&self) -> Result<String> {
         let path = self.home.join("config.yaml");
         match fs::read(path) {
-            Ok(bytes) => Ok(sha256(&bytes)),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(sha256(b"")),
+            Ok(bytes) => Ok(sha256_hex(&bytes)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(sha256_hex(b"")),
             Err(error) => Err(error.into()),
         }
     }
@@ -1463,12 +1463,6 @@ pub fn sha256_file(path: &Path) -> Result<String> {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect())
-}
-
-fn sha256(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
 }
 
 fn validate_version(value: &str) -> Result<()> {
