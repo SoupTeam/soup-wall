@@ -2,10 +2,10 @@
 //! SOU-231: one explicit installed managed connection; no enrollment secrets in reports.
 #[cfg(unix)]
 use crate::hashing::sha256_hex;
+#[cfg(unix)]
 use anyhow::Context;
 use anyhow::{ensure, Result};
 use serde::{Deserialize, Serialize};
-#[cfg(unix)]
 use std::path::{Path, PathBuf};
 
 #[cfg(unix)]
@@ -101,7 +101,6 @@ impl Profile {
         }
     }
 }
-#[cfg(unix)]
 #[cfg(unix)]
 fn hash_value(value: &impl Serialize) -> String {
     sha256_hex(&serde_json::to_vec(value).expect("bounded connection value serializes"))
