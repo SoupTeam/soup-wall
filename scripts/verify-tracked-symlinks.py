@@ -20,7 +20,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 import importlib.util
 
-SPEC = importlib.util.spec_from_file_location("sou150_original_helpers", ROOT / "scripts/verify-sou107-real-git.py")
+SPEC = importlib.util.spec_from_file_location("sou150_original_helpers", ROOT / "scripts/verify-git-local-clone.py")
 CLONE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CLONE)
 V1, BASE = CLONE.V1, CLONE.BASE

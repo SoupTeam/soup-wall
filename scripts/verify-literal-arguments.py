@@ -60,7 +60,7 @@ SOURCE_FILES = (
     "crates/agentfw/src/native/approval.rs", "crates/agentfw/src/mcp/server_profile.rs",
     "crates/agentfw/src/mcp/admission/real_server.rs", "rule_baseline/rule_baseline.py",
     "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
-    "profiles/mcp/filesystem-readonly-v1/policy.yaml", "scripts/verify-sou110-literal-arguments.py",
+    "profiles/mcp/filesystem-readonly-v1/policy.yaml", "scripts/verify-literal-arguments.py",
 )
 
 

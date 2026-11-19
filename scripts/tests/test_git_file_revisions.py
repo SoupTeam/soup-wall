@@ -21,7 +21,7 @@ def load(name, path):
 INSTALL = load("sou146_install", "scripts/install-sou68-git-profile.py")
 CLASSIFIER = load("sou146_classifier", "rule_baseline/git_readonly_file_revisions_v1/rule_baseline.py")
 LEGACY = load("sou146_legacy", "rule_baseline/git_readonly_v1/rule_baseline.py")
-VERIFY = load("sou146_verify", "scripts/verify-sou146-git-file-revisions.py")
+VERIFY = load("sou146_verify", "scripts/verify-git-file-revisions.py")
 
 class PerFileRevisions(unittest.TestCase):
     def second_ask_run(self, **faults):

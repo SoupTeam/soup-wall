@@ -40,7 +40,7 @@ GIT = load("sou114_git", "verify-sou68-real-mcp.py")
 require, sha, write = BASE.require, BASE.sha, BASE.write
 FILES = ("crates/agentfw/src/doctor.rs", "crates/agentfw/src/pilot_doctor.rs",
          "crates/agentfw/src/pilot_doctor/io.rs", "crates/agentfw/src/pilot_doctor/incident.rs",
-         "crates/agentfw/src/support_bundle.rs", "scripts/verify-sou114-pilot-doctor.py")
+         "crates/agentfw/src/support_bundle.rs", "scripts/verify-pilot-doctor.py")
 CASES = ("healthy-json", "healthy-text", "recorded-refusal", "changed-asset", "changed-classifier", "unverifiable-agent", "missing-incident",
          "stale-incident", "mismatched-incident", "malformed-input", "oversized-input",
          "symlink-input", "fifo-input", "public-input", "existing-output", "symlink-output",

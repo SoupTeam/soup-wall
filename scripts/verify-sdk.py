@@ -39,7 +39,7 @@ def main():
              for enforce in ((True,False) if case in ('deny','ask','destructive') else (True,))]
     report={'schema':'sou92-sdk-acceptance/1','status':'incomplete','release_acceptance':False,
             'source_before':before,'binary_sha256':binary_hash,'sdk_versions':versions,
-            'dependency_lock_sha256':digest((root/'scripts/requirements-sou92.txt').read_bytes()),
+            'dependency_lock_sha256':digest((root/'scripts/requirements-sdk-compat.txt').read_bytes()),
             'dependencies':{dep['name']:dep['version'] for dep in dependencies},
             'environment':{'system':platform.system(),'python':platform.python_version()},
             'cases_expected':len(planned),'cases':[],'limitations':['Owned deterministic upstream; no live-model effectiveness claim.',
