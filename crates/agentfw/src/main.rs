@@ -880,10 +880,7 @@ fn replay(
 /// Create the daemon token if needed and print the host hook installation instructions.
 fn print_install_instructions() -> anyhow::Result<()> {
     let home = Config::home()?;
-    let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
-        Ok(s) => Config::from_yaml(&s)?,
-        Err(_) => Config::default(),
-    };
+    let cfg = load_config_or_default(&home)?;
     agentfw::token::load_or_create(&home.join("token"))?;
     println!(
         "{}",
@@ -1017,10 +1014,7 @@ fn run_service(home: Option<PathBuf>, command: ServiceCommand) -> anyhow::Result
 /// Probe the running daemon and exit with the preflight verdict.
 fn run_preflight(require_enforce: bool, timeout_seconds: u64) -> anyhow::Result<()> {
     let home = Config::home()?;
-    let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
-        Ok(s) => Config::from_yaml(&s)?,
-        Err(_) => Config::default(),
-    };
+    let cfg = load_config_or_default(&home)?;
     let probe = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
@@ -1433,16 +1427,8 @@ fn run_mcp(invocation: McpInvocation) -> anyhow::Result<()> {
         Some(h) => h,
         None => Config::home()?,
     };
-    let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
-        Ok(s) => Config::from_yaml(&s)?,
-        Err(_) => Config::default(),
-    };
-    let server_id = id.unwrap_or_else(|| {
-        use sha2::{Digest, Sha256};
-        let mut h = Sha256::new();
-        h.update(command.join(" ").as_bytes());
-        format!("srv-{:x}", h.finalize()).chars().take(12).collect()
-    });
+    let cfg = load_config_or_default(&home)?;
+    let server_id = id.unwrap_or_else(|| derived_server_id(&command));
     if native_admission {
         let installed = cfg.native.as_ref().ok_or_else(|| {
             anyhow::anyhow!("MCP native admission needs an operator-installed registry")
@@ -1567,18 +1553,7 @@ fn run_guarded_shell(
     if command.is_empty() {
         anyhow::bail!("no command given after --");
     }
-    let home = Config::home()?;
-    let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
-        Ok(s) => Config::from_yaml(&s)?,
-        Err(_) => Config::default(),
-    };
-    let mut firewall = match &cfg.policy {
-        Some(path) => AgentFirewall::new(
-            AgentPolicySet::from_yaml(&std::fs::read_to_string(path)?)?,
-            DEFAULT_TAINT_CAP,
-        ),
-        None => AgentFirewall::with_default_policy(),
-    };
+    let mut firewall = guarded_firewall()?;
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
@@ -1614,18 +1589,7 @@ fn run_guarded_write(
     path: PathBuf,
     content: String,
 ) -> anyhow::Result<()> {
-    let home = Config::home()?;
-    let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
-        Ok(s) => Config::from_yaml(&s)?,
-        Err(_) => Config::default(),
-    };
-    let mut firewall = match &cfg.policy {
-        Some(path) => AgentFirewall::new(
-            AgentPolicySet::from_yaml(&std::fs::read_to_string(path)?)?,
-            DEFAULT_TAINT_CAP,
-        ),
-        None => AgentFirewall::with_default_policy(),
-    };
+    let mut firewall = guarded_firewall()?;
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
@@ -1655,18 +1619,7 @@ fn run_guarded_delete(
     workspace: PathBuf,
     path: PathBuf,
 ) -> anyhow::Result<()> {
-    let home = Config::home()?;
-    let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
-        Ok(s) => Config::from_yaml(&s)?,
-        Err(_) => Config::default(),
-    };
-    let mut firewall = match &cfg.policy {
-        Some(path) => AgentFirewall::new(
-            AgentPolicySet::from_yaml(&std::fs::read_to_string(path)?)?,
-            DEFAULT_TAINT_CAP,
-        ),
-        None => AgentFirewall::with_default_policy(),
-    };
+    let mut firewall = guarded_firewall()?;
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
@@ -1696,18 +1649,7 @@ fn run_guarded_rename(
     from: PathBuf,
     to: PathBuf,
 ) -> anyhow::Result<()> {
-    let home = Config::home()?;
-    let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
-        Ok(s) => Config::from_yaml(&s)?,
-        Err(_) => Config::default(),
-    };
-    let mut firewall = match &cfg.policy {
-        Some(path) => AgentFirewall::new(
-            AgentPolicySet::from_yaml(&std::fs::read_to_string(path)?)?,
-            DEFAULT_TAINT_CAP,
-        ),
-        None => AgentFirewall::with_default_policy(),
-    };
+    let mut firewall = guarded_firewall()?;
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
@@ -1739,18 +1681,7 @@ fn run_guarded_fetch(
     timeout_seconds: u64,
     max_response_bytes: usize,
 ) -> anyhow::Result<()> {
-    let home = Config::home()?;
-    let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
-        Ok(s) => Config::from_yaml(&s)?,
-        Err(_) => Config::default(),
-    };
-    let mut firewall = match &cfg.policy {
-        Some(path) => AgentFirewall::new(
-            AgentPolicySet::from_yaml(&std::fs::read_to_string(path)?)?,
-            DEFAULT_TAINT_CAP,
-        ),
-        None => AgentFirewall::with_default_policy(),
-    };
+    let mut firewall = guarded_firewall()?;
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
@@ -1771,6 +1702,38 @@ fn run_guarded_fetch(
             println!("{}", serde_json::to_string(&result)?);
             Ok(())
         })
+}
+
+/// `config.yaml` under `home`, or the built-in defaults when the file cannot
+/// be read. A file that is present but invalid is still an error.
+fn load_config_or_default(home: &std::path::Path) -> anyhow::Result<Config> {
+    match std::fs::read_to_string(home.join("config.yaml")) {
+        Ok(s) => Config::from_yaml(&s),
+        Err(_) => Ok(Config::default()),
+    }
+}
+
+/// The firewall the guarded commands decide with: the configured policy file
+/// when one is set, otherwise the shipped default policy.
+fn guarded_firewall() -> anyhow::Result<AgentFirewall> {
+    let home = Config::home()?;
+    let cfg = load_config_or_default(&home)?;
+    Ok(match &cfg.policy {
+        Some(path) => AgentFirewall::new(
+            AgentPolicySet::from_yaml(&std::fs::read_to_string(path)?)?,
+            DEFAULT_TAINT_CAP,
+        ),
+        None => AgentFirewall::with_default_policy(),
+    })
+}
+
+/// Server id used when `--id` is absent: `srv-` plus the start of the
+/// SHA-256 of the wrapped command line, twelve characters in total.
+fn derived_server_id(command: &[String]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(command.join(" ").as_bytes());
+    format!("srv-{:x}", h.finalize()).chars().take(12).collect()
 }
 
 #[cfg(windows)]
