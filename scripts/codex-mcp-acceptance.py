@@ -255,6 +255,9 @@ def main():
     finally:
         report["passed"] = completed and bool(checks) and all(c["passed"] for c in checks)
         options.out.write_text(json.dumps(report, indent=2) + "\n")
+        if options.lifecycle_only:
+            print(json.dumps({"mode": report["mode"], "passed": report["passed"],
+                              "checks": checks, "report_path": str(options.out)}, indent=2))
     print(json.dumps(report, indent=2))
 
 

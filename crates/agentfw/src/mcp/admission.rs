@@ -903,7 +903,7 @@ async fn line<R: AsyncBufRead + Unpin>(
     }
 }
 
-async fn write<W: AsyncWrite + Unpin>(output: &mut W, raw: &[u8]) -> anyhow::Result<()> {
+pub(crate) async fn write<W: AsyncWrite + Unpin>(output: &mut W, raw: &[u8]) -> anyhow::Result<()> {
     tokio::time::timeout(Duration::from_secs(5), async {
         output.write_all(raw).await?;
         output.flush().await
@@ -2322,7 +2322,7 @@ fn codex_turn_metadata(value: &Value) -> anyhow::Result<()> {
 
 /// Keep the original request for admission and custody. Workspace metadata is
 /// host-local context and can include paths and credentials in Git remote URLs.
-fn codex_server_frame(raw: &[u8], value: &Value) -> anyhow::Result<Option<Vec<u8>>> {
+pub(crate) fn codex_server_frame(raw: &[u8], value: &Value) -> anyhow::Result<Option<Vec<u8>>> {
     let meta = &value["params"]["_meta"];
     let turn = "x-codex-turn-metadata";
     if value["method"] != "tools/call" || meta[turn].get("workspaces").is_none() {

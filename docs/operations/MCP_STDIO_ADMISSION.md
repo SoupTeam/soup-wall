@@ -165,8 +165,10 @@ without translating tools into another format:
 | `tools/call` | Validates arguments against the pinned schema; `_meta` stays transport correlation; an installed classifier then sees the admitted discovery snapshot, actual arguments and trusted baseline | `call` with `tool`, `args`, `schema_sha256` | Registry `action_class` and egress hosts form a `ToolCall` event for the agent policy | `allow` forwards the call with the host metadata treatment described above; `deny` and `ask` return a correlated `isError` refusal and the server never receives the frame |
 | Server response | Binds the response to the pending call | `result` with `call_id`, `result_kind`, `delivery: mcp_host`, `content` | Decoded text blocks form `ToolResult` events with the declared provenance | `allow` writes the original bytes to the host; otherwise a correlated `isError` refusal |
 
-The JSON-RPC id, tool name, arguments and `_meta` stay in the original bytes,
-and a refusal reuses the original id. There is no approval channel in this
+Forwarding preserves the JSON-RPC ID, tool name and argument bytes. The pinned
+Codex turn shape omits workspace metadata as described above. Verified execution
+records the SHA-256 of the frame written to the server. A refusal reuses the
+original ID. There is no approval channel in this
 contract, so `ask` is enforced exactly like a denial until a reviewed
 single-use approval path exists.
 

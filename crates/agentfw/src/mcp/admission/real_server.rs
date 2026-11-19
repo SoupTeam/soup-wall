@@ -1527,12 +1527,19 @@ where
                                         }));
                                         continue;
                                     }
-                                    if let Some(context)=&collector.execution {
-                                        grant.source=Some(Box::new(context.dispatched(&collector.session,
+                                    let server_frame = call.server_raw.as_deref().unwrap_or(&call.raw);
+                                    if let Some(context) = &collector.execution {
+                                        let source = context.dispatch_to(
+                                            child,
+                                            &collector.session,
                                             grant.call_id.as_str().context("private native call")?,
-                                            grant.binding.as_str().context("private native binding")?,&call.raw)?));
+                                            grant.binding.as_str().context("private native binding")?,
+                                            server_frame,
+                                        ).await?;
+                                        grant.source = Some(Box::new(source));
+                                    } else {
+                                        write(child, server_frame).await?;
                                     }
-                                    write(child, call.server_raw.as_deref().unwrap_or(&call.raw)).await?;
                                     call.dispatched = true;
                                     if let Some(timing) = &mut grant.continuation {
                                         timing.record(call, "original_dispatch", true);
