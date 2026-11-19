@@ -44,7 +44,7 @@ fn checked(source: &str, bytes: &[u8], model: &str, provider: &str) -> Result<Ve
     let text = message["content"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("openrouter_content"))?;
-    decode_result(source, "openrouter-offline-result-contract", text)
+    decode_result(source, &hash(bytes), text)
 }
 
 #[test]

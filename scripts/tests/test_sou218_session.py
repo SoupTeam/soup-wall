@@ -8,7 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("memory_session", Path(__file__).resolve().parents[1] / "sou218-session.py")
 M = importlib.util.module_from_spec(SPEC)
@@ -90,6 +90,44 @@ class SessionTests(unittest.TestCase):
                 if p.is_file(): self.assertNotIn(synthetic.encode(), p.read_bytes())
             events = [json.loads(p.read_text()) for p in sorted(session.glob('event-*.json'))]
             self.assertEqual([v['event'] for v in events], ['reserved','key_used','finished']*2)
+
+    def test_key_transfer_log_failure_stops_session_and_reaps_worker(self):
+        self.check_worker_cleanup(False)
+
+    def test_unconfirmed_cleanup_is_terminal(self):
+        self.check_worker_cleanup(True)
+
+    def check_worker_cleanup(self, timeout):
+        with tempfile.TemporaryDirectory() as d:
+            repo, state, session, token, cfg, config, req = self.fixture(d)
+            sup = M.Supervisor(session, repo, state, "test-project",
+                               M.Budget(2, int(time.time()) + 60), "synthetic-key", token)
+            proc = Mock()
+            if timeout:
+                proc.wait.side_effect = M.subprocess.TimeoutExpired("offline-worker", 5)
+            # Keep a reader open for the synthetic grant, as a spawned worker would.
+            readers = []
+            def spawn(*args, pass_fds, **kwargs):
+                readers.append(os.fdopen(os.dup(pass_fds[0]), "rb"))
+                return proc
+            try:
+                with patch.object(M, "build", return_value="offline-worker"), \
+                     patch.object(M.subprocess, "Popen", side_effect=spawn), \
+                     patch.object(sup, "event", side_effect=[None, OSError(), OSError()]):
+                    sup.dispatch(req)
+                    sup.work()
+                self.assertEqual(json.load(readers[0])["key"], "synthetic-key")
+                proc.kill.assert_called_once()
+                proc.wait.assert_called_once_with(timeout=5)
+                status = sup.dispatch({"action": "status"})
+                self.assertEqual(status["remaining_reserved_budget"], 1)
+                expected = "terminal_cleanup_unconfirmed" if timeout else "stopped_inspect_logs"
+                self.assertEqual(status["jobs"][0]["status"], expected)
+                with self.assertRaises(ValueError):
+                    sup.dispatch(req)
+            finally:
+                for reader in readers:
+                    reader.close()
 
     def test_provider_quota_stop_blocks_further_jobs(self):
         with tempfile.TemporaryDirectory() as d:

@@ -166,6 +166,7 @@ class Supervisor:
                 if self.stopping or time.time() >= self.budget.expires:
                     return
                 continue
+            proc = None
             try:
                 folder = self.root / job["id"]
                 folder.mkdir(mode=0o700)
@@ -210,13 +211,9 @@ class Supervisor:
                         with self.lock:
                             job["status"] = "running"
                             self.event({"event": "key_used", "job": job["id"], "max_new_rows": job["reserved_rows"], "time": int(time.time())})
-                        try:
-                            result = proc.wait(timeout=max(1, self.budget.expires - time.time()) + 70)
-                        except subprocess.TimeoutExpired:
-                            proc.kill()
-                            proc.wait()
-                            raise ValueError("expired_worker_unknown_outcome")
-                        self.proc = None
+                        result = proc.wait(timeout=max(1, self.budget.expires - time.time()) + 70)
+                        with self.lock:
+                            self.proc = None
                     with self.lock:
                         job["status"] = "finished" if result == 0 else "stopped"
                         job["exit_code"] = result
@@ -238,7 +235,20 @@ class Supervisor:
             except Exception:
                 with self.lock:
                     job["status"] = "stopped_inspect_logs"
-                    self.event({"event": "stopped", "job": job["id"], "remaining": self.budget.remaining})
+                    if proc is not None:
+                        self.stopping = True
+                        try:
+                            proc.kill()
+                            proc.wait(timeout=5)
+                        except (OSError, subprocess.TimeoutExpired):
+                            job["status"] = "terminal_cleanup_unconfirmed"
+                        else:
+                            self.proc = None
+                    try:
+                        self.event({"event": "stopped", "job": job["id"], "status": job["status"],
+                                    "remaining": self.budget.remaining})
+                    except OSError:
+                        self.stopping = True
             finally:
                 with self.lock:
                     self.busy = False

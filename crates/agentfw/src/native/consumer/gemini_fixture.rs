@@ -704,12 +704,9 @@ fn decode_result(source: &str, nonce: &str, text: &str) -> Result<Vec<u8>> {
         &json!({"contract":OUTPUT,"attempt":nonce,"source_sha256":hash(source.as_bytes()),"source_bytes":source.len(),"summary":summary,"citations":citations}),
     )?;
     ensure!(frame.len() <= FRAME_LIMIT, "gemini_result_limit");
-    super::result_contract::ProposedAttempt {
-        nonce,
-        source,
-    }
-    .decode(&frame)
-    .map_err(|_| anyhow::anyhow!("gemini_result_contract"))?;
+    super::result_contract::ProposedAttempt { nonce, source }
+        .decode(&frame)
+        .map_err(|_| anyhow::anyhow!("gemini_result_contract"))?;
     Ok(frame)
 }
 
