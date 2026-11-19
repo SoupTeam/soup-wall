@@ -525,6 +525,8 @@ fn reviewer_sou89_liveness(f: &Fixture, sid: &str, action: &str) -> Value {
 
 #[path = "native_endpoint/child_authority.rs"]
 mod child_authority;
+// Every test in this module is Unix-only.
+#[cfg(unix)]
 #[path = "native_endpoint/create_file.rs"]
 mod create_file;
 #[path = "native_endpoint/durable_barrier.rs"]
