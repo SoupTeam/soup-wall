@@ -1,0 +1,642 @@
+{
+  "format": "sw-private-candidate-development-checkpoint/1",
+  "status": "incomplete-not-release-qualification",
+  "date": "2026-11-03",
+  "implementation_source": "a3d53bd34b71529cac12663688922fe273e4b7f1",
+  "targeted_controls": {
+    "linux": {
+      "source": "edb2a7cc",
+      "affected_controls_passed": 146,
+      "final_wheelhouse_source": "a3d53bd34b71529cac12663688922fe273e4b7f1",
+      "final_wheelhouse_controls_passed": 18
+    },
+    "windows": {
+      "candidate_inventory_notice_wheelhouse_controls": 80,
+      "scope": "79 combined controls followed by the added redirect-body regression and final affected checks",
+      "posix_fifo_skipped": true
+    },
+    "documentation_links": "377 files, 1317 links, 0 errors"
+  },
+  "installed_offline_kit": {
+    "platform": "WSL2 Ubuntu 24.04 x86_64, unprivileged operator",
+    "source": "a3d53bd34b71529cac12663688922fe273e4b7f1",
+    "archive_sha256": "7d3b0ccc37f74e3a91d88a9ad56816e3f3db451d746d6493db34bc9615afbf30",
+    "compiler": "rustc 1.94.1 (e408947bf 2026-03-25)",
+    "build_profile": "debug",
+    "status": "passed-at-recorded-source",
+    "checks": [
+      "complete pre-extraction inventory and pinned archive validation",
+      "extracted executable modes",
+      "original filesystem profile install with networking unavailable, 104 npm packages",
+      "unrelated setup-error and malformed-envelope negatives",
+      "fabricated collector marker rejected without fresh daemon records",
+      "useful original-server read",
+      "protected unsupported write with independent absent-file witness",
+      "result injection refusal correlated with fresh native_call/native_result audit records",
+      "broken-path control",
+      "daemon-loss refusal",
+      "direct original-server write calibration followed by protected same-path zero effect"
+    ]
+  },
+  "python_dependency_update": {
+    "source": "a3d53bd34b71529cac12663688922fe273e4b7f1",
+    "pins": {
+      "certifi": "2026.10.19",
+      "mcp": "1.30.0",
+      "python": "3.11.18",
+      "bootstrap_pip": "26.2.2",
+      "bootstrap_setuptools": "84.2.0"
+    },
+    "strategy": "Verified pinned interpreter security update plus the two hashed wheel updates; original initialize/discovery and strict installers remain intact.",
+    "native_qualification": {
+      "status": "pass",
+      "permitted_reads": 6,
+      "refusals": 12,
+      "overlap_rounds": 16,
+      "repository_unchanged": true,
+      "no_denied_dispatch": true,
+      "python_notice_bindings_verified": 26
+    },
+    "independent_review": {
+      "source_range": "ca52c824..77ba8046",
+      "status": "no actionable bypass or regression found",
+      "inventory_tests_passed": 32,
+      "scope": "runtime pins, npm closure and vendored Python inventory; subsequent notice custody repair has focused mutation and native installation checks"
+    },
+    "advisory_scope": "The earlier top-level certifi/MCP/pip/setuptools matches no longer occur at their updated versions. Actual pip-vendored setuptools, msgpack and urllib3 still have advisory matches; no global bootstrap clearance is claimed."
+  },
+  "native_rust_tests": {
+    "server_profile": {
+      "source": "77ba8046",
+      "passed": 123,
+      "ignored": 4
+    },
+    "server_sandbox": {
+      "source": "77ba8046",
+      "passed": 7,
+      "ignored": 7
+    },
+    "verified_closure": {
+      "source": "bea3d196",
+      "passed": 3,
+      "ignored": 0,
+      "argument_limit": 9000
+    },
+    "toolchain": "1.94.1"
+  },
+  "installed_inventory": {
+    "status": "incomplete-findings-and-policy-review-blocking",
+    "real_scanner_observation_source": "a3d53bd34b71529cac12663688922fe273e4b7f1",
+    "exact_identity_coverage": "passed",
+    "osv_version": "2.7.0",
+    "cargo_audit_version": "0.22.2",
+    "rustsec_commit": "263a4d951a0867d4bddc29dddd6d59427c78f9a7",
+    "counts": {
+      "cargo_lock_entries": 443,
+      "npm_unique_identities": 101,
+      "python_top_level": 35,
+      "python_vendored": 30,
+      "python_unique_scanned_identities": 64
+    },
+    "rust_license_gate": {
+      "status": "passed",
+      "packages": 443,
+      "approved": 423,
+      "exact_exceptions": 20,
+      "release_approval": false
+    },
+    "remaining_package_observations": [
+      "glob 13.0.6",
+      "minimatch 10.2.6",
+      "msgpack 1.1.2",
+      "paste 1.0.15",
+      "setuptools 70.3.0",
+      "unsafe-libyaml 0.2.11",
+      "urllib3 2.7.0",
+      "zip 9.0.4"
+    ],
+    "blocking_reasons": [
+      "runtime_license_review_required:@modelcontextprotocol/server-filesystem",
+      "runtime_license_review_required:glob",
+      "runtime_license_review_required:lru-cache",
+      "runtime_license_review_required:minimatch",
+      "runtime_license_review_required:minipass",
+      "runtime_license_review_required:path-scurry",
+      "runtime_license_review_required:certifi",
+      "runtime_license_review_required:autocommand",
+      "runtime_license_review_required:typing_extensions",
+      "runtime_license_review_required:certifi",
+      "runtime_license_review_required:distlib",
+      "native_reviews:native_reviews_required",
+      "cargo_audit:cargo_audit_incomplete_or_findings",
+      "osv_failed_or_incomplete",
+      "osv:unresolved_osv_findings"
+    ],
+    "qualification_limit": "Exact coverage and factual attribution passed. Remaining incomplete status is from policy dispositions, retained advisory/maintenance observations and clean native assertions, never a waived finding."
+  },
+  "retained_failed_attempts": [
+    {
+      "source": "21f1771f",
+      "status": "profile_package_changed",
+      "reason": "An operator pip check without -B wrote bytecode into the sealed runtime. Verification correctly refused the changed package. A new generation was requested with -B; the refusal was not waived."
+    },
+    {
+      "source": "21f1771f",
+      "status": "environment-blocked",
+      "reason": "The corrected complete preparation/inventory retry stopped producing output after cached Rust builds. Separate WSL process-list commands and a bounded Ubuntu-24.04 termination request also did not complete. No final verified inventory was produced."
+    },
+    {
+      "source": "77ba8046",
+      "status": "closure-count-regression-test-failed",
+      "reason": "The patched exact npm graph has 4082 files/2442 runtime files instead of 4079/2439. The two pinned counters were updated; the 9000-argument bubblewrap limit was preserved. All three closure tests then passed at bea3d196."
+    },
+    {
+      "source": "edb2a7cc",
+      "status": "native-overlap-admission-unavailable",
+      "reason": "Useful reads passed, then one overlap attempt closed on admission_unavailable. Kept as failed evidence; later complete 16-round runs at a9a794f3 and a3d53bd3 passed without changing timeouts, witnesses or runtime policy."
+    }
+  ],
+  "historical_kit_runs": [
+    {
+      "platform": "WSL2 Ubuntu 24.04 x86_64, unprivileged operator",
+      "source": "2ccbf64a7d3504538f5db1ab79194c143d61036d",
+      "archive_sha256": "dce95d60f633f6bc6a9268c4230e85eb758eaea5619107ff49c39c312ab78221",
+      "compiler": "rustc 1.94.1 (e408947bf 2026-03-25)",
+      "build_profile": "debug",
+      "status": "passed-at-recorded-source",
+      "checks": [
+        "complete pre-extraction inventory and pinned archive validation",
+        "extracted executable modes",
+        "original filesystem profile install with networking unavailable, 104 npm packages",
+        "unrelated setup-error and malformed-envelope negatives",
+        "fabricated collector marker rejected without fresh daemon records",
+        "useful original-server read",
+        "protected unsupported write with independent absent-file witness",
+        "result injection refusal correlated with fresh native_call/native_result audit records",
+        "broken-path control",
+        "daemon-loss refusal"
+      ]
+    },
+    {
+      "source": "894968941d08d0192fc4749619fd5ede253a87e8",
+      "archive_sha256": "e3fb4a4daac9d236727c111cd7bfac25b56a7cfb909aa1cd6a44a5117738eb51",
+      "status": "passed-at-recorded-source"
+    },
+    {
+      "platform": "WSL2 Ubuntu 24.04 x86_64, unprivileged operator",
+      "source": "21f1771ffe2e5a388a821051a6825a2196fd7c6d",
+      "archive_sha256": "349079d4ff183a43175b1b109512052a1005edf9d0a4ff980a7d7cac94a6cf34",
+      "compiler": "rustc 1.94.1 (e408947bf 2026-03-25)",
+      "build_profile": "debug",
+      "status": "passed-at-recorded-source",
+      "checks": [
+        "complete pre-extraction inventory and pinned archive validation",
+        "extracted executable modes",
+        "original filesystem profile install with networking unavailable, 104 npm packages",
+        "unrelated setup-error and malformed-envelope negatives",
+        "fabricated collector marker rejected without fresh daemon records",
+        "useful original-server read",
+        "protected unsupported write with independent absent-file witness",
+        "result injection refusal correlated with fresh native_call/native_result audit records",
+        "broken-path control",
+        "daemon-loss refusal",
+        "direct original-server write calibration followed by protected same-path zero effect"
+      ]
+    },
+    {
+      "source": "bea3d196fecf7a97d54159aa774d362e4c4c9a5d",
+      "archive_sha256": "795ee90d64b3cf4c31e67782119d17071d729ffc3f4ea0da1fbbc015ce00af5e",
+      "status": "passed-before-final-Python-notice-binding"
+    },
+    {
+      "platform": "WSL2 Ubuntu 24.04 x86_64, unprivileged operator",
+      "source": "078a4c4f7ca9de6a2c191add3c95ba36c084b1a8",
+      "archive_sha256": "819096ee951b27b0e192a11c64118576328e231a3b0e073ea3b683e380e5d7f5",
+      "compiler": "rustc 1.94.1 (e408947bf 2026-03-25)",
+      "build_profile": "debug",
+      "status": "passed-at-recorded-source",
+      "checks": [
+        "complete pre-extraction inventory and pinned archive validation",
+        "extracted executable modes",
+        "original filesystem profile install with networking unavailable, 104 npm packages",
+        "unrelated setup-error and malformed-envelope negatives",
+        "fabricated collector marker rejected without fresh daemon records",
+        "useful original-server read",
+        "protected unsupported write with independent absent-file witness",
+        "result injection refusal correlated with fresh native_call/native_result audit records",
+        "broken-path control",
+        "daemon-loss refusal",
+        "direct original-server write calibration followed by protected same-path zero effect"
+      ]
+    }
+  ],
+  "remaining": [
+    "Obtain explicit dispositions for license terms outside the current allowlist and the original server's transition notice; do not invent release/legal approval.",
+    "Retain unresolved upstream advisory/maintenance records. The selected pip HTTP bootstrap path is mitigated without replacing or hiding its vendored libraries; no newer stable pip exists in the checked upstream release set.",
+    "Complete maintainer setup-input review and TL-owned Ready qualification, independent admission and merge."
+  ],
+  "environment_blocker": {
+    "status": "resolved",
+    "recovery": "Restarted the unresponsive WSL service through standard Windows elevation, then completed fresh native runs and exact inventories.",
+    "temporary_configuration": "Task-only WSL memory configuration removed after each invocation; original absence restored."
+  },
+  "claims_excluded": [
+    "complete installed advisory or license clearance",
+    "byte-for-byte compiler reproducibility",
+    "global HTTP/authentication or vendored certificate remediation",
+    "live-model effectiveness",
+    "release or publication authority"
+  ],
+  "native_runtime_updates": {
+    "node": {
+      "version": "22.23.4",
+      "archive_sha256": "1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce",
+      "binary_sha256": "94efd062ed066c1a0b332e18249859c905e920eeada5df55d24c99b919629a90"
+    },
+    "python": {
+      "version": "3.11.18",
+      "archive_sha256": "17c4978a36c496dc53c08899ef8dad1ad2734f6325f08d6033a1e66419e0af26",
+      "notice_files": 25,
+      "notice_provenance_files": 1
+    },
+    "npm": {
+      "body_parser": "2.4.0",
+      "fast_uri": "3.1.9",
+      "changed_closure_files": 16,
+      "physical_packages": 104
+    },
+    "ubuntu_updates": {
+      "libbrotli1": "1.1.0-2ubuntu0.1",
+      "zlib1g": "1:1.3.dfsg-3.1ubuntu2.3",
+      "matching_zlib_dev_updated": true
+    }
+  },
+  "native_review_observations": {
+    "selected_system_libraries": 11,
+    "selected_system_source_packages": [
+      "gcc-14",
+      "glibc",
+      "libxcrypt",
+      "zlib"
+    ],
+    "host_python_distribution": "3.12.3-1ubuntu0.17",
+    "canonical_api": {
+      "fully_paginated_source_queries": 23,
+      "exact_noble_status_rows": 284,
+      "sha256": "d4d687ff09ed477faa59ebf86207d70ae5958eaab15052ef5a4c4c64ad11bc7f",
+      "scope": "Includes the original 30-ELF closure as history; every current system source and host Python is covered. Remaining triage/needed/ignored dispositions remain explicit."
+    },
+    "python_bundled_components": {
+      "mapped_components": 17,
+      "source_release_commit": "fa506e0858ac9f2cc5b289c137b888a2aa24d1ee",
+      "map_sha256": "3088081f8c9ba6940fdcd077440a56c40a5b88976387ee8f62d08bf1c2965aaf",
+      "remaining": "Declared libatomic provider source and nested Tcl source identities are now recorded with verbatim notices; source-to-linked-binary attestation remains explicitly unproven."
+    },
+    "notice_material": "103 captured native/common-license documents plus matching full Python metadata and 20 dependency license texts; installed notice bindings verified.",
+    "clean_native_review": "not asserted",
+    "source_to_binary_reproducibility": "not attested",
+    "additional_source_identities": {
+      "libatomic": {
+        "provider": "GCC 15.2.0 via pinned LLVM build recipe",
+        "source_sha256": "438fd996826b0c82485a29da03a72d71d6e3541a83ec702df4271f6fe025d24e",
+        "license": "GPL-3.0-or-later WITH GCC-exception-3.1"
+      },
+      "itcl": {
+        "version": "4.3.8",
+        "embedded_revision": "b3e5201f83ce3035196879cd6fa2af40f0b0a4ed4ac5951789b92a97aed4ebb5"
+      },
+      "thread": {
+        "version": "3.0.6",
+        "embedded_revision": "8c0237b059853bfe1e31923fbde37892bce9d89d177eb3a4e5acd3ee2903fd34"
+      },
+      "tcl_source_sha256": "d0aed49230bc02a65c1e0229e65f34590a4b037ec40d546f32573b467f7551ea"
+    }
+  },
+  "bootstrap_transport": {
+    "source": "a3d53bd34b71529cac12663688922fe273e4b7f1",
+    "manifest": "profiles/mcp/git-readonly-v1/wheels.lock.json",
+    "wheels": 33,
+    "bytes": 9901744,
+    "pip": "always --no-index with a verified private local wheelhouse",
+    "explicit_downloads": "Exact reviewed HTTPS files through a standard-library helper, no package index, no environment proxies, no redirects or encoded/chunked responses.",
+    "availability_budget": "A child-process deadline covers network status/headers as well as bodies; download preparation and pip share the original 300-second installation budget.",
+    "strict_hashes": "unchanged",
+    "protected_runtime": "no installer/network activity added",
+    "ci_source_admission": "Accepted helper and data snapshots only; ACCEPTED pointer unchanged."
+  },
+  "runtime_license_attribution": {
+    "source": "a3d53bd34b71529cac12663688922fe273e4b7f1",
+    "mapped_components": 23,
+    "attribution_rejections": 0,
+    "existing_policy_matches": 158,
+    "policy_pending_rows": 11,
+    "missing_or_opaque_notice_warnings": 0,
+    "supplemental_notices": [
+      "gitdb AUTHORS",
+      "Pygments AUTHORS",
+      "Requests NOTICE"
+    ],
+    "source_binding": "upstream-notices/runtime-licenses/provenance.json",
+    "provenance_sha256": "f37d72be8818d17b46fa9d82ec1edf84161bc9c0010e3b6f56bbf50ee86f1c9a",
+    "policy_change": "none; raw declarations and package graphs retained"
+  },
+  "independent_remediation_review": {
+    "range": "6f73f7ff..edb2a7cc",
+    "confirmed_issue": "Inherited redirect handling drained bodies before bounds. Redirects now close without reading, covered for all five redirect status codes.",
+    "additional_parent_control": "Network staging and pip share a hard 300-second subprocess budget.",
+    "other_findings": "no additional actionable bypass/regression reported",
+    "review_cycles": 1
+  },
+  "latest_remediation": {
+    "date": "2026-11-07",
+    "status": "incomplete-policy-and-native-review-required",
+    "historical_records": "Earlier fields retain their original source attribution. This section supersedes their dependency versions, scanner counts and current blocker observations.",
+    "runtime_source": {
+      "commit": "c8350ab491e8019cf869c57e99500e52bbc2a926",
+      "dirty": false,
+      "files_sha256": "23eea6598267c6ad504ea1382894b994c1094b3a4374731b8ff7538e20c2f679",
+      "tree": "32fcc4a862cd3e206156d9c79283fd599667de76"
+    },
+    "preset_qualification_source": "73834147e113f519550fe9069465aaac3db3e490",
+    "runtime_inputs_identical_between_sources": true,
+    "pins": {
+      "installed_pip": "26.3",
+      "pip_vendored_msgpack": "1.2.4",
+      "pip_vendored_urllib3": "2.8.0",
+      "glob": "14.0.4",
+      "minimatch": "11.0.5",
+      "zip": "9.0.5"
+    },
+    "compatibility": {
+      "original_filesystem_server": "2026.8.31",
+      "original_filesystem_sdk": "1.32.1",
+      "node": "22.23.4",
+      "python": "3.11.18",
+      "preset_refresh": "Only the two upstream identity hashes changed. Accepted base, nine-file set, policy, classifier and discovery identities remain unchanged.",
+      "offline_wheels": 34,
+      "shared_install_budget_seconds": 300,
+      "trusted_ci_accepted_pointer": "unchanged; maintainer admission pending"
+    },
+    "inventory": {
+      "status": "incomplete",
+      "selection_sha256": "a7843b59dabe8696a18d0ff2e6f9290f1fbe05eba4570d2ec5b7bb5ed1aea980",
+      "rustsec_database": {
+        "commit": "309392b18f6b17022f82c701f300433126901068",
+        "source": "https://github.com/RustSec/advisory-db",
+        "dirty": false
+      },
+      "cargo_audit_version": "0.22.2",
+      "osv_version": "2.7.0",
+      "exact_identity_coverage": {
+        "cargo": 443,
+        "npm": 102,
+        "python_unique": 63,
+        "python_top_level": 35,
+        "python_vendored": 29
+      },
+      "python_attribution_mappings_verified": 23,
+      "attribution_rejections": 0,
+      "runtime_license_policy_pending_rows": 12,
+      "rust_license_gate": "passed",
+      "cargo_vulnerabilities": 0,
+      "remaining_advisory_records": [
+        {
+          "package": {
+            "ecosystem": "crates.io",
+            "name": "paste",
+            "version": "1.0.15"
+          },
+          "id": "RUSTSEC-2024-0436"
+        },
+        {
+          "package": {
+            "ecosystem": "crates.io",
+            "name": "unsafe-libyaml",
+            "version": "0.2.11"
+          },
+          "id": "RUSTSEC-2024-0449"
+        },
+        {
+          "package": {
+            "ecosystem": "PyPI",
+            "name": "setuptools",
+            "version": "70.3.0"
+          },
+          "id": "PYSEC-2025-49"
+        },
+        {
+          "package": {
+            "ecosystem": "PyPI",
+            "name": "setuptools",
+            "version": "70.3.0"
+          },
+          "id": "PYSEC-2026-3447"
+        },
+        {
+          "package": {
+            "ecosystem": "PyPI",
+            "name": "setuptools",
+            "version": "70.3.0"
+          },
+          "id": "GHSA-5rjg-fvgr-3xxf"
+        },
+        {
+          "package": {
+            "ecosystem": "PyPI",
+            "name": "setuptools",
+            "version": "70.3.0"
+          },
+          "id": "GHSA-h35f-9h28-mq5c"
+        },
+        {
+          "package": {
+            "ecosystem": "PyPI",
+            "name": "setuptools",
+            "version": "70.3.0"
+          },
+          "id": "GHSA-xmj3-9gf7-h52w"
+        }
+      ],
+      "errors": [
+        "runtime_license_review_required:@isaacs/nonrecursive-glob-match",
+        "runtime_license_review_required:@modelcontextprotocol/server-filesystem",
+        "runtime_license_review_required:glob",
+        "runtime_license_review_required:lru-cache",
+        "runtime_license_review_required:minimatch",
+        "runtime_license_review_required:minipass",
+        "runtime_license_review_required:path-scurry",
+        "runtime_license_review_required:certifi",
+        "runtime_license_review_required:autocommand",
+        "runtime_license_review_required:typing_extensions",
+        "runtime_license_review_required:certifi",
+        "runtime_license_review_required:distlib",
+        "native_reviews:native_reviews_required",
+        "cargo_audit:cargo_audit_incomplete_or_findings",
+        "osv_failed_or_incomplete",
+        "osv:unresolved_osv_findings"
+      ],
+      "scanner_exit_codes": {
+        "inventory_generator": 1,
+        "cargo_audit": 0,
+        "rust_license_gate": 0,
+        "osv": 1
+      },
+      "interpretation": "Findings and policy refusals remain visible. No complete advisory, license or native clearance is asserted."
+    },
+    "native_qualification": {
+      "original_git": {
+        "status": "pass",
+        "reads": 6,
+        "refusals": 12,
+        "overlap_rounds": 16,
+        "skipped": 0,
+        "repository_unchanged": true,
+        "no_denied_dispatch": true,
+        "pilot_preset": true
+      },
+      "original_filesystem": {
+        "status": "pass",
+        "passed": 51,
+        "failed": 0,
+        "skipped": 0,
+        "source_unchanged": true,
+        "installed_profile_unchanged": true,
+        "runtime_unchanged": true,
+        "pilot_preset": true
+      },
+      "explicit_selection": {
+        "source": "c8350ab491e8019cf869c57e99500e52bbc2a926",
+        "status": "passed",
+        "cases": 12,
+        "benign_workflows": 2,
+        "false_interruptions": 0,
+        "scope": "development-installed-host-scripted-provider; explicit selected policy",
+        "pilot_readiness": "not_certified"
+      }
+    },
+    "focused_controls": {
+      "linux": {
+        "passed": 95,
+        "skipped": 0
+      },
+      "windows": {
+        "passed": 91,
+        "skipped": 4
+      },
+      "rust_format": "passed",
+      "locked_agent_binary_build": "passed",
+      "ml_archive_compatibility_tests": 2,
+      "toolchain": "1.94.1"
+    },
+    "installed_regression_probes": {
+      "glob_abort": {
+        "old_post_rejection_reads": 64,
+        "selected_post_rejection_reads": 0
+      },
+      "minimatch_amplification": {
+        "old": "heap exhausted under bounded probe",
+        "selected": "bounded rejection; normal matching controls pass"
+      },
+      "setuptools_subset": "Exact pip vendor subset contains pkg_resources; affected PackageIndex, source-distribution builder and legacy wheel modules are absent. All scanner findings are retained for maintainer applicability disposition."
+    },
+    "independent_review": {
+      "scope": "07a2a975..c8350ab4, followed by the bounded preset identity correction",
+      "cycles": 1,
+      "result": "no concrete bypass or regression found",
+      "all_23_attributions_against_installed_files": "verified",
+      "all_18_pip_vendor_attributions_against_official_wheels": "verified"
+    },
+    "retained_failed_attempts": [
+      {
+        "source": "d24f3c0e",
+        "status": "stale-archive-input-refused",
+        "reason": "An earlier Node archive path did not match the current pinned identity; preparation was rerun with the exact reviewed archive."
+      },
+      {
+        "source": "d24f3c0e",
+        "status": "pip-parent-attribution-refused",
+        "reason": "The updated pip parent/vendor identity correctly invalidated earlier attribution rows. All 18 pip-vendor mappings were rebound to exact official wheels before the final inventory."
+      },
+      {
+        "source": "c8350ab4",
+        "status": "preset-identity-refused",
+        "reason": "The shipped preset manifest still named earlier upstream identity hashes. Only the two hashes and the identity-tamper control were updated; both full preset qualifications then passed at 73834147."
+      }
+    ],
+    "remaining": [
+      "Maintainer disposition of the twelve exact license rows documented in private-runtime-clearance.md.",
+      "Maintainer advisory applicability/maintenance decisions for pip-vendored setuptools, paste and unsafe-libyaml; no finding removed or waived.",
+      "Current native binary, bundled-library and system-library review with exact identities and notice obligations.",
+      "Maintainer admission of trusted setup inputs and TL-owned current-main Ready/CodeQL qualification, candidate admission and integration."
+    ],
+    "current_main_integration": {
+      "main": "d7567b93",
+      "merge": "1a83872e",
+      "release_contract": "Refreshed only the 17 stale hashes within the existing explicit bundle; no document inclusion or admission threshold changes.",
+      "documentation_links": "452 files, 1440 links, 0 errors",
+      "windows_release_archive_controls": {
+        "run": 22,
+        "errors": 13,
+        "reason": "Unix candidate fixture modes are not represented by the Windows filesystem; candidate_binary_digest_or_mode_mismatch is retained. Linux Draft CI must execute the complete suite."
+      },
+      "qualification_limit": "Earlier native runs retain c8350ab4/73834147 source identities; current-main integration has not received final native acceptance.",
+      "component_verification_source": "12681d98b557aeb21ec5c954f29e235efd25ee74",
+      "component_capacity": {
+        "actual_payload_files": 142,
+        "maximum_payload_files": 160,
+        "producer_native_installer_update_consumer": "aligned",
+        "archive_bytes": 33554432,
+        "manifest_bytes": 65536,
+        "file_bytes": 1048576,
+        "other_validation": "unchanged"
+      },
+      "linux_controls": {
+        "component": {
+          "passed": 8,
+          "skipped": 0
+        },
+        "update": {
+          "passed": 34,
+          "skipped": 1,
+          "skip_reason": "separately supplied native Agent binary required"
+        },
+        "release_archive": {
+          "passed": 22,
+          "skipped": 0
+        },
+        "rust_format": "passed",
+        "source_after": "clean"
+      },
+      "focused_native_parser": {
+        "status": "passed",
+        "scope": "Verbatim production manifest/archive parser compiled with the current Cargo build dependency identities; controlled structural fixtures, not full Agent lifecycle.",
+        "old_complete_142": "refused",
+        "selected_complete_142": "accepted",
+        "selected_160": "accepted",
+        "selected_161": "refused",
+        "changed_payload": "refused"
+      },
+      "full_agent_unit_build": {
+        "status": "passed-with-agent-test-debug-symbols-disabled",
+        "command": "cargo --config profile.test.package.agentfw.debug=0 test --locked --offline -j1 -p agentfw --lib pilot_component::tests",
+        "initial_attempt": "2 GiB WSL instance became unresponsive; terminated only the task-owned distribution.",
+        "retry": "3 GiB retry reached the 360-second compiler budget; preserved as incomplete.",
+        "reduced_debug_retry": "Passed at exact clean source 12681d98 in 3m58s. Only Agent test-package debug symbols were disabled; assertions, production profile and validation remain unchanged.",
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0,
+        "filtered_out": 1217
+      },
+      "draft_ci": {
+        "source": "12681d98b557aeb21ec5c954f29e235efd25ee74",
+        "run_id": 42354134281,
+        "status": "passed",
+        "scope": "Draft fast checks only; full Ready qualification deferred."
+      },
+      "windows_focused_controls_at_bfa64c81": {
+        "passed": 91,
+        "skipped": 4
+      }
+    }
+  }
+}

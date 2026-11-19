@@ -1,0 +1,19 @@
+{
+  "run_id": 41888907395,
+  "source_commit": "8e644d668e3346662f19235701a28e4ecdfef4db",
+  "status": "failed",
+  "cause": "Legacy environment-only fixture used an empty new Agent home after the same enrollment deployment was already acknowledged; Console correctly did not redeliver applied policy. All earlier connection, guarded disconnect, preserved runtime policy and reconnect witnesses passed.",
+  "resolution": "Legacy compatibility now uses its own newly enrolled Agent, private credential and pending signed deployment; no runtime source change.",
+  "artifacts": {
+    "sqlite": {
+      "id": 13353460375,
+      "sha256": "7ff5a4af75545387b89f927b2926af49bdb1bee6db71c9523740b7bb5ea519f5"
+    },
+    "postgres": {
+      "id": 13353335441,
+      "sha256": "daa6b0b2b8c53e99d8341f1dac7c1388a1ddf2ba4e74204e5f3c54f62101b6c8"
+    }
+  },
+  "zip_crc_and_every_source_hash_verified": true,
+  "source_hashes_each": 284
+}

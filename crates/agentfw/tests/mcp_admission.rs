@@ -24,6 +24,22 @@ use tokio::sync::{oneshot, Notify};
 
 const TOKEN: &str = "fixture-native-mcp-token-9876543210";
 
+// The verified CI build consumer supplies its checked current-run binary at
+// execution time; a normal Cargo run retains Cargo's exact compiled binary.
+fn agentfw_test_binary() -> &'static str {
+    static BINARY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    BINARY.get_or_init(|| {
+        if std::env::var("SOU166_MODE").as_deref() == Ok("shared") {
+            let selected = std::env::var("SOU166_TEST_AGENTFW")
+                .expect("shared test requires the verified Agent binary");
+            assert!(Path::new(&selected).is_absolute());
+            selected
+        } else {
+            env!("CARGO_BIN_EXE_agentfw").into()
+        }
+    })
+}
+
 #[tokio::test]
 async fn sou11_unfamiliar_nested_input_preserves_bytes_and_annotations() {
     let mut fixture = Fixture::with_classifier("nested-input", true, Some("fixture-v1")).await;
@@ -581,7 +597,7 @@ fn spawn_gateway_named(
     let python = if cfg!(windows) { "python" } else { "python3" };
     let server_py = directory.join("server.py");
     std::fs::write(&server_py, SERVER).unwrap();
-    let mut command = Command::new(env!("CARGO_BIN_EXE_agentfw"));
+    let mut command = Command::new(agentfw_test_binary());
     command.args(["mcp", "--native-admission"]);
     if mode.starts_with("lease-enroll-") {
         command
@@ -887,7 +903,7 @@ impl Fixture {
         // even on elevated Windows runners. Discard setup instructions and keys.
         let bootstrap = tokio::time::timeout(
             Duration::from_secs(10),
-            Command::new(env!("CARGO_BIN_EXE_agentfw"))
+            Command::new(agentfw_test_binary())
                 .arg("install")
                 .env(
                     if cfg!(windows) { "USERPROFILE" } else { "HOME" },
@@ -1025,7 +1041,7 @@ impl Fixture {
         let stderr = dir.path().join("gateway-stderr.log");
         let bootstrap = tokio::time::timeout(
             Duration::from_secs(10),
-            Command::new(env!("CARGO_BIN_EXE_agentfw"))
+            Command::new(agentfw_test_binary())
                 .arg("install")
                 .env(
                     if cfg!(windows) { "USERPROFILE" } else { "HOME" },
@@ -4511,7 +4527,7 @@ print(json.dumps({'status':'ok','actions':['read'],'unknown':False,'confidence':
 }
 
 fn authority_cli(directory: &Path, args: &[&str]) -> std::process::Output {
-    std::process::Command::new(env!("CARGO_BIN_EXE_agentfw"))
+    std::process::Command::new(agentfw_test_binary())
         .arg("child-authority")
         .args(args)
         .env(
@@ -4691,7 +4707,7 @@ async fn reviewc757_legacy_host_tokens_never_spawn_a_server_even_after_restart()
 fn sou63_child_authority_cli_round_trip_and_refusals() {
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path().join(".agentfw");
-    let install = std::process::Command::new(env!("CARGO_BIN_EXE_agentfw"))
+    let install = std::process::Command::new(agentfw_test_binary())
         .arg("install")
         .env("HOME", dir.path())
         .env("USERPROFILE", dir.path())
@@ -4894,7 +4910,7 @@ fn sou63_acceptance_evidence(fixture: &Fixture, scenario: &str, proofs: &[&str],
         json!({
             "scenario":scenario,"policy_sha256":sha(POLICY.as_bytes()),
             "registry_sha256":sha(&std::fs::read(fixture._dir.path().join("registry.json")).unwrap()),
-            "agentfw_binary_sha256":agentfw::lifecycle::sha256_file(Path::new(env!("CARGO_BIN_EXE_agentfw"))).unwrap(),
+            "agentfw_binary_sha256":agentfw::lifecycle::sha256_file(Path::new(agentfw_test_binary())).unwrap(),
             "owned_server_source_sha256":sha(SERVER.as_bytes()),
             "bindings":bindings,"backend_execution_counts":ledgers,
             "withheld_rule":"fixture-mcp-reuse"
@@ -5230,7 +5246,7 @@ fn scoped_mint_accepts_hyphen_prefixed_instance_ids() {
     let home = dir.path().join(".agentfw");
     // Elevated Windows runners otherwise create an Administrators-owned home.
     // Use the real bootstrap so the owner and DACL match a supported profile.
-    let bootstrap = std::process::Command::new(env!("CARGO_BIN_EXE_agentfw"))
+    let bootstrap = std::process::Command::new(agentfw_test_binary())
         .arg("install")
         .env(
             if cfg!(windows) { "USERPROFILE" } else { "HOME" },

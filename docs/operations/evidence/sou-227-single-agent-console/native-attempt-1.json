@@ -1,0 +1,26 @@
+{
+  "format": "sou-227-native-qualification/1",
+  "implementation_source": "32946036387032f59458a61a44c261182e97990f",
+  "browser_run": 41848642387,
+  "postgres_http_run": 41848649060,
+  "browser_assertions": 9,
+  "browser_skips": 0,
+  "overall_runs": "success",
+  "reports": [
+    {
+      "file": "postgres-report.json",
+      "sha256": "c1ade444a6e442bfabf1650ca1301d05379f2f7e108311e33d3a1e05cd2463af",
+      "checks": 17,
+      "status": "passed",
+      "source_files_verified": 55
+    },
+    {
+      "file": "sqlite-report.json",
+      "sha256": "6afb246d8442c0e3bffcdb88ce77e3d0a5367e40a6001c1c0384b36e83275f0a",
+      "checks": 16,
+      "status": "passed",
+      "source_files_verified": 55
+    }
+  ],
+  "limitation": "Initial fixture emitted duplicate dialog callback exceptions on repeated login; the listener is now registered once and callback/page errors fail tearDown. Requalification includes additional observed hook effects."
+}

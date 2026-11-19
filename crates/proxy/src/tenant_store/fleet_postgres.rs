@@ -19,6 +19,8 @@ fn record(r: &Row, i: usize) -> Option<DeploymentRecord> {
         reported_applied_at_unix: r.get(i + 6),
         delivered_at_unix: None,
         rejected_at_unix: None,
+        rejection_code: None,
+        rejection_reason_version: None,
     })
 }
 fn agent(r: Row) -> FleetAgent {
@@ -105,14 +107,20 @@ impl PostgresTenantStore {
         };
         let rows = self
             .bounded(tx.query(
-                fleet::HISTORY_SQL,
+                fleet::HISTORY_WITH_REJECTIONS_SQL,
                 &[&tenant, &id, &q.before_sequence, &(i64::from(q.limit) + 1)],
             ))
             .await?;
         let result = fleet::detail(
             agent(row),
             rows.iter()
-                .map(|r| record(r, 0).expect("deployment sequence is non-null"))
+                .map(|r| {
+                    let mut d = record(r, 0).expect("deployment sequence is non-null");
+                    d.rejected_at_unix = r.get(7);
+                    d.rejection_reason_version = r.get(8);
+                    d.rejection_code = r.get(9);
+                    d
+                })
                 .collect(),
             q.limit,
             observed,

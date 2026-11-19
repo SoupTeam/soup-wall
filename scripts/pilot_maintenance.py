@@ -54,12 +54,21 @@ def digest(value):
 
 
 def scope(binding):
-    """The installation a marker governs: the Agent home and component home only.
+    """Keep the installation gate stable while full launch pins change.
 
-    A selection, project preset or update changes the launch binding but never
-    which installation is paused, so only this scope gates admission."""
+    Direct components retain their exact home/component scope. Coordinated
+    launches additionally prove their selected component against a pinned
+    coordinator root, whose identity survives generation update and rollback.
+    """
     try:
         home, component = binding['home'], binding['component_home']
+        if 'coordinator_root' in binding:
+            coordinator = binding['coordinator_root']
+            require(type(coordinator) is str and coordinator != home
+                    and {home, coordinator} <= {r['path'] for r in binding['roots']},
+                    'maintenance_binding_invalid')
+            return {'home': home, 'coordinator_root': coordinator,
+                    'roots': [r for r in binding['roots'] if r['path'] in (home, coordinator)]}
         return {'home': home, 'component_home': component,
                 'roots': [r for r in binding['roots'] if r['path'] in (home, component)]}
     except (KeyError, TypeError):

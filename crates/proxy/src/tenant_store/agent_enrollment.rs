@@ -5,6 +5,7 @@
 //! separation. They are never admin, tenant proxy, or workspace credentials.
 //! A revoked Agent is rejected at lookup time even if it knows its old token.
 
+use super::operator_audit::{AuditFact, AuditOperation, AuditTarget};
 use anyhow::{ensure, Context, Result};
 use rusqlite::{params, OptionalExtension, TransactionBehavior};
 use serde::Deserialize;
@@ -164,7 +165,7 @@ impl TenantStore {
         let mut conn = self.connection()?;
         ensure_schema(&conn)?;
         let tx = conn
-            .transaction()
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .context("could not start Agent enrollment transaction")?;
         let active: Option<i64> = tx
             .query_row(
@@ -184,6 +185,11 @@ impl TenantStore {
             params![tenant_id, agent_id, hash, created_at_unix],
         )
         .context("Agent enrollment already exists or could not be saved")?;
+        self.audit_committed(
+            &tx,
+            tenant_id,
+            AuditFact::new(AuditOperation::AgentEnroll, AuditTarget::Agent, agent_id).sequence(1),
+        )?;
         tx.commit()?;
         Ok(IssuedAgentCredential {
             agent: EnrolledAgent {
@@ -271,6 +277,12 @@ impl TenantStore {
                 new_hash
             ],
         )?;
+        self.audit_committed(
+            &tx,
+            tenant_id,
+            AuditFact::new(AuditOperation::AgentRotate, AuditTarget::Agent, agent_id)
+                .sequence(next as u64),
+        )?;
         tx.commit()?;
         Ok(RotationOutcome {
             tenant_id: tenant_id.into(),
@@ -321,14 +333,45 @@ impl TenantStore {
             valid_id(tenant_id) && valid_id(agent_id),
             "invalid tenant/Agent identity"
         );
-        let conn = self.connection()?;
+        let mut conn = self.connection()?;
         ensure_schema(&conn)?;
-        let changed = conn.execute(
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let changed = tx.execute(
             "UPDATE managed_agent_enrollments SET revoked_at_unix = ?3
              WHERE tenant_id = ?1 AND agent_id = ?2 AND revoked_at_unix IS NULL",
             params![tenant_id, agent_id, now_unix()],
         )?;
+        if changed == 1 {
+            self.audit_committed(
+                &tx,
+                tenant_id,
+                AuditFact::new(AuditOperation::AgentRevoke, AuditTarget::Agent, agent_id),
+            )?;
+        }
+        tx.commit()?;
         Ok(changed == 1)
+    }
+
+    pub(super) fn get_managed_agent(
+        &self,
+        tenant: &str,
+        agent: &str,
+    ) -> Result<Option<EnrolledAgent>> {
+        ensure!(
+            valid_id(tenant) && valid_id(agent),
+            "invalid tenant/Agent identity"
+        );
+        let conn = self.connection()?;
+        ensure_schema(&conn)?;
+        Ok(conn.query_row(
+            "SELECT tenant_id, agent_id, created_at_unix, revoked_at_unix, credential_generation
+             FROM managed_agent_enrollments WHERE tenant_id=?1 AND agent_id=?2",
+            params![tenant, agent],
+            |r| Ok(EnrolledAgent {
+                tenant_id: r.get(0)?, agent_id: r.get(1)?, created_at_unix: r.get(2)?,
+                revoked_at_unix: r.get(3)?, credential_generation: r.get(4)?,
+            }),
+        ).optional()?)
     }
 
     /// Bounded tenant-scoped inventory with no credential hashes or secrets.

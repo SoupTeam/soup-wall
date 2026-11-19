@@ -40,6 +40,9 @@ pub(crate) fn export_edit(
     if let Some(pilot) = &report.pilot {
         manifest["pilot_schema"] = json!(pilot.schema);
     }
+    if let Some(lifecycle) = &report.lifecycle {
+        manifest["lifecycle_schema"] = json!(lifecycle.format);
+    }
     if let Some(edit_session) = edit {
         manifest["edit_session_schema"] = json!(edit_session.schema);
     }
@@ -81,6 +84,7 @@ mod tests {
             scope: "local_setup_and_authenticated_runtime_not_active_host_execution",
             checks: vec![],
             pilot: None,
+            lifecycle: None,
         }
     }
 

@@ -8,6 +8,8 @@ execute PR-controlled files, logs, artifacts, or cache contents in this process.
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 from dataclasses import dataclass
 import hashlib
 from http.client import HTTPException, IncompleteRead
@@ -22,7 +24,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
-from ci_impact import WORKFLOW_JOBS, plan
+from ci_impact import (REVIEWED_DEPENDENCY_BLOBS, REVIEWED_PYTHON_BLOBS, WORKFLOW_JOBS,
+                       bounded_git_blob, git_blob_sha, git_tree_blob_sha, plan)
 from ci_activation import selective_enabled
 from sou91_ruleset_patch import RULESET_ID
 
@@ -538,6 +541,24 @@ def evidence_digest(evidence: dict[str, Any], verifier_sha: str) -> str:
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
+def candidate_script_bytes(api: GitHub, path: str, merge_sha: str,
+                           listed_sha: object) -> bytes | None:
+    """Read an exact merge blob as inert bytes; incomplete custody forces full CI."""
+    if not isinstance(listed_sha, str) or not SHA.fullmatch(listed_sha):
+        return None
+    try:
+        item = api.get("/contents/" + path + "?ref=" + merge_sha)
+        if (not isinstance(item, dict) or item.get("type") != "file"
+                or item.get("sha") != listed_sha or item.get("encoding") != "base64"
+                or not isinstance(item.get("size"), int) or item["size"] > 128 * 1024
+                or not isinstance(item.get("content"), str)):
+            return None
+        body = base64.b64decode(item["content"].replace("\n", ""), validate=True)
+        return body if len(body) == item["size"] and git_blob_sha(body) == listed_sha else None
+    except (EvidenceAPIError, EvidenceFormatError, ValueError, TypeError, binascii.Error):
+        return None
+
+
 def inspect(api: GitHub, number: int, event_base: str, event_head: str,
             *, evidence: dict[str, Any] | None = None) -> tuple[str, Verdict]:
     pr = api.get(f"/pulls/{number}")
@@ -555,10 +576,15 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str,
         return merge_sha, Verdict("failure", "merge candidate parent identity mismatch")
     files = api.pages(f"/pulls/{number}/files", "")
     paths: list[str] = []
+    details: dict[str, dict[str, object]] = {}
     for item in files:
-        paths.append(item["filename"])
+        path = item["filename"]
+        paths.append(path)
+        details[path] = {"status": item.get("status")}
         if item.get("previous_filename"):
-            paths.append(item["previous_filename"])
+            previous = item["previous_filename"]
+            paths.append(previous)
+            details[previous] = {"status": "renamed"}
     if len(files) != pr.get("changed_files"):
         return merge_sha, Verdict("failure", "PR file list incomplete")
     # The trusted base process independently reads current enforcement. If it
@@ -571,7 +597,17 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str,
         return ruleset
 
     active = selective_enabled(os.environ.get("SOU91_SELECTIVE_CI"), read_ruleset)
-    selected = plan(paths, force_full=not active)
+    if active and len(details) == len(paths):
+        for item in files:
+            path = item["filename"]
+            if path in REVIEWED_PYTHON_BLOBS and details[path]["status"] == "modified":
+                details[path]["base_content"] = bounded_git_blob(base_sha, path)
+                details[path]["head_content"] = candidate_script_bytes(
+                    api, path, merge_sha, item.get("sha"))
+                details[path]["dependency_blobs"] = {
+                    dependency: git_tree_blob_sha(base_sha, dependency)
+                    for dependency in REVIEWED_DEPENDENCY_BLOBS.get(path, {})}
+    selected = plan(paths, force_full=not active, change_details=details)
     if evidence is not None:
         evidence.update({
             "pr": {"number": number, "state": pr.get("state"), "draft": pr.get("draft"),

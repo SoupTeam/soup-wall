@@ -21,6 +21,36 @@ PREP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PREP)
 
 
+@unittest.skipUnless(os.name == "posix", "private JSON writing requires POSIX permissions")
+class ReportEncodingControls(unittest.TestCase):
+    def test_compact_reports_preserve_all_data_and_default_manifest_bytes(self):
+        value = {'observations': [{'pid': 123, 'stopped': True} for _ in range(1500)]}
+        pretty = (json.dumps(value, sort_keys=True, indent=2) + '\n').encode()
+        self.assertGreater(len(pretty), PREP.MAX_JSON)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report = root / 'report.json'
+            PREP.write_json(report, value, compact=True)
+            self.assertLessEqual(report.stat().st_size, PREP.MAX_JSON)
+            self.assertEqual(json.loads(report.read_bytes()), value)
+            self.assertEqual(stat.S_IMODE(report.stat().st_mode), 0o600)
+            marker = root / 'marker.json'
+            PREP.write_json(marker, {'b': 2, 'a': 1})
+            expected = (json.dumps({'b': 2, 'a': 1}, sort_keys=True, indent=2) + '\n').encode()
+            self.assertEqual(marker.read_bytes(), expected)
+            with self.assertRaises(FileExistsError):
+                PREP.write_json(marker, value, compact=True)
+            self.assertEqual(marker.read_bytes(), expected)
+
+    def test_compact_encoding_retains_the_existing_size_refusal(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for compact in (False, True):
+                path = Path(temporary) / f'oversized-{compact}.json'
+                with self.assertRaisesRegex(ValueError, 'manifest_size_limit'):
+                    PREP.write_json(path, {'data': 'x' * PREP.MAX_JSON}, compact=compact)
+                self.assertFalse(path.exists())
+
+
 @unittest.skipUnless(os.name == "posix", "private installer logs require POSIX permissions")
 class InstallerFailurePrivacy(unittest.TestCase):
     @contextmanager
@@ -45,6 +75,7 @@ class InstallerFailurePrivacy(unittest.TestCase):
 
         with ExitStack() as stack:
             stack.enter_context(patch.object(PREP, "supported_platform"))
+            stack.enter_context(patch.object(PREP.lifecycle_preflight, "inspect", return_value={"setup": "satisfied", "removal": "satisfied"}))
             stack.enter_context(patch.object(PREP.PILOT, "source", return_value={
                 "dirty": False, "commit": args.expected_commit}))
             stack.enter_context(patch.object(PREP, "selected_paths", return_value=paths))
@@ -288,16 +319,16 @@ class PreparationBoundary(unittest.TestCase):
             self.assertEqual(list(destination.iterdir()), [])
 
     def test_archive_rejects_traversal_external_symlink_and_link_parent(self):
-        for name, kind, link in (("node-v22.22.0-linux-x64/../escape", tarfile.REGTYPE, ""),
-                                 ("node-v22.22.0-linux-x64/bin/npm", tarfile.SYMTYPE, "/etc/passwd"),
-                                 ("node-v22.22.0-linux-x64/bin/npm/x", tarfile.REGTYPE, "")):
+        for name, kind, link in (("node-v22.23.5-linux-x64/../escape", tarfile.REGTYPE, ""),
+                                 ("node-v22.23.5-linux-x64/bin/npm", tarfile.SYMTYPE, "/etc/passwd"),
+                                 ("node-v22.23.5-linux-x64/bin/npm/x", tarfile.REGTYPE, "")):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 archive, destination = root / "node.tar.xz", root / "runtime"
                 destination.mkdir()
                 with tarfile.open(archive, "w:xz") as bundle:
                     if name.endswith("/x"):
-                        parent = tarfile.TarInfo("node-v22.22.0-linux-x64/bin/npm")
+                        parent = tarfile.TarInfo("node-v22.23.5-linux-x64/bin/npm")
                         parent.type, parent.linkname = tarfile.SYMTYPE, "../lib"
                         bundle.addfile(parent)
                     entry = tarfile.TarInfo(name)
@@ -389,7 +420,8 @@ class PreparationBoundary(unittest.TestCase):
             def init_git(command, **_):
                 (Path(command[-1]) / ".git").mkdir()
 
-            with patch.object(PREP, "supported_platform"), patch.object(PREP.PILOT, "source", return_value=before), \
+            with patch.object(PREP.lifecycle_preflight, "inspect", return_value={"setup": "satisfied", "removal": "satisfied"}), \
+                 patch.object(PREP, "supported_platform"), patch.object(PREP.PILOT, "source", return_value=before), \
                  patch.object(PREP, "selected_paths", return_value=paths), \
                  patch.object(PREP, "verify_profile", side_effect=lambda kind, *_, **__: profiles[kind]), \
                  patch.object(PREP, "verify_generation", side_effect=lambda gen, *_: (gen / "selection.json", profiles)), \

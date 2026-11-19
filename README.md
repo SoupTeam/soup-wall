@@ -11,7 +11,10 @@
 ## Try the Linux pilot
 
 The supported two-server pilot runs as an ordinary user on **native Ubuntu
-24.04 x86_64**. Start with the [first-use walkthrough](docs/operations/PILOT_QUICKSTART.md)
+24.04 x86_64**. Its frozen [v1 scope](docs/operations/PILOT_V1_SCOPE.md) names exactly what is supported
+(pinned Claude Code, the original reviewed filesystem and Git servers, explicit enforcement), what is
+conditional and what is excluded; select it with `--scope linux-v1`. It makes no universal-firewall or
+live-model effectiveness claim. Start with the [first-use walkthrough](docs/operations/PILOT_QUICKSTART.md)
 to build the selected Agent, prepare pinned filesystem/Git servers and run the
 actual Claude Code host against a local scripted provider. The walkthrough uses
 synthetic files and needs no model account or provider credentials.
@@ -30,13 +33,17 @@ python3 -B scripts/pilot-demo.py --run \
   --output "$HOME/pilot-demo-result-1"
 ```
 
-Preparation alone does not activate protection. A passing demo proves the
+The default Agent install above runs in shadow mode; the pilot is a separate explicit-enforcement
+configuration. Preparation alone does not activate protection. A passing demo proves the
 documented synthetic calls and recovery controls for its recorded inputs;
 live-model effectiveness remains unmeasured. Windows has a separate
 [native onboarding guide](docs/operations/WINDOWS_ONBOARDING.md). WSL and macOS
 are outside this Linux pilot's supported platform.
 
 ## Choose where to start
+
+Downloaded a binary archive? Use the included [offline archive guide](docs/RELEASE_ARCHIVE.md)
+for its root-level executable commands, operator documentation and separately required assets.
 
 Joining the development team? Start with the [development guide](docs/DEVELOPMENT.md), then read [CONTRIBUTING.md](CONTRIBUTING.md). The [documentation index](docs/README.md) links setup, architecture, operator procedures, and verification evidence.
 

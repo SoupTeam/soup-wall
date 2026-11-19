@@ -34,7 +34,7 @@
   },
   {
     "name": "certifi",
-    "version": "2026.7.22",
+    "version": "2026.10.19",
     "license": "MPL-2.0",
     "project_urls": {
       "Homepage": "https://github.com/certifi/python-certifi",
@@ -172,7 +172,7 @@
   },
   {
     "name": "mcp",
-    "version": "1.29.0",
+    "version": "1.30.0",
     "license": "MIT",
     "project_urls": {
       "Documentation": "https://py.sdk.modelcontextprotocol.io/v1/",
@@ -188,6 +188,15 @@
     "project_urls": {
       "Issues": "https://github.com/modelcontextprotocol/servers/issues",
       "Repository": "https://github.com/modelcontextprotocol/servers/tree/main/src/git"
+    }
+  },
+  {
+    "name": "pip",
+    "version": "26.3",
+    "license": "MIT",
+    "project_urls": {
+      "Source": "https://github.com/pypa/pip",
+      "Documentation": "https://pip.pypa.io/"
     }
   },
   {

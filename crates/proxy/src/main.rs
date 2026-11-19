@@ -79,6 +79,10 @@ fn validate_tenant_store(
     postgres_url: Option<&str>,
     require_admin_token: bool,
 ) -> anyhow::Result<()> {
+    cfg.rollout_reconciliation.validate()?;
+    if cfg.rollout_reconciliation.enabled && !cfg.tenant_store.enabled {
+        anyhow::bail!("rollout reconciliation requires tenant_store.enabled");
+    }
     let tenant_store = &cfg.tenant_store;
     if !tenant_store.enabled {
         return Ok(());
@@ -436,7 +440,50 @@ async fn main() -> anyhow::Result<()> {
 
     let listener = tokio::net::TcpListener::bind(&cfg.bind).await?;
     tracing::info!("Soup Wall Gateway listening on {}", cfg.bind);
-    axum::serve(listener, app(state)).await?;
+    if !cfg.rollout_reconciliation.enabled {
+        // Preserve the existing lifecycle when the opt-in worker is disabled.
+        axum::serve(listener, app(state)).await?;
+        return Ok(());
+    }
+    let (stop, shutdown) = tokio::sync::watch::channel(false);
+    let worker = state
+        .tenant_store
+        .clone()
+        .filter(|_| cfg.rollout_reconciliation.enabled)
+        .map(|store| {
+            let config = cfg.rollout_reconciliation.clone();
+            tokio::spawn(async move { store.run_rollout_reconciliation(config, shutdown).await })
+        });
+    let shutdown_signal = async {
+        let ctrl_c = async {
+            let _ = tokio::signal::ctrl_c().await;
+        };
+        #[cfg(unix)]
+        let terminate = async {
+            if let Ok(mut signal) =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            {
+                signal.recv().await;
+            } else {
+                std::future::pending::<()>().await;
+            }
+        };
+        #[cfg(not(unix))]
+        let terminate = std::future::pending::<()>();
+        tokio::select! { _ = ctrl_c => {}, _ = terminate => {} }
+    };
+    // Stop accepting on shutdown without waiting for unrelated incomplete HTTP
+    // bodies or streams. The worker is joined separately so its current durable
+    // transition finishes before the runtime exits.
+    let result = tokio::select! {
+        result = async { axum::serve(listener, app(state)).await } => result,
+        _ = shutdown_signal => Ok(()),
+    };
+    let _ = stop.send(true);
+    if let Some(worker) = worker {
+        worker.await??;
+    }
+    result?;
     Ok(())
 }
 

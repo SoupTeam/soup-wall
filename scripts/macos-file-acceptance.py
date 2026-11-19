@@ -311,7 +311,6 @@ class RelayHandler(http.server.BaseHTTPRequestHandler):
             res = conn.getresponse()
             res_body = res.read()
             res_status = res.status
-            res_headers = res.getheaders()
             conn.close()
         except Exception as e:
             self.send_error(502, f"Relay forward failed: {e}")
@@ -361,9 +360,10 @@ class RelayHandler(http.server.BaseHTTPRequestHandler):
 
         # Send response back to collector
         self.send_response(res_status)
-        for k, v in res_headers:
-            if k.lower() not in ("transfer-encoding", "content-length"):
-                self.send_header(k, v)
+        # This owned relay carries the daemon's JSON protocol, not arbitrary
+        # upstream HTTP metadata. Never reflect upstream header names or values:
+        # BaseHTTPRequestHandler.send_header does not reject embedded CR/LF.
+        self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(res_body)))
         self.end_headers()
         self.wfile.write(res_body)

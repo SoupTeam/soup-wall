@@ -1,0 +1,84 @@
+{
+  "format": "sw-runtime-author-preparation-checkpoint/1",
+  "date": "2026-11-08",
+  "status": "author-prepared-native-admission-blocked",
+  "accepted_base": "0a146beb967fc33931abcd387dee879bfe94dd47",
+  "runtime_source": "9d08dc74e5cb0fc6227d932f4341d3d50299ca54",
+  "selection_sha256": "38c03f190d172234a0ab229515cd1405bddeeb01c547f076e0e091a55fb8d22f",
+  "functional_scope": {
+    "platform": "WSL2 Ubuntu 24.04 x86_64; unprivileged operator",
+    "provider": "owned scripted loopback; real Claude Code 2.1.251",
+    "policy_sha256": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "cases_passed": 12,
+    "cases_failed": 0,
+    "benign_workflows_completed": 2,
+    "false_interruptions": 0,
+    "live_model_effectiveness": "not measured",
+    "native_ubuntu_acceptance": "not claimed",
+    "source_and_selected_bytes": "unchanged"
+  },
+  "checks": {
+    "windows_runtime_controls": {"passed": 69, "skipped": 1},
+    "linux_runtime_controls": {"passed": 70, "skipped": 0},
+    "locked_agent_binary_build": "passed",
+    "rust_format": "passed",
+    "compiler": "rustc 1.94.1 (e408947bf 2026-03-25)",
+    "agent_dev_package_debug_symbols": false,
+    "pip_check": "passed"
+  },
+  "inventory": {
+    "status": "incomplete",
+    "exit_code": 1,
+    "coverage": {"cargo": 443, "npm": 102, "python_unique": 63},
+    "osv_scanner": "2.7.0",
+    "cargo_audit": "0.22.2",
+    "rustsec_commit": "309392b18f6b17022f82c701f300433126901068",
+    "database_freshness": "Official origin fetched on this run; no maximum-age or full native freshness claim",
+    "retained_osv_records": 7,
+    "retained_cargo_maintenance_records": 2,
+    "license_proposals": 12,
+    "advisory_proposals": 9,
+    "all_proposals": "UNREVIEWED",
+    "unchanged_proposal_refusal": "runtime_reviews:decision_invalid"
+  },
+  "material": {
+    "package_compliance_source_files": 595,
+    "selected_system_library_paths": 13,
+    "system_library_copyright_coverage": 13,
+    "retained_native_upstream_notice_files": 40,
+    "archive_name": "runtime-tl-review-final.tar.gz",
+    "archive_bytes": 1580554,
+    "archive_members": 902,
+    "archive_scope": "Private review material; no executable runtime installer or qualified kit"
+  },
+  "evidence_sha256": {
+    "review_archive": "0b39e6c187dc284dc42c526324f783a4e71d95e46e0e3a425639d1fb5fcda771",
+    "admission_packet": "8f48b1192009b562873afd139ec1672a17c2378c135ace91b6576257a7340491",
+    "raw_inventory": "84a34c9cad52657004a9a4c5e83882d5544dcbc004885512c369532bc8cfebaa",
+    "qualification": "4ccf72c79b8f070f3a0242ff3653818709a21a6655c569ea6b502aa9a123744a",
+    "runtime_review_proposal": "71fef76ea4c97873e5c3a2deee1c41bb8c502156fa6b4066ab6f6d13bb791d49",
+    "native_author_observation": "495d6981915dfb42a66e1a6f9f57fd1e634b04cc0dffcbac131a13b3095a4088"
+  },
+  "preserved_unsuccessful_attempts": [
+    {
+      "scope": "read-only preset with a different shared-source Ask qualification expectation",
+      "passed": 10,
+      "failed": 2,
+      "first_reason": "actual_host_refusal_not_preserved",
+      "secondary_reason": "missing refused_host after the first failed case",
+      "correction": "A separate generation selects the explicit policy implementing the existing expected Ask rule; no assertion or product policy was weakened."
+    },
+    {
+      "scope": "author native-material collector",
+      "reason": "dpkg diversion metadata initially treated as a package name",
+      "correction": "Retain diversion metadata; verify canonical same-file identity and its actual package/copyright."
+    }
+  ],
+  "remaining": [
+    "Unresolved Node 22.x HIGH preannouncement; await the actual patched release scheduled on or after 11 November, verify exact pins and repeat preparation/scans/qualification.",
+    "Renew explicit maintainer package/license/advisory decisions against this exact source, selection and material; previous decisions remain historical.",
+    "Complete native security/distribution/corresponding-source review. The official Ubuntu CVE API query timed out; no complete fresh distro advisory matrix is asserted.",
+    "TL-owned independent native/current-source qualification and final exact-candidate admission."
+  ],
+  "release_or_handoff_permission": false
+}

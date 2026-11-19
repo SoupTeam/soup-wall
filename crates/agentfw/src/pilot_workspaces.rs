@@ -17,6 +17,7 @@ pub enum GitProfileKind {
     LocalRefs,
     Shallow,
     FileRevisions,
+    FirstParent,
     TrackedSymlinks,
 }
 
@@ -28,6 +29,7 @@ impl GitProfileKind {
             Self::LocalRefs,
             Self::Shallow,
             Self::FileRevisions,
+            Self::FirstParent,
             Self::TrackedSymlinks,
         ]
         .into_iter()
@@ -41,6 +43,7 @@ impl GitProfileKind {
             Self::LocalRefs => server_profile::git::LOCAL_REFS_FORMAT,
             Self::Shallow => server_profile::git::SHALLOW_FORMAT,
             Self::FileRevisions => server_profile::git::FILE_READS_FORMAT,
+            Self::FirstParent => server_profile::git::FIRST_PARENT_FORMAT,
             Self::TrackedSymlinks => server_profile::git_tracked_symlinks::FORMAT,
         }
     }

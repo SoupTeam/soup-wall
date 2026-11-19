@@ -360,6 +360,12 @@ class PreparedEvidence(unittest.TestCase):
 
 
 class CapacityCLI(unittest.TestCase):
+    def setUp(self):
+        environment = patch("pilot_lifecycle_preflight.inspect",
+                            return_value={"setup": "satisfied", "removal": "satisfied"})
+        environment.start()
+        self.addCleanup(environment.stop)
+
     def test_lost_reserve_while_waiting_refuses_before_generation(self):
         for name, stage in (("prepare-native-pilot-prerequisites.py", "native"),
                             ("build-native-pilot-inputs.py", "source")):

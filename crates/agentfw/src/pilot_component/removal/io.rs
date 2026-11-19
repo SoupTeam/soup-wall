@@ -55,7 +55,7 @@ impl Identity {
             == (b.device, b.inode, b.uid, b.gid, b.mode)
     }
 }
-pub(super) struct Budget {
+pub(crate) struct Budget {
     started: Instant,
     bytes: usize,
 }
@@ -65,6 +65,14 @@ impl Budget {
             started: Instant::now(),
             bytes: 0,
         }
+    }
+    pub(crate) fn read_limit(&mut self, cap: u64) -> Result<u64> {
+        self.tick(0)?;
+        let remaining = (64 * 1024 * 1024usize)
+            .checked_sub(self.bytes)
+            .context("removal_read_cap")?;
+        ensure!(remaining > 0, "removal_read_cap");
+        Ok((cap + 1).min(remaining as u64))
     }
     pub fn tick(&mut self, n: usize) -> Result<()> {
         self.bytes = self.bytes.checked_add(n).context("removal_read_cap")?;

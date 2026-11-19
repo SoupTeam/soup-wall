@@ -25,6 +25,8 @@ JOURNAL = "sw-pilot-update-journal/1"
 LIMIT = 65536
 MAX_BINARY = 512 * 1024 * 1024
 MAX_ARCHIVE = 32 * 1024 * 1024
+# Match the component producer and native installer, including runtime notices.
+MAX_COMPONENT_FILES = 160
 RESERVE = 1024 * 1024 * 1024
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -265,7 +267,7 @@ def component(record, source):
     raw = checked_file(record, MAX_ARCHIVE)
     with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
         members = archive.getmembers()
-        require(2 <= len(members) <= 129 and all(member.isfile() and not member.pax_headers for member in members)
+        require(2 <= len(members) <= MAX_COMPONENT_FILES + 1 and all(member.isfile() and not member.pax_headers for member in members)
                 and members[0].name == "manifest.json", "unsupported_component")
         manifest_raw = archive.extractfile(members[0]).read(LIMIT + 1)
         manifest = decode(manifest_raw)

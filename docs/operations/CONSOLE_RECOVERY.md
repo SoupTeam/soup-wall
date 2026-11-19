@@ -10,14 +10,36 @@ operator acceptance are required. No customer or default database is used by the
 
 The [versioned inventory](../../scripts/fixtures/console_recovery_inventory_v1.json)
 binds format 1 to accepted schema source `4f428e4b983111e5b2480e40d658628e3d198fe7`.
-PostgreSQL requires exactly migrations 1 through 26. SQLite has no native migration
+PostgreSQL requires exactly migrations 1 through 33. SQLite has no native migration
 version; the inventory binds its native table/column layouts, indexes, triggers and
 expected PRAGMA versions, including lazily created managed Agent tables when present.
 Unknown schemas require an explicit compatibility review, including future fleet tables.
 
+The one reviewed exception is the volatile `agent_observations` schema of the
+opt-in [Agent heartbeat](AGENT_HEARTBEAT.md): a PostgreSQL backup accepts it only
+when its catalog equals the reviewed definition exactly, excludes it from the
+dump, checks the archive listing contains none of it, and a restore target must
+not have it. Its rows are never archived or restored. After a restore and the
+checks below, run `llm-firewall migrate` against the target to recreate it empty;
+until then heartbeat status reads `unavailable`, never fresh.
+
+A pre-31 SQLite source can still be inventoried with no operator history, and a
+pre-32 one with no `managed_agent_rejections` table (Agent rejection reasons,
+see [Agent policy rejections](AGENT_POLICY_REJECTIONS.md)); the table is created on
+first use and its rows (reason code and Console receipt time only) are archived
+and restored like other managed Agent state. A pre-33 source has no
+`managed_agent_recovery_fences` table ([stale-restore recovery](STALE_RESTORE_RECOVERY.md));
+it is created on first use, and fence rows are archived and restored with the
+other managed Agent state.
+Archives bind the inventory used to create them. For a schema-30, 31 or 32 archive,
+use the matching reviewed recovery tool and a separate target, then run the
+normal Console migration on that restored target. Recovery itself performs
+no schema upgrade or reconciliation.
+
 The archive contains every native table and sequence: tenants, principals, memberships,
 active/revoked credentials, approved policies, immutable Agent revisions, enrollment
-credential hashes, signed deployment sequence/status/acknowledgements, security events,
+credential hashes, signed deployment sequence/status/acknowledgements, operator audit events and their
+sequence, security events,
 webhook destinations, retry/lease ownership and usage/identity state. Comparison is
 private full-row and sequence equality; counts alone cannot pass recovery.
 
@@ -109,10 +131,14 @@ A running Agent may have accepted a deployment newer than the restored database.
 It must retain that durable active policy and refuse lower/equal conflicting sequences.
 The fixture records the restored sequence, actual Agent sequence, rejected deployment,
 stale transport state and live hook decision; its negative result is explicitly
-`recovery_complete: false`. Stop the stale recovered Console and recover a current
-snapshot. Do not reset Agent counters, delete caches, manufacture acknowledgements or
-change issuer trust to make recovery look successful. Automatic point-in-time
-reconciliation and a new signing epoch require a separate reviewed procedure.
+`recovery_complete: false`. The preferred fix is still to stop the stale recovered
+Console and recover a current snapshot. When no newer backup exists, the one supported
+alternative is the Owner-confirmed [stale-restore recovery](STALE_RESTORE_RECOVERY.md)
+for the same tenant, enrollment credential and issuer, using the Agent's retained
+signed bundle and its fresh authenticated heartbeat. Do not reset Agent counters,
+delete caches, manufacture acknowledgements or change issuer trust to make recovery
+look successful. Automatic point-in-time reconciliation, reconstructing lost history
+and a new signing epoch require a separate reviewed procedure.
 
 ## Reproducible real-process witness
 

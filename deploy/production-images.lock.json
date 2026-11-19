@@ -1,0 +1,60 @@
+{
+  "format": "sw-production-images/1",
+  "checked_at": "2026-11-03T20:07:13.648814+00:00",
+  "registry": "https://registry-1.docker.io/v2/",
+  "files": {
+    "deploy/docker-compose.production.yaml": "e503c9b775cad135f2a709216969509ee1955e10b0c8bed2b8cbde351e1cf5b9",
+    "deploy/production.firewall.yaml": "18a0b56dac9b4dcadb72b9157ffa867908d20fb1b92b531d8977986fabe36e4f",
+    "deploy/Dockerfile": "1e953334aab52b44119d3f7731504304103a5185d8d38d9efb9f11c2b4e5857b",
+    "policies/default.yaml": "f56e40101b6899a8ddc98a4dc5c8672bf1006da5a419d89d481a97c51ffc1998"
+  },
+  "images": {
+    "postgres": {
+      "image": "docker.io/library/postgres:16.15-alpine3.24@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab",
+      "platforms": {
+        "linux/amd64": {
+          "manifest_digest": "sha256:cbf42f0edc946c0bc1b8eeed62403734e1f25dc67a3491455d07a92fdb558b28",
+          "config_digest": "sha256:6a2e324ebe59af6031c4c1cd96c1d5072c2ebc36563d2196365e43b8297c062d"
+        },
+        "linux/arm64": {
+          "manifest_digest": "sha256:7a8050e52090c5f77effbe7e0cbed4a0587306776c3f26dc99933a63c619eaf1",
+          "config_digest": "sha256:c54a696c68013b2f8f42f479e00a2b6ad24c5ef10ee31cdfb8972cec3dad7eb7"
+        }
+      },
+      "provenance": {
+        "recipe_url": "https://raw.githubusercontent.com/docker-library/postgres/9d15534160ade17f2b6c455a39ee967c49b1937d/16/alpine3.24/Dockerfile",
+        "recipe_sha256": "ac1db9854259c93b840716ddb1fcb9289e1487d50fb78d882558590e0d99f01e",
+        "upstream_archive_url": "https://ftp.postgresql.org/pub/source/v16.15/postgresql-16.15.tar.bz2",
+        "upstream_archive_sha256": "c1575341fa7bd40f5274ea465b34390f4dc64cdd0770af327005caaeb9f6b7ed",
+        "license_observation": "PostgreSQL",
+        "license_approval": false,
+        "advisory_review": "not-a-complete-image-vulnerability-clearance",
+        "upstream_security_notes": "https://www.postgresql.org/docs/release/16.15/"
+      }
+    },
+    "redis": {
+      "image": "docker.io/library/redis:7.4.12-alpine3.21@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f",
+      "platforms": {
+        "linux/amd64": {
+          "manifest_digest": "sha256:1cf73a2f04808e55a8bd2f5706c2aa0ebb0f71938f93deb7af79f48311cd5cb9",
+          "config_digest": "sha256:98c6ca8f397f86e469be752c3e7ed5eb8b17f2479840cb69a2e413037038e9f4"
+        },
+        "linux/arm64": {
+          "manifest_digest": "sha256:c1945f0eeb2d503f8421952da953a3804d38e4f004d4ef11d57826da59d2c332",
+          "config_digest": "sha256:c90c016450904cc9c63d38100c04c72554fcc983e257f1637ab451afaf32da7b"
+        }
+      },
+      "provenance": {
+        "recipe_url": "https://raw.githubusercontent.com/redis/docker-library-redis/786872f8c248c1f0990f93244cbcb3949329016d/alpine/Dockerfile",
+        "recipe_sha256": "4e97a743bef79aaf917f7ca3334f4284a86fda09b8406b69f0f85adcb55ae5b2",
+        "upstream_archive_url": "https://github.com/redis/redis/archive/refs/tags/7.4.12.tar.gz",
+        "upstream_archive_sha256": "324ab63d55c607639b419f547b213c62ae39ff50e09870e450a11c272567b84f",
+        "license_observation": "RSALv2 OR SSPLv1",
+        "license_approval": false,
+        "advisory_review": "not-a-complete-image-vulnerability-clearance",
+        "upstream_security_notes": "https://github.com/redis/redis/releases/tag/7.4.12"
+      }
+    }
+  },
+  "scope": "Image identity and source attribution; no image-wide advisory or license clearance, source-to-binary reproducibility or release approval."
+}

@@ -1,5 +1,8 @@
 # Explicit Linux read-only pilot policy (SOU-98)
 
+> The installed entry points (`agentfw pilot`, `scripts/pilot.py`) select the front-door policy bound by the
+> [v1 scope](PILOT_V1_SCOPE.md), not this preset; this recipe remains the individual-server acceptance reference.
+
 `linux-readonly-v1` is an operator-selected policy for the accepted original
 filesystem and Git stdio MCP profiles. The same exact policy bytes must be used
 for ordinary work and protection evidence. It leaves `agent-default.yaml`,

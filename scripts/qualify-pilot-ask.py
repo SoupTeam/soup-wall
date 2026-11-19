@@ -20,6 +20,7 @@ import tempfile
 import time
 import uuid
 import traceback
+from typing import NamedTuple
 import threading
 import sys
 
@@ -96,15 +97,103 @@ def until(check, label, seconds=20):
     raise ValueError(label)
 
 
-def await_original_expiry(expires_at_ms):
-    # Expiry is deliberately induced before a separate useful request can be
-    # offered. Do not spend that follow-up's existing wait on the primary TTL.
-    require(type(expires_at_ms) is int and expires_at_ms >= 0, "original_expiry_invalid")
-    remaining = (expires_at_ms - time.time_ns() // 1_000_000) / 1000
-    require(remaining <= 20, "original_expiry_outside_case")
+NS_PER_MS = 1_000_000
+EXPIRY_REFUSALS = ("native_approval_expired", "native_approval_timeout")
+
+
+class ClockPair(NamedTuple):
+    before_ns: int
+    wall_ns: int
+    after_ns: int
+
+    @classmethod
+    def observe(cls):
+        return cls(time.monotonic_ns(), time.time_ns(), time.monotonic_ns())
+
+    @property
+    def offset_bounds_ns(self):
+        return self.wall_ns - self.after_ns, self.wall_ns - self.before_ns
+
+
+class ExpiryClock:
+    """Sample the owned harness clock from proposal through pending observation."""
+
+    max_pair_ns = NS_PER_MS
+    max_gap_ns = 100 * NS_PER_MS
+    max_offset_spread_ns = 2 * NS_PER_MS
+
+    def __init__(self):
+        self.samples = []
+        self.done = threading.Event()
+        self.thread = None
+
+    def start(self):
+        self.samples.append(ClockPair.observe())
+        self.thread = threading.Thread(target=self.watch, daemon=True)
+        self.thread.start()
+
+    def watch(self):
+        while not self.done.wait(.02) and len(self.samples) < 2048:
+            self.samples.append(ClockPair.observe())
+
+    def stop(self):
+        self.done.set()
+        if self.thread is not None:
+            self.thread.join()
+
+    def finish(self):
+        self.stop()
+        return [*self.samples, ClockPair.observe()]
+
+
+def bind_original_expiry(waiting, pending, samples, proposal_ns, configured_ttl_ms, evidence):
+    """Project the producer's original expiry across a checked clock interval."""
+    identity = ("pending_id", "tool", "binding_sha256", "expires_at_ms", "state")
+    require(isinstance(pending, dict), "original_expiry_identity_unavailable")
+    created, expires = pending.get("created_at_ms"), pending.get("expires_at_ms")
+    require(all(waiting.get(key) == pending.get(key) for key in identity)
+            and pending.get("scope") == "native-mcp/approval/v1" and pending.get("state") == "pending"
+            and type(created) is int and created >= 0 and type(expires) is int
+            and expires - created == configured_ttl_ms,
+            "original_expiry_identity_unavailable")
+    evidence.update(pending_id=pending["pending_id"], created_at_ms=created, expires_at_ms=expires,
+                    configured_ttl_ms=configured_ttl_ms, proposal_monotonic_ns=proposal_ns,
+                    clock_pairs=[pair._asdict() for pair in samples])
+    require(len(samples) >= 2 and type(proposal_ns) is int
+            and samples[0].after_ns <= proposal_ns <= samples[-1].before_ns
+            and all(0 <= pair.after_ns - pair.before_ns <= ExpiryClock.max_pair_ns for pair in samples)
+            and all(0 <= following.before_ns - pair.after_ns <= ExpiryClock.max_gap_ns
+                    for pair, following in zip(samples, samples[1:])),
+            "original_expiry_clock_coverage_unavailable")
+    low = min(pair.offset_bounds_ns[0] for pair in samples)
+    high = max(pair.offset_bounds_ns[1] for pair in samples)
+    observed = samples[-1]
+    evidence["clock_offset_bounds_ns"] = [low, high]
+    require(high - low <= ExpiryClock.max_offset_spread_ns, "original_expiry_clock_discontinuity")
+    # Producer timestamps truncate wall time to milliseconds. Bound the latest
+    # mapped expiry so this uncertainty cannot turn an early observation green.
+    created_ns = created * NS_PER_MS
+    require(created_ns + NS_PER_MS > proposal_ns + low and created_ns <= observed.after_ns + high,
+            "original_expiry_creation_outside_observation")
+    deadline = (expires + 1) * NS_PER_MS - low
+    remaining = deadline - observed.after_ns
+    require(0 < remaining <= configured_ttl_ms * NS_PER_MS, "original_expiry_remaining_unavailable")
+    evidence.update(deadline_monotonic_ns=deadline, remaining_ttl_ns=remaining)
+    return deadline
+
+
+def await_original_expiry(deadline):
+    # Leave the follow-up its own wait budget after the original expiry.
+    remaining = deadline - time.monotonic_ns()
     if remaining > 0:
-        time.sleep(remaining)
-    require(time.time_ns() // 1_000_000 >= expires_at_ms, "original_expiry_not_reached")
+        time.sleep(remaining / 1_000_000_000)
+    require(time.monotonic_ns() >= deadline, "original_expiry_not_reached")
+
+
+def check_expiry_refusal(row, result_ns, deadline):
+    elapsed = (result_ns - deadline) / NS_PER_MS
+    row["refusal_after_original_expiry_ms"] = elapsed
+    require(row["primary_refusal_codes"] and elapsed >= 0, "expiry_refusal_not_attributed")
 
 
 def stop(process):
@@ -164,6 +253,7 @@ class Pilot:
         self.offered, self.result_times, self.result_monotonic = set(), {}, {}
         self.proposal_monotonic = {}
         self.first_pending_ms = None
+        self.expiry_clock = self.expiry_result_pair = None
         self.close_after_primary = False
         self.proposals = ProposalGate(deferred)
         target = ("filesystem", "read_text_file", {"path": "/workspace/credentials.txt"}) if kind == "filesystem" else (
@@ -185,6 +275,8 @@ class Pilot:
                         logical = block["tool_use_id"].removeprefix("toolu_pilot_ask_")
                         self.result_times.setdefault(logical, time.time_ns() // 1_000_000)
                         self.result_monotonic.setdefault(logical, time.monotonic_ns())
+                        if logical == "primary" and self.expiry_clock and self.expiry_result_pair is None:
+                            self.expiry_result_pair = ClockPair.observe()
                         self.model.results[logical] = {"is_error": bool(block.get("is_error")), "content": block.get("content")}
             if "primary" not in self.model.results:
                 proposals = [("primary", self.primary)]
@@ -200,6 +292,8 @@ class Pilot:
             for identifier, (server, tool, arguments) in proposals:
                 wire_id = "toolu_pilot_ask_" + identifier
                 require(wire_id not in self.offered,"host_request_would_have_been_reissued")
+                if identifier == "primary" and self.expiry_clock:
+                    self.expiry_clock.start()
                 self.proposal_monotonic.setdefault(identifier, time.monotonic_ns())
                 self.offered.add(wire_id)
                 result.append({"type": "tool_use", "id": wire_id, "name": f"mcp__{server}__{tool}", "input": arguments})
@@ -266,6 +360,34 @@ class Pilot:
         proposal = self.proposal_monotonic.get("primary")
         self.first_pending_ms = None if proposal is None else (time.monotonic_ns() - proposal) / 1_000_000
         return pending
+
+    def observe_original_expiry(self, waiting, configured_ttl_ms, evidence):
+        evidence["pending_id"] = waiting["pending_id"]
+        require(re.fullmatch(r"[A-Za-z0-9_-]{1,128}", waiting["pending_id"]),
+                "original_expiry_identity_unavailable")
+        path = self.setup.home / "native-pending" / (waiting["pending_id"] + ".json")
+        try:
+            pending = json.loads(path.read_bytes())
+        except (OSError, ValueError):
+            raise ValueError("original_expiry_identity_unavailable") from None
+        return bind_original_expiry(waiting, pending, self.expiry_clock.finish(),
+                                    self.proposal_monotonic.get("primary"), configured_ttl_ms, evidence)
+
+    def observe_expiry_request(self, waiting, configured_ttl_ms, evidence):
+        require(self.trace.stat().st_size <= 32 * 1024 * 1024, "wire_trace_bound")
+        lines, _ = LAUNCH.normalized_syscalls(self.trace.read_text(), thread_birth_order=True)
+        collectors = LAUNCH.collector_processes(lines, self.setup.binary)
+        selected = [pid for pid, server in collectors.items() if server == self.kind]
+        require(len(selected) == 1, "original_expiry_collector_unavailable")
+        rows = LATENCY.collector_stderr_rows(lines, selected[0])
+        requests = [item for item in rows if item.get("event") == "mcp_native_approval_pending"
+                    and item.get("pending_id") == waiting["pending_id"]]
+        require(len(requests) == 1 and all(requests[0].get(key) == waiting[key]
+                    for key in ("tool", "binding_sha256"))
+                and type(requests[0].get("expires_in_ms")) is int
+                and requests[0]["expires_in_ms"] == configured_ttl_ms,
+                "original_expiry_request_unavailable")
+        evidence["open_reply_configured_expires_in_ms"] = requests[0]["expires_in_ms"]
 
     def effects(self, peer=False):
         return SELECTED.trace_effects(self.trace, "filesystem" if peer else self.kind,
@@ -420,6 +542,8 @@ class Pilot:
 
     def close(self):
         self.proposals.cancel()
+        if self.expiry_clock:
+            self.expiry_clock.stop()
         if self.process.poll() is None and self.run_id:
             if BASE.ProcessWitness.identity(self.launcher_pid) == self.launcher_start:
                 try:
@@ -503,17 +627,21 @@ def qualify(args, private, report, pilot_class=None):
                 + (["collector_term"] if kind == "git" else []))
             for sample_index, case in enumerate(selected_cases):
                 try:
-                    start_daemon(kind, 20 if case == "expire" else 30, kind + ':' + case)
+                    ttl_seconds = 20 if case == "expire" else 30
+                    start_daemon(kind, ttl_seconds, kind + ':' + case)
                     paired = kind == "filesystem" and case == "approve"
                     pilot = pilot_class(setup, private / (kind + "-" + case + "-" + str(sample_index)), classifier, kind,
-                                  enabled=case != "default", deferred=paired)
+                                  enabled=case != "default", deferred=paired or case == "expire")
                     active.append(pilot)
                     pilot.close_after_primary = case == "collector_term"
                     row = {"profile": kind, "case": case, "sample_index": sample_index, "configured": case != "default", "pending":False,
-                        "approved":False, "passed": False, "broker_ttl_seconds":20 if case == "expire" else 30, "policy_sha256":LAUNCH.sha(setup.policy),
+                        "approved":False, "passed": False, "broker_ttl_seconds":ttl_seconds, "policy_sha256":LAUNCH.sha(setup.policy),
                         "configuration_sha256":LAUNCH.sha(setup.home / "config.yaml")}
                     cases.append(row)
                     sibling = other = None
+                    if case == "expire":
+                        pilot.expiry_clock = ExpiryClock()
+                        row["proposals_released_at_ms"] = release_ready_pilots([pilot])
                     if kind == "filesystem" and case == "approve":
                         # Start both actual hosts before either pending lease is
                         # consumed by the other host's startup. Deadlines stay fixed.
@@ -529,6 +657,11 @@ def qualify(args, private, report, pilot_class=None):
                         row.update(pending=True, binding_sha256=waiting["binding_sha256"],
                                    pending_expires_at_ms=waiting["expires_at_ms"],
                                    pending_observed_at_ms=time.time_ns() // 1_000_000)
+                        if case == "expire":
+                            row["stage"] = "bind_original_expiry"
+                            expiry_evidence = row["original_expiry"] = {}
+                            expiry_deadline = pilot.observe_original_expiry(
+                                waiting, ttl_seconds * 1000, expiry_evidence)
                         row["stage"] = "before_decision_wire_check"
                         require(pilot.undispatched(), "dispatch_before_operator_decision")
                         if kind == "filesystem" and case == "approve":
@@ -614,7 +747,7 @@ def qualify(args, private, report, pilot_class=None):
                     if kind == "git":
                         if case == "expire":
                             row["stage"] = "observe_original_expiry"
-                            await_original_expiry(waiting["expires_at_ms"])
+                            await_original_expiry(expiry_deadline)
                             row["stage"] = "wait_useful_followup_after_original_expiry"
                         def followup_ready():
                             if "primary" not in pilot.model.results:
@@ -651,14 +784,10 @@ def qualify(args, private, report, pilot_class=None):
                             row["verified_inputs_resume"] = proof
                             require(proof["immutable_files"] + proof["leased_files"] > 0, "actual_reuse_missing")
                     primary_text = json.dumps(primary)
-                    row["primary_refusal_codes"] = [code for code in ("native_approval_expired", "native_approval_timeout") if code in primary_text]
+                    row["primary_refusal_codes"] = [code for code in EXPIRY_REFUSALS if code in primary_text]
                     if case == "expire":
-                        # The relay min(wait, remaining TTL) may report timeout on
-                        # the same boundary the daemon reports expired. Require
-                        # both a native deadline refusal and the ORIGINAL expiry.
-                        elapsed = pilot.result_times["primary"] - waiting["expires_at_ms"]
-                        row["refusal_after_original_expiry_ms"] = elapsed
-                        require(row["primary_refusal_codes"] and elapsed >= 0, "expiry_refusal_not_attributed")
+                        expiry_evidence["result_clock_pair"] = pilot.expiry_result_pair._asdict()
+                        expiry_evidence["result_monotonic_ns"] = pilot.result_monotonic["primary"]
                     followup = pilot.model.results.get("followup")
                     followup_text = json.dumps(followup)
                     row["followup"] = {"present": followup is not None,
@@ -679,6 +808,19 @@ def qualify(args, private, report, pilot_class=None):
                         and ("native_approval_redeemed:" + waiting["pending_id"]) in item.get("reason_codes",[])
                         ]
                     require(len(redemptions) == (1 if case == "approve" else 0), "approval_redemption_observation_mismatch")
+                    if case == "expire":
+                        row["stage"] = "verify_original_expiry_refusal"
+                        requested = [item for item in audit if item.get("event") == "native_approval_requested"
+                                     and item.get("approval_id") == waiting["pending_id"]]
+                        require(len(requested) == 1 and requested[0].get("at_ms") == expiry_evidence["created_at_ms"]
+                                and all(requested[0].get(key) == waiting[key]
+                                        for key in ("tool", "binding_sha256", "expires_at_ms")),
+                                "original_expiry_audit_unavailable")
+                        expiry_evidence["creation_audit_matches"] = True
+                        pilot.observe_expiry_request(waiting, ttl_seconds * 1000, expiry_evidence)
+                        row.update(dispatched=dispatches, kernel_effects=effects, approved=bool(redemptions),
+                                   released=False, trace_sha256=LAUNCH.sha(pilot.trace))
+                        check_expiry_refusal(row, pilot.result_monotonic["primary"], expiry_deadline)
                     row.update(passed=True, dispatched=dispatches, kernel_effects=effects, released=not primary["is_error"],
                         approved=bool(redemptions), approved_observation="native signed grant redemption audit",
                         host_result_sha256=BASE.hashlib.sha256(json.dumps(primary,sort_keys=True).encode()).hexdigest(),

@@ -167,6 +167,32 @@ class Custody(unittest.TestCase):
                     self.unpack(self.write_archive(manifest=changed), self.root / fault)
                 self.unpublished(self.root / fault)
 
+    def test_each_new_harness_role_requires_its_exact_target_and_bytes(self):
+        for role in ("doctor", "mcp_admission", "resource_approval_witness"):
+            with self.subTest(role=role):
+                missing = copy.deepcopy(self.manifest)
+                del missing["files"][role]
+                with self.assertRaisesRegex(ValueError, "build_roles_mismatch"):
+                    B.validate_manifest(missing, self.expected)
+                wrong = copy.deepcopy(self.manifest)
+                wrong["files"][role]["target"] = B.TARGETS["library"]
+                with self.assertRaisesRegex(ValueError, "build_role_substitution"):
+                    B.validate_manifest(wrong, self.expected)
+                destination = self.root / (role + "-selected")
+                self.unpack(self.write_archive(), destination)
+                selected = destination / B.ROLES[role]
+                selected.chmod(0o755)
+                selected.write_bytes(elf(role + "-changed"))
+                selected.chmod(0o555)
+                context = {"expected": self.expected, "artifact_id": "456",
+                           "archive_sha256": B.sha(self.archive.read_bytes()),
+                           "manifest_sha256": B.sha(B.canonical(self.manifest))}
+                with patch.object(B, "source_builder") as builder, \
+                        patch.object(B, "runtime_identity", return_value=self.expected["runtime"]):
+                    builder.return_value.source_identity.return_value = self.expected["source"]
+                    with self.assertRaisesRegex(ValueError, "installed_payload_changed"):
+                        B.verified_role(destination, context, role)
+
     def test_optimization_debug_overflow_and_json_type_substitution_refuse(self):
         for field, value in (("opt_level", "3"), ("debuginfo", 0), ("debug_assertions", False),
                              ("debug_assertions", 1), ("overflow_checks", False), ("test", 1)):
@@ -307,6 +333,82 @@ class Custody(unittest.TestCase):
 
 
 class Dependency(unittest.TestCase):
+    def test_doctor_and_get_roles_are_exact_default_build_targets(self):
+        prefix = ["test", "--locked", "--offline", "-p", "agentfw"]
+        for role, selection in (("doctor", ["--test", "doctor"]),
+                                ("mcp_admission", ["--test", "mcp_admission", "sou88"]),
+                                ("resource_approval_witness", ["--test", "resource_approval_witness"])):
+            command = prefix + selection + ["--", "--nocapture"]
+            self.assertEqual(B.parse_cargo(command)[0], role)
+            self.assertEqual(B.TARGETS[role], {"name": role, "kind": "test", "test": True})
+            self.assertEqual(B.ROLES[role].split("/")[0], "tests")
+            for changed in (command + ["--ignored"], prefix + ["--all-features"] + selection + ["--", "--nocapture"],
+                            prefix + selection + ["unknown-filter", "--", "--nocapture"]):
+                with self.subTest(role=role, command=changed), self.assertRaises(ValueError):
+                    B.parse_cargo(changed)
+
+    def test_only_complete_library_and_router_suites_can_use_bounded_quiet_output(self):
+        prefix = ["test", "--locked", "--offline", "-p", "agentfw"]
+        self.assertEqual(B.parse_cargo(prefix + ["--lib", "--", "--quiet"]), ("library", ""))
+        self.assertEqual(B.parse_cargo(prefix + ["--test", "native_endpoint", "--", "--quiet"]),
+                         ("native_endpoint", ""))
+        for changed in (prefix + ["--lib", "doctor", "--", "--quiet"],
+                        prefix + ["--test", "mcp_admission", "sou88", "--", "--quiet"],
+                        prefix + ["--lib", "--", "--skip", "expensive"]):
+            with self.subTest(command=changed), self.assertRaises(ValueError):
+                B.parse_cargo(changed)
+
+    def test_embedded_binary_harness_uses_only_verified_same_artifact_role(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            context = {"artifact_id": "456"}
+            roles = []
+            launches = []
+
+            def role_fd(_directory, _context, role):
+                roles.append(role)
+                return os.open(os.devnull, os.O_RDONLY)
+
+            def run(_fd, arguments, log, *, selected_agentfw=None):
+                launches.append((arguments, selected_agentfw))
+                log.write_text("one: test\n" if "--list" in arguments else
+                               "test result: ok. 1 passed; 0 failed; 0 ignored;\n")
+
+            for role, selection in (("doctor", ["--test", "doctor"]),
+                                    ("mcp_admission", ["--test", "mcp_admission", "sou88"])):
+                roles.clear(); launches.clear()
+                arguments = ["test", "--locked", "--offline", "-p", "agentfw", *selection,
+                             "--", "--nocapture"]
+                with patch.dict(os.environ, {"SOU166_MODE": "shared"}), \
+                        patch.object(B, "command_context", return_value=(root, context)), \
+                        patch.object(B, "verified_role", side_effect=role_fd), \
+                        patch.object(B, "run_native", side_effect=run):
+                    record = B.cargo(arguments, root / (role + ".json"))
+                self.assertEqual(record["outcome"], "verified_reuse")
+                self.assertEqual(roles, [role, "agentfw", "agentfw", "agentfw"])
+                self.assertEqual([item[1] for item in launches], [root / B.ROLES["agentfw"]] * 2)
+
+            with patch.dict(os.environ, {"SOU166_MODE": "shared"}), \
+                    patch.object(B, "command_context", return_value=(root, context)), \
+                    patch.object(B, "verified_role", side_effect=[os.open(os.devnull, os.O_RDONLY), ValueError("installed_payload_changed")]), \
+                    patch.object(B, "run_native", side_effect=AssertionError("must not execute")):
+                with self.assertRaisesRegex(ValueError, "installed_payload_changed"):
+                    B.cargo(["test", "--locked", "--offline", "-p", "agentfw", "--test", "doctor",
+                             "--", "--nocapture"], root / "tampered.json")
+
+    def test_new_consumers_select_only_existing_default_build_roles(self):
+        prefix = ["test", "--locked", "--offline", "-p", "agentfw"]
+        self.assertEqual(B.parse_cargo(["build", "--locked", "--offline", "-p", "agentfw", "--bin", "agentfw"]),
+                         ("agentfw", None))
+        self.assertEqual(B.parse_cargo(prefix + ["--lib", "--", "--nocapture"]), ("library", ""))
+        self.assertEqual(B.parse_cargo(prefix + ["--test", "native_endpoint", "--", "--nocapture"]),
+                         ("native_endpoint", ""))
+        for changed in (prefix + ["--test", "unknown", "--", "--nocapture"],
+                        prefix + ["--lib", "--all-features", "--", "--nocapture"],
+                        ["build", "--locked", "-p", "agentfw", "--bin", "agentfw"]):
+            with self.subTest(command=changed), self.assertRaises(ValueError):
+                B.parse_cargo(changed)
+
     def test_stop_filters_use_existing_pinned_test_roles_without_widening_commands(self):
         prefix = ["test", "--locked", "--offline", "-p", "agentfw"]
         for selection, expected in ((["--lib", "pilot_approval"], ("library", "pilot_approval")),
@@ -335,6 +437,17 @@ class Dependency(unittest.TestCase):
         rerun = dict(self.env, SOU166_PRODUCER_ATTEMPT="2", SOU166_ARCHIVE_NAME="build-r123-a2.tar.gz", SOU166_ARTIFACT_ID="789")
         self.assertNotEqual(old, B.dependency_context(rerun))
 
+    def test_manual_consumer_workflow_context_is_finite_and_run_bound(self):
+        prefix = "SoupTeam/soup-wall/.github/workflows/"
+        for filename in sorted(B.BUILD_CONSUMER_WORKFLOWS):
+            with self.subTest(filename=filename):
+                env = dict(self.env, GITHUB_WORKFLOW_REF=prefix + filename + "@refs/heads/main")
+                self.assertEqual(B.dependency_context(env)["artifact_id"], "456")
+        for filename in ("unrelated.yml", "mcp-windows-read.yml"):
+            env = dict(self.env, GITHUB_WORKFLOW_REF=prefix + filename + "@refs/heads/main")
+            with self.subTest(filename=filename), self.assertRaisesRegex(ValueError, "unsupported_producer_workflow"):
+                B.dependency_context(env)
+
     def test_missing_failed_skipped_future_and_unbound_producer_cannot_download(self):
         faults = {"SOU166_PRODUCER_RESULT": ["", "failure", "skipped", "cancelled"],
                   "SOU166_PRODUCER_ATTEMPT": ["", "0", "3", "-1", "latest", 1],
@@ -348,6 +461,14 @@ class Dependency(unittest.TestCase):
             for value in values:
                 with self.subTest(key=key, value=value), self.assertRaises(ValueError):
                     B.dependency_context(dict(self.env, **{key: value}))
+
+    def test_skipped_producer_is_reported_unavailable_before_download(self):
+        import contextlib
+        stream = io.StringIO()
+        with patch.dict(os.environ, dict(self.env, SOU166_PRODUCER_RESULT="skipped")), \
+                contextlib.redirect_stderr(stream):
+            self.assertEqual(B.main(["guard"]), 2)
+        self.assertEqual(json.loads(stream.getvalue())["status"], "unavailable")
 
     def test_distinct_images_need_the_complete_identical_abi_tools_flags_and_fixture_paths(self):
         observed = {"image": {"ImageOS": "ubuntu24", "ImageVersion": "20261026.354.1"},
@@ -410,6 +531,33 @@ class Dependency(unittest.TestCase):
             result = B.cargo(["build", "--locked", "--offline", "-p", "agentfw", "--bin", "agentfw"], output)
             self.assertEqual(result["compiled_artifacts"], 1)
             self.assertEqual(result["status"], "passed")
+            self.assertEqual(result["outcome"], "full_local_build")
+
+    def test_clippy_is_reported_as_source_check_and_cannot_inherit_binary_override(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(B, "source_builder") as builder, \
+                patch.dict(os.environ, {"SOU166_MODE": "shared", "SOU166_TEST_AGENTFW": "/unverified",
+                                     "CARGO_TARGET_DIR": temporary + "/target"}):
+            output = Path(temporary) / "clippy.json"
+            def inspect(command, **kwargs):
+                self.assertEqual(command[:3], ["cargo", "clippy", "--message-format=json"])
+                self.assertNotIn("SOU166_TEST_AGENTFW", kwargs["env"])
+                kwargs["log"].write_text("")
+            builder.return_value.bounded_cargo.side_effect = inspect
+            result = B.cargo(["clippy", "--locked", "--offline", "-p", "agentfw",
+                              "--all-targets", "--", "-D", "warnings"], output)
+            self.assertEqual(result["outcome"], "source_clippy")
+
+    def test_only_complete_quiet_source_router_gets_finite_extra_journal(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(B, "source_builder") as builder, \
+                patch.dict(os.environ, {"SOU166_MODE": "source", "CARGO_TARGET_DIR": temporary + "/target"}):
+            builder.return_value.native.MAX_LOG = 1024
+            def inspect(_command, **kwargs):
+                self.assertEqual(kwargs["log_limit"], 2048)
+                kwargs["log"].write_text("test result: ok. 1 passed; 0 failed; 0 ignored;\n")
+            builder.return_value.bounded_cargo.side_effect = inspect
+            record = B.cargo(["test", "--locked", "--offline", "-p", "agentfw", "--test",
+                              "native_endpoint", "--", "--quiet"], Path(temporary) / "router.json")
+            self.assertEqual(record["outcome"], "full_local_build")
 
 
 if __name__ == "__main__":

@@ -652,7 +652,7 @@ fn verify_identity(file: &InputFile, before: &Snapshot) -> R<IdentityCheck> {
             per_tool: true,
         })
     } else if !object.contains_key("format") {
-        let expected: BTreeSet<&str> = [
+        let mut expected: BTreeSet<&str> = [
             "package",
             "version",
             "sdk",
@@ -665,13 +665,17 @@ fn verify_identity(file: &InputFile, before: &Snapshot) -> R<IdentityCheck> {
             "files",
         ]
         .into();
+        let has_runtime_license_provenance = object.contains_key("runtime_license_provenance");
+        if has_runtime_license_provenance {
+            expected.insert("runtime_license_provenance");
+        }
         if keys != expected {
             return refuse("invalid_identity", "unsupported identity document");
         }
         let Some(files) = value["files"].as_object() else {
             return refuse("identity_incomplete", "identity files missing");
         };
-        if files.len() > MAX_REFERENCED_FILES {
+        if files.len() + usize::from(has_runtime_license_provenance) > MAX_REFERENCED_FILES {
             return refuse("invalid_identity", "too many referenced files");
         }
         let Some(snapshot_digest) = files
@@ -707,6 +711,27 @@ fn verify_identity(file: &InputFile, before: &Snapshot) -> R<IdentityCheck> {
             } else {
                 referenced.push(verify_referenced(dir, name, digest)?);
             }
+        }
+        if has_runtime_license_provenance {
+            let Some(reference) = value["runtime_license_provenance"]
+                .as_object()
+                .filter(|entry| {
+                    entry.len() == 2
+                        && ["path", "sha256"]
+                            .iter()
+                            .all(|key| entry.get(*key).is_some_and(Value::is_string))
+                })
+            else {
+                return refuse(
+                    "identity_incomplete",
+                    "runtime license provenance entry incomplete",
+                );
+            };
+            referenced.push(verify_referenced(
+                dir,
+                reference["path"].as_str().unwrap(),
+                reference["sha256"].as_str().unwrap(),
+            )?);
         }
         Ok(IdentityCheck {
             file: FileIdentity::of(file),

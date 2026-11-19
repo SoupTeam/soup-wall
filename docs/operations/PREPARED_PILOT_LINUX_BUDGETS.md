@@ -193,7 +193,7 @@ Keep previous red attempts and qualify the corrected source independently.
 
 The pressure phase prepares a fresh owned Git fixture with a real HEAD and
 30,000 identical small files in a supported eight-level index directory. This
-keeps normal status output small while exercising Git 2.51.2's own ordinary
+keeps normal status output small while exercising Git 2.51.3's own ordinary
 index-preload threads; it adds no worker executable, environment test switch,
 server patch or Git config setting. The existing eight MCP proposals and all
 resource limits remain unchanged. The memory case changes a genuinely tracked

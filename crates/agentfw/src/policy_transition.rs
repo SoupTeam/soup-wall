@@ -35,10 +35,14 @@ impl Drop for Boundary {
 }
 
 impl Barrier {
-    pub fn new(home: &Path) -> anyhow::Result<Self> {
-        let barrier = Self {
+    /// Construct a path without creating state, for non-mutating connection probes.
+    pub(crate) fn for_home(home: &Path) -> Self {
+        Self {
             path: home.join("managed-native-boundary.lock"),
-        };
+        }
+    }
+    pub fn new(home: &Path) -> anyhow::Result<Self> {
+        let barrier = Self::for_home(home);
         drop(barrier.open()?);
         Ok(barrier)
     }

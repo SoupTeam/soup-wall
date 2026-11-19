@@ -1,0 +1,468 @@
+{
+  "format": "sw-installed-front-door-qualification/1",
+  "status": "passed",
+  "cases": [
+    {
+      "case": "component-install",
+      "passed": true,
+      "component": "46f0d826b8f1cb014bf0ae4ab90bbef938886f2f1e3f218ea68f9ae96a363161",
+      "python": {
+        "path": "/usr/bin/python3.12",
+        "sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+        "version": "3.12.3"
+      },
+      "files": 91
+    },
+    {
+      "case": "preview-zero-effect",
+      "passed": true,
+      "selected_started": 0,
+      "inet_connects": 0,
+      "programs": [
+        "agentfw",
+        "python3.12"
+      ]
+    },
+    {
+      "case": "prepare-and-reuse",
+      "passed": true,
+      "first": "prepared-not-active",
+      "second": "reused"
+    },
+    {
+      "case": "private-export-consent",
+      "passed": true
+    },
+    {
+      "case": "declarative-export",
+      "passed": true
+    },
+    {
+      "case": "fresh-home-explicit-provider-inputs",
+      "passed": true
+    },
+    {
+      "case": "unresolved-preview-inert",
+      "passed": true
+    },
+    {
+      "case": "stale-plan-refused",
+      "passed": true
+    },
+    {
+      "case": "tampered-archive-refused",
+      "passed": true
+    },
+    {
+      "case": "changed-destination-catalog-refused",
+      "passed": true
+    },
+    {
+      "case": "two-record-atomic-import",
+      "passed": true
+    },
+    {
+      "case": "duplicate-import-explicit",
+      "passed": true
+    },
+    {
+      "case": "native-interruption-recovery",
+      "passed": true
+    },
+    {
+      "case": "source-sibling-state-preserved",
+      "passed": true
+    },
+    {
+      "case": "two-explicit-presets",
+      "passed": true
+    },
+    {
+      "case": "inert-check",
+      "passed": true
+    },
+    {
+      "case": "stale-workspace",
+      "passed": true
+    },
+    {
+      "case": "changed-selection",
+      "passed": true
+    },
+    {
+      "case": "changed-profile",
+      "passed": true
+    },
+    {
+      "case": "changed-budget",
+      "passed": true
+    },
+    {
+      "case": "changed-last-input",
+      "passed": true
+    },
+    {
+      "case": "budget-no-fallback",
+      "passed": true
+    },
+    {
+      "case": "provider-rotation",
+      "passed": true
+    },
+    {
+      "case": "stale-update",
+      "passed": true
+    },
+    {
+      "case": "damaged-store",
+      "passed": true
+    },
+    {
+      "case": "concurrent-update",
+      "passed": true
+    },
+    {
+      "case": "two-protected-reads",
+      "passed": true
+    },
+    {
+      "case": "cross-project-authority",
+      "passed": true
+    },
+    {
+      "case": "frozen-running-settings",
+      "passed": true
+    },
+    {
+      "case": "stop-one-sibling-continues",
+      "passed": true
+    },
+    {
+      "case": "private-catalog",
+      "passed": true
+    },
+    {
+      "case": "owned-cleanup",
+      "passed": true
+    }
+  ],
+  "skipped": 0,
+  "provider": "owned-scripted-loopback",
+  "live_model_effectiveness": "not_tested",
+  "platform": {
+    "kernel": "7.0.0-1017-azure",
+    "kind": "linux"
+  },
+  "inputs_sha256": {
+    "git": "791c696929a01e754fbefbdc33a4386fe5c91aad43013ae23769b957c557a429",
+    "bwrap": "4e61d5c0c696b8bd19c4d0e743c351b8ba5fa41429d1102b8d65de2636316953",
+    "agentfw": "589ece128ee758287698cb89e8ed8de95981ac48044aa0ce5861357e0acb9b53",
+    "git_launcher": "a8f8b4d4cf2b434747cd5fcce270fc68054632558315000330f9583ba75e38fc",
+    "sandbox_tests": "500a20b676c688120524a85cb9511066845a5ce2e6739c1b93a480ff2d451406",
+    "node_archive": "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f"
+  },
+  "component_python_sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+  "source_before": {
+    "commit": "9d8a5fcf524c1cb57f1d05328e4005845b8a139a",
+    "tree": "af2f98916d54063634217784baa4a65e1a9445cb",
+    "dirty": false
+  },
+  "component": {
+    "component": "46f0d826b8f1cb014bf0ae4ab90bbef938886f2f1e3f218ea68f9ae96a363161",
+    "archive_sha256": "bd7d6a4c7dc585fe8efa8397d5bb5196aaa4dad16a5bfb5a060df9400ac4ee13",
+    "files": 91,
+    "commit": "9d8a5fcf524c1cb57f1d05328e4005845b8a139a"
+  },
+  "project_before_sha256": {
+    "project": "626bdc96eaa8095d50711e871804a4273c2c86f2cd9d0ed563a44c1b23c16f22",
+    "repository": "44f59ca96ce32d96b62705139e51371bc34b729a10e51737ec42b26997b5a32b",
+    "home": "3ca35a2ec4594c3cc30d94ca1870ca29df395f889195c9b1a781c40b57d987c9"
+  },
+  "selection_sha256": "b193e901566b9dc15811a317cc5efe2fcefe9f1a7a32a085638b1a48edf67434",
+  "project_presets": {
+    "format": "sw-installed-project-presets-qualification/1",
+    "status": "passed",
+    "source": {
+      "commit": "9d8a5fcf524c1cb57f1d05328e4005845b8a139a",
+      "tree": "af2f98916d54063634217784baa4a65e1a9445cb",
+      "dirty": false
+    },
+    "expected": [
+      "two-explicit-presets",
+      "inert-check",
+      "stale-workspace",
+      "changed-selection",
+      "changed-profile",
+      "changed-budget",
+      "changed-last-input",
+      "budget-no-fallback",
+      "provider-rotation",
+      "stale-update",
+      "damaged-store",
+      "concurrent-update",
+      "two-protected-reads",
+      "cross-project-authority",
+      "frozen-running-settings",
+      "stop-one-sibling-continues",
+      "private-catalog",
+      "owned-cleanup"
+    ],
+    "cases": [
+      {
+        "id": "two-explicit-presets",
+        "status": "passed",
+        "attempted": true
+      },
+      {
+        "id": "inert-check",
+        "status": "passed",
+        "attempted": true,
+        "selected_started": 0,
+        "network_connections": 0
+      },
+      {
+        "id": "stale-workspace",
+        "status": "passed",
+        "attempted": true
+      },
+      {
+        "id": "changed-selection",
+        "status": "passed",
+        "attempted": true
+      },
+      {
+        "id": "changed-profile",
+        "status": "passed",
+        "attempted": true
+      },
+      {
+        "id": "changed-budget",
+        "status": "passed",
+        "attempted": true
+      },
+      {
+        "id": "changed-last-input",
+        "status": "passed",
+        "attempted": true,
+        "selected_started": 0
+      },
+      {
+        "id": "budget-no-fallback",
+        "status": "passed",
+        "attempted": true,
+        "host_started": false
+      },
+      {
+        "id": "provider-rotation",
+        "status": "passed",
+        "attempted": true
+      },
+      {
+        "id": "stale-update",
+        "status": "passed",
+        "attempted": true
+      },
+      {
+        "id": "damaged-store",
+        "status": "passed",
+        "attempted": true
+      },
+      {
+        "id": "concurrent-update",
+        "status": "passed",
+        "attempted": true,
+        "one_writer": true
+      },
+      {
+        "id": "two-protected-reads",
+        "status": "passed",
+        "attempted": true,
+        "independent_readback": true
+      },
+      {
+        "id": "cross-project-authority",
+        "status": "passed",
+        "attempted": true,
+        "independent_native_receivers": true,
+        "cross_authority_refused": true
+      },
+      {
+        "id": "frozen-running-settings",
+        "status": "passed",
+        "attempted": true
+      },
+      {
+        "id": "stop-one-sibling-continues",
+        "status": "passed",
+        "attempted": true,
+        "later_readback": true
+      },
+      {
+        "id": "private-catalog",
+        "status": "passed",
+        "attempted": true,
+        "credential_exec_witness": true
+      },
+      {
+        "id": "owned-cleanup",
+        "status": "passed",
+        "attempted": true,
+        "all_stopped": true,
+        "sources_preserved": true,
+        "receiver_effects": 0
+      }
+    ],
+    "active_case": "owned-cleanup",
+    "last_cli": {
+      "action": "remove",
+      "exit": 0,
+      "expected_exit": 0,
+      "reason": null
+    },
+    "source_after": {
+      "commit": "9d8a5fcf524c1cb57f1d05328e4005845b8a139a",
+      "tree": "af2f98916d54063634217784baa4a65e1a9445cb",
+      "dirty": false
+    }
+  },
+  "project_recovery": {
+    "format": "sw-installed-project-recovery-qualification/1",
+    "status": "passed",
+    "source": {
+      "commit": "9d8a5fcf524c1cb57f1d05328e4005845b8a139a",
+      "tree": "af2f98916d54063634217784baa4a65e1a9445cb",
+      "dirty": false
+    },
+    "expected": [
+      "private-export-consent",
+      "declarative-export",
+      "fresh-home-explicit-provider-inputs",
+      "unresolved-preview-inert",
+      "stale-plan-refused",
+      "tampered-archive-refused",
+      "changed-destination-catalog-refused",
+      "two-record-atomic-import",
+      "duplicate-import-explicit",
+      "native-interruption-recovery",
+      "source-sibling-state-preserved"
+    ],
+    "cases": [
+      {
+        "id": "private-export-consent",
+        "status": "passed",
+        "attempted": true,
+        "published_archives": 0
+      },
+      {
+        "id": "declarative-export",
+        "status": "passed",
+        "attempted": true,
+        "records": 2,
+        "authority_or_credentials": false
+      },
+      {
+        "id": "fresh-home-explicit-provider-inputs",
+        "status": "passed",
+        "attempted": true,
+        "supplied_separately": true
+      },
+      {
+        "id": "unresolved-preview-inert",
+        "status": "passed",
+        "attempted": true,
+        "selected_started": 0,
+        "network_connections": 0,
+        "home_unchanged": true
+      },
+      {
+        "id": "stale-plan-refused",
+        "status": "passed",
+        "attempted": true,
+        "catalog_created": false
+      },
+      {
+        "id": "tampered-archive-refused",
+        "status": "passed",
+        "attempted": true,
+        "catalog_created": false
+      },
+      {
+        "id": "changed-destination-catalog-refused",
+        "status": "passed",
+        "attempted": true,
+        "existing_entry_preserved": true
+      },
+      {
+        "id": "two-record-atomic-import",
+        "status": "passed",
+        "attempted": true,
+        "records": 2,
+        "fresh_versions": true,
+        "existing_entry_preserved": true
+      },
+      {
+        "id": "duplicate-import-explicit",
+        "status": "passed",
+        "attempted": true,
+        "records_overwritten": 0
+      },
+      {
+        "id": "native-interruption-recovery",
+        "status": "passed",
+        "attempted": true,
+        "initial_exit": -9,
+        "initial_status": "terminated_after_staged_fsync_before_publication",
+        "recovered": true,
+        "owned_processes_stopped": true,
+        "stage_fsynced": true,
+        "trace_sha256": "e859b0ae66b6ab10306f92bfc96504b0ebc8475339f634bf34a6340c4dbdf29b"
+      },
+      {
+        "id": "source-sibling-state-preserved",
+        "status": "passed",
+        "attempted": true,
+        "source_catalog_unchanged": true,
+        "sibling_unchanged": true,
+        "authority_restored": false
+      }
+    ],
+    "authority_restored": false,
+    "active_case": "source-sibling-state-preserved",
+    "last_cli": {
+      "action": "check",
+      "exit": 0,
+      "expected_exit": 0,
+      "status": "configured-not-running"
+    },
+    "interruption_witness": {
+      "phase": "terminated_before_publication",
+      "stage_fsynced": true,
+      "publication_observed": false,
+      "syscall_filter_requested": true,
+      "initial_exit": -9,
+      "elapsed_ms": 50280,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "trace_bytes": 1638,
+      "trace_sha256": "e859b0ae66b6ab10306f92bfc96504b0ebc8475339f634bf34a6340c4dbdf29b",
+      "observed_fsync_calls": 2,
+      "stage_present": true,
+      "catalog_present": false,
+      "observed_exec_calls": 2,
+      "observed_rename_calls": 0,
+      "owned_processes_stopped": true
+    },
+    "source_after": {
+      "commit": "9d8a5fcf524c1cb57f1d05328e4005845b8a139a",
+      "tree": "af2f98916d54063634217784baa4a65e1a9445cb",
+      "dirty": false
+    }
+  },
+  "source_after": {
+    "commit": "9d8a5fcf524c1cb57f1d05328e4005845b8a139a",
+    "tree": "af2f98916d54063634217784baa4a65e1a9445cb",
+    "dirty": false
+  }
+}

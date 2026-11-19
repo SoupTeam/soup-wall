@@ -263,6 +263,7 @@ fn status(args: diagnostic::Args) -> Result<()> {
             scope: "selected_edit_session_read_only_diagnosis",
             checks: vec![],
             pilot: None,
+            lifecycle: None,
         };
         crate::support_bundle::export_edit(&wrapper, Some(&report), destination)
             .map_err(|_| anyhow::anyhow!("edit_status_support_export_failed"))?;

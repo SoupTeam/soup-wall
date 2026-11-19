@@ -67,7 +67,7 @@ Admin routes (existing `x-llm-firewall-admin-token: Bearer …` header, **Owner*
 | POST | `/{agent}/revoke` | revoke Agent credential |
 | POST | `/{agent}/revisions` | create `{"revision":"v1","policy_yaml":"default: deny\n"}` |
 | POST | `/{agent}/revisions/{revision}/approve` | explicitly approve immutable revision |
-| POST | `/{agent}/revisions/{revision}/deploy` | `{"rollback":false}` or `{"rollback":true}` |
+| POST | `/{agent}/revisions/{revision}/deploy` | `{"rollback":false}` or `{"rollback":true}`; optional `Idempotency-Key` header makes a retry safe ([below](#retrying-an-individual-deployment-sou-219)) |
 | GET | `/{agent}/deployments` | current and previous issued/delivered/applied/rejected deployments |
 
 Agent routes with **its own** `Authorization: Bearer sw_agent_…`:
@@ -117,13 +117,62 @@ Keyring properties and guarantees:
 
 ## Failure semantics and outstanding review boundaries
 
-- **Replayed, cross-tenant/Agent, modified, expired, unknown/revoked-key or invalid YAML**: reject before activation and attempt an authenticated `rejected` acknowledgement; preserve the last active policy.
+- **Replayed, cross-tenant/Agent, modified, expired, unknown/revoked-key or invalid YAML**: reject before activation and attempt an authenticated `rejected` acknowledgement with a finite reason code ([Agent policy rejections](AGENT_POLICY_REJECTIONS.md)); preserve the last active policy.
 - **Console offline/unavailable**: retain the last accepted active policy, expose transport status separately, and retry. If an `applied` ack failed, the same signed pending deployment can be acknowledged again *without* a second application.
 - **Rollback**: issue a **new** higher-sequence signed deployment of a previously approved payload; do not replay an old signed bundle.
 - **Revoked enrollment**: server refuses all future fetches and acknowledgements using the old Agent token. Already active policy is not remotely erased.
 - **Key rotation and revocation**: online zero-downtime rotation and revocation are supported via dynamic local keyring reloading (`trusted-issuers.json`). Public key material is never trusted from incoming bundles; private seeds never leave operator environment variables.
 - **Approval-grant boundary**: pending files are removed and a durable policy epoch is advanced under a cross-process OS file lock shared with CLI issuance and authoritative ledger redemption. A grant carries its signed epoch, so an already-loaded stale grant must fail even when its file was deleted. The hook also rechecks the running deployment after asynchronous judging and refuses a pre-tool decision that spans activation. These changes address the P2 review witness but still require completed exact-head CI and independent concurrency/security review before merge.
 - **Trust limits**: an authenticated Agent `applied` assertion is an observation of this software process, **not hardware remote attestation**. Local file/OS compromise is outside the bounded slice.
+
+## Retrying an individual deployment (SOU-219)
+
+`POST .../revisions/{revision}/deploy` accepts an optional `Idempotency-Key` header: 8 to 128
+characters from `A-Z a-z 0-9 _ - . :`. A malformed, empty or repeated header is rejected with HTTP 400
+before anything is read or written. Without the header nothing changes: the call is keyless, always
+issues a new sequence and its response has no `idempotency` object.
+
+With the header, the key is stored in the same transaction as the issuance, so a committed
+issuance always has its key and a failure before commit leaves neither (the next call with the same
+key simply issues). The key belongs to one tenant and Agent and is bound to the authenticated
+administrator and the canonical intent: revision, its approved policy digest, rollback or activate,
+and the `issuer_key_id` exactly as requested (omitted is not the same as naming the default signer).
+
+| Retry of the same key | Result |
+| --- | --- |
+| Same administrator and intent | HTTP 201, the original deployment: same sequence, `issued_at_unix`, signed envelope and expiry; `idempotency.replayed` is `true` |
+| Other revision, rollback flag, requested signer or **other administrator** | HTTP 409, nothing issued, nothing from the original is returned |
+| Other tenant or Agent with the same text | A different key: it neither replays nor reveals the first one |
+| Revoked or unknown administrator, insufficient role | HTTP 401/403 before any stored result is read |
+| Agent revoked, tenant inactive, revision unknown | HTTP 400; a stored result is not an authority |
+
+A replay never signs, numbers, delivers or acknowledges anything, so it cannot renew the one-hour expiry
+(an expired issuance is returned as it was, with its original `expires_at_unix`), cannot make an older
+sequence deliverable again once a newer one exists, and cannot lower the Agent's high-water mark. It
+reports the deployment's current status (`applied` stays `applied`). A replay needs no signing seed;
+issuing a new key's deployment does. Keys are kept with the deployment row.
+
+```bash
+KEY=$(python3 -c 'import uuid; print(uuid.uuid4())')
+deploy() {
+  curl -sS -X POST -H "x-llm-firewall-admin-token: Bearer $ADMIN" -H "Idempotency-Key: $KEY" \
+    -H 'content-type: application/json' -d '{"rollback":false}' \
+    "$CONSOLE/admin/v1/tenants/acme/agents/laptop-7/revisions/v2/deploy"
+}
+deploy   # response lost (timeout, reset) - the Console may or may not have committed
+deploy   # same key: returns the original sequence, never a second one
+# {"deployment_sequence":4, ..., "idempotency":{"key":"...","replayed":true,"envelope_sha256":"...", ...}}
+```
+
+PostgreSQL migration 29 adds `managed_agent_deployment_keys`; SQLite creates it on first use. The group
+rollout engine does not use these keys.
+
+Controls (`crates/proxy/tests/managed_deployment_idempotency.rs`) drive a real TCP listener: lost
+response on a raw socket, 16 parallel callers, crash/restart after commit, an injected failure on the
+key insert, conflicts, expiry, authorization changes and a historical retry. Rows, keys and sequences
+are counted by direct database queries and deliveries through the Agent endpoint. PostgreSQL runs the
+same controls when `SOUP_DEPLOY_TEST_POSTGRES_URL` names a disposable database (the
+`managed-group-rollout.yml` service is used in CI).
 
 ## PostgreSQL managed enrollment and rollout (SOU-42)
 
@@ -148,9 +197,10 @@ Fetching a pending deployment again returns the identical signed bundle. An
 exact retry of the latest terminal acknowledgement returns HTTP 204 without
 changing its timestamp. Mismatched hashes/revisions, superseded sequences and
 conflicting terminal statuses return HTTP 409. A rejected deployment remains
-terminal. These retry semantics apply to SQLite too. An explicit deployment POST
-still issues a new sequence: the existing API has no deployment idempotency key,
-so clients must inspect deployment inventory after an ambiguous POST outcome.
+terminal. These retry semantics apply to SQLite too. A deployment POST **without**
+an `Idempotency-Key` still issues a new sequence every time, so a client that lost
+such a response must inspect deployment inventory before trying again. Sending the
+key makes the retry safe; see the next section.
 
 The separate Linux/Docker witness uses a pinned disposable PostgreSQL container
 with verified TLS, the actual Console, and the unchanged `agentfw serve` process
@@ -215,8 +265,10 @@ Enrollment and past acknowledgements never prove current liveness, active
 protection, model consumption or registry identity. Those runtime facts remain
 `unknown` (registry identity is `null`). Refresh rereads stored records; it does
 not obtain live Agent telemetry. No new Agent-to-Console protocol is introduced.
-The store has issued and reported-applied timestamps, but no distinct delivery
-or rejection timestamp; these missing dates remain `null`, not the issue time.
+The store has issued and reported-applied timestamps and, since SOU-241, the
+Console receipt time and finite reason of the first authenticated rejection
+([Agent policy rejections](AGENT_POLICY_REJECTIONS.md)). There is no distinct
+delivery timestamp; missing dates remain `null`, not the issue time.
 
 ### Fleet read API
 

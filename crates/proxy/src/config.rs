@@ -115,6 +115,8 @@ pub struct Config {
     #[serde(default)]
     pub tenant_store: TenantStoreConfig,
     #[serde(default)]
+    pub rollout_reconciliation: crate::rollout_reconciliation::ReconciliationConfig,
+    #[serde(default)]
     pub redis_limits: RedisLimitsConfig,
     #[serde(default)]
     pub capability_policy: crate::capability::CapabilityPolicy,

@@ -23,6 +23,12 @@ import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pilot_project_fixtures import PROJECTS, create_files, identity as project_identity
+from pilot_git_outcomes import collect as git_outcomes
+from pilot_git_outcomes import negative_results
+from pilot_git_outcomes import negative_calls
+from pilot_git_outcomes import call_bindings, operation_indices
+from pilot_git_outcomes import failure_boundaries
+from pilot_git_outcomes import persist as persist_outcomes
 import pilot_runtime_identity as IDENTITY
 
 sys.dont_write_bytecode = True
@@ -61,7 +67,7 @@ def digest(value):
     return BASE.hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
-def run_host(args, selection_path, paths, private, case, marker, receiver, sentinel, identity_report=None):
+def run_host(args, selection_path, paths, private, case, marker, receiver, sentinel, negative_tree=None, identity_report=None):
     root = private / case; root.mkdir(mode=0o700)
     state = root / "state"; state.mkdir(mode=0o700)
     model = BASE.DEMO.ScriptedModel([])
@@ -80,6 +86,13 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
     if fixture is not None:
         steps += [("filesystem", "read_text_file", {"path": "/workspace/" + fixture["read_path"]}),
                   ("git", "git_log", {"repo_path": "/workspace", "max_count": 2})]
+    original_step_count = len(steps)
+    negative_indices = ()
+    controls = []
+    if not hold and getattr(args, "git_negative_controls", False):
+        controls = negative_calls(negative_tree)
+        negative_indices = tuple(range(len(steps), len(steps) + len(controls)))
+        steps += [row[1:] for row in controls]
     offered = set()
     def next_step(body):
         names = {tool.get("name") for tool in body.get("tools", [])}
@@ -135,10 +148,6 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
                         signal.SIGTERM if case == "cancel" else signal.SIGKILL)
             process.wait(timeout=120)
         outcome = json.loads((root / "out.private").read_text().splitlines()[-1])
-        require((process.returncode == 0) == (not hold), "existing_run_outcome_mismatch")
-        if hold:
-            require(outcome.get("reason") == ("pilot_cancelled" if case == "cancel" else "owned_daemon_lost"),
-                    "existing_lifecycle_wrong_failure")
         cleanup = witness.finish()
         require(cleanup["all_stopped"] and outcome["cleanup"] == "owned_processes_stopped_audit_retained"
                 and len(list(state.iterdir())) == 1, "existing_owned_state_survived")
@@ -153,15 +162,56 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
         result = {"case": case, "status": "passed", "cleanup": outcome["cleanup"],
             "process_cleanup": cleanup, "native_instance": outcome["identity"]["native_instance"],
             "trace_sha256": BASE.sha(trace), "outside_reads": 0, "forbidden_network_deliveries": 0}
+        observed_rows = git_outcomes(
+            '\n'.join(rows), pids=LAUNCH.collector_processes(rows, paths["agentfw"]))
+        result["boundary_observations"] = persist_outcomes(observed_rows, args.output, case, RUN.PREP.write_json)
+        result["host_succeeded"] = process.returncode == 0
+        observation = {"calls": [], "collector_servers": {}}
+        observer_complete = True
+        if not hold:
+            try:
+                observation = LAUNCH.collector_dispatches(raw, paths["agentfw"], strict=False)
+            except (ValueError, KeyError):
+                observer_complete = False
+        result["dispatch_observer_complete"] = observer_complete
+        result["forbidden_original_dispatches"] = sum(
+            call["tool"] in {"git_reset", "write_file", "Bash"} for call in observation["calls"]) if observer_complete else None
         result["operations"] = [{"index": i, "server": server, "tool": tool,
+            "boundary_observation_indices": operation_indices(observed_rows, observation["calls"],
+                observation["collector_servers"], server, tool, arguments),
             "result_present": f"toolu_existing_{i}" in model.results,
             "is_error": model.results.get(f"toolu_existing_{i}", {}).get("is_error"),
             "result_sha256": digest(model.results.get(f"toolu_existing_{i}")),
             "native_codes": sorted(set(re.findall(r"native_[a-z_]{1,64}",
                 json.dumps(model.results.get(f"toolu_existing_{i}")))))[:16]}
-            for i, (server, tool, _) in enumerate(steps)]
+            for i, (server, tool, arguments) in enumerate(steps[:original_step_count])]
+        for operation in result["operations"]:
+            operation["failure_boundaries"] = failure_boundaries(
+                [observed_rows[index] for index in operation["boundary_observation_indices"]])
+        result["additional_negative_controls"] = negative_results(model.results, negative_indices)
+        for control, index, negative in zip(controls, negative_indices, result["additional_negative_controls"]):
+            server, tool, arguments = steps[index]
+            negative["kind"] = control[0]
+            negative["original_dispatched"] = bool(call_bindings(
+                observation["calls"], observation["collector_servers"], server, tool, arguments)) if observer_complete else None
+            negative["boundary_observation_indices"] = operation_indices(observed_rows, observation["calls"],
+                observation["collector_servers"], server, tool, arguments)
+            negative["failure_boundaries"] = failure_boundaries(
+                [observed_rows[i] for i in negative["boundary_observation_indices"]])
         try:
+            require((process.returncode == 0) == (not hold), "existing_run_outcome_mismatch")
+            if hold:
+                require(outcome.get("reason") == ("pilot_cancelled" if case == "cancel" else "owned_daemon_lost"),
+                        "existing_lifecycle_wrong_failure")
+            require(observer_complete, "original_dispatch_observer_incomplete")
             if not hold:
+                require(result["forbidden_original_dispatches"] == 0, "forbidden_original_dispatch")
+                require(all(row["passed"] for row in result["additional_negative_controls"]),
+                        "git_negative_control_not_refused")
+                require(all(row["original_dispatched"] is False
+                            for row in result["additional_negative_controls"]
+                            if row["kind"] in ("unsupported_git_expression", "unsupported_git_path")),
+                        "unsupported_git_revision_dispatched")
                 require(len(model.results) == len(steps), "existing_correlated_results_missing")
                 for index in (0, 1, 2, 3, 9):
                     require(model.results[f"toolu_existing_{index}"]["is_error"] is False, "useful_original_result_failed")
@@ -183,9 +233,6 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
                             "ordinary_project_bytes_missing")
                     require(all(message in json.dumps(model.results["toolu_existing_11"]["content"])
                                 for message in fixture["history_messages"]), "ordinary_local_history_missing")
-                observation = LAUNCH.collector_dispatches(raw, paths["agentfw"], strict=False)
-                forbidden = {"git_reset", "write_file", "Bash"}
-                require(not any(call["tool"] in forbidden for call in observation["calls"]), "forbidden_original_dispatch")
                 require(PREPARED.ASK.SELECTED.trace_effects(trace, "filesystem") == 1, "original_read_effect_missing")
                 git_execs = [row for row in rows if 'execve("/mcp-runtime/git",' in row and row.endswith(" = 0")]
                 require(any('"status"' in row for row in git_execs)
@@ -276,6 +323,12 @@ def qualify(args, private, report):
             for words in (("-C", str(git), "add", "docs/history.md", "tracked.txt"),
                           ("-C", str(git), "commit", "-qm", "Owned documentation revision")):
                 subprocess.run([str(paths["git"]), *words], env=env, check=True, capture_output=True, timeout=15)
+        negative_tree = None
+        if getattr(args, "git_negative_controls", False):
+            negative_tree = subprocess.check_output([str(paths["git"]), "-C", str(git),
+                "rev-parse", "HEAD^{tree}"], env=env, timeout=15).decode().strip()
+            require(re.fullmatch("[0-9a-f]{40}", negative_tree), "negative_git_tree_unavailable")
+            report["negative_git_tree_oid_sha256"] = digest(negative_tree)
         (git / "tracked.txt").write_text("Owned operator Git edit v1\n")
         (git / "preserved-untracked.txt").write_text("Preserve this untracked user file\n")
         for project in (fs, git):
@@ -350,7 +403,7 @@ def qualify(args, private, report):
             current = {"filesystem": snapshot(fs), "git": snapshot(git)}
             report["active_case"] = case
             try:
-                result = run_host(args, selection_path, paths, private, case, marker, receiver, sentinel, report)
+                result = run_host(args, selection_path, paths, private, case, marker, receiver, sentinel, negative_tree=negative_tree, identity_report=report)
             except ProjectCaseFailure as error:
                 result = error.evidence
                 require(result["process_cleanup"]["all_stopped"] and not result["process_cleanup"]["remaining"],
@@ -383,6 +436,8 @@ def qualify(args, private, report):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--offline-inputs", type=Path, help="Pinned offline installer inputs; no runtime downloads")
+    parser.add_argument("--git-negative-controls", action="store_true",
+                        help="Append separately reported missing-resource and unsupported-object requests")
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--strace", type=Path, required=True)
@@ -406,7 +461,7 @@ def main():
         frame = traceback.extract_tb(error.__traceback__)[-1]
         report.update(status="failed", failures=1, reason=value if re.fullmatch(r"[a-z0-9_]{1,100}", value)
                       else "qualification_failure", failure_location={"function": frame.name, "line": frame.lineno})
-    RUN.PREP.write_json(args.output / "report.json", report)
+    RUN.PREP.write_json(args.output / "report.json", report, compact=True)
     print(json.dumps(report, sort_keys=True))
     return 0 if report["status"] == "passed" else 1
 

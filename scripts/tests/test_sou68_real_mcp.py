@@ -235,5 +235,74 @@ class ProtectedDiagnostics(unittest.TestCase):
             self.assertEqual(summary["events"][0]["host_call_id"], 24)
 
 
+
+class LegacyClassifierSelection(unittest.TestCase):
+    def test_startup_refusals_preserve_default_and_explicit_classifier(self):
+        from types import SimpleNamespace
+        for selected in (None, {"path": "/selected/candidate.py"}):
+            with self.subTest(selected=selected), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                install, workspace = root / "install", root / "workspace"
+                install.mkdir()
+                (workspace / ".git/objects/info").mkdir(parents=True)
+                (workspace / ".git/config").write_bytes(b"")
+                (install / "profile.json").write_text(json.dumps({"runtimePath": "/python"}))
+                stack = SimpleNamespace(root=root, install=install, workspace=workspace,
+                                        binary=Path("/agentfw"), env={"PATH": "/usr/bin"})
+                if selected is not None:
+                    stack.classifier = selected
+                result = SimpleNamespace(returncode=1, stderr=b"expected startup refusal")
+                with patch.object(VERIFY.subprocess, "run", return_value=result) as run:
+                    report = {}
+                    VERIFY.startup_refusals(stack, report)
+                expected = selected["path"] if selected else str(VERIFY.DEFAULT_CLASSIFIER)
+                self.assertEqual(len(report["startup_refusals"]), 12)
+                self.assertTrue(all(call.kwargs["env"]["AGENTFW_RULE_BASELINE"] == expected
+                                    for call in run.call_args_list))
+                self.assertFalse(hasattr(stack, "classifier") and selected is None)
+
+    def test_protected_legacy_entry_selects_classifier_before_server_launch(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+        class EnvironmentCaptured(Exception):
+            pass
+        for selected in (None, {"path": "/selected/candidate.py"}):
+            with self.subTest(selected=selected), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                workspace = root / "workspace"
+                (workspace / ".git").mkdir(parents=True)
+                index = workspace / ".git/index"
+                index.write_bytes(b"before")
+                stack = SimpleNamespace(root=root, install=root / "install", workspace=workspace,
+                                        binary=Path("/agentfw"), git=Path("/git"), poison="poison", env={})
+                if selected is not None:
+                    stack.classifier = selected
+                original = MagicMock()
+                def exchange(frame):
+                    if frame["id"] == 90:
+                        index.write_bytes(b"mutated")
+                        content = "original mutation"
+                    elif frame["id"] == 8:
+                        content = VERIFY.INJECTION
+                    else:
+                        content = next(fragment for tool, _, fragment in VERIFY.READS
+                                       if tool == frame["params"]["name"])
+                    return {"result": {"content": [{"type": "text", "text": content}]}}, b"original"
+                original.exchange.side_effect = exchange
+                captured = {}
+                def client(command, env, *args):
+                    if "--native-admission" in command:
+                        captured.update(env)
+                        raise EnvironmentCaptured
+                    return original
+                witness = MagicMock()
+                witness.drain.return_value = 1
+                with patch.object(VERIFY, "Client", side_effect=client),                      patch.object(VERIFY.subprocess, "run"),                      patch.object(VERIFY.BASE, "snapshot", return_value={}):
+                    with self.assertRaises(EnvironmentCaptured):
+                        VERIFY.protected(stack, {}, witness_type=lambda _: witness)
+                expected = selected["path"] if selected else str(VERIFY.DEFAULT_CLASSIFIER)
+                self.assertEqual(captured["AGENTFW_RULE_BASELINE"], expected)
+
+
 if __name__ == "__main__":
     unittest.main()

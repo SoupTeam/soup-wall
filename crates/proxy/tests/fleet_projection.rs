@@ -298,9 +298,14 @@ fn fleet_sequence_serialization_is_exact_beyond_javascript_integer_range() {
         reported_applied_at_unix: None,
         delivered_at_unix: None,
         rejected_at_unix: None,
+        rejection_code: None,
+        rejection_reason_version: None,
     };
     let value = serde_json::to_value(record).unwrap();
     assert_eq!(value["sequence"], "9007199254740993");
     assert!(value["delivered_at_unix"].is_null());
     assert!(value["rejected_at_unix"].is_null());
+    // SOU-241: reason fields are additive and absent unless recorded.
+    assert!(value.get("rejection_code").is_none());
+    assert!(value.get("rejection_reason_version").is_none());
 }

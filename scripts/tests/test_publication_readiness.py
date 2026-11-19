@@ -19,6 +19,8 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 import publication_readiness as p
+import candidate_fixture
+import pilot_candidate
 import pilot_dossier as d
 import roadmap_support as support
 import test_pilot_runtime_identity as scoped_fixture
@@ -62,7 +64,11 @@ class PublicationReadinessTests(unittest.TestCase):
         name = "soup-wall-" + self.tag + "-x86_64-unknown-linux-gnu.tar.gz"
         archive = self.root / name
         self.binary = self.fixture.paths["agentfw"].read_bytes()
-        self.make_archive(archive, [(name[:-7] + "/agentfw", self.binary)])
+        payload = Path(self.external.name) / "candidate"
+        payload.mkdir()
+        candidate_fixture.populate(payload, self.fixture.m["candidate"]["commit"], self.binary,
+                                   self.fixture.m["candidate"]["tree"], self.fixture.paths["git_launcher"].read_bytes())
+        self.make_archive(archive, [(name[:-7] + "/" + path.name, path.read_bytes()) for path in payload.iterdir()])
         self.manifest = {"tag": self.tag, "checksums": [p.sha(archive.read_bytes()) + "  " + name]}
         self.manifest_path.write_bytes(encoded(self.manifest))
         self.manifest_sha = p.sha(self.manifest_path.read_bytes())
@@ -87,6 +93,7 @@ class PublicationReadinessTests(unittest.TestCase):
             for name, raw in files:
                 info = tarfile.TarInfo(name)
                 info.size = len(raw)
+                info.mode = 0o755 if name.rsplit("/",1)[-1] in ("agentfw",pilot_candidate.LAUNCHER) else 0o644
                 archive.addfile(info, io.BytesIO(raw))
 
     def prepare_roadmap(self):

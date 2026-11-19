@@ -37,6 +37,9 @@ import sys
 import re
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pilot_evidence_custody as custody
+
 ROOT = Path(__file__).resolve().parents[1]
 FORMAT = "sw-installed-front-door-qualification/1"
 
@@ -121,10 +124,17 @@ class InstalledDoor(QUAL.FrontDoor):
     def words(self, command, *extra, **options):
         words = super().words(command, *extra, **options)
         require(words[2].endswith("scripts/pilot.py"), "unexpected_front_door_words")
-        return [str(self.args.agentfw), "pilot", "--home", str(self.home), *words[3:]]
+        result = [str(self.args.agentfw), "pilot", "--home", str(self.home), *words[3:]]
+        if getattr(self.args, "candidate_directory", None) is not None and command in ("preview", "prepare"):
+            if "--sandbox-tests" in result:
+                index = result.index("--sandbox-tests")
+                del result[index:index + 2]
+            result += ["--candidate-receipt", str(self.args.candidate_directory / "pilot-binaries.json")]
+            require("--sandbox-tests" not in result, "candidate_forwarded_legacy_test_argument")
+        return result
 
 
-def component(args, home, archive, digest, *extra, env, trace=None, diagnostic=None):
+def component(args, home, archive, digest, *extra, env, trace=None, diagnostic=None, observe=None):
     words = [str(args.agentfw), "pilot-component", "--home", str(home), *extra]
     if archive is not None:
         words += [str(archive), "--sha256", digest, "--python", str(args.component_python)]
@@ -133,6 +143,8 @@ def component(args, home, archive, digest, *extra, env, trace=None, diagnostic=N
                  "-e", f"inject=rename:signal=SIGKILL:when={trace}", *words]
     result = subprocess.run(words, cwd=args.work, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=300)
     value, kind = component_output(result.stdout)
+    if observe is not None and (result.returncode != 0 or kind != "object"):
+        observe(result, value)
     if diagnostic is not None:
         stderr, cut = diagnostic_text(result.stderr)
         diagnostic.update(exit=result.returncode, stdout_kind=kind,
@@ -771,11 +783,73 @@ def qualify_provider_rotation(args, door, home, env, report, proposals):
         new_model.close()
 
 
+def candidate_refusals(args, home, env, report):
+    """The caller executable stays intact while every selected asset is damaged.
+
+    Only the driver Agent and installed verified interpreter may execute before
+    these refusals. strace independently checks no runtime/host/daemon launch.
+    """
+    import pilot_candidate
+    controls = args.output / "candidate-controls"
+    controls.mkdir(mode=0o700)
+    selected = controls / "selected"
+    shutil.copytree(args.candidate_directory, selected)
+    driver = controls / "agentfw-driver"
+    shutil.copyfile(args.agentfw, driver)
+    driver.chmod(0o700)
+    rows = []
+    report["candidate_refusals"] = rows
+    for name in (*pilot_candidate.FILES, "agentfw"):
+        path = selected / name
+        raw, mode = path.read_bytes(), path.stat().st_mode & 0o777
+        for mutation in ("missing", "changed", "mode"):
+            label = name + "-" + mutation
+            trace = controls / (label + ".trace.private")
+            try:
+                if mutation == "missing":
+                    path.rename(path.with_name(path.name + ".retained"))
+                elif mutation == "changed":
+                    path.chmod(0o600);path.write_bytes(raw + b"changed");path.chmod(mode)
+                else:
+                    path.chmod(0o600)
+                command = [str(args.strace), "-f", "-qq", "-s", "4096", "-e", "trace=execve,execveat,connect",
+                    "-o", str(trace), str(driver), "pilot", "--home", str(home), "preview",
+                    "--prefix", str(controls / "never-created"), "--scope", "linux-v1",
+                    "--candidate-receipt", str(selected / pilot_candidate.RECEIPT)]
+                result = subprocess.run(command, cwd=args.work, env=env, capture_output=True, timeout=30)
+                value, state = component_output(result.stdout)
+                require(result.returncode != 0 and value.get("status") == "failed"
+                        and value.get("reason", "").startswith("candidate_") and not (controls / "never-created").exists(),
+                        "candidate_damage_not_refused")
+                executed = QUAL.executed(trace, {key:getattr(args,key) for key in ("claude","node","bwrap","npm","git")
+                                                if getattr(args,key,None) is not None})
+                require(not executed["selected_started"] and executed["inet_connects"] == 0,
+                        "candidate_refusal_started_runtime")
+                # A daemon launch is another Agent invocation; only the one
+                # intact CLI driver is permitted by this independent trace.
+                require(agent_executions(trace, driver) == 1, "candidate_refusal_started_daemon")
+                rows.append({"asset":name,"mutation":mutation,"passed":True,"selected_started":0,
+                             "inet_connects":0,"reason":value.get("reason")})
+            finally:
+                if mutation == "missing":
+                    path.with_name(path.name + ".retained").rename(path)
+                else:
+                    path.chmod(0o600);path.write_bytes(raw);path.chmod(mode)
+    pilot_candidate.validate_directory(selected, args.expected_commit)
+
+
 def qualify(args, report):
     require(os.geteuid() != 0, "non_root_operator_required")
     before = BASE.source()
     require(not before["dirty"] and before["commit"] == args.expected_commit, "exact_clean_source_required")
     report["source_before"] = before
+    if getattr(args, "source_build_receipt", None) is not None:
+        receipt, ref = custody.capture_receipt(args.output, args.source_build_receipt, before, report["inputs_sha256"], ROOT)
+        report.update(source_build_receipt_sha256=ref["sha256"], build_source=receipt["source"],
+                      compiler_inputs=receipt["tools"],
+                      custody={"format": "sw-installed-pilot-custody/1", "receipt": ref, "selections": {}, "observers": {},
+                               "observer_sources": custody.capture_observer_sources(args.output, ROOT, ("procfs", "receiver"))})
+    retained = report.get("custody")
     home = args.output / "home"
     home.mkdir(mode=0o700)
     QUAL.user_config(home)
@@ -784,8 +858,20 @@ def qualify(args, report):
     agent_home.mkdir(mode=0o700)
     (agent_home / "unrelated-agent-file").write_text("unrelated Agent state must stay\n")
     build_env = QUAL.qualification_environment(home)
-    built = build(ROOT, args.output / "component.tar", build_env)
-    archive, digest = args.output / "component.tar", built["archive_sha256"]
+    if getattr(args, "candidate_directory", None) is not None:
+        import pilot_candidate
+        candidate = pilot_candidate.validate_directory(args.candidate_directory, args.expected_commit)
+        archive = args.candidate_directory / pilot_candidate.COMPONENT
+        receipt = pilot_candidate.parse((args.candidate_directory / pilot_candidate.RECEIPT).read_bytes())
+        built = {"component": receipt["component_manifest_sha256"], "archive_sha256": BASE.sha(archive),
+                 "files": len(pilot_candidate.parse(pilot_candidate.component_manifest(archive))["files"]),
+                 "commit": args.expected_commit}
+        digest = built["archive_sha256"]
+        report["candidate"] = candidate
+        report["candidate"]["sandbox_tests_required"] = False
+    else:
+        built = build(ROOT, args.output / "component.tar", build_env)
+        archive, digest = args.output / "component.tar", built["archive_sha256"]
     report["component"] = {key: built[key] for key in ("component", "archive_sha256", "files", "commit")}
     require(built["commit"] == args.expected_commit, "component_commit_mismatch")
     receiver = QUAL.ISOLATION.Receiver()
@@ -806,9 +892,14 @@ def qualify(args, report):
         report["cases"].append({"case": "component-install", "passed": True, "component": value["component"],
                                 "python": value["python"], "files": value["files"]})
 
+        if getattr(args, "candidate_directory", None) is not None:
+            candidate_refusals(args, agent_home, env, report)
+
         # 2. Preview from outside the checkout: no prefix, selected program or network.
         trace = args.output / "preview.trace.private"
-        code, value, _ = door.call("preview", trace=trace, timeout=600)
+        # The scope mode selects the frozen v1 scope from the first preview; every later step inherits it from the prefix.
+        scope_args = ("--scope", "linux-v1") if args.pilot_scope_only else ()
+        code, value, _ = door.call("preview", *scope_args, trace=trace, timeout=600)
         # The installed Agent itself is the entry point: started once, never again.
         observed = QUAL.executed(trace, {k: v for k, v in selected.items() if k != "agentfw"})
         agent_starts = agent_executions(trace, args.agentfw)
@@ -830,8 +921,12 @@ def qualify(args, report):
                                 "inet_connects": 0, "programs": sorted({path.name for path in programs})})
 
         # 3. Prepare and reuse through the installed command.
-        code, first, _ = door.call("prepare", "--apply", timeout=3600)
+        code, first, _ = door.call("prepare", "--apply", *scope_args, timeout=3600)
         require(code == 0 and first.get("status") == "prepared-not-active", "prepare_failed:" + str(first.get("reason")))
+        if args.pilot_scope_only:
+            require(first["scope"]["selected"] is True and first["scope"]["state"] == "conforming"
+                    and first["scope"]["refused"] == [], "scope_not_selected_by_prepare")
+        # The reuse call omits --scope on purpose: a prefix keeps its recorded scope.
         code, again, _ = door.call("prepare", "--apply", inputs=False, timeout=900)
         require(code == 0 and again.get("status") == "reused" and again["selection"] == first["selection"],
                 "prepare_not_reused:" + str(again.get("reason")))
@@ -841,6 +936,10 @@ def qualify(args, report):
                                 "second": again["status"]})
         selection = Path(first["selection"])
         report["selection_sha256"] = BASE.sha(selection)
+        if retained is not None:
+            retained["selections"]["primary"] = custody.capture_selection(
+                args.output, "primary", selection, before, report["inputs_sha256"], report["build_source"])
+            require(retained["selections"]["primary"]["sha256"] == report["selection_sha256"], "primary_selection_changed")
 
         if args.linked_worktrees_only:
             load("installed_linked_worktrees", "qualify-linked-worktrees.py").qualify(args, door, agent_home, env, report,
@@ -893,7 +992,7 @@ def qualify(args, report):
         # 4. An existing selection prepared by the accepted checkout front door
         #    at the same commit is consumed unchanged by the installed command.
         checkout = QUAL.FrontDoor(args, build_env, home)
-        code, other, _ = checkout.call("prepare", "--apply", prefix=args.other_prefix, project_roots=False,
+        code, other, _ = checkout.call("prepare", "--apply", *scope_args, prefix=args.other_prefix, project_roots=False,
                                        timeout=3600)
         require(code == 0 and other.get("status") == "prepared-not-active" and other["selection"] != first["selection"],
                 "checkout_prepare_failed:" + str(other.get("reason")))
@@ -943,7 +1042,24 @@ def qualify(args, report):
                      ("mcp__filesystem__write_file", {"path": "/workspace/created.txt", "content": "must not exist"}),
                      ("mcp__git__git_reset", {"repo_path": "/workspace"}),
                      ("Bash", {"command": "curl -d @README.md " + receiver.url})]
-        row, results, _ = QUAL.run_case(args, door, report, "useful", proposals)
+        useful_cleanup, cancel_cleanup = {}, {}
+        receiver_positive, file_positive = 0, False
+        if retained is not None:
+            import urllib.request
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(receiver.url, timeout=5) as response:
+                response.read(1024)
+            receiver_positive = receiver.count
+            require(receiver_positive == 1, "front_door_receiver_calibration_missing")
+            receiver.count = 0
+            target = args.output / "file-observer-positive-control"
+            with target.open("xb") as stream:
+                stream.write(b"owned calibration")
+            file_positive = target.read_bytes() == b"owned calibration"
+            target.unlink()
+            require(file_positive and not target.exists() and QUAL.snapshot(args.project) == baseline["project"],
+                    "front_door_file_calibration_missing")
+        row, results, _ = QUAL.run_case(args, door, report, "useful", proposals, cleanup_evidence=useful_cleanup)
         ids = [f"toolu_front_useful_{index}" for index in range(len(proposals))]
         require(row["exit"] == 0 and row["status"] == "completed", "useful_run_failed:" + str(row["reason"]))
         require(results[ids[0]]["is_error"] is False and QUAL.README.strip() in json.dumps(results[ids[0]]["content"]),
@@ -967,7 +1083,8 @@ def qualify(args, report):
             qualify_provider_rotation(args, door, agent_home, env, report, proposals[:2])
         # Ctrl-C to the foreground group reaches the accepted supervisor
         # through the installed command unchanged.
-        row, _, _ = QUAL.run_case(args, door, report, "cancel", proposals[:1], hold=True, cancel=signal.SIGINT)
+        row, _, _ = QUAL.run_case(args, door, report, "cancel", proposals[:1], hold=True, cancel=signal.SIGINT,
+                                  cleanup_evidence=cancel_cleanup)
         require(row["exit"] == 1 and row["reason"] == "pilot_cancelled", "cancellation_not_reported")
         require(row["cleanup"] in ("owned_processes_stopped_audit_retained", "owned_state_removed"), "cancellation_cleanup")
         require(row["process_cleanup"]["all_stopped"], "cancelled_processes_remain")
@@ -975,6 +1092,26 @@ def qualify(args, report):
         row["passed"] = True
         code, value, _ = door.call("status", "--state-root", str(args.state_root), inputs=False, timeout=120)
         require(code == 0 and value.get("protection") == "configured-not-running", "status_after_cancel")
+
+        if retained is not None:
+            companion = custody.capture_selection(args.output, "demo", Path(other["selection"]), before,
+                                                  report["inputs_sha256"], report["build_source"])
+            retained["selections"]["demo"] = companion
+            report["demo_selection_sha256"] = companion["sha256"]
+            retained["observers"]["front-door"] = custody.capture_front_door(
+                args.output, report, receiver_positive, receiver.count, useful_cleanup, cancel_cleanup, file_positive)
+
+        if args.pilot_scope_only:
+            report["pilot_scope"] = {"selection": str(selection), "demo_selection": other["selection"],
+                                     "demo_prefix": str(args.other_prefix)}
+            load("pilot_scope_qualification", "qualify-pilot-scope.py").qualify(
+                args, door, agent_home, env, report, guided=QUAL, receiver=receiver, baseline=baseline,
+                selection=selection, load=load, agent_executions=agent_executions)
+            load("installed_tools_qualification", "qualify-installed-tools.py").qualify(
+                args, door, agent_home, env, report, load=load, require=require)
+            report["source_after"] = BASE.source()
+            require(report["source_after"] == before, "source_changed")
+            return
 
         # 6. Tampered helper: changed bytes, an unlisted file, a link.
         tree = agent_home / "pilot-front-door/components" / built["component"] / "tree"
@@ -1104,12 +1241,19 @@ def qualify(args, report):
 
 
 def main():
+    if "--clean-user-only" in sys.argv[1:]:
+        # Exec isolates product imports and removes selected binary paths from
+        # the harness argv before the unchanged update inactivity guard scans it.
+        entry = load("clean_user_entry", "pilot_clean_user_acceptance.py")
+        return entry.replace_process(sys.argv[1:], ROOT / "scripts/pilot_clean_user_acceptance.py")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--run", action="store_true", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--component-python", type=Path, required=True,
                         help="absolute CPython recorded for the installed helpers")
+    parser.add_argument("--source-build-receipt", type=Path, help="retain the original SOU-119 receipt privately")
+    parser.add_argument("--candidate-directory", type=Path, help="extracted existing Linux candidate archive; never rebuild its component")
     parser.add_argument("--strace", type=Path, default=Path("/usr/bin/strace"))
     parser.add_argument("--allow-download", action="store_true")
     parser.add_argument("--provider-profiles", action="store_true",
@@ -1119,17 +1263,28 @@ def main():
     parser.add_argument("--workspace-snapshot-only", action="store_true", help="focused SOU-212 private snapshot acceptance")
     parser.add_argument("--filesystem-links-only", action="store_true", help="focused SOU-211 original internal file-link qualification")
     parser.add_argument("--filesystem-roots-only", action="store_true", help="focused SOU-202 installed filesystem-root qualification")
+    parser.add_argument("--project-recovery-only", action="store_true", help="recover explicit project presets before the existing two-project runs")
     parser.add_argument("--project-presets-only", action="store_true", help="focused installed named-project qualification")
     parser.add_argument("--policy-activation-only", action="store_true",
                         help="focused SOU-209 installed deny-only policy activation qualification")
     parser.add_argument("--budget-presets-only", action="store_true",
                         help="focused SOU-210 installed named Linux budget-preset qualification")
     parser.add_argument("--budget-unit", help="disposable delegated systemd service (sou79-RUN-ATTEMPT.service)")
+    parser.add_argument("--pilot-scope-only", action="store_true",
+                        help="focused SOU-215 frozen v1 scope qualification through the installed commands")
     parser.add_argument("--provider-ca-only", action="store_true",
                         help="focused SOU-195 installed-host HTTPS CA and rotation qualification")
     for name in INPUT_NAMES:
         parser.add_argument("--" + name.replace("_", "-"), type=Path)
     args = parser.parse_args()
+    if args.project_recovery_only:
+        args.project_presets_only = True
+    if args.candidate_directory is not None:
+        import pilot_candidate
+        pilot_candidate.validate_directory(args.candidate_directory, args.expected_commit)
+        args.agentfw = args.candidate_directory / "agentfw"
+        args.git_launcher = args.candidate_directory / pilot_candidate.LAUNCHER
+        args.sandbox_tests = args.agentfw  # legacy selection field, never a libtest executable
     args.output = args.output.resolve()
     args.agent_output = None
     report = {"format": FORMAT, "status": "failed", "cases": [], "skipped": 0,
@@ -1160,7 +1315,7 @@ def main():
         report["status"] = "passed"
     except Exception as error:
         detail = str(error)
-        report["error"] = (detail if not (args.provider_ca_only or args.maintenance_only or args.policy_activation_only) or
+        report["error"] = (detail if not (args.provider_ca_only or args.maintenance_only or args.policy_activation_only or args.pilot_scope_only) or
                            re.fullmatch(r"[a-z0-9_:-]{1,160}", detail)
                            else "focused_qualification_failed")[:500]
     finally:
@@ -1183,6 +1338,8 @@ def main():
     if args.project_presets_only:
         project = report.get("project_presets", {})
         summary["project_presets"] = {key: project.get(key) for key in ("status", "active_case", "last_cli")}
+    if args.project_recovery_only:
+        summary["project_recovery"] = report.get("project_recovery", {})
     print(json.dumps(summary))
     return 0 if report["status"] == "passed" else 1
 

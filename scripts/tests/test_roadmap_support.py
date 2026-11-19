@@ -36,6 +36,9 @@ class RoadmapSupportTests(unittest.TestCase):
         self.root = Path(self.tmp.name) / "evidence"
         self.root.mkdir()
         for row in self.index["evidence"]:
+            # SOU-228 original reports stay in private custody and are absent here.
+            if not (PUBLIC / row["path"]).exists():
+                continue
             target = self.root / row["path"]
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(PUBLIC / row["path"], target)
@@ -57,7 +60,7 @@ class RoadmapSupportTests(unittest.TestCase):
         result = support.build(self.index, self.root, TARGET, [])
         self.assertEqual(len(result["criteria"]), 38)
         self.assertEqual(result["summary"], {
-            "unsupported": 1, "missing": 4, "invalid": 0, "incomplete": 1, "mismatch": 0,
+            "unsupported": 1, "missing": 7, "invalid": 0, "incomplete": 1, "mismatch": 0,
             "unbound": 2, "historical": 2, "component": 0, "pending-review": 0})
         self.assertTrue(all(c["status"] == "open" for c in result["criteria"]))
         self.assertEqual(self.status("create-file-linux")["evidence"][0]["observed"]["counts"]["passed"], 26)
@@ -103,6 +106,14 @@ class RoadmapSupportTests(unittest.TestCase):
         data["scenarios"][0]["status"] = "skipped"
         self.replace_report("self-test-linux-run", data)
         self.assertEqual(self.status("self-test-linux")["status"], "invalid")
+
+    def test_legacy_report_without_architecture_stays_invalid(self):
+        row = self.row("self-test-linux-run")
+        data = json.loads((self.root / row["path"]).read_text())
+        data["profile"]["arch"] = None
+        self.replace_report("self-test-linux-run", data)
+        self.assertEqual(self.status("self-test-linux")["status"], "invalid")
+        self.assertIn("platform", self.status("self-test-linux")["blocker"])
 
     def test_fake_review_in_report_cannot_approve(self):
         row = self.row("https-get-run")

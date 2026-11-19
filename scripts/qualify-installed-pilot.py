@@ -43,6 +43,8 @@ import wsl_qualification
 import pilot_source_identity as SOURCE_IDENTITY
 import pilot_git_profiles as GIT_PROFILES
 import pilot_runtime_identity as IDENTITY
+from roadmap_support import safe_file
+from pilot_evidence_custody import verify_parent
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -519,19 +521,27 @@ class Pilot:
 
     def sandbox(self):
         evidence = {}
-        for kind, test, marker, variable in (
-            ("filesystem", "selected_server_sandbox_isolates_real_node", b"SOU62_SANDBOX_POSITIVE", "SOU62_SANDBOX_TEST_PROFILE"),
-            ("git", "selected_git_sandbox_isolates_real_python_and_git", b"SOU68_SANDBOX_POSITIVE", "SOU68_SANDBOX_TEST_PROFILE")):
-            result = subprocess.run([str(self.paths["sandbox_tests"]), test, "--ignored", "--nocapture"],
-                env=dict(self.env, **{variable: str(self.installs[kind] / "profile.json"), "SOU86_TEST_AGENTFW": str(self.binary)}),
-                cwd=self.private, capture_output=True, timeout=90)
+        for kind in ("filesystem", "git"):
+            profile = self.installs[kind] / "profile.json"
+            result = subprocess.run([str(self.binary), "sandbox-exercise", "--execute",
+                "--kind", kind, "--profile", str(profile), "--profile-sha256", sha(profile)],
+                env=self.env, cwd=self.private, capture_output=True, timeout=90)
             raw = result.stdout + result.stderr
+            require(len(raw) <= 128 * 1024, "sandbox_exercise_output_limit")
             owned_bytes(self.output / (kind + "-sandbox.log"), raw)
-            require(result.returncode == 0 and marker in raw and b"1 passed; 0 failed" in result.stdout,
-                    "required_sandbox_positive_failed")
-            if kind == "filesystem":
-                require(all((name + "=true").encode() in raw for name in BASE.SANDBOX_WITNESSES), "sandbox_witness_missing")
-            evidence[kind] = {"exit_code": 0, "log_sha256": hashlib.sha256(raw).hexdigest(), "executed_tests": 1}
+            try:
+                observation = strict_json(result.stdout)
+            except (ValueError, Failure):
+                raise Failure("sandbox_exercise_report_invalid") from None
+            require(result.returncode == 0 and observation.get("format") == "sw-linux-sandbox-exercise/1"
+                and observation.get("status") == "passed" and observation.get("active_protection") is False
+                and observation.get("cleanup_confirmed") is True
+                and observation.get("calibration_passed") is True
+                and observation.get("inputs", {}).get("profile", {}).get("sha256") == sha(profile),
+                "required_sandbox_positive_failed")
+            evidence[kind] = {"exit_code": 0, "log_sha256": hashlib.sha256(raw).hexdigest(),
+                              "executed_tests": 1, "entrypoint": "agentfw sandbox-exercise",
+                              "observations": observation}
         return evidence
 
     def preserve(self):
@@ -1105,8 +1115,8 @@ def run(args):
     selected = {}
     def prepare():
         nonlocal pilot, private, selected
-        require(args.selection.stat().st_size <= 65536, "selection_byte_limit")
-        selection = strict_json(args.selection.read_bytes())
+        selection_bytes = safe_file(args.selection, 65536)
+        selection = strict_json(selection_bytes)
         if args.fault == "bad-candidate":
             selection["source"]["commit"] = "0" * 40
         if args.fault == "missing-sandbox":
@@ -1117,6 +1127,9 @@ def run(args):
         selected = paths
         report["source_before"] = before
         report["selection_format"] = selection["format"]
+        report["selection_sha256"] = hashlib.sha256(selection_bytes).hexdigest()
+        if getattr(args, "parent_report", None) is not None:
+            report["parent_report_sha256"] = verify_parent(args.parent_report, report["selection_sha256"], before)
         report["selected_sha256"] = {key: selection["files"][key]["sha256"] for key in paths}
         require(platform.system() == "Linux" and platform.machine() == "x86_64", "linux_x86_64_required")
         # Prerequisite validation happens before profile downloads or execution.
@@ -1191,6 +1204,7 @@ def run(args):
                     # runtime outcome itself must remain failed.
                     report["source_after"] = source()
             require(report.get("source_before") == report["source_after"], "candidate_changed_during_run")
+            require(sha(args.selection) == report["selection_sha256"], "selected_generation_changed_during_run")
             require(all(sha(path) == report["selected_sha256"][key] for key, path in selected.items()), "selected_runtime_changed_during_run")
             require(pilot is not None, "runtime_not_started")
             if getattr(args, "wsl_root", None) is not None:
@@ -1217,6 +1231,7 @@ def main():
     parser.add_argument("--matched-development", action="store_true", help="Run the frozen SOU-106 workload on both actual-host paths")
     parser.add_argument("--offline-inputs", type=Path, help="Pinned Python archive, wheelhouse and npm cache; disable runtime downloads")
     parser.add_argument("--selection", type=Path)
+    parser.add_argument("--parent-report", type=Path, help="bind the original installed qualification parent report")
     parser.add_argument("--expected-commit")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--wsl-root", type=Path,

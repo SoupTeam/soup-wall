@@ -1,0 +1,77 @@
+{
+  "backend": "sqlite",
+  "binaries": {
+    "agentfw": "b1b9668aa39bfff3c5580ed57316035c47f2ce8309d06b66f5b5953d97c1f14e",
+    "llm-firewall": "24baf8ae0a4c92e88fdb220d508b2c89f5baf3b42613665681de5dd9cb71c721"
+  },
+  "checks": {
+    "admin-token-refused": true,
+    "agent-log-free-of-credentials-edge-hb": true,
+    "agent-log-free-of-credentials-edge-legacy": true,
+    "browser-fresh-self-report-not-health": true,
+    "browser-read-only": true,
+    "browser-unopted-unknown": true,
+    "console-outage-keeps-enforcement": true,
+    "cross-tenant-refused": true,
+    "forged-registration-refused": true,
+    "fresh-self-report-matches-independent-runtime-witness": true,
+    "heartbeat-opt-in-value-is-strict": true,
+    "heartbeat-without-managed-console-refuses-startup": true,
+    "live-agent-reregisters-after-supersession": true,
+    "non-positive-sequence-refused": true,
+    "offline-becomes-stale": true,
+    "old-credential-refused-at-once": true,
+    "other-tenant-same-id-isolated": true,
+    "out-of-order-refused": true,
+    "probe-first-heartbeat": true,
+    "probe-registers": true,
+    "probe-registration-now-superseded": true,
+    "probe-second-heartbeat": true,
+    "reconnect-after-console-restart": true,
+    "replay-refused": true,
+    "restart-registers-new-instance": true,
+    "revocation-keeps-last-verified-enforcement": true,
+    "revoked-credential-refused": true,
+    "revoked-status": true,
+    "rotation-generation-2": true,
+    "rotation-shows-credential-changed-until-reregistration": true,
+    "same-process-reregisters-with-new-generation": true,
+    "sequence-advances": true,
+    "server-delivery-record-stays-separate": true,
+    "unknown-field-refused": true,
+    "unopted-agent-stays-unsupported": true,
+    "wrong-epoch-refused": true
+  },
+  "config_sha256": {
+    "console": "4b8424d568d0d78f8b29674a9da0f3547347cf10a968f59b91e898bedf5ec5cd"
+  },
+  "format": "sw-console-agent-heartbeat-acceptance/1",
+  "scope": "one disposable private Linux deployment; synthetic tenants and Agent IDs; an authenticated self-report, not runtime attestation, production, multi-host or a health check",
+  "snapshots": {
+    "after_console_restart": {
+      "status": "fresh",
+      "store": "sqlite"
+    },
+    "fresh": {
+      "age_seconds": 0,
+      "current_credential_generation": 1,
+      "expires_after_seconds": 90,
+      "status": "fresh"
+    },
+    "stale": {
+      "age_seconds": 91,
+      "expires_after_seconds": 90,
+      "status": "stale"
+    },
+    "witness": {
+      "deployment_sequence": 1,
+      "hook_decision": "deny",
+      "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "revision": "r-deny"
+    }
+  },
+  "source_commit": "6bc29ea6aa137f9068d743e2c1286f9101ff7240",
+  "source_dirty": false,
+  "source_tree": "0ab138feb595d685da78aa023c332b78629b0ed1",
+  "status": "passed"
+}

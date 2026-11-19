@@ -1,0 +1,19 @@
+{
+  "run_id": 41885067663,
+  "source_commit": "39c275e2a0e2b070b356419fdc2085647dc51066",
+  "status": "failed",
+  "cause": "After actual policy application Console correctly returned 204 for its empty pending inbox; setup verify lacked authenticated audience metadata and refused the incomplete result. Both publication SIGKILL/resume controls passed.",
+  "resolution": "Shared Console response adds authenticated tenant/Agent scope on success, including 204. The setup probe requires an exact pair to verify an empty inbox; signed candidates remain independently verified. No backend-specific storage changes.",
+  "artifacts": {
+    "sqlite": {
+      "id": 13349869795,
+      "sha256": "93718bc981aab9fd9c2e8b18e0180434bc171b0306d18c63749a16315a8ee096"
+    },
+    "postgres": {
+      "id": 13351775691,
+      "sha256": "e84eaa5eb2e131daf301f69b8c178d4b0bd0fbbdb7bb37fc23b4be1de7907063"
+    }
+  },
+  "zip_crc_and_every_source_hash_verified": true,
+  "source_hashes_each": 283
+}

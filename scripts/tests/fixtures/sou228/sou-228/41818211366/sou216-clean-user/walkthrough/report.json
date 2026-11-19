@@ -1,0 +1,609 @@
+{
+ "active_case": "stop-unconfirmed-namespace-stop",
+ "cases": [
+  {
+   "case": "plan",
+   "reason": null,
+   "selected_execution": 0,
+   "status": "passed"
+  },
+  {
+   "case": "occupied-port",
+   "reason": "occupied_port_refused",
+   "selected_execution": 0,
+   "status": "passed"
+  },
+  {
+   "case": "stale-source",
+   "reason": "candidate_source_mismatch",
+   "selected_execution": 0,
+   "status": "passed"
+  },
+  {
+   "case": "changed-selection",
+   "reason": "selected_executable_changed",
+   "selected_execution": 0,
+   "status": "passed"
+  },
+  {
+   "case": "provider-unavailable",
+   "reason": "provider_unavailable",
+   "selected_execution": 0,
+   "status": "passed"
+  },
+  {
+   "audit_export": {
+    "completeness": "incomplete",
+    "decisions": 8,
+    "notices": [],
+    "status": "exported"
+   },
+   "audit_summary_sha256": "9650cd5b43966019242d381db7192477be6b2804de26bfdc46b739485f2b8500",
+   "case": "useful-refusal",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "correlated_useful_continuation": true,
+   "dispatch_counts": [
+    1,
+    1,
+    0
+   ],
+   "exact_once_kernel_read": true,
+   "explicit_harness_decisions": 0,
+   "kernel_git_status_count": 1,
+   "outcome": "completed",
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "status": "passed",
+   "trace_capture": {
+    "complete": true,
+    "format": "prepared-effect-and-wire/1",
+    "input_bytes": 25021395,
+    "input_sha256": "1c67ee1e1128aaea992111340fb9d6dd99ff5484bdb829c42f9e6969e9f32c48",
+    "omitted_non_witness_metadata": {
+     "close": 93600,
+     "openat": 94569
+    },
+    "raw_stream_exported": false,
+    "retained_bytes": 1961802,
+    "retained_limit": 33554432,
+    "unclassified_metadata_processes": 1
+   }
+  },
+  {
+   "audit_export": {
+    "completeness": "incomplete",
+    "decisions": 16,
+    "notices": [
+     "decision_evidence_incomplete"
+    ],
+    "status": "exported"
+   },
+   "audit_summary_sha256": "ff9cd4f6508aa89be0bb0f00c7a9aeccc786205b1fe5abd22d3227fc5cd03458",
+   "case": "ask",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "correlated_useful_continuation": true,
+   "dispatch_counts": [
+    1,
+    1,
+    1
+   ],
+   "exact_once_kernel_read": true,
+   "explicit_harness_decisions": 2,
+   "outcome": "completed",
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "status": "passed",
+   "trace_capture": {
+    "complete": true,
+    "format": "prepared-effect-and-wire/1",
+    "input_bytes": 35874194,
+    "input_sha256": "1ce7e819b66c7b237ae8077042f21922c6a7295d46978480f46bed5392d3a461",
+    "omitted_non_witness_metadata": {
+     "close": 128991,
+     "openat": 129781
+    },
+    "raw_stream_exported": false,
+    "retained_bytes": 2394975,
+    "retained_limit": 33554432,
+    "unclassified_metadata_processes": 0
+   }
+  },
+  {
+   "audit_export": {
+    "completeness": "incomplete",
+    "decisions": 7,
+    "notices": [
+     "decision_evidence_incomplete"
+    ],
+    "status": "exported"
+   },
+   "audit_summary_sha256": "dbd49c43d26e91b671413fd81467f2cbd976c7c067ebfdacc254da77b71a9f2f",
+   "case": "default",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "correlated_useful_continuation": false,
+   "dispatch_counts": [
+    1,
+    0
+   ],
+   "exact_once_kernel_read": true,
+   "explicit_harness_decisions": 0,
+   "outcome": "completed",
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "status": "passed",
+   "trace_capture": {
+    "complete": true,
+    "format": "prepared-effect-and-wire/1",
+    "input_bytes": 24953183,
+    "input_sha256": "477870977c4700d2349bed3ebb7aefe71ca0aefb010cb3cc9e963037c6159017",
+    "omitted_non_witness_metadata": {
+     "close": 93560,
+     "openat": 94534
+    },
+    "raw_stream_exported": false,
+    "retained_bytes": 1914442,
+    "retained_limit": 33554432,
+    "unclassified_metadata_processes": 1
+   }
+  },
+  {
+   "audit_export": {
+    "completeness": "incomplete",
+    "decisions": 4,
+    "notices": [],
+    "status": "exported"
+   },
+   "audit_summary_sha256": "55bb54fc0ae4bfff8d46a9c74256e187b2c75b207683db649cc4c33b7599b13a",
+   "case": "cancel",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "failure_reason": "pilot_cancelled",
+   "outcome": "failed",
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "status": "passed",
+   "trace_capture": {
+    "complete": true,
+    "format": "prepared-effect-and-wire/1",
+    "input_bytes": 24831574,
+    "input_sha256": "c9d48b1d60a4de90f2f237c51231e9e032098013af08d25787b1b08c09db1225",
+    "omitted_non_witness_metadata": {
+     "close": 93478,
+     "openat": 94396
+    },
+    "raw_stream_exported": false,
+    "retained_bytes": 1809023,
+    "retained_limit": 33554432,
+    "unclassified_metadata_processes": 1
+   }
+  },
+  {
+   "audit_export": {
+    "completeness": "incomplete",
+    "decisions": 4,
+    "notices": [],
+    "status": "exported"
+   },
+   "audit_summary_sha256": "fcb41999f29e29e618268afa08d2458872419e6b9b3ea2c73ab2c1f2bfe038b8",
+   "case": "daemon-loss",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "failure_reason": "owned_daemon_lost",
+   "outcome": "failed",
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "status": "passed",
+   "trace_capture": {
+    "complete": true,
+    "format": "prepared-effect-and-wire/1",
+    "input_bytes": 24806197,
+    "input_sha256": "b16b92313a75f6930e0b062df9c2daaeab8da7f13451218386ae0b57c75967c5",
+    "omitted_non_witness_metadata": {
+     "close": 93408,
+     "openat": 94384
+    },
+    "raw_stream_exported": false,
+    "retained_bytes": 1799565,
+    "retained_limit": 33554432,
+    "unclassified_metadata_processes": 1
+   }
+  },
+  {
+   "audit_export": {
+    "completeness": "incomplete",
+    "decisions": 4,
+    "notices": [],
+    "status": "exported"
+   },
+   "audit_summary_sha256": "96e306e2d6e6952bd71855d88be239bc14b24eca9ce260275f0fd4c5ba6a3c27",
+   "case": "host-crash",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "failure_reason": "restricted_launcher_failed",
+   "outcome": "failed",
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "status": "passed",
+   "trace_capture": {
+    "complete": true,
+    "format": "prepared-effect-and-wire/1",
+    "input_bytes": 24746811,
+    "input_sha256": "6c307cd3259281e0cbc721d728795e02a0f8aef09f46e623e25e87c4714c9613",
+    "omitted_non_witness_metadata": {
+     "close": 93411,
+     "openat": 94384
+    },
+    "raw_stream_exported": false,
+    "retained_bytes": 1739179,
+    "retained_limit": 33554432,
+    "unclassified_metadata_processes": 0
+   }
+  },
+  {
+   "audit_export": {
+    "completeness": "incomplete",
+    "decisions": 4,
+    "notices": [],
+    "status": "exported"
+   },
+   "audit_summary_sha256": "f2db3fa731a1585a672ff43c476957aa203130b2c2166daabfb1174c765277d7",
+   "case": "timeout",
+   "cleanup": "owned_processes_stopped_audit_retained",
+   "failure_reason": "restricted_launcher_failed",
+   "outcome": "failed",
+   "process_cleanup": {
+    "all_stopped": true
+   },
+   "status": "passed",
+   "trace_capture": {
+    "complete": true,
+    "format": "prepared-effect-and-wire/1",
+    "input_bytes": 24829576,
+    "input_sha256": "d4f57ec694aa3cace27f2624c2549ca035766ee85bb283584926bc48c3f5428d",
+    "omitted_non_witness_metadata": {
+     "close": 93403,
+     "openat": 94379
+    },
+    "raw_stream_exported": false,
+    "retained_bytes": 1810312,
+    "retained_limit": 33554432,
+    "unclassified_metadata_processes": 1
+   }
+  }
+ ],
+ "emergency_stop": {
+  "cases": [
+   {
+    "case": "two-prepared-runs",
+    "exact_authenticated_receipt": {
+     "contract": "sw-pilot-stop/1",
+     "run_sha256": "cce05a8f8197ec26dfbd9d42289e9f72ff26effaee1d2727ce1aca1da4428658",
+     "status": "stopped"
+    },
+    "future_dispatches": 0,
+    "future_kernel_reads": 0,
+    "peer": {
+     "cleanup": "owned_processes_stopped_audit_retained",
+     "entry_reason": null,
+     "entry_status": "completed",
+     "observed_owned_roles": [
+      {
+       "role": "host"
+      },
+      {
+       "role": "collector",
+       "server": "filesystem"
+      },
+      {
+       "role": "collector",
+       "server": "git"
+      },
+      {
+       "role": "owner"
+      },
+      {
+       "role": "pid1"
+      },
+      {
+       "role": "owner"
+      },
+      {
+       "role": "pid1"
+      }
+     ],
+     "process_cleanup": {
+      "all_stopped": true
+     },
+     "provider_private_logs": null,
+     "provider_protocol": null,
+     "provider_retained_artifacts": null,
+     "provider_routing": null
+    },
+    "peer_original_dispatches_after_stop": 2,
+    "peer_useful_after_stop": true,
+    "record_controls": [
+     {
+      "case": "forged-run",
+      "operator_refused": true,
+      "pid_reuse_scope": null,
+      "status": "passed"
+     },
+     {
+      "case": "stale-start",
+      "operator_refused": true,
+      "pid_reuse_scope": null,
+      "status": "passed"
+     },
+     {
+      "case": "foreign-live-pid",
+      "operator_refused": true,
+      "pid_reuse_scope": null,
+      "status": "passed"
+     },
+     {
+      "case": "foreign-pid-reused-start",
+      "operator_refused": true,
+      "pid_reuse_scope": "forged_start_ticks_no_forced_kernel_pid_reuse",
+      "status": "passed"
+     },
+     {
+      "case": "forged-stopped-receipt",
+      "operator_refused": true,
+      "pid_reuse_scope": null,
+      "status": "passed"
+     }
+    ],
+    "running_effects_rolled_back": false,
+    "selected": {
+     "cleanup": "owned_processes_stopped_state_retained",
+     "entry_reason": null,
+     "entry_status": "stopped",
+     "observed_owned_roles": [
+      {
+       "role": "host"
+      },
+      {
+       "role": "collector",
+       "server": "filesystem"
+      },
+      {
+       "role": "collector",
+       "server": "git"
+      },
+      {
+       "role": "owner"
+      },
+      {
+       "role": "pid1"
+      },
+      {
+       "role": "owner"
+      },
+      {
+       "role": "pid1"
+      }
+     ],
+     "process_cleanup": {
+      "all_stopped": true
+     },
+     "provider_private_logs": null,
+     "provider_protocol": null,
+     "provider_retained_artifacts": null,
+     "provider_routing": null
+    },
+    "selected_owner_obligations": [
+     {
+      "server": "filesystem",
+      "verified": false
+     },
+     {
+      "server": "git",
+      "verified": false
+     }
+    ],
+    "status": "passed",
+    "unrelated_listener_preserved": true,
+    "unrelated_process_identity_preserved": true
+   },
+   {
+    "case": "interrupted-stop",
+    "cleanup": "owned_processes_stopped_state_retained",
+    "entry_reason": null,
+    "entry_status": "stopped",
+    "exact_authenticated_receipt": {
+     "contract": "sw-pilot-stop/1",
+     "run_sha256": "e5ce96905f0df28e26adff1ed83ac4b5e241551cbb40195773e4a366c8b9f40b",
+     "status": "stopped"
+    },
+    "future_dispatches": 0,
+    "interrupted_operator": true,
+    "observed_owned_roles": [
+     {
+      "role": "host"
+     },
+     {
+      "role": "collector",
+      "server": "filesystem"
+     },
+     {
+      "role": "collector",
+      "server": "git"
+     },
+     {
+      "role": "owner"
+     },
+     {
+      "role": "pid1"
+     },
+     {
+      "role": "owner"
+     },
+     {
+      "role": "pid1"
+     }
+    ],
+    "process_cleanup": {
+     "all_stopped": true
+    },
+    "provider_private_logs": null,
+    "provider_protocol": null,
+    "provider_retained_artifacts": null,
+    "provider_routing": null,
+    "status": "passed"
+   },
+   {
+    "case": "daemon-loss-stop",
+    "cleanup": "owned_processes_stopped_state_retained",
+    "entry_reason": "owned_daemon_lost",
+    "entry_status": "failed",
+    "future_dispatches": 0,
+    "observed_owned_roles": [
+     {
+      "role": "host"
+     },
+     {
+      "role": "collector",
+      "server": "filesystem"
+     },
+     {
+      "role": "collector",
+      "server": "git"
+     },
+     {
+      "role": "owner"
+     },
+     {
+      "role": "pid1"
+     },
+     {
+      "role": "owner"
+     },
+     {
+      "role": "pid1"
+     }
+    ],
+    "process_cleanup": {
+     "all_stopped": true
+    },
+    "provider_private_logs": null,
+    "provider_protocol": null,
+    "provider_retained_artifacts": null,
+    "provider_routing": null,
+    "status": "passed",
+    "stop_receipt": {
+     "contract": "sw-pilot-stop/1",
+     "run_sha256": "33961dc39d85416245b03174e349945ba0b2f610be29549800c20339db97a9e8",
+     "status": "requested"
+    },
+    "terminal_success_refused": true
+   },
+   {
+    "case": "unconfirmed-namespace-stop",
+    "cleanup": "owned_processes_stopped_state_retained",
+    "entry_reason": "restricted_launcher_failed",
+    "entry_status": "failed",
+    "future_dispatches": 0,
+    "namespace_cleanup_unconfirmed": true,
+    "observed_owned_roles": [
+     {
+      "role": "host"
+     },
+     {
+      "role": "collector",
+      "server": "git"
+     },
+     {
+      "role": "collector",
+      "server": "filesystem"
+     },
+     {
+      "role": "owner"
+     },
+     {
+      "role": "pid1"
+     },
+     {
+      "role": "owner"
+     },
+     {
+      "role": "pid1"
+     }
+    ],
+    "process_cleanup": {
+     "all_stopped": true
+    },
+    "provider_private_logs": null,
+    "provider_protocol": null,
+    "provider_retained_artifacts": null,
+    "provider_routing": null,
+    "status": "passed",
+    "stop_receipt": {
+     "contract": "sw-pilot-stop/1",
+     "run_sha256": "9cf2244a18bed98d70a860eb187c78131e3dd00993c8883edb41c17fee5c4234",
+     "status": "revoked"
+    },
+    "terminal_success_refused": true
+   }
+  ],
+  "format": "sw-prepared-pilot-stop-witness/1",
+  "paid_api_calls": 0,
+  "provider": "owned-scripted-loopback",
+  "source_commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "status": "passed"
+ },
+ "executed": true,
+ "fixture_cleanup": {
+  "complete": true,
+  "retained_changed_files": []
+ },
+ "format": "sw-pilot-demo/1",
+ "live_model_effectiveness": "not_tested",
+ "provider": "owned-scripted-loopback",
+ "required_platform": "native Ubuntu 24.04 x86_64, non-root",
+ "selected_assets_unchanged": true,
+ "selected_sha256": {
+  "agentfw": "98af293b9c80bc60822019bfa47de22d433f03d3d8145cd1280b406e5f227407",
+  "bwrap": "9141b41fc18c0b5b599729c96bad7bc495c86b6c3e6a27ebd9e0d53270022001",
+  "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+  "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+  "git": "bdc796fec3a083c7511e32f9387f7eaead93a109a6e48b1d469119518d1b6174",
+  "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+  "git_launcher": "95c3cdfa2ace75e1045f4d05c0fcb111c8daaeb28b9f453055cefa9a015bb9d5",
+  "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+  "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+  "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+  "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+  "sandbox_tests": "1fa269adf86df0f2c721945ccb88a8c621a42888c9f91bf2cc59d8a970a43f6d"
+ },
+ "selection_sha256": "c481bce5dd5d2c09677c59a8e634e6d5b227687014271ca9a7a3fe80e15f00ad",
+ "source": {
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "dirty": false,
+  "files_sha256": "303854b052bbc48eb0b28cc410def92f63a7b725bbc01c64ae29eb6e19fce98e",
+  "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+ },
+ "source_after": {
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "dirty": false,
+  "files_sha256": "303854b052bbc48eb0b28cc410def92f63a7b725bbc01c64ae29eb6e19fce98e",
+  "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+ },
+ "source_before": {
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "dirty": false,
+  "files_sha256": "303854b052bbc48eb0b28cc410def92f63a7b725bbc01c64ae29eb6e19fce98e",
+  "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+ },
+ "status": "passed",
+ "trace_requested": {
+  "fallback_possible": true,
+  "mode": "seccomp-bpf",
+  "run_syscalls": "execve,openat,close,write,writev",
+  "validation_syscalls": "execve"
+ },
+ "unrelated_preserved": true,
+ "workspace_unchanged": true
+}

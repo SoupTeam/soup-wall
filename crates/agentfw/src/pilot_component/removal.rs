@@ -12,6 +12,7 @@ mod inventory;
 mod io;
 mod journal;
 mod processes;
+pub(crate) use io::Budget as ProcessBudget;
 use io::{Budget, Dir, Identity};
 
 const FORMAT: &str = "sw-installed-pilot-removal/1";
@@ -148,11 +149,13 @@ fn execute(cli: Cli) -> Result<Value> {
     match cli.action {
         Action::Preview(s) => {
             let plan = inventory::preview(&s, &mut budget)?;
-            let blockers = processes::blockers(&plan, &mut budget)?;
+            let mut process_refusals = std::collections::BTreeSet::new();
+            let blockers =
+                processes::blockers_with_refusals(&plan, &mut budget, &mut process_refusals)?;
             Ok(
                 json!({"format":FORMAT,"status":if blockers.is_empty(){"preview"}else{"blocked"},
                 "confirmation_sha256":if blockers.is_empty(){Some(digest(&plan)?)}else{None},
-                "inventory":plan,"blockers":blockers,"executed":false,"provider_requests":0,
+                "inventory":plan,"blockers":blockers,"process_refusals":process_refusals,"executed":false,"provider_requests":0,
                 "retained":["projects","outputs","exports","backups","audit_history","provider_credentials","agent_binary","prepared_generations"],
                 "scope":"verified_front_door_component_only",
                 "prerequisite_cleanup":"use_existing_receipt_aware_pilot_cleanup_separately"}),
@@ -225,4 +228,12 @@ pub fn run(cli: Cli) -> Result<()> {
         anyhow::bail!("{code}");
     }
     Ok(())
+}
+
+// The doctor reuses the exact removal process reader without any selected
+// scope, inactive-run claim, confirmation, journal or removal authority.
+pub(crate) fn environment_process_evidence(
+    budget: &mut ProcessBudget,
+) -> std::result::Result<Vec<&'static str>, &'static str> {
+    processes::environment(budget).map_err(|_| "process_inventory_unavailable_or_bounded")
 }

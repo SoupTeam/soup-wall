@@ -59,38 +59,87 @@ class ProposalScheduling(unittest.TestCase):
                 ASK.release_ready_pilots(pilots, seconds=.1)
             self.assertFalse(any(p.proposals.released.is_set() for p in pilots))
 
+    def mapped_expiry(self, *, creation=1002_000, step_ms=0, changed=False, gap=False):
+        ns = 1_000_000
+        offset = 1000_000 * ns
+        # First observation covers proposal; the rest cover creation-to-observation.
+        times = (list(range(0, 3001, 20)) if not gap else [0, 3000])
+        samples = [ASK.ClockPair(ms * ns, offset + (ms + (step_ms if ms >= 2500 else 0)) * ns, ms * ns)
+                   for ms in times]
+        waiting = {"pending_id": "original", "tool": "git_show", "binding_sha256": "a" * 64,
+                   "state": "pending", "expires_at_ms": creation + 20_000}
+        pending = dict(waiting, created_at_ms=creation, scope="native-mcp/approval/v1")
+        if changed:
+            pending["pending_id"] = "different"
+        evidence = {}
+        deadline = ASK.bind_original_expiry(waiting, pending, samples, ns, 20_000, evidence)
+        return deadline, evidence
+
     def test_expiry_does_not_consume_the_separate_followup_wait(self):
-        clock = SimpleNamespace(now=0.0)
+        deadline, evidence = self.mapped_expiry()
+        clock = SimpleNamespace(now=3.0)
         def sleep(seconds):
             self.assertGreaterEqual(seconds, 0)
             clock.now += seconds
         def followup():
-            return {"pending_id": "separate-useful-call"} if clock.now >= 21 else None
+            return {"pending_id": "separate-useful-call"} if clock.now >= 23 else None
         with patch.object(ASK.time, "monotonic", side_effect=lambda: clock.now), \
-             patch.object(ASK.time, "time_ns", side_effect=lambda: int((1000 + clock.now) * 1_000_000_000)), \
+             patch.object(ASK.time, "monotonic_ns", side_effect=lambda: round(clock.now * 1_000_000_000)), \
              patch.object(ASK.time, "sleep", side_effect=sleep):
-            # The old combined wait ends before the follow-up can be offered.
-            with self.assertRaisesRegex(ValueError, "followup_missing"):
-                ASK.until(followup, "followup_missing")
-            clock.now = 0
-            ASK.await_original_expiry(1_020_000)
-            self.assertEqual(clock.now, 20)
+            ASK.await_original_expiry(deadline)
+            self.assertAlmostEqual(clock.now, 22.001)
+            self.assertEqual(evidence["remaining_ttl_ns"], 19_001_000_000)
             result = ASK.until(followup, "followup_missing")
             self.assertEqual(result["pending_id"], "separate-useful-call")
-            self.assertLess(clock.now, 22)
+            self.assertLess(clock.now, 24)
 
-    def test_expiry_phase_rejects_unknown_or_unbounded_deadlines(self):
-        with patch.object(ASK.time, "time_ns", return_value=1_000_000_000_000), \
-             patch.object(ASK.time, "sleep") as sleep:
-            for value in (True, "1020000", -1, 1_020_001):
-                with self.subTest(expiry=value), self.assertRaises(ValueError):
-                    ASK.await_original_expiry(value)
-            sleep.assert_not_called()
-            ASK.await_original_expiry(999_000)
-            sleep.assert_not_called()
-            with self.assertRaisesRegex(ValueError, "original_expiry_not_reached"):
-                ASK.await_original_expiry(1_020_000)
-            sleep.assert_called_once_with(20)
+    def test_expiry_rejects_uncertain_creation_mapping(self):
+        for options, reason in [
+                ({"changed": True}, "identity_unavailable"),
+                ({"step_ms": -954}, "clock_discontinuity"),
+                ({"step_ms": 954}, "clock_discontinuity"),
+                ({"gap": True}, "clock_coverage_unavailable"),
+                ({"creation": 999_999}, "creation_outside_observation"),
+                ({"creation": 1003_010}, "creation_outside_observation")]:
+            with self.subTest(options=options), self.assertRaisesRegex(ValueError, reason):
+                self.mapped_expiry(**options)
+
+    def test_post_binding_wall_steps_and_genuinely_early_refusal(self):
+        deadline, evidence = self.mapped_expiry()
+        expiry_wall_ns = evidence["expires_at_ms"] * 1_000_000
+        for step_ms, elapsed_ms, accepted in [(-954, 150, True), (954, 150, True),
+                                              (954, -500, False), (-954, -500, False)]:
+            with self.subTest(step_ms=step_ms, elapsed_ms=elapsed_ms):
+                result_ns = deadline + elapsed_ms * 1_000_000
+                result_wall = expiry_wall_ns + (step_ms + elapsed_ms) * 1_000_000
+                row = {"primary_refusal_codes": ["native_approval_timeout"]}
+                with patch.object(ASK.time, "time_ns", return_value=result_wall) as wall:
+                    if accepted:
+                        ASK.check_expiry_refusal(row, result_ns, deadline)
+                    else:
+                        with self.assertRaisesRegex(ValueError, "expiry_refusal_not_attributed"):
+                            ASK.check_expiry_refusal(row, result_ns, deadline)
+                    wall.assert_not_called()
+                self.assertEqual(row["refusal_after_original_expiry_ms"], elapsed_ms)
+                if step_ms * elapsed_ms < 0:
+                    self.assertNotEqual(result_wall >= expiry_wall_ns, accepted)
+
+    def test_monotonic_wait_ignores_a_wall_step_during_sleep(self):
+        deadline, _ = self.mapped_expiry()
+        for step_ms in (-954, 954):
+            mono = deadline - 1_000_000_000
+            wall = 1_000_000_000_000
+            def sleep(seconds):
+                nonlocal mono, wall
+                mono += round(seconds * 1_000_000_000)
+                wall += round(seconds * 1_000_000_000) + step_ms * 1_000_000
+            with self.subTest(step_ms=step_ms), \
+                 patch.object(ASK.time, "monotonic_ns", side_effect=lambda: mono), \
+                 patch.object(ASK.time, "time_ns", side_effect=lambda: wall) as read_wall, \
+                 patch.object(ASK.time, "sleep", side_effect=sleep):
+                ASK.await_original_expiry(deadline)
+                self.assertEqual(mono, deadline)
+                read_wall.assert_not_called()
 
     def test_diagnostic_thread_birth_precedes_parent_clone_return(self):
         event = '{"event":"mcp_verified_inputs_resume","immutable_files":0,"leased_files":1,"rehashed_files":2}\n'

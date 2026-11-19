@@ -1,0 +1,13 @@
+{
+ "authorization": false,
+ "diagnostic": "SOU-216 owned CI user-session preparation",
+ "driver_source": {
+  "commit": "b4d3e7d67abe7cfc2a0e0877dbd21d1d0c8e232f",
+  "dirty": false,
+  "tree": "6b0afad2456b53a5e394ed04a08606bd5f39c187"
+ },
+ "installed_host_executed": null,
+ "native_removal_guard_changed": false,
+ "phase": "after installed-host attempt",
+ "status": "observed"
+}

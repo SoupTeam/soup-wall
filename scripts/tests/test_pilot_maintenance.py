@@ -178,6 +178,47 @@ class Marker(unittest.TestCase):
             with store.locked(exclusive=False):
                 with self.assertRaises(M.Refusal): store.admit(self.binding)
 
+    def coordinated(self, component):
+        root = self.home / 'coordinator'; root.mkdir(exist_ok=True, mode=0o700)
+        selected = root / component; selected.mkdir(exist_ok=True, mode=0o700)
+        value = self.bound(component)
+        value.update(component_home=str(selected), coordinator_root=str(root))
+        value['roots'] = [L.directory(path) for path in (self.home, root, selected)]
+        return value
+
+    def test_coordinated_update_and_rollback_keep_the_same_entered_gate(self):
+        a, b = self.coordinated('a'), self.coordinated('b')
+        with M.Store.create(self.home, a, maintenance=False) as store:
+            with store.locked(exclusive=False):
+                store.admit(a); store.admit(b)
+            self.assertEqual(self.transition_for(store, b, 'enter')['status'], 'entered')
+            with store.locked(exclusive=False):
+                for value in (a, b):
+                    with self.assertRaisesRegex(M.Refusal, 'maintenance_entered'): store.admit(value)
+            self.assertEqual(self.transition_for(store, a, 'leave')['status'], 'left')
+            with store.locked(exclusive=False):
+                store.admit(a); store.admit(b)
+        self.assertEqual(len(list((self.home / M.DIRECTORY / 'events').iterdir())), 2)
+
+    def test_coordinator_root_substitution_and_another_coordinator_keep_refusing(self):
+        from copy import deepcopy
+        a = self.coordinated('a')
+        other = self.home / 'other-coordinator'; other.mkdir(mode=0o700)
+        replaced = deepcopy(a); replaced['roots'][1]['object'][1] += 1
+        foreign = deepcopy(a); foreign['coordinator_root'] = str(other)
+        foreign['roots'][1] = L.directory(other)
+        with M.Store.create(self.home, a, maintenance=False) as store:
+            with store.locked(exclusive=False):
+                for value in (replaced, foreign):
+                    with self.assertRaisesRegex(M.Refusal, 'maintenance_scope_changed'): store.admit(value)
+                incomplete = deepcopy(a); incomplete['roots'] = incomplete['roots'][:1]
+                with self.assertRaisesRegex(M.Refusal, 'maintenance_binding_invalid'): store.admit(incomplete)
+
+    def test_direct_installation_is_not_silently_reenrolled_as_a_coordinator(self):
+        coordinated = self.coordinated('a')
+        with self.create() as store, store.locked(exclusive=False):
+            with self.assertRaisesRegex(M.Refusal, 'maintenance_scope_changed'): store.admit(coordinated)
+
 
 spec = importlib.util.spec_from_file_location('pilot_maintenance_launch', Path(__file__).resolve().parents[1] / 'pilot_maintenance_launch.py')
 L = importlib.util.module_from_spec(spec)
@@ -282,3 +323,25 @@ class Admission(unittest.TestCase):
         events.rename(events.with_name('events-held')); events.mkdir(mode=0o700)
         (self.home / L.M.DIRECTORY / 'marker.json').write_bytes(original)
         with self.assertRaises(ValueError), self.store.locked(exclusive=False): self.store.admit(self.bound)
+
+
+class CoordinatedSelectionBinding(unittest.TestCase):
+    def test_current_generation_and_coordinator_identity_are_revalidated(self):
+        home, coordinator, component, selection = '/owned/entry', '/owned/coordinator', '/owned/generation-a', '/owned/selection-a'
+        def directory(path): return {'path': str(path), 'object': [1, str(path)]}
+        file = {'path': '/owned/pointer', 'sha256': 'a' * 64}
+        bound = {'format': L.FORMAT, 'home': home, 'component_home': component,
+                 'coordinator_root': coordinator, 'selection': selection, 'state_root': '/owned/runs',
+                 'files': [file], 'roots': [directory(p) for p in (home, coordinator, component)], 'launch': {}}
+        current = {'generation': 'a' * 32, 'inventory_sha256': 'b' * 64}
+        verified = {'home': Path(component), 'inventory': {'selection': {'path': selection}}}
+        with mock.patch.object(L, 'file', return_value=file), mock.patch.object(L, 'directory', side_effect=directory), \
+             mock.patch.object(L.M.IO, 'state', return_value={'current': current}), \
+             mock.patch.object(L.M.IO, 'verify_binding', return_value=verified) as checking:
+            L.revalidate(bound)
+            checking.assert_called_once_with(Path(coordinator), current)
+            for field, value in (('component_home', '/owned/unselected-generation'), ('selection', '/owned/unselected-selection')):
+                changed = {**bound, field: value, 'roots': bound['roots'] + [directory(value)]}
+                with self.assertRaisesRegex(L.M.Refusal, 'maintenance_source_changed'): L.revalidate(changed)
+            without_root = {**bound, 'roots': [r for r in bound['roots'] if r['path'] != coordinator]}
+            with self.assertRaisesRegex(L.M.Refusal, 'maintenance_root_changed'): L.revalidate(without_root)

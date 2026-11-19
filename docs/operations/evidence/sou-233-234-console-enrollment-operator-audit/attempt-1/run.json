@@ -1,0 +1,8 @@
+{
+  "run_id": 42070305185,
+  "artifact_id": 13435484023,
+  "conclusion": "failure",
+  "url": "https://github.com/SoupTeam/soup-wall/actions/runs/42070305185",
+  "source_commit": "29bf830a7fbb2c4da067bf484b338bb12a7eaefc",
+  "cause": "Native fixture selected the private file writer from the wrong helper module. Both backend attempts stopped before the managed connection setup controls."
+}

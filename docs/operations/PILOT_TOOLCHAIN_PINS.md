@@ -7,12 +7,16 @@ inputs as the internal Linux pilot candidate, and see a clear refusal when anyth
 
 The single source of truth is `profiles/toolchain/linux-pilot-toolchain.json`.
 
+The current runtime pins are Node.js 22.23.5 and CPython 3.11.18. Their archive
+identities are verified; native runtime requalification is pending. Retained
+evidence records the earlier runtime versions and does not qualify these updates.
+
 | Input | Pin | Declared in |
 | --- | --- | --- |
 | Rust compiler | `1.99.1` (commit prefix `58cf8f9c3`, host `x86_64-unknown-linux-gnu`) | `rust-toolchain.toml`, `dtolnay/rust-toolchain@1.99.1` in workflows |
 | Cargo dependencies | `Cargo.lock`, built with `--locked` | `Cargo.lock` |
 | Classifier Python | CPython >= 3.9, supplied explicitly | pins file |
-| Git runtime Python | CPython 3.11.14, pinned archive digest | `profiles/mcp/git-readonly-v1/upstream-identity.json` |
+| Git runtime Python | CPython 3.11.18, pinned archive digest | `profiles/mcp/git-readonly-v1/upstream-identity.json` |
 | Git runtime packages | `requirements.lock` digest | same identity file |
 | Filesystem server packages | `package-lock.json` digest | `profiles/mcp/filesystem-readonly-v1/upstream-identity.json` |
 | Build scripts | digests recorded in every report | pins file `build_scripts` |
@@ -58,7 +62,7 @@ python3 scripts/verify-pilot-toolchain.py --python /absolute/path/to/python3 --e
 Options:
 
 - `--lane native` attests the native 1.94.1 lane instead of the 1.99.1 pin.
-- `--python-role git_runtime` attests the Git runtime interpreter (must be exactly 3.11.14).
+- `--python-role git_runtime` attests the Git runtime interpreter (must be exactly 3.11.18).
 - `--git-archive` and `--python-archive` digest-check locally supplied archives against their pins.
 - `--allow-dirty` is for development only.
 

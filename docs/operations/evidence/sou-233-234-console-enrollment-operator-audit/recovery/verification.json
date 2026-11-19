@@ -1,0 +1,27 @@
+{
+  "archive_sha256": "3a68eb401bbef5820ecd1821b71558ab284f10b5d253751020ec00f90158d1fd",
+  "kind": "recovery",
+  "reports": [
+    {
+      "backend": "postgres",
+      "checks": 88,
+      "failed_checks": [],
+      "runtime_commit": "29bf830a7fbb2c4da067bf484b338bb12a7eaefc",
+      "sha256": "925bef4138bd4e9a2167c6372b752987dcc731b8849dcd54d8aa8cb1a6ec47df",
+      "source_hashes_verified": 343,
+      "source_matches_head": "0a02fb48dfff12d7fe2dafb1196878da3085a5e3",
+      "status": "passed"
+    },
+    {
+      "backend": "sqlite",
+      "checks": 74,
+      "failed_checks": [],
+      "runtime_commit": "29bf830a7fbb2c4da067bf484b338bb12a7eaefc",
+      "sha256": "3052b70707c618ae9c9bfceb757c421da45c31560239b0008a5a8b27f5102b16",
+      "source_hashes_verified": 343,
+      "source_matches_head": "0a02fb48dfff12d7fe2dafb1196878da3085a5e3",
+      "status": "passed"
+    }
+  ],
+  "zip_crc": "passed"
+}

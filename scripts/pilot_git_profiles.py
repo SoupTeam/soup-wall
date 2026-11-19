@@ -14,12 +14,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT = "git-readonly-v1"
+FIRST_PARENT = "git-readonly-first-parent-v1"
 ASSETS = "profiles/mcp/git-readonly-v1"
 SELECTION_V2 = "sw-installed-pilot-selection/2"
 SELECTION_V3 = "sw-installed-pilot-selection/3"
 PROFILES = {
     "git-linked-worktree-readonly-v1": ("sw-mcp/git-linked-worktree-readonly/1", "linked_worktree", None),
     DEFAULT: ("sw-mcp/git-readonly/1", None, None),
+    FIRST_PARENT: ("sw-mcp/git-readonly-first-parent/1", "first_parent", None),
     "git-readonly-file-revisions-v1": ("sw-mcp/git-readonly-file-revisions/1", "file_revisions", None),
     "git-readonly-local-refs-v1": ("sw-mcp/git-readonly-local-refs/1", "local_references", None),
     "git-readonly-shallow-v1": ("sw-mcp/git-readonly-shallow/1", "shallow_repository", None),
@@ -72,7 +74,8 @@ def policy_path(name):
 
 def classifier_path(name):
     selected(name)
-    variant = {"git-readonly-file-revisions-v1": "git_readonly_file_revisions_v1",
+    variant = {FIRST_PARENT: "git_readonly_first_parent_v1",
+               "git-readonly-file-revisions-v1": "git_readonly_file_revisions_v1",
                "git-readonly-local-refs-v1": "git_readonly_local_refs_v1"}.get(name, "git_readonly_v1")
     return ROOT / "rule_baseline" / variant / "rule_baseline.py"
 
@@ -100,6 +103,8 @@ def binding(name=DEFAULT):
             files.append("scripts/install-sou150-git-profile.py")
     if name == "git-linked-worktree-readonly-v1":
         files += ["scripts/pilot_linked_worktree.py", "profiles/mcp/git-linked-worktree-readonly-v1/contract.json"]
+    if name == FIRST_PARENT:
+        files.append(f"profiles/mcp/{name}/contract.json")
     value = registry(name)
     return {"format": "sw-pilot-git-selection/1", "id": name, "profile_format": format_,
             "execution": "daemon-owned-original" if name in DAEMON_EXECUTION else "original-collector",

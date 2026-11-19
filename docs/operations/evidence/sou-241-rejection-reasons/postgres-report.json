@@ -1,0 +1,288 @@
+{
+  "backend": "postgres",
+  "binaries": {
+    "agentfw": "d3adb299c4695c15f611d2a25cf8ae0420fb19427199a729e04b4756030c9706",
+    "llm-firewall": "c554c364f99bc70b7be5729318e41b4fd7219d0fe0e8ae4d7cc009402a96a29e"
+  },
+  "checks": {
+    "agent-credential-cannot-read-history": true,
+    "applied-after-rejected-refused": true,
+    "baseline-applied-and-enforced": true,
+    "browser-fleet-latest-rejected-reason": true,
+    "browser-history-next-steps": true,
+    "browser-history-reasons": true,
+    "browser-history-receipt-times": true,
+    "browser-policy-panel-reasons": true,
+    "browser-read-only-no-errors": true,
+    "conflicting-reason-refused": true,
+    "corrected-redeploy-applied": true,
+    "expiry-bundle-expired": true,
+    "expiry-retry-keeps-first-receipt": true,
+    "foreign-tenant-credential-no-effect": true,
+    "free-of-private-values-detail": true,
+    "free-of-private-values-snapshot": true,
+    "narrow-no-horizontal-overflow": true,
+    "old-client-ack-accepted": true,
+    "old-client-retry-idempotent": true,
+    "older-console-fallback-recorded": true,
+    "policy-active-policy-unchanged": true,
+    "policy-invalid": true,
+    "policy-list-carries-reasons": true,
+    "postgres-explicit-migration-to-32": true,
+    "recovery-inventory-accepts-live-store": true,
+    "rejected-candidates-separate-from-active": true,
+    "restart-agent-keeps-applied": true,
+    "restart-keeps-reasons": true,
+    "revoked-credential-refused": true,
+    "snapshot-reason-codes": true,
+    "stored-rows-unchanged-by-refusals": true,
+    "transient-stays-pending": true,
+    "trust-active-policy-unchanged": true,
+    "trust-issuer-key-unknown": true,
+    "trust-rejection-stored-directly": true,
+    "unknown-reason-refused": true,
+    "viewer-cannot-deploy": true
+  },
+  "config_sha256": {
+    "console": "b3ded47a8f7334be2b8b090b9965af132628ef30ef4e553341f600e7cd8bef55"
+  },
+  "fault_injection": {
+    "expiry": "owned LD_PRELOAD shim adds +7200 s to the Agent's CLOCK_REALTIME only",
+    "invalid_policy": "one approved invalid revision row inserted into the owned disposable store",
+    "transient_activation": "a shared flock on the Agent's own managed-native-boundary.lock"
+  },
+  "format": "sw-console-agent-rejection-acceptance/1",
+  "postgres": {
+    "listen": "127.0.0.1",
+    "server": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
+    "tls": "sslmode=require with an owned CA"
+  },
+  "recovery_schema_version": 32,
+  "scope": "one disposable private Linux deployment; synthetic tenants and Agent IDs; recorded Console evidence and one local Agent, not production, multi-host or runtime attestation",
+  "snapshots": {
+    "store_detail": {
+      "agent": {
+        "agent_id": "edge-reject",
+        "current_liveness": "unknown",
+        "enrolled_at_unix": 1793998260,
+        "last_reported_applied": {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998270,
+          "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+          "recorded_state": "applied",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": 1793998280,
+          "revision": "r2",
+          "sequence": "5"
+        },
+        "latest_issued": {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998280,
+          "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+          "recorded_state": "rejected",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": null,
+          "revision": "r2",
+          "sequence": "7"
+        },
+        "registry_identity": null,
+        "revoked_at_unix": null,
+        "runtime_coverage": "unknown",
+        "tenant_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ"
+      },
+      "contract_version": "sw-agent-fleet/1",
+      "deployments": [
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998280,
+          "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+          "recorded_state": "rejected",
+          "rejected_at_unix": 1793998280,
+          "reported_applied_at_unix": null,
+          "revision": "r2",
+          "sequence": "7"
+        },
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998280,
+          "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+          "recorded_state": "rejected",
+          "rejected_at_unix": 1793998280,
+          "reported_applied_at_unix": null,
+          "revision": "r1",
+          "sequence": "6"
+        },
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998270,
+          "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+          "recorded_state": "applied",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": 1793998280,
+          "revision": "r2",
+          "sequence": "5"
+        },
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998270,
+          "policy_sha256": "6ab6b46ad5288f9f7a64b3cd463bdfdaf246557118a3d81de456e33280eeba17",
+          "recorded_state": "rejected",
+          "rejected_at_unix": 1793998270,
+          "rejection_code": "policy_invalid",
+          "rejection_reason_version": 1,
+          "reported_applied_at_unix": null,
+          "revision": "r-invalid",
+          "sequence": "4"
+        },
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998262,
+          "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+          "recorded_state": "rejected",
+          "rejected_at_unix": 1793998262,
+          "rejection_code": "bundle_expired",
+          "rejection_reason_version": 1,
+          "reported_applied_at_unix": null,
+          "revision": "r2",
+          "sequence": "3"
+        },
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998260,
+          "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+          "recorded_state": "rejected",
+          "rejected_at_unix": 1793998262,
+          "rejection_code": "issuer_key_unknown",
+          "rejection_reason_version": 1,
+          "reported_applied_at_unix": null,
+          "revision": "r2",
+          "sequence": "2"
+        },
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998260,
+          "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+          "recorded_state": "applied",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": 1793998260,
+          "revision": "r1",
+          "sequence": "1"
+        }
+      ],
+      "next_before_sequence": null,
+      "observed_at_unix": 1793998280
+    },
+    "store_detail_while_pending": {
+      "agent": {
+        "agent_id": "edge-reject",
+        "current_liveness": "unknown",
+        "enrolled_at_unix": 1793998260,
+        "last_reported_applied": {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998260,
+          "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+          "recorded_state": "applied",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": 1793998260,
+          "revision": "r1",
+          "sequence": "1"
+        },
+        "latest_issued": {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998270,
+          "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+          "recorded_state": "delivered",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": null,
+          "revision": "r2",
+          "sequence": "5"
+        },
+        "registry_identity": null,
+        "revoked_at_unix": null,
+        "runtime_coverage": "unknown",
+        "tenant_id": "tenant_Ke52Ppw0cp3uFV32KvavbQ"
+      },
+      "contract_version": "sw-agent-fleet/1",
+      "deployments": [
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998270,
+          "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+          "recorded_state": "delivered",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": null,
+          "revision": "r2",
+          "sequence": "5"
+        },
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998270,
+          "policy_sha256": "6ab6b46ad5288f9f7a64b3cd463bdfdaf246557118a3d81de456e33280eeba17",
+          "recorded_state": "rejected",
+          "rejected_at_unix": 1793998270,
+          "rejection_code": "policy_invalid",
+          "rejection_reason_version": 1,
+          "reported_applied_at_unix": null,
+          "revision": "r-invalid",
+          "sequence": "4"
+        },
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998262,
+          "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+          "recorded_state": "rejected",
+          "rejected_at_unix": 1793998262,
+          "rejection_code": "bundle_expired",
+          "rejection_reason_version": 1,
+          "reported_applied_at_unix": null,
+          "revision": "r2",
+          "sequence": "3"
+        },
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998260,
+          "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+          "recorded_state": "rejected",
+          "rejected_at_unix": 1793998262,
+          "rejection_code": "issuer_key_unknown",
+          "rejection_reason_version": 1,
+          "reported_applied_at_unix": null,
+          "revision": "r2",
+          "sequence": "2"
+        },
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793998260,
+          "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+          "recorded_state": "applied",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": 1793998260,
+          "revision": "r1",
+          "sequence": "1"
+        }
+      ],
+      "next_before_sequence": null,
+      "observed_at_unix": 1793998279
+    }
+  },
+  "source_commit": "150762290a71889b7f34f238c888c744376dd376",
+  "source_dirty": false,
+  "source_tree": "69909a83574407114de617fdec27be747f791ae9",
+  "status": "passed"
+}

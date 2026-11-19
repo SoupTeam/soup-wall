@@ -68,6 +68,18 @@ def approve(rig, waiting, success=True):
 def assert_refused(client, identifier=50):
     response, _ = client.receive(timeout=10)
     require(response.get("id") == identifier and B.refused(response), "terminal refusal lost its request identity")
+    return response
+
+
+def assert_changed_create_resource(client, stderr):
+    response = assert_refused(client)
+    content = response.get("result", {}).get("content")
+    require(content == [{"type": "text", "text": "Soup Wall withheld MCP invocation (native_approval_revalidation_refused)"}],
+            "create prevalidation did not return a correlated refusal")
+    stages = [row for row in B.events(stderr, "mcp_real_approval_timing") if row.get("host_call_id") == 50]
+    require([(row.get("stage"), row.get("success")) for row in stages] == [("create_resource_before_assets", False)],
+            "a changed create resource entered post-approval asset and authority checks")
+    return {"response_id": response["id"], "stage": stages[0]["stage"], "revalidation_refused": True}
 
 
 def useful_read(client, identifier):
@@ -212,7 +224,8 @@ def qualify(rig, report):
                 restored = rig.root / "original-workspace"
                 rig.workspace.rename(restored)
                 rig.workspace.mkdir(mode=0o700)
-                approve(rig, waiting); assert_refused(client)
+                approve(rig, waiting)
+                row["resource_prevalidation"] = assert_changed_create_resource(client, stderr)
                 require(set(snapshot(rig.workspace)) == {"."} and snapshot(restored) == before, "root replacement transferred write authority")
                 rig.workspace.rmdir(); restored.rename(rig.workspace); restored = None
             elif case in ("competing_target", "symlink_target"):
@@ -222,7 +235,8 @@ def qualify(rig, report):
                 if case == "competing_target": target.write_text("operator owned")
                 else: target.symlink_to(sentinel)
                 interference = snapshot(rig.workspace)
-                approve(rig, waiting); assert_refused(client)
+                approve(rig, waiting)
+                row["resource_prevalidation"] = assert_changed_create_resource(client, stderr)
                 require(snapshot(rig.workspace) == interference and sentinel.read_text() == "external inventory unchanged", "competing inventory was overwritten")
                 target.unlink()
             elif case == "disconnect":

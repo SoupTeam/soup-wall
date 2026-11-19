@@ -196,6 +196,13 @@ enum DiagnosticCommands {
 
 #[derive(Subcommand)]
 enum LifecycleCommands {
+    /// Configure or disconnect one installed Linux managed Console connection.
+    ManagedConsole {
+        #[arg(long, global = true)]
+        home: Option<PathBuf>,
+        #[command(subcommand)]
+        command: agentfw::managed_connection::Command,
+    },
     /// Print the settings.json hook block and setup instructions.
     Install,
     /// Manage a user-scoped Agent binary lifecycle.
@@ -316,6 +323,8 @@ enum McpCommands {
     ///
     /// Writes a versioned JSON report. Exit 0 passed, 3 failed, 4 incomplete, 5 unsupported.
     SelfTest(agentfw::self_test::Cli),
+    /// Explicit real-runtime Linux sandbox exercise; bounded JSON, no protection claim.
+    SandboxExercise(agentfw::mcp::sandbox_exercise::Cli),
     #[cfg(windows)]
     /// Preview a native Windows Agent setup against explicitly selected local assets.
     OnboardWindows {
@@ -657,6 +666,9 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
         Cmd::Mcp(McpCommands::SelfTest(args)) => {
             std::process::exit(agentfw::self_test::run_cli(args))
         }
+        Cmd::Mcp(McpCommands::SandboxExercise(args)) => {
+            std::process::exit(agentfw::mcp::sandbox_exercise::run_cli(args))
+        }
         #[cfg(windows)]
         Cmd::Mcp(McpCommands::OnboardWindows { command }) => {
             prepare_lifecycle_process()?;
@@ -685,6 +697,9 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             let body = std::fs::read_to_string(&path)?;
             print!("{}", agentfw::replay::summarize(&body).render());
             Ok(())
+        }
+        Cmd::Lifecycle(LifecycleCommands::ManagedConsole { home, command }) => {
+            agentfw::managed_connection::run(&home.unwrap_or(Config::home_path()?), command)
         }
         Cmd::Lifecycle(LifecycleCommands::Install) => {
             let home = Config::home()?;
@@ -1747,9 +1762,27 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
     // Managed enrollment is opt-in and pinned to an operator-approved local
     // Console origin and public key. A corrupt persisted signed policy stops
     // startup rather than silently reverting to a permissive default.
-    if let Some(managed) = agentfw::managed_sync::ManagedSync::from_environment(&home)? {
-        managed.restore(&state)?;
-        tokio::spawn(managed.run(state.clone()));
+    let heartbeat = agentfw::managed_heartbeat::requested()?;
+    let connection = agentfw::managed_connection::startup(&home)?;
+    if let Some(sync) = connection.sync {
+        sync.restore(&state)?;
+        if connection.enabled {
+            if heartbeat {
+                tokio::spawn(sync.heartbeat_sender()?.run(state.clone()));
+            }
+            tokio::spawn(sync.run(state.clone()));
+        } else {
+            state
+                .firewall
+                .lock()
+                .map_err(|_| anyhow::anyhow!("firewall state unavailable"))?
+                .set_managed_transport_status(
+                    "disconnected",
+                    agentfw::protection_status::now_ms() as i64 / 1000,
+                );
+        }
+    } else if heartbeat {
+        anyhow::bail!("SOUP_MANAGED_AGENT_HEARTBEAT=1 requires the managed Console configuration (SOUP_MANAGED_AGENT_CONSOLE and its settings)");
     }
 
     let (maint_tx, maint_rx) = tokio::sync::watch::channel(false);
@@ -1761,8 +1794,9 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
         ));
     }
 
-    let diagnostics =
-        agentfw::protection_status::Runtime::new(&cfg).with_binary(if managed.is_none() {
+    let diagnostics = agentfw::protection_status::Runtime::new(&cfg)
+        .with_managed_connection(connection.identity)
+        .with_binary(if managed.is_none() {
             std::env::current_exe()
                 .ok()
                 .and_then(|p| agentfw::lifecycle::sha256_file(&p).ok())

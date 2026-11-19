@@ -1,0 +1,64 @@
+Private Linux read-only runtime: source and recipient rights
+
+Give this entire compliance directory to each recipient with the corresponding
+runtime. Keep package copyright, attribution, warranty and license notices.
+This package does not license third-party code under the Soup Wall license.
+
+The original filesystem server 2026.8.31 is from upstream commit
+a40bc270fb5ece62673f8a1196f57116d885c5eb, at
+https://github.com/modelcontextprotocol/servers/tree/a40bc270fb5ece62673f8a1196f57116d885c5eb/src/filesystem .
+Its retained LICENSE describes the MIT/Apache transition: unconsented earlier
+MIT contributions remain MIT; new/consented code is Apache-2.0. The supplied
+package is not asserted to be wholly available under a choice of either license.
+The unchanged upstream README/documentation is attributed to its original
+contributors and remains CC-BY-4.0:
+https://creativecommons.org/licenses/by/4.0/ .
+The distributor's changes are dependency-lock overrides and integration;
+the original server's packaged code and README remain unchanged. The upstream
+license, attribution and any supplied notices must be preserved in further copies.
+
+The certifi source directories include the exact installed .py source and
+cacert.pem for top-level 2026.10.19 and pip-vendored 2026.10.23, kept separately.
+They are covered by MPL-2.0; see MPL-2.0.txt and each component's own notices.
+Their source is supplied here at no extra charge. Modify and redistribute the
+covered source under MPL-2.0 and retain its notices. The larger application's
+license does not remove these source rights. Pip's upstream vendoring is
+retained; the distributor made no further edits to these source files.
+
+Autocommand 2.2.2 is Copyright 2014-2016 Nathan West, licensed LGPL-3.0-or-later.
+See LGPL-3.0.txt and GPL-3.0.txt. Editable autocommand .py source and its containing
+setuptools application/vendor tree are supplied under python-source/, with
+their original license/copyright files. Their original licenses remain in force.
+You may modify the library and debug those modifications, including reverse
+engineering to the extent needed for debugging library changes. No project
+confidentiality, runtime acceptance or other terms withdraw those rights.
+The distributor made no source changes to the supplied library.
+
+To use a modified autocommand, copy python-source/ to your own development
+directory, edit setuptools/_vendor/autocommand/*.py, and put that directory
+first on PYTHONPATH for a compatible Python 3.11 interpreter. For example:
+  PYTHONPATH=/your/editable/python-source python3 -B -c \
+    "from setuptools._vendor import autocommand; print(autocommand.__file__)"
+Run the normal application/tests with that same interpreter and source path;
+keep the other supplied vendor modules and package metadata available.
+This interpreted source path is the replaceable-library/recombination route.
+The separately retained runtime-compliance file inventory identifies every
+supplied source byte; no secret authorization key is needed to edit/run it.
+The production selection's digest checks still identify only the qualified
+unmodified runtime. A modified development copy does not inherit that
+qualification. Rebuild/review a new selection to qualify modified code.
+
+PSF-licensed typing_extensions 4.16.0 and pip-vendored distlib 0.4.4 retain their
+full original and historical license/copyright notices. The distributor made no
+source changes; pip's upstream vendor layout is retained. Do not imply Python
+Software Foundation or upstream contributor endorsement.
+
+Each of the six exact BlueOak packages retains its full license notice:
+@isaacs/nonrecursive-glob-match 1.1.0; glob 14.0.4; lru-cache 11.5.3;
+minimatch 11.0.5; minipass 7.1.3; path-scurry 3.0.0.
+Give recipients that license text or https://blueoakcouncil.org/license/1.0.0 .
+
+This bundle satisfies only its identified package notice/source conditions.
+It makes no blanket claim that native Git/Python/ELF corresponding-source
+obligations, security findings, pilot qualification or public release gates have
+been cleared. Those have separate exact-material evidence and review.

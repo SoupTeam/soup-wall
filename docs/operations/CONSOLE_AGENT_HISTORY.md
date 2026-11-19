@@ -24,7 +24,7 @@ current protection and liveness are always shown as unknown.
 | Issued | deployment record (sequence, revision, policy digest, activate or rollback) | issue time |
 | Fetched | deployment state `delivered` | not recorded |
 | Applied | deployment state `applied` (a past Agent report) | reported time |
-| Rejected | deployment state `rejected` | not recorded |
+| Rejected | deployment state `rejected`, with its [reason and next step](AGENT_POLICY_REJECTIONS.md) when recorded | Console receipt time (not recorded for rejections stored before SOU-241) |
 | Pending | the latest deployment, still `issued` or `delivered` | none |
 | Superseded | an older deployment that never got an acknowledgement | none |
 | Revoked | enrollment record | revocation time |

@@ -21,6 +21,8 @@ import uuid
 _spec=importlib.util.spec_from_file_location('workspace_snapshot_io',Path(__file__).with_name('pilot_update.py'))
 IO=importlib.util.module_from_spec(_spec);_spec.loader.exec_module(IO)
 FORMAT='sw-private-workspace-snapshot/1'
+CAPTURE_OWNER='capture-owner.json'
+STAGE_NAME=re.compile(r'\.snapshot-[a-f0-9]{32}')
 MAX_FILES=128
 MAX_DIRECTORIES=128
 MAX_ENTRIES=256
@@ -183,6 +185,7 @@ def plan(capture,destination,protected):
     destination=Path(destination)
     require(destination.is_absolute() and destination.name not in ('.','..') and destination.resolve()==destination,'canonical_destination_required')
     require(not destination.exists() and not destination.is_symlink(),'destination_exists')
+    require(not destination.name.startswith('.snapshot-'),'reserved_destination')
     with IO.Directory(destination.parent) as parent:
         local(parent.fd)
         separate([capture.source,destination])
@@ -211,14 +214,35 @@ def publish(parent,temporary,destination):
         raise OSError(ctypes.get_errno(),'exclusive snapshot publication refused')
 
 
-def write_record(directory,name,value):
-    raw=encoded(value);require(len(raw)<=65536,'receipt_bound')
+def write_record(directory,name,value,limit=65536):
+    raw=encoded(value);require(len(raw)<=limit,'receipt_bound')
     fd=os.open(name,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW|os.O_CLOEXEC,0o600,dir_fd=directory)
     try:
         with os.fdopen(os.dup(fd),'wb') as stream: stream.write(raw);stream.flush();os.fsync(stream.fileno())
         os.fchmod(fd,0o400);os.fsync(fd)
     finally:os.close(fd)
     return hashlib.sha256(raw).hexdigest()
+
+
+def process_start(pid):
+    with (Path('/proc') / str(pid) / 'stat').open('rb') as stream:
+        raw = stream.read(4097)
+    fields = raw.rsplit(b') ', 1)[-1].split()
+    require(len(raw) <= 4096 and len(fields) > 19 and int(fields[19]) > 0,
+            'recovery_process_identity_invalid')
+    return int(fields[19])
+
+
+def capture_owner(parent, stage, name, destination):
+    pid = os.getpid()
+    return dict(
+        format=FORMAT, stage=name, destination=str(destination),
+        store_identity=identity(os.fstat(parent)),
+        stage_identity=identity(os.fstat(stage)),
+        creator=dict(pid=pid, start=process_start(pid),
+                     boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                     pid_namespace=os.stat('/proc/self/ns/pid').st_ino),
+    )
 
 
 def remove_tree(parent,name):
@@ -258,6 +282,10 @@ def create(source,destination,confirmation,protected=()):
         stage=os.open(temporary,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC,dir_fd=parent.fd)
         published=False
         try:
+            fcntl.flock(stage, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            write_record(stage, CAPTURE_OWNER, capture_owner(parent.fd, stage, temporary, destination))
+            os.fsync(stage)
+            os.fsync(parent.fd)
             os.mkdir('workspace',0o700,dir_fd=stage)
             workspace=os.open('workspace',os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC,dir_fd=stage)
             outputs={'':workspace};entries=[]
@@ -305,17 +333,19 @@ def create(source,destination,confirmation,protected=()):
             finally:
                 for fd in outputs.values():os.close(fd)
         finally:
-            os.close(stage)
-            if not published:remove_tree(parent.fd,temporary)
+            try:
+                if not published:remove_tree(parent.fd,temporary)
+            finally:
+                os.close(stage)
     return inspect(destination)
 
 
-def record(fd,name):
+def record(fd,name,limit=65536):
     file=os.open(name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK|os.O_CLOEXEC,dir_fd=fd)
     try:
         m=os.fstat(file)
-        require(stat.S_ISREG(m.st_mode) and m.st_uid==os.getuid() and stat.S_IMODE(m.st_mode)==0o400 and m.st_nlink==1 and m.st_size<=65536,'private_receipt_required')
-        raw=os.read(file,65537)
+        require(stat.S_ISREG(m.st_mode) and m.st_uid==os.getuid() and stat.S_IMODE(m.st_mode)==0o400 and m.st_nlink==1 and m.st_size<=limit,'private_receipt_required')
+        raw=os.read(file,limit+1)
         require(len(raw)==m.st_size and stamp(os.fstat(file))==stamp(m)==stamp(os.stat(name,dir_fd=fd,follow_symlinks=False)),'receipt_changed')
         value=IO.decode(raw);require(encoded(value)==raw,'receipt_encoding_invalid')
         return value,hashlib.sha256(raw).hexdigest()
@@ -351,8 +381,13 @@ def tree(fd,entries):
 
 def load(destination):
     destination=Path(destination)
+    require(not destination.name.startswith('.snapshot-'),'incomplete_generation')
     with IO.Directory(destination) as generation:
-        require(set(os.listdir(generation.fd))=={'workspace','receipt.json','complete.json','lease'},'incomplete_generation')
+        names=set(os.listdir(generation.fd))
+        require(names- {CAPTURE_OWNER}=={'workspace','receipt.json','complete.json','lease'},'incomplete_generation')
+        if CAPTURE_OWNER in names:
+            owner,_=record(generation.fd,CAPTURE_OWNER)
+            require(owner['stage_identity']==identity(os.fstat(generation.fd)),'generation_changed')
         receipt,sha=record(generation.fd,'receipt.json');complete,_=record(generation.fd,'complete.json')
         require(set(receipt)=={'format','view','source','source_identity','source_scope_sha256','tree_sha256','entries','generation_identity','workspace_identity','lease_identity'} and receipt['format']==FORMAT and receipt['view']=='snapshot','receipt_schema')
         require(complete==dict(format=FORMAT,receipt_sha256=sha,generation_identity=identity(os.fstat(generation.fd))) and
@@ -416,6 +451,246 @@ def remove(destination,confirmation):
     return dict(format=FORMAT,status='snapshot-removed',executed=False,source_modified=False)
 
 
+def recovery_owner(parent, stage, name):
+    owner, receipt = record(stage, CAPTURE_OWNER)
+    stage_info = os.fstat(stage)
+    require(owner['format'] == FORMAT and owner['stage'] == name
+            and owner['store_identity'] == identity(os.fstat(parent.fd))
+            and owner['stage_identity'] == identity(stage_info)
+            and stage_info.st_dev == os.fstat(parent.fd).st_dev
+            and mount(stage) == mount(parent.fd), 'recovery_identity_changed')
+    destination = Path(owner['destination'])
+    require(destination.parent == parent.path
+            and not destination.name.startswith('.snapshot-'), 'recovery_destination_changed')
+    return owner, receipt
+
+
+def creator_state(creator):
+    pid, start = creator['pid'], creator['start']
+    require(type(pid) is int and pid > 0 and type(start) is int and start > 0
+            and re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', creator['boot']),
+            'recovery_process_identity_invalid')
+    boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+    if creator['boot'] != boot:
+        return 'abandoned'
+    require(creator['pid_namespace'] == os.stat('/proc/self/ns/pid').st_ino
+            and os.readlink('/proc/self') == str(os.getpid()), 'recovery_process_namespace_changed')
+    try:
+        return 'active' if process_start(pid) == start else 'abandoned'
+    except FileNotFoundError:
+        return 'abandoned'
+
+
+def recovery_stage_state(parent, name):
+    try:
+        with IO.Directory(parent.path / name) as stage:
+            owner, _ = recovery_owner(parent, stage.fd, name)
+            try:
+                fcntl.flock(stage.fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return 'active'
+            state = creator_state(owner['creator'])
+            stage.check()
+            return state
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, StopIteration):
+        return 'unknown'
+
+
+def recovery_inventory(store):
+    require(sys.platform == 'linux', 'recovery_platform_unsupported')
+    with IO.Directory(store) as parent:
+        local(parent.fd)
+        stages = []
+        with os.scandir(parent.fd) as entries:
+            for count, entry in enumerate(entries, 1):
+                require(count <= MAX_ENTRIES, 'recovery_inventory_bound')
+                if STAGE_NAME.fullmatch(entry.name):
+                    stages.append(dict(stage=entry.name, state=recovery_stage_state(parent, entry.name)))
+        parent.check()
+    return dict(format=FORMAT, status='snapshot-recovery-inventory',
+                executed=False, stages=sorted(stages, key=lambda row: row['stage']))
+
+
+@contextmanager
+def abandoned_stage(store, name, *, exclusive=False):
+    require(sys.platform == 'linux', 'recovery_platform_unsupported')
+    require(STAGE_NAME.fullmatch(name) is not None, 'recovery_stage_name_invalid')
+    with IO.Directory(store) as parent:
+        local(parent.fd)
+        with IO.Directory(parent.path / name) as stage:
+            try:
+                mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+                fcntl.flock(stage.fd, mode | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise ValueError('workspace_snapshot_recovery_stage_busy') from None
+            owner, receipt = recovery_owner(parent, stage.fd, name)
+            require(creator_state(owner['creator']) == 'abandoned', 'recovery_creator_active')
+            yield parent, stage, owner, receipt
+
+
+def recovery_entries(stage):
+    stage_info = os.fstat(stage)
+    stage_mount = mount(stage)
+    entries = []
+
+    def walk(directory, prefix, depth):
+        before = stamp(os.fstat(directory))
+        require(depth <= MAX_DEPTH + 1, 'recovery_tree_bound')
+        with os.scandir(directory) as children:
+            for child in children:
+                require(len(entries) < MAX_ENTRIES + 8, 'recovery_tree_bound')
+                path = prefix + child.name
+                relative(path)
+                info = child.stat(follow_symlinks=False)
+                is_directory = stat.S_ISDIR(info.st_mode)
+                require(info.st_uid == stage_info.st_uid and info.st_dev == stage_info.st_dev
+                        and not info.st_mode & 0o022
+                        and (is_directory or (stat.S_ISREG(info.st_mode) and info.st_nlink == 1)),
+                        'recovery_unsafe_entry')
+                flags = os.O_RDONLY | os.O_DIRECTORY if is_directory else os.O_PATH
+                fd = os.open(child.name, flags | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
+                try:
+                    require(stamp(os.fstat(fd)) == stamp(info) and mount(fd) == stage_mount,
+                            'recovery_entry_changed')
+                    entries.append((path, stamp(info)))
+                    if is_directory:
+                        walk(fd, path + '/', depth + 1)
+                    require(stamp(os.stat(child.name, dir_fd=directory, follow_symlinks=False))
+                            == stamp(info), 'recovery_entry_changed')
+                finally:
+                    os.close(fd)
+        require(stamp(os.fstat(directory)) == before, 'recovery_entry_changed')
+
+    walk(stage, '', 0)
+    return sorted(entries)
+
+
+def recovery_plan(parent, stage, owner, receipt, entries=None):
+    if entries is None:
+        entries = recovery_entries(stage.fd)
+    parent.check()
+    stage.check()
+    require(recovery_owner(parent, stage.fd, owner['stage']) == (owner, receipt),
+            'recovery_identity_changed')
+    return dict(format=FORMAT, status='snapshot-recovery-plan', executed=False,
+                stage=owner['stage'], entries=len(entries),
+                confirmation=digest(dict(action='recover', store=str(parent.path), owner=owner,
+                                         receipt=receipt, entries=entries)))
+
+
+def recovery_preview(store, name):
+    with abandoned_stage(store, name) as selected:
+        return recovery_plan(*selected)
+
+
+RECOVERY_RECORD_LIMIT = 2 * 1024 * 1024
+
+
+def remove_recovery_entries(stage, entries):
+    def clear(directory, prefix):
+        os.fchmod(directory, 0o700)
+        names = []
+        with os.scandir(directory) as children:
+            for child in children:
+                require(len(names) < MAX_ENTRIES + 8, 'recovery_tree_bound')
+                names.append(child.name)
+        for name in sorted(names):
+            path = prefix + name
+            info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            expected = entries.get(path)
+            require(expected is not None, 'recovery_entry_changed')
+            if stat.S_ISDIR(info.st_mode):
+                fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+                try:
+                    require(stamp(os.fstat(fd)) == stamp(info)
+                            and stamp(info)[:4] == expected[:4]
+                            and mount(fd) == mount(stage), 'recovery_entry_changed')
+                    clear(fd, path + '/')
+                    require(identity(os.stat(name, dir_fd=directory, follow_symlinks=False))
+                            == identity(os.fstat(fd)), 'recovery_entry_changed')
+                    os.rmdir(name, dir_fd=directory)
+                finally:
+                    os.close(fd)
+            else:
+                fd = os.open(name, os.O_PATH | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory)
+                try:
+                    require(stamp(info) == expected == stamp(os.fstat(fd))
+                            and mount(fd) == mount(stage), 'recovery_entry_changed')
+                    os.unlink(name, dir_fd=directory)
+                finally:
+                    os.close(fd)
+        os.fsync(directory)
+
+    clear(stage, '')
+
+
+def recovery_apply(store, name, confirmation):
+    require(sys.platform == 'linux', 'recovery_platform_unsupported')
+    require(STAGE_NAME.fullmatch(name) is not None, 'recovery_stage_name_invalid')
+    journal_name = '.recovery-' + name.removeprefix('.snapshot-') + '.json'
+    with IO.Directory(store) as parent:
+        local(parent.fd)
+        try:
+            journal, _ = record(parent.fd, journal_name, RECOVERY_RECORD_LIMIT)
+        except FileNotFoundError:
+            journal = None
+        if journal is not None:
+            require(journal['confirmation'] == confirmation and journal['stage'] == name
+                    and journal['store'] == str(parent.path)
+                    and journal['store_identity'] == identity(os.fstat(parent.fd)),
+                    'exact_confirmation_required')
+        try:
+            stage = IO.Directory(parent.path / name)
+        except FileNotFoundError:
+            require(journal is not None, 'recovery_stage_missing')
+            parent.check()
+            return dict(format=FORMAT, status='snapshot-already-recovered', stage=name)
+        with stage:
+            try:
+                fcntl.flock(stage.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise ValueError('workspace_snapshot_recovery_stage_busy') from None
+            parent.check()
+            stage.check()
+            require(mount(stage.fd) == mount(parent.fd), 'recovery_identity_changed')
+            current = recovery_entries(stage.fd)
+            if journal is None:
+                owner, receipt = recovery_owner(parent, stage.fd, name)
+                require(creator_state(owner['creator']) == 'abandoned', 'recovery_creator_active')
+                plan = recovery_plan(parent, stage, owner, receipt, current)
+                require(plan['confirmation'] == confirmation, 'exact_confirmation_required')
+                journal = dict(confirmation=confirmation, stage=name, store=str(parent.path),
+                               store_identity=identity(os.fstat(parent.fd)),
+                               stage_identity=identity(os.fstat(stage.fd)), entries=current)
+                temporary = '.recovery-pending-' + uuid.uuid4().hex
+                try:
+                    write_record(parent.fd, temporary, journal, RECOVERY_RECORD_LIMIT)
+                    publish(parent.fd, temporary, journal_name)
+                    os.fsync(parent.fd)
+                finally:
+                    try:
+                        os.unlink(temporary, dir_fd=parent.fd)
+                    except FileNotFoundError:
+                        pass
+            require(journal['stage_identity'] == identity(os.fstat(stage.fd)),
+                    'recovery_identity_changed')
+            original = dict(journal['entries'])
+            for path, observed in current:
+                expected = original.get(path)
+                require(expected is not None and (
+                    observed == expected or (stat.S_ISDIR(observed[4])
+                    and stat.S_ISDIR(expected[4]) and observed[:4] == expected[:4])),
+                    'recovery_entry_changed')
+            parent.check()
+            stage.check()
+            remove_recovery_entries(stage.fd, original)
+            stage.check()
+            parent.check()
+            os.rmdir(name, dir_fd=parent.fd)
+            os.fsync(parent.fd)
+    return dict(format=FORMAT, status='snapshot-recovered', stage=name)
+
+
 def main(argv,front=None):
     parser=argparse.ArgumentParser(description=__doc__);commands=parser.add_subparsers(dest='action',required=True)
     for action in ('preview','create'):
@@ -425,6 +700,13 @@ def main(argv,front=None):
     for action in ('inspect','remove'):
         p=commands.add_parser(action);p.add_argument('--snapshot',type=Path,required=True)
         if action=='remove':p.add_argument('--confirm',required=True)
+    p=commands.add_parser('recovery-inventory')
+    p.add_argument('--store',type=Path,required=True)
+    for action in ('recovery-preview', 'recovery-apply'):
+        p=commands.add_parser(action)
+        p.add_argument('--store',type=Path,required=True)
+        p.add_argument('--stage',required=True)
+        if action == 'recovery-apply':p.add_argument('--confirm',required=True)
     args=parser.parse_args(argv)
     try:
         if args.action in ('preview','create'):
@@ -445,6 +727,9 @@ def main(argv,front=None):
             protected=list(dict.fromkeys(protected))
             for path in protected: separate([args.source,args.destination,path])
             result=preview(args.source,args.destination,protected) if args.action=='preview' else create(args.source,args.destination,args.confirm,protected)
+        elif args.action=='recovery-inventory':result=recovery_inventory(args.store)
+        elif args.action=='recovery-preview':result=recovery_preview(args.store,args.stage)
+        elif args.action=='recovery-apply':result=recovery_apply(args.store,args.stage,args.confirm)
         else:result=inspect(args.snapshot) if args.action=='inspect' else remove(args.snapshot,args.confirm)
         print(json.dumps(result,sort_keys=True));return 0
     except (OSError,ValueError,KeyError,TypeError) as error:

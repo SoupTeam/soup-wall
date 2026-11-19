@@ -2,6 +2,7 @@
 //! SOU-30 SQLite Console issuer for approved, signed AgentPolicySet revisions.
 //! Deliberately distinct from the Gateway TenantPolicyDocument API.
 
+use super::operator_audit::{AuditFact, AuditOperation, AuditTarget, RolloutAuditState};
 use anyhow::{bail, ensure, Context, Result};
 use aws_lc_rs::signature::{Ed25519KeyPair, KeyPair};
 use rusqlite::{params, OptionalExtension};
@@ -48,6 +49,14 @@ pub struct ManagedDeployment {
     pub status: String,
     pub issued_at_unix: i64,
     pub applied_at_unix: Option<i64>,
+    /// SOU-241: Console receipt time of the first authenticated rejection of
+    /// this exact candidate, when one is recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rejected_at_unix: Option<i64>,
+    /// SOU-241: allowlisted reason code (`sw-agent-rejection-reason/1`);
+    /// absent when the Agent did not report one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rejection_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -264,6 +273,15 @@ pub(super) fn exact_id(s: &str) -> bool {
         && s.bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
 }
+fn decode_hex(value: &str) -> Option<Vec<u8>> {
+    if !value.len().is_multiple_of(2) || !value.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    (0..value.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&value[i..i + 2], 16).ok())
+        .collect()
+}
 pub(super) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -374,6 +392,10 @@ impl ManagedIssuer {
         );
     }
 
+    pub(super) fn public_key_sha256(&self) -> String {
+        hex(&Sha256::digest(self.pair.public_key().as_ref()))
+    }
+
     pub fn public_key_hex(&self) -> String {
         hex(self.pair.public_key().as_ref())
     }
@@ -381,9 +403,24 @@ impl ManagedIssuer {
         bundle.signature_hex = hex(self.pair.sign(&bundle.transcript()?).as_ref());
         Ok(())
     }
+    /// SOU-242: whether `bundle` carries a valid signature by this issuer key.
+    pub(super) fn verifies(&self, bundle: &SignedManagedBundle) -> bool {
+        let Ok(transcript) = bundle.transcript() else {
+            return false;
+        };
+        let Some(signature) = decode_hex(&bundle.signature_hex) else {
+            return false;
+        };
+        aws_lc_rs::signature::UnparsedPublicKey::new(
+            &aws_lc_rs::signature::ED25519,
+            self.pair.public_key().as_ref(),
+        )
+        .verify(&transcript, &signature)
+        .is_ok()
+    }
 }
 
-fn schema(db: &rusqlite::Connection) -> Result<()> {
+pub(super) fn schema(db: &rusqlite::Connection) -> Result<()> {
     db.execute_batch(
         "CREATE TABLE IF NOT EXISTS managed_agent_revisions (
            tenant_id TEXT NOT NULL,
@@ -411,7 +448,13 @@ fn schema(db: &rusqlite::Connection) -> Result<()> {
              REFERENCES managed_agent_revisions(tenant_id,agent_id,revision)
         );",
     )
-    .context("cannot prepare managed policy tables")
+    .context("cannot prepare managed policy tables")?;
+    db.execute_batch(super::managed_stale_recovery::SQLITE_SCHEMA)
+        .context("cannot prepare managed recovery fence table")?;
+    db.execute_batch(super::managed_rejection::SQLITE_SCHEMA)
+        .context("cannot prepare managed rejection table")?;
+    db.execute_batch(super::managed_idempotency::SQLITE_KEYS_SCHEMA)
+        .context("cannot prepare managed deployment idempotency table")
 }
 
 pub(super) fn migrate_existing_groups(db: &rusqlite::Connection) -> Result<()> {
@@ -426,7 +469,7 @@ pub(super) fn migrate_existing_groups(db: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
-fn group_schema(db: &rusqlite::Connection) -> Result<()> {
+pub(super) fn group_schema(db: &rusqlite::Connection) -> Result<()> {
     if db.is_autocommit() {
         let tx =
             rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate)?;
@@ -494,6 +537,8 @@ fn group_schema(db: &rusqlite::Connection) -> Result<()> {
     if !has_snapshot {
         db.execute_batch("ALTER TABLE managed_group_rollouts ADD COLUMN initial_sequences_json TEXT NOT NULL DEFAULT '{}';")?;
     }
+    db.execute_batch(super::managed_confirmation::SQLITE_CONFIRMATION_SCHEMA)
+        .context("cannot prepare group start confirmation table")?;
     Ok(())
 }
 
@@ -515,7 +560,7 @@ type SqliteRolloutRow = (
     String,
 );
 
-fn eligible_group(db: &rusqlite::Connection, tenant: &str, group: &str) -> Result<()> {
+pub(super) fn eligible_group(db: &rusqlite::Connection, tenant: &str, group: &str) -> Result<()> {
     ensure!(
         exact_id(tenant) && exact_id(group),
         "invalid group identity"
@@ -532,7 +577,7 @@ fn eligible_group(db: &rusqlite::Connection, tenant: &str, group: &str) -> Resul
     Ok(())
 }
 
-fn eligible(db: &rusqlite::Connection, tenant: &str, agent: &str) -> Result<()> {
+pub(super) fn eligible(db: &rusqlite::Connection, tenant: &str, agent: &str) -> Result<()> {
     ensure!(
         exact_id(tenant) && exact_id(agent),
         "invalid policy audience"
@@ -549,13 +594,90 @@ fn eligible(db: &rusqlite::Connection, tenant: &str, agent: &str) -> Result<()> 
     Ok(())
 }
 
+// A completely cold SQLite store has no managed schema. A partial schema is
+// unavailable evidence, not an empty revision history. Neither case runs DDL.
+fn revision_schema_present(db: &rusqlite::Connection) -> Result<bool> {
+    let (revisions, other_managed): (bool, bool) = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='managed_agent_revisions'), EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name IN ('managed_agent_enrollments','managed_agent_deployments'))",
+        [], |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    ensure!(
+        revisions || !other_managed,
+        "managed revision schema unavailable"
+    );
+    Ok(revisions)
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ManagedRevisionDocument {
+    #[serde(flatten)]
+    pub identity: ManagedRevision,
+    pub policy_yaml: String,
+}
+
 impl TenantStore {
+    pub fn list_managed_revisions(
+        &self,
+        tenant: &str,
+        agent: &str,
+        after: &str,
+        limit: usize,
+    ) -> Result<Vec<ManagedRevision>> {
+        ensure!(
+            (1..=100).contains(&limit) && (after.is_empty() || exact_id(after)),
+            "invalid revision page"
+        );
+        let db = self.connection()?;
+        let exists = revision_schema_present(&db)?;
+        if !exists {
+            return Ok(Vec::new());
+        }
+        let mut stmt=db.prepare("SELECT revision,policy_sha256,approved_at_unix IS NOT NULL FROM managed_agent_revisions WHERE tenant_id=?1 AND agent_id=?2 AND revision>?3 ORDER BY revision LIMIT ?4")?;
+        let rows = stmt
+            .query_map(params![tenant, agent, after, limit as i64], |r| {
+                Ok(ManagedRevision {
+                    tenant_id: tenant.into(),
+                    agent_id: agent.into(),
+                    revision: r.get(0)?,
+                    policy_sha256: r.get(1)?,
+                    approved: r.get(2)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+    pub fn read_managed_revision(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+    ) -> Result<Option<ManagedRevisionDocument>> {
+        ensure!(exact_id(revision), "invalid revision");
+        let db = self.connection()?;
+        let exists = revision_schema_present(&db)?;
+        if !exists {
+            return Ok(None);
+        }
+        Ok(db.query_row("SELECT policy_yaml,policy_sha256,approved_at_unix IS NOT NULL FROM managed_agent_revisions WHERE tenant_id=?1 AND agent_id=?2 AND revision=?3",params![tenant,agent,revision],|r|Ok(ManagedRevisionDocument{identity:ManagedRevision{tenant_id:tenant.into(),agent_id:agent.into(),revision:revision.into(),policy_sha256:r.get(1)?,approved:r.get(2)?},policy_yaml:r.get(0)?})).optional()?)
+    }
+
     pub fn create_managed_revision(
         &self,
         tenant: &str,
         agent: &str,
         revision: &str,
         yaml: &str,
+    ) -> Result<ManagedRevision> {
+        self.create_managed_revision_checked(tenant, agent, revision, yaml, None)
+    }
+
+    pub(super) fn create_managed_revision_checked(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+        yaml: &str,
+        admin_id: Option<&str>,
     ) -> Result<ManagedRevision> {
         ensure!(exact_id(revision), "invalid immutable revision");
         ensure!(
@@ -564,16 +686,27 @@ impl TenantStore {
         );
         AgentPolicySet::from_yaml(yaml).context("invalid AgentPolicySet YAML")?;
         let digest = hex(&Sha256::digest(yaml.as_bytes()));
-        let db = self.connection()?;
+        let mut db = self.connection()?;
         schema(&db)?;
-        eligible(&db, tenant, agent)?;
-        db.execute(
+        let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        eligible(&tx, tenant, agent)?;
+        if let Some(admin_id) = admin_id {
+            super::managed_idempotency::current_admin_may_deploy(&tx, admin_id)?;
+        }
+        tx.execute(
             "INSERT INTO managed_agent_revisions
               (tenant_id,agent_id,revision,policy_yaml,policy_sha256)
              VALUES (?1,?2,?3,?4,?5)",
             params![tenant, agent, revision, yaml, digest],
         )
         .context("revision exists or cannot be created")?;
+        self.audit_committed(
+            &tx,
+            tenant,
+            AuditFact::new(AuditOperation::AgentPolicyCreate, AuditTarget::Agent, agent)
+                .source(revision, Some(&digest)),
+        )?;
+        tx.commit()?;
         Ok(ManagedRevision {
             tenant_id: tenant.into(),
             agent_id: agent.into(),
@@ -588,14 +721,41 @@ impl TenantStore {
         agent: &str,
         revision: &str,
     ) -> Result<bool> {
-        let db = self.connection()?;
+        self.approve_managed_revision_checked(tenant, agent, revision, None)
+    }
+
+    pub(super) fn approve_managed_revision_checked(
+        &self,
+        tenant: &str,
+        agent: &str,
+        revision: &str,
+        admin_id: Option<&str>,
+    ) -> Result<bool> {
+        let mut db = self.connection()?;
         schema(&db)?;
-        eligible(&db, tenant, agent)?;
-        let changed = db.execute(
+        let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        eligible(&tx, tenant, agent)?;
+        if let Some(admin_id) = admin_id {
+            super::managed_idempotency::current_admin_may_deploy(&tx, admin_id)?;
+        }
+        let changed = tx.execute(
             "UPDATE managed_agent_revisions SET approved_at_unix=?4
              WHERE tenant_id=?1 AND agent_id=?2 AND revision=?3 AND approved_at_unix IS NULL",
             params![tenant, agent, revision, now_unix()],
         )?;
+        if changed == 1 {
+            self.audit_committed(
+                &tx,
+                tenant,
+                AuditFact::new(
+                    AuditOperation::AgentPolicyApprove,
+                    AuditTarget::Agent,
+                    agent,
+                )
+                .source(revision, None),
+            )?;
+        }
+        tx.commit()?;
         Ok(changed == 1)
     }
     /// New signed, monotonically numbered deployment. Rollback reuses only
@@ -623,11 +783,12 @@ impl TenantStore {
             },
             issuer,
         )?;
+        self.audit_committed(&tx, tenant, AuditFact::deployment(&result))?;
         tx.commit()?;
         Ok(result)
     }
 
-    fn deploy_managed_revision_conn(
+    pub(super) fn deploy_managed_revision_conn(
         &self,
         db: &rusqlite::Connection,
         tenant: &str,
@@ -664,9 +825,17 @@ impl TenantStore {
                 "rollback must select a different approved revision"
             );
         }
+        // SOU-242: a confirmed stale-restore fence raises the floor; the
+        // next issuance is above both the restored deployments and the fence.
+        let fence: i64 = db.query_row(
+            super::managed_stale_recovery::SQLITE_FENCE_HIGH,
+            params![tenant, agent],
+            |r| r.get(0),
+        )?;
         let seq = last
             .map(|(s, _)| s)
             .unwrap_or(0)
+            .max(fence)
             .checked_add(1)
             .context("sequence exhausted")?;
         let issued = now_unix();
@@ -714,6 +883,8 @@ impl TenantStore {
             status: "issued".into(),
             issued_at_unix: issued,
             applied_at_unix: None,
+            rejected_at_unix: None,
+            rejection_code: None,
         })
     }
     fn require_managed_credential(
@@ -802,7 +973,19 @@ impl TenantStore {
         bearer: &str,
         report: &AppliedReport,
     ) -> Result<bool> {
-        self.acknowledge_managed_bundle_inner(tenant, agent, Some(bearer), report)
+        self.acknowledge_managed_bundle_inner(tenant, agent, Some(bearer), report, None)
+    }
+    /// SOU-241: the authenticated acknowledgement with an optional finite
+    /// rejection reason; the first authenticated rejection is retained.
+    pub fn acknowledge_authorized_managed_bundle_with_reason(
+        &self,
+        tenant: &str,
+        agent: &str,
+        bearer: &str,
+        report: &AppliedReport,
+        reason: Option<&super::managed_rejection::RejectionReport>,
+    ) -> Result<bool> {
+        self.acknowledge_managed_bundle_inner(tenant, agent, Some(bearer), report, reason)
     }
     pub fn acknowledge_managed_bundle(
         &self,
@@ -810,7 +993,7 @@ impl TenantStore {
         agent: &str,
         report: &AppliedReport,
     ) -> Result<bool> {
-        self.acknowledge_managed_bundle_inner(tenant, agent, None, report)
+        self.acknowledge_managed_bundle_inner(tenant, agent, None, report, None)
     }
     fn acknowledge_managed_bundle_inner(
         &self,
@@ -818,11 +1001,14 @@ impl TenantStore {
         agent: &str,
         credential: Option<&str>,
         report: &AppliedReport,
+        reason: Option<&super::managed_rejection::RejectionReport>,
     ) -> Result<bool> {
         ensure!(
             report.status == "applied" || report.status == "rejected",
             "invalid acknowledgement"
         );
+        super::managed_rejection::check(&report.status, reason)?;
+        let (reason_version, reason_code) = super::managed_rejection::parts(reason);
         let mut db = self.connection()?;
         schema(&db)?;
         let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
@@ -854,6 +1040,15 @@ impl TenantStore {
             ],
         )?;
         if changed == 1 {
+            if report.status == "rejected" {
+                // The first authenticated rejection of this exact candidate,
+                // timed by the Console. Later repeats never replace it.
+                tx.execute(
+                    "INSERT INTO managed_agent_rejections(tenant_id,agent_id,deployment_sequence,revision,policy_sha256,reason_version,reason_code,received_at_unix)
+                     VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+                    params![tenant, agent, seq, report.revision, report.policy_sha256, reason_version, reason_code, now_unix()],
+                )?;
+            }
             tx.commit()?;
             drop(db);
             // Groups can advance only after the exact authenticated ACK
@@ -878,8 +1073,22 @@ impl TenantStore {
                 |r| r.get(0),
             )
             .optional()?;
+        // A repeated rejection must carry the same reason as the first; a
+        // record from before reasons existed accepts any repeat as before.
+        let same_reason = if repeated.is_some() && report.status == "rejected" {
+            tx.query_row(
+                "SELECT reason_version,reason_code FROM managed_agent_rejections
+                 WHERE tenant_id=?1 AND agent_id=?2 AND deployment_sequence=?3",
+                params![tenant, agent, seq],
+                |r| Ok((r.get::<_, Option<i64>>(0)?, r.get::<_, Option<String>>(1)?)),
+            )
+            .optional()?
+            .is_none_or(|stored| stored == (reason_version, reason_code))
+        } else {
+            true
+        };
         tx.commit()?;
-        Ok(repeated.is_some())
+        Ok(repeated.is_some() && same_reason)
     }
     pub fn list_managed_deployments(
         &self,
@@ -890,10 +1099,14 @@ impl TenantStore {
         schema(&db)?;
         ensure!(exact_id(tenant) && exact_id(agent), "invalid identity");
         let mut stmt = db.prepare(
-            "SELECT deployment_sequence,revision,policy_sha256,action,status,
-                    issued_at_unix,applied_at_unix
-             FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2
-             ORDER BY deployment_sequence DESC LIMIT 50",
+            "SELECT d.deployment_sequence,d.revision,d.policy_sha256,d.action,d.status,
+                    d.issued_at_unix,d.applied_at_unix,j.received_at_unix,j.reason_code
+             FROM managed_agent_deployments d
+             LEFT JOIN managed_agent_rejections j ON j.tenant_id=d.tenant_id
+               AND j.agent_id=d.agent_id AND j.deployment_sequence=d.deployment_sequence
+               AND j.revision=d.revision AND j.policy_sha256=d.policy_sha256 AND d.status='rejected'
+             WHERE d.tenant_id=?1 AND d.agent_id=?2
+             ORDER BY d.deployment_sequence DESC LIMIT 50",
         )?;
         let rows = stmt.query_map(params![tenant, agent], |r| {
             let sequence: i64 = r.get(0)?;
@@ -907,6 +1120,8 @@ impl TenantStore {
                 status: r.get(4)?,
                 issued_at_unix: r.get(5)?,
                 applied_at_unix: r.get(6)?,
+                rejected_at_unix: r.get(7)?,
+                rejection_code: r.get(8)?,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -923,9 +1138,10 @@ impl TenantStore {
             "invalid group identifier"
         );
         ensure!(!name.is_empty() && name.len() <= 256, "invalid group name");
-        let db = self.connection()?;
+        let mut db = self.connection()?;
         group_schema(&db)?;
-        let tenant_active: Option<i64> = db
+        let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let tenant_active: Option<i64> = tx
             .query_row(
                 "SELECT 1 FROM tenants WHERE id=?1 AND active=1",
                 params![tenant],
@@ -934,12 +1150,18 @@ impl TenantStore {
             .optional()?;
         ensure!(tenant_active.is_some(), "tenant not found or inactive");
         let now = now_unix();
-        db.execute(
+        tx.execute(
             "INSERT INTO managed_agent_groups (tenant_id, group_id, name, created_at_unix)
              VALUES (?1, ?2, ?3, ?4)",
             params![tenant, group_id, name, now],
         )
         .context("group already exists or cannot be created")?;
+        self.audit_committed(
+            &tx,
+            tenant,
+            AuditFact::new(AuditOperation::GroupCreate, AuditTarget::Group, group_id),
+        )?;
+        tx.commit()?;
         Ok(ManagedAgentGroup {
             tenant_id: tenant.into(),
             group_id: group_id.into(),
@@ -1012,6 +1234,13 @@ impl TenantStore {
             "DELETE FROM managed_agent_groups WHERE tenant_id=?1 AND group_id=?2",
             params![tenant, group_id],
         )?;
+        if count > 0 {
+            self.audit_committed(
+                &db,
+                tenant,
+                AuditFact::new(AuditOperation::GroupDelete, AuditTarget::Group, group_id),
+            )?;
+        }
         db.commit()?;
         Ok(count > 0)
     }
@@ -1023,17 +1252,28 @@ impl TenantStore {
         agent_id: &str,
         is_pilot: bool,
     ) -> Result<ManagedGroupMember> {
-        let db = self.connection()?;
+        let mut db = self.connection()?;
         group_schema(&db)?;
-        eligible_group(&db, tenant, group_id)?;
-        eligible(&db, tenant, agent_id)?;
+        let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        eligible_group(&tx, tenant, group_id)?;
+        eligible(&tx, tenant, agent_id)?;
         let now = now_unix();
-        db.execute(
+        let changed = tx.execute(
             "INSERT INTO managed_agent_group_members (tenant_id, group_id, agent_id, is_pilot, joined_at_unix)
              VALUES (?1, ?2, ?3, ?4, ?5)
-             ON CONFLICT(tenant_id, group_id, agent_id) DO UPDATE SET is_pilot=excluded.is_pilot",
+             ON CONFLICT(tenant_id, group_id, agent_id) DO UPDATE SET is_pilot=excluded.is_pilot
+             WHERE managed_agent_group_members.is_pilot <> excluded.is_pilot",
             params![tenant, group_id, agent_id, if is_pilot { 1 } else { 0 }, now],
         )?;
+        if changed != 0 {
+            self.audit_committed(
+                &tx,
+                tenant,
+                AuditFact::new(AuditOperation::GroupAddMember, AuditTarget::Group, group_id)
+                    .source(agent_id, None),
+            )?;
+        }
+        tx.commit()?;
         Ok(ManagedGroupMember {
             tenant_id: tenant.into(),
             group_id: group_id.into(),
@@ -1053,12 +1293,26 @@ impl TenantStore {
             exact_id(tenant) && exact_id(group_id) && exact_id(agent_id),
             "invalid identifier"
         );
-        let db = self.connection()?;
+        let mut db = self.connection()?;
         group_schema(&db)?;
-        let count = db.execute(
+        let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let count = tx.execute(
             "DELETE FROM managed_agent_group_members WHERE tenant_id=?1 AND group_id=?2 AND agent_id=?3",
             params![tenant, group_id, agent_id],
         )?;
+        if count != 0 {
+            self.audit_committed(
+                &tx,
+                tenant,
+                AuditFact::new(
+                    AuditOperation::GroupRemoveMember,
+                    AuditTarget::Group,
+                    group_id,
+                )
+                .source(agent_id, None),
+            )?;
+        }
+        tx.commit()?;
         Ok(count > 0)
     }
 
@@ -1102,15 +1356,27 @@ impl TenantStore {
         );
         AgentPolicySet::from_yaml(yaml).context("invalid AgentPolicySet YAML")?;
         let digest = hex(&Sha256::digest(yaml.as_bytes()));
-        let db = self.connection()?;
+        let mut db = self.connection()?;
         group_schema(&db)?;
-        eligible_group(&db, tenant, group_id)?;
-        db.execute(
+        let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        eligible_group(&tx, tenant, group_id)?;
+        tx.execute(
             "INSERT INTO managed_group_revisions (tenant_id, group_id, revision, policy_yaml, policy_sha256)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![tenant, group_id, revision, yaml, digest],
         )
         .context("group revision exists or cannot be created")?;
+        self.audit_committed(
+            &tx,
+            tenant,
+            AuditFact::new(
+                AuditOperation::GroupPolicyCreate,
+                AuditTarget::Group,
+                group_id,
+            )
+            .source(revision, Some(&digest)),
+        )?;
+        tx.commit()?;
         Ok(ManagedGroupRevision {
             tenant_id: tenant.into(),
             group_id: group_id.into(),
@@ -1126,14 +1392,28 @@ impl TenantStore {
         group_id: &str,
         revision: &str,
     ) -> Result<bool> {
-        let db = self.connection()?;
+        let mut db = self.connection()?;
         group_schema(&db)?;
-        eligible_group(&db, tenant, group_id)?;
-        let changed = db.execute(
+        let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        eligible_group(&tx, tenant, group_id)?;
+        let changed = tx.execute(
             "UPDATE managed_group_revisions SET approved_at_unix=?4
              WHERE tenant_id=?1 AND group_id=?2 AND revision=?3 AND approved_at_unix IS NULL",
             params![tenant, group_id, revision, now_unix()],
         )?;
+        if changed == 1 {
+            self.audit_committed(
+                &tx,
+                tenant,
+                AuditFact::new(
+                    AuditOperation::GroupPolicyApprove,
+                    AuditTarget::Group,
+                    group_id,
+                )
+                .source(revision, None),
+            )?;
+        }
+        tx.commit()?;
         Ok(changed == 1)
     }
 
@@ -1178,11 +1458,16 @@ impl TenantStore {
         let result = self
             .get_managed_group_rollout_conn(&tx, tenant, group_id)?
             .context("rollout disappeared during transaction")?;
+        self.audit_committed(
+            &tx,
+            tenant,
+            AuditFact::rollout(AuditOperation::RolloutStart, &result),
+        )?;
         tx.commit()?;
         Ok(result)
     }
 
-    fn start_managed_group_rollout_conn(
+    pub(super) fn start_managed_group_rollout_conn(
         &self,
         db: &rusqlite::Connection,
         tenant: &str,
@@ -1624,15 +1909,52 @@ impl TenantStore {
         group_id: &str,
         issuer: Option<&ManagedIssuer>,
     ) -> Result<Option<ManagedGroupRollout>> {
+        self.advance_managed_group_rollout_checked(tenant, group_id, issuer, None)
+    }
+
+    pub(super) fn advance_managed_group_rollout_checked(
+        &self,
+        tenant: &str,
+        group_id: &str,
+        issuer: Option<&ManagedIssuer>,
+        expected: Option<&str>,
+    ) -> Result<Option<ManagedGroupRollout>> {
         let mut db = self.connection()?;
         group_schema(&db)?;
         let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        eligible_group(&tx, tenant, group_id)?;
+        if let Some(expected) = expected {
+            let current = self.get_managed_group_rollout_conn(&tx, tenant, group_id)?;
+            if !current.is_some_and(|plan| {
+                plan.rollout_id == expected
+                    && matches!(
+                        plan.phase,
+                        RolloutPhase::Pilot | RolloutPhase::Standard | RolloutPhase::RollingBack
+                    )
+            }) {
+                return Ok(None);
+            }
+        }
+        let before = if self.operator.is_some() {
+            RolloutAuditState::sqlite(&tx, tenant, group_id)?
+        } else {
+            None
+        };
         let result = self.advance_managed_group_rollout_conn(&tx, tenant, group_id, issuer)?;
         let result = if result.is_some() {
             self.get_managed_group_rollout_conn(&tx, tenant, group_id)?
         } else {
             None
         };
+        if let (Some(previous), Some(plan)) = (before, &result) {
+            if previous.changed(plan) {
+                self.audit_committed(
+                    &tx,
+                    tenant,
+                    AuditFact::rollout(AuditOperation::RolloutAdvance, plan),
+                )?;
+            }
+        }
         tx.commit()?;
         Ok(result)
     }
@@ -2505,7 +2827,7 @@ impl TenantStore {
         Ok(plan)
     }
 
-    fn get_managed_group_rollout_conn(
+    pub(super) fn get_managed_group_rollout_conn(
         &self,
         db: &rusqlite::Connection,
         tenant: &str,
@@ -2581,7 +2903,7 @@ impl TenantStore {
         };
         for agent in plan.pilot_agents.iter().chain(plan.standard_agents.iter()) {
             let read_deployment = |sequence: Option<u64>| -> Result<Option<ManagedDeployment>> {
-                Ok(db.query_row("SELECT deployment_sequence,revision,policy_sha256,action,status,issued_at_unix,applied_at_unix FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2 AND (?3 IS NULL OR deployment_sequence=?3) ORDER BY deployment_sequence DESC LIMIT 1", params![tenant,agent,sequence.map(|s|s as i64)], |row| Ok(ManagedDeployment { tenant_id:tenant.into(),agent_id:agent.clone(),deployment_sequence:row.get::<_,i64>(0)? as u64,revision:row.get(1)?,policy_sha256:row.get(2)?,action:row.get(3)?,status:row.get(4)?,issued_at_unix:row.get(5)?,applied_at_unix:row.get(6)? })).optional()?)
+                Ok(db.query_row("SELECT deployment_sequence,revision,policy_sha256,action,status,issued_at_unix,applied_at_unix FROM managed_agent_deployments WHERE tenant_id=?1 AND agent_id=?2 AND (?3 IS NULL OR deployment_sequence=?3) ORDER BY deployment_sequence DESC LIMIT 1", params![tenant,agent,sequence.map(|s|s as i64)], |row| Ok(ManagedDeployment { tenant_id:tenant.into(),agent_id:agent.clone(),deployment_sequence:row.get::<_,i64>(0)? as u64,revision:row.get(1)?,policy_sha256:row.get(2)?,action:row.get(3)?,status:row.get(4)?,issued_at_unix:row.get(5)?,applied_at_unix:row.get(6)?,rejected_at_unix:None,rejection_code:None })).optional()?)
             };
             let latest = read_deployment(None)?;
             let expected = plan
@@ -2609,12 +2931,26 @@ impl TenantStore {
         let mut db = self.connection()?;
         group_schema(&db)?;
         let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let before = if self.operator.is_some() {
+            RolloutAuditState::sqlite(&tx, tenant, group_id)?
+        } else {
+            None
+        };
         let result = self.rollback_managed_group_rollout_conn(&tx, tenant, group_id, issuer)?;
         let result = if result.is_some() {
             self.get_managed_group_rollout_conn(&tx, tenant, group_id)?
         } else {
             None
         };
+        if let (Some(previous), Some(plan)) = (before, &result) {
+            if previous.changed(plan) {
+                self.audit_committed(
+                    &tx,
+                    tenant,
+                    AuditFact::rollout(AuditOperation::RolloutRollback, plan),
+                )?;
+            }
+        }
         tx.commit()?;
         Ok(result)
     }
@@ -2859,12 +3195,26 @@ impl TenantStore {
         let mut db = self.connection()?;
         group_schema(&db)?;
         let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let before = if self.operator.is_some() {
+            RolloutAuditState::sqlite(&tx, tenant, group_id)?
+        } else {
+            None
+        };
         let result = self.pause_managed_group_rollout_conn(&tx, tenant, group_id)?;
         let result = if result.is_some() {
             self.get_managed_group_rollout_conn(&tx, tenant, group_id)?
         } else {
             None
         };
+        if let (Some(previous), Some(plan)) = (before, &result) {
+            if previous.changed(plan) {
+                self.audit_committed(
+                    &tx,
+                    tenant,
+                    AuditFact::rollout(AuditOperation::RolloutPause, plan),
+                )?;
+            }
+        }
         tx.commit()?;
         Ok(result)
     }
@@ -2914,12 +3264,26 @@ impl TenantStore {
         let mut db = self.connection()?;
         group_schema(&db)?;
         let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let before = if self.operator.is_some() {
+            RolloutAuditState::sqlite(&tx, tenant, group_id)?
+        } else {
+            None
+        };
         let result = self.resume_managed_group_rollout_conn(&tx, tenant, group_id, issuer)?;
         let result = if result.is_some() {
             self.get_managed_group_rollout_conn(&tx, tenant, group_id)?
         } else {
             None
         };
+        if let (Some(previous), Some(plan)) = (before, &result) {
+            if previous.changed(plan) {
+                self.audit_committed(
+                    &tx,
+                    tenant,
+                    AuditFact::rollout(AuditOperation::RolloutResume, plan),
+                )?;
+            }
+        }
         tx.commit()?;
         Ok(result)
     }

@@ -25,19 +25,26 @@ to the managed PostgreSQL/Redis provider and record the chosen retention region.
    upstream provider credential remains caller-supplied. Store all runtime
    secrets in the provider secret manager, not in Git, images, logs, or shell
    history.
-3. Run migrations as a one-shot release job, then start the proxy with the
+3. Build and record the accepted Gateway image separately. Prefetch the exact
+   PostgreSQL/Redis digest references in `deploy/production-images.lock.json`.
+   Follow the [guarded Compose procedure](PRODUCTION_COMPOSE.md), using the
+   resulting local Gateway `sha256:` image ID and a protected environment file.
+   Run migrations as a one-shot release job, then start the proxy with the
    runtime role. Do not let every replica run migrations concurrently:
 
    ```text
-   docker compose -f deploy/docker-compose.production.yaml run --rm --no-deps firewall preflight
-   docker compose -f deploy/docker-compose.production.yaml run --rm firewall migrate
-   docker compose -f deploy/docker-compose.production.yaml up -d firewall
+   python3 scripts/production-compose.py check --project soup-wall-production --env-file <protected-file> --gateway-image-id sha256:<reviewed-image-id>
+   python3 scripts/production-compose.py preflight --project soup-wall-production --env-file <protected-file> --gateway-image-id sha256:<reviewed-image-id>
+   python3 scripts/production-compose.py migrate --project soup-wall-production --env-file <protected-file> --gateway-image-id sha256:<reviewed-image-id>
+   python3 scripts/production-compose.py start --project soup-wall-production --env-file <protected-file> --gateway-image-id sha256:<reviewed-image-id>
    ```
 
    `preflight` parses the mounted policy and checks required secrets, auth,
    fail-closed settings, and TLS on backend URLs without connecting to
    PostgreSQL or Redis. Run it again for every image/config change; it does not
-   replace the migration or restore drills below.
+   replace the migration or restore drills below. The wrapper checks actual
+   local image IDs against the selected Linux daemon architecture before any
+   startup; it never builds or pulls a replacement. A missing image is a refusal.
 
 4. Terminate TLS at the edge and forward only to the loopback-bound firewall
    port. Expose `/healthz` and `/readyz` to the orchestrator; expose `/metrics`

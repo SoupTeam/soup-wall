@@ -1,0 +1,20 @@
+{
+  "format": "sw-runtime-compliance-assets/1",
+  "sources": {
+    "LGPL-3.0.txt": {
+      "url": "https://files.pythonhosted.org/packages/b5/62/05203c39d21aa3171454a6c5391ea3b582a97bfb1bc1adad25628331a1cd/autocommand-2.2.2-py3-none-any.whl",
+      "archive_sha256": "710afe251075e038e19e815e25f8155cabe02196cfb545b2185e0d9c8b2b0459",
+      "member": "autocommand-2.2.2.dist-info/LICENSE",
+      "sha256": "ade78d04982d69972d444a8e14a94f87a2334dd3855cc80348ea8e240aa0df2d"
+    },
+    "GPL-3.0.txt": {
+      "source": "../git-readonly-v1/upstream-notices/python-3.11.18/LICENSE.libatomic-GPL-3.0.txt",
+      "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    "MPL-2.0.txt": {
+      "url": "https://www.mozilla.org/media/MPL/2.0/index.txt",
+      "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04"
+    }
+  }
+}

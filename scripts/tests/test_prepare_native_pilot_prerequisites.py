@@ -39,6 +39,31 @@ def args(root, *, prepare=True, rebuild=False):
 
 
 class PreparationBoundary(unittest.TestCase):
+    def test_git_security_pin_is_consistent_across_runtime_and_ci(self):
+        version, archive_root, url, checksum, _ = PREP.SOURCES["git"]
+        self.assertEqual(version, "2.51.3")
+        self.assertEqual(archive_root, "git-2.51.3")
+        self.assertEqual(checksum,
+                         "8e6ff1adf702c26e75de1846498d00575ff7e9919305b38b4e27c5514062b13d")
+        identity = json.loads((ROOT / "profiles/mcp/git-readonly-v1/upstream-identity.json").read_text())
+        self.assertEqual(identity["git_version"], version)
+        self.assertEqual(identity["git_source_url"], url)
+        self.assertEqual(identity["git_source_sha256"], checksum)
+        consumers = [
+            "scripts/ci/native-prepared-host-inputs.py",
+            ".github/workflows/ci-components.yml",
+            ".github/workflows/managed-policy-tls.yml",
+            ".github/workflows/mcp-real-filesystem.yml",
+            ".github/workflows/mcp-real-git.yml",
+            ".github/workflows/sou86-crash-supervision.yml",
+        ]
+        for name in consumers:
+            with self.subTest(consumer=name):
+                content = (ROOT / name).read_text()
+                self.assertIn(url, content)
+                self.assertIn(checksum, content)
+                self.assertNotIn("git-2.51.2.tar.xz", content)
+
     def test_composed_failure_retains_transfer_and_completed_build_evidence(self):
         progress = {"attempts": 1, "received_bytes": 7}
         failure = PREP.Failure("download_timeout", "download", progress=progress)
@@ -217,13 +242,13 @@ pathlib.Path(sys.argv[1]).write_text(json.dumps({"worker": os.getpid(), "child":
 
     def test_extraction_rejects_traversal_links_special_files_and_duplicate_paths(self):
         cases = (
-            [("git-2.51.2/../outside", tarfile.REGTYPE, "")],
-            [("git-2.51.2/bad", tarfile.SYMTYPE, "../../outside")],
-            [("git-2.51.2/fifo", tarfile.FIFOTYPE, "")],
-            [("git-2.51.2/dup", tarfile.REGTYPE, ""),
-             ("git-2.51.2/dup", tarfile.REGTYPE, "")],
-            [("git-2.51.2/link", tarfile.SYMTYPE, "target"),
-             ("git-2.51.2/link/child", tarfile.REGTYPE, "")],
+            [("git-2.51.3/../outside", tarfile.REGTYPE, "")],
+            [("git-2.51.3/bad", tarfile.SYMTYPE, "../../outside")],
+            [("git-2.51.3/fifo", tarfile.FIFOTYPE, "")],
+            [("git-2.51.3/dup", tarfile.REGTYPE, ""),
+             ("git-2.51.3/dup", tarfile.REGTYPE, "")],
+            [("git-2.51.3/link", tarfile.SYMTYPE, "target"),
+             ("git-2.51.3/link/child", tarfile.REGTYPE, "")],
         )
         for entries in cases:
             with self.subTest(entries=entries), tempfile.TemporaryDirectory() as temporary:
@@ -288,7 +313,7 @@ pathlib.Path(sys.argv[1]).write_text(json.dumps({"worker": os.getpid(), "child":
             def version(command, **_):
                 if command[1] == "--help":
                     return "--ro-bind-fd"
-                return "git version 2.51.2" if command[0].endswith("/git") else "bubblewrap 0.13.1"
+                return "git version 2.51.3" if command[0].endswith("/git") else "bubblewrap 0.13.1"
 
             with patch.object(PREP, "platform_missing", return_value=[]), \
                  patch.object(PREP, "tool_inventory", return_value=(tools, [])), \
@@ -362,7 +387,7 @@ def staged_build_fixture(root):
     def captured(command, **_):
         if command[1] == "--help":
             return "--ro-bind-fd"
-        return "git version 2.51.2" if command[0].endswith("/git") else "bubblewrap 0.13.1"
+        return "git version 2.51.3" if command[0].endswith("/git") else "bubblewrap 0.13.1"
 
     def libraries(_binary, _tools):
         return {str(library): PREP.digest(library)}

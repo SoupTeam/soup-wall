@@ -140,6 +140,19 @@ class StoreBoundaries(unittest.TestCase):
         self.assertEqual(len(seen), 1)
         return seen[0]
 
+    def test_check_labels_scope_conformance_without_enforcing_it(self):
+        import types
+        front = types.SimpleNamespace(SCOPE=types.SimpleNamespace(conformance=lambda doc, sel, kit: {'state': 'nonconforming'}),
+                                      scope_document=lambda: ({}, 'x'), scope_kit=lambda: None,
+                                      PREP=types.SimpleNamespace(PILOT=types.SimpleNamespace(strict_json=json.loads)))
+        selection = self.home / 'selection.json'
+        selection.write_text('{}')
+        binding = {'selection': {'path': str(selection)}}
+        self.assertEqual(P.scope_conformance(binding, front), 'nonconforming')
+        self.assertEqual(P.scope_conformance(binding, types.SimpleNamespace()), 'unavailable')
+        front.scope_document = lambda: (_ for _ in ()).throw(ValueError('x'))
+        self.assertEqual(P.scope_conformance(binding, front), 'unavailable')
+
     def test_installed_named_project_run_carries_the_maintenance_gate_context(self):
         words = self.captured_run_words(True)
         for flag in ('--maintenance-home', '--maintenance-component-home'):

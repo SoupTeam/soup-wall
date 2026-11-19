@@ -172,7 +172,8 @@ class Selection(unittest.TestCase):
         args = SimpleNamespace(git_profile=linked.ID, wsl_root=None, expected_commit='a'*40,
             filesystem_workspace=self.one, git_workspace=self.one, git_worktree_binding=manifest,
             node_archive=None, python_archive=None, wheelhouse=None, npm_cache=self.common/'never-cache', output=output)
-        with patch.object(prep, 'supported_platform'), patch.object(prep.PILOT, 'source', return_value={'commit':'a'*40,'dirty':False}):
+        with patch.object(prep, 'supported_platform'), patch.object(prep.PILOT, 'source', return_value={'commit':'a'*40,'dirty':False}), \
+                patch.object(prep.lifecycle_preflight, 'inspect', return_value={'setup': 'satisfied', 'removal': 'satisfied'}):
             with self.assertRaisesRegex(ValueError, 'inputs_overlap_metadata'):
                 prep.prepare(args)
         self.assertFalse(output.exists())

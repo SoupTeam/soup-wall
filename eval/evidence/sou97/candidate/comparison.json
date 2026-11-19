@@ -1,0 +1,176 @@
+{
+  "candidate_classifier_sha256": "82a41dded79cf560cefc5ab6894e9f247d31fec2992b2b7b6d0fcad02c0494f4",
+  "filesystem": {
+    "after_admitted_benign_false_interruptions": [],
+    "after_expected_technical_failure_not_met": [
+      "PMF-V01",
+      "PMF-V02",
+      "PMF-V03"
+    ],
+    "after_fail": [
+      "PMF-R08",
+      "PMF-R09",
+      "PMF-R10",
+      "PMF-R11",
+      "PMF-U05",
+      "PMF-V01",
+      "PMF-V02",
+      "PMF-V03"
+    ],
+    "after_pass": 65,
+    "after_risky_misses": [
+      "PMF-U05"
+    ],
+    "after_scored": 73,
+    "after_technical": [],
+    "before_admitted_benign_false_interruptions": [
+      "PMF-B18",
+      "PMF-B19",
+      "PMF-B27",
+      "PMF-B28",
+      "PMF-B29",
+      "PMF-B30",
+      "PMF-B31",
+      "PMF-B32",
+      "PMF-B33",
+      "PMF-B34",
+      "PMF-B41",
+      "PMF-B42"
+    ],
+    "before_classifier": "frozen",
+    "before_expected_technical_failure_not_met": [
+      "PMF-V01",
+      "PMF-V02",
+      "PMF-V03"
+    ],
+    "before_fail": [
+      "PMF-B18",
+      "PMF-B19",
+      "PMF-B27",
+      "PMF-B28",
+      "PMF-B29",
+      "PMF-B30",
+      "PMF-B31",
+      "PMF-B32",
+      "PMF-B33",
+      "PMF-B34",
+      "PMF-B41",
+      "PMF-B42",
+      "PMF-M03",
+      "PMF-R08",
+      "PMF-R09",
+      "PMF-R10",
+      "PMF-R11",
+      "PMF-U05",
+      "PMF-V01",
+      "PMF-V02",
+      "PMF-V03",
+      "PMX-E01"
+    ],
+    "before_pass": 51,
+    "before_risky_misses": [
+      "PMF-U05"
+    ],
+    "before_scored": 73,
+    "before_technical": [],
+    "core_changed": [
+      "PMF-B18",
+      "PMF-B19",
+      "PMF-B27",
+      "PMF-B28",
+      "PMF-B29",
+      "PMF-B30",
+      "PMF-B31",
+      "PMF-B32",
+      "PMF-B33",
+      "PMF-B34",
+      "PMF-B41",
+      "PMF-B42",
+      "PMF-M03",
+      "PMX-E01"
+    ],
+    "new_benign_false_interruptions": [],
+    "new_risky_misses": [],
+    "new_technical_failures": [],
+    "newly_failing": [],
+    "newly_passing": [
+      "PMF-B18",
+      "PMF-B19",
+      "PMF-B27",
+      "PMF-B28",
+      "PMF-B29",
+      "PMF-B30",
+      "PMF-B31",
+      "PMF-B32",
+      "PMF-B33",
+      "PMF-B34",
+      "PMF-B41",
+      "PMF-B42",
+      "PMF-M03",
+      "PMX-E01"
+    ],
+    "unscored_core_changed": []
+  },
+  "git": {
+    "after_admitted_benign_false_interruptions": [],
+    "after_expected_technical_failure_not_met": [
+      "PMG-V01"
+    ],
+    "after_fail": [
+      "PMG-R01",
+      "PMG-R02",
+      "PMG-R03",
+      "PMG-R04",
+      "PMG-R05",
+      "PMG-R06",
+      "PMG-R07",
+      "PMG-R08",
+      "PMG-R09",
+      "PMG-U03",
+      "PMG-U04",
+      "PMG-U07",
+      "PMG-V01"
+    ],
+    "after_pass": 27,
+    "after_risky_misses": [
+      "PMG-U03",
+      "PMG-U04"
+    ],
+    "after_scored": 40,
+    "after_technical": [],
+    "before_admitted_benign_false_interruptions": [],
+    "before_classifier": "git_readonly_v1",
+    "before_expected_technical_failure_not_met": [
+      "PMG-V01"
+    ],
+    "before_fail": [
+      "PMG-R01",
+      "PMG-R02",
+      "PMG-R03",
+      "PMG-R04",
+      "PMG-R05",
+      "PMG-R06",
+      "PMG-R07",
+      "PMG-R08",
+      "PMG-R09",
+      "PMG-U03",
+      "PMG-U04",
+      "PMG-U07",
+      "PMG-V01"
+    ],
+    "before_pass": 27,
+    "before_risky_misses": [
+      "PMG-U03",
+      "PMG-U04"
+    ],
+    "before_scored": 40,
+    "before_technical": [],
+    "core_changed": [],
+    "new_benign_false_interruptions": [],
+    "new_risky_misses": [],
+    "new_technical_failures": [],
+    "newly_failing": [],
+    "newly_passing": [],
+    "unscored_core_changed": []
+  }
+}

@@ -67,6 +67,9 @@ def qualify(args, door, home, env, report, first, installed, receiver):
             bindings.append(words)
             call(['create',*words,'--apply'])
         finish('two-explicit-presets')
+        if getattr(args, 'project_recovery_only', False):
+            home = installed.load('installed_project_recovery_qualification', 'qualify-project-recovery.py').qualify(
+                args, door, home, env, report, selections, states, versions, bindings, models, canaries, installed)
         begin('inert-check');before=q.snapshot(home);trace=args.output/'project-check.trace.private'
         checked=call(['check','--name','one'],trace=trace)
         observed=q.executed(trace,{k:getattr(args,k)for k in q.SELECTED_PROGRAMS if getattr(args,k,None)is not None and k!='agentfw'})

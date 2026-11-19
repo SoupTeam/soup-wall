@@ -1,0 +1,102 @@
+{
+  "backend": "postgres",
+  "binaries": {
+    "agentfw": "b1b9668aa39bfff3c5580ed57316035c47f2ce8309d06b66f5b5953d97c1f14e",
+    "llm-firewall": "24baf8ae0a4c92e88fdb220d508b2c89f5baf3b42613665681de5dd9cb71c721"
+  },
+  "checks": {
+    "admin-token-refused": true,
+    "agent-log-free-of-credentials-edge-hb": true,
+    "agent-log-free-of-credentials-edge-legacy": true,
+    "browser-fresh-self-report-not-health": true,
+    "browser-read-only": true,
+    "browser-unopted-unknown": true,
+    "console-outage-keeps-enforcement": true,
+    "cross-tenant-refused": true,
+    "forged-registration-refused": true,
+    "fresh-self-report-matches-independent-runtime-witness": true,
+    "heartbeat-opt-in-value-is-strict": true,
+    "heartbeat-without-managed-console-refuses-startup": true,
+    "live-agent-reregisters-after-supersession": true,
+    "migrate-recreates-empty-observations": true,
+    "non-positive-sequence-refused": true,
+    "offline-becomes-stale": true,
+    "old-credential-refused-at-once": true,
+    "opted-in-agent-registers-again-after-restore": true,
+    "other-tenant-same-id-isolated": true,
+    "out-of-order-refused": true,
+    "postgres-migration-creates-observation-schema": true,
+    "probe-first-heartbeat": true,
+    "probe-registers": true,
+    "probe-registration-now-superseded": true,
+    "probe-second-heartbeat": true,
+    "reconnect-after-console-restart": true,
+    "recovery-backup-with-observation-schema": true,
+    "recovery-refuses-changed-observation-schema": true,
+    "recovery-refuses-unknown-schema": true,
+    "recovery-restore-verified": true,
+    "replay-refused": true,
+    "restart-registers-new-instance": true,
+    "restored-console-reports-observations-unavailable": true,
+    "restored-observation-not-fresh": true,
+    "restored-target-has-no-observations": true,
+    "revocation-keeps-last-verified-enforcement": true,
+    "revoked-credential-refused": true,
+    "revoked-status": true,
+    "rotation-generation-2": true,
+    "rotation-shows-credential-changed-until-reregistration": true,
+    "same-process-reregisters-with-new-generation": true,
+    "sequence-advances": true,
+    "server-delivery-record-stays-separate": true,
+    "source-has-opted-in-observation": true,
+    "unknown-field-refused": true,
+    "unopted-agent-stays-unsupported": true,
+    "unopted-agent-unsupported-after-restore": true,
+    "wrong-epoch-refused": true
+  },
+  "config_sha256": {
+    "console": "dd200cae4aaf7eb3bca5deca90c6238f70b61f35d66e8dff09c094ea9661d1a6"
+  },
+  "format": "sw-console-agent-heartbeat-acceptance/1",
+  "postgres": {
+    "listen": "127.0.0.1",
+    "server": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
+    "tls": "sslmode=require with an owned CA"
+  },
+  "scope": "one disposable private Linux deployment; synthetic tenants and Agent IDs; an authenticated self-report, not runtime attestation, production, multi-host or a health check",
+  "snapshots": {
+    "after_console_restart": {
+      "status": "fresh",
+      "store": "postgres"
+    },
+    "fresh": {
+      "age_seconds": 0,
+      "current_credential_generation": 1,
+      "expires_after_seconds": 90,
+      "status": "fresh"
+    },
+    "recovery": {
+      "after": "fresh",
+      "refused": [
+        "unknown schema",
+        "changed observation schema"
+      ],
+      "restored_observations": "absent until migrate, then empty"
+    },
+    "stale": {
+      "age_seconds": 91,
+      "expires_after_seconds": 90,
+      "status": "stale"
+    },
+    "witness": {
+      "deployment_sequence": 1,
+      "hook_decision": "deny",
+      "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "revision": "r-deny"
+    }
+  },
+  "source_commit": "6bc29ea6aa137f9068d743e2c1286f9101ff7240",
+  "source_dirty": false,
+  "source_tree": "0ab138feb595d685da78aa023c332b78629b0ed1",
+  "status": "passed"
+}

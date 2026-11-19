@@ -167,6 +167,7 @@ class Roots(unittest.TestCase):
             filesystem_workspace=self.a,git_workspace=self.c,filesystem_roots_binding=manifest,
             node_archive=None,python_archive=None,wheelhouse=None,npm_cache=self.b/'never-cache',output=output)
         with patch.object(prep,'supported_platform'),patch.object(prep.PILOT,'source',return_value={'commit':'a'*40,'dirty':False}), \
+                patch.object(prep.lifecycle_preflight, "inspect", return_value={"setup": "satisfied", "removal": "satisfied"}), \
                 patch.object(prep.subprocess,'Popen') as spawn:
             with self.assertRaisesRegex(ValueError,'state_or_runtime_overlaps_root'):prep.prepare(SimpleNamespace(**values))
             spawn.assert_not_called()

@@ -1,0 +1,311 @@
+{
+  "format": "sw-installed-front-door-qualification/1",
+  "status": "failed",
+  "cases": [
+    {
+      "case": "component-install",
+      "passed": true,
+      "component": "b1f07884edab17cc3a994343d4581d8b92d284ab503d9743a52f992a81c90e11",
+      "python": {
+        "path": "/usr/bin/python3.12",
+        "sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+        "version": "3.12.3"
+      },
+      "files": 91
+    },
+    {
+      "case": "preview-zero-effect",
+      "passed": true,
+      "selected_started": 0,
+      "inet_connects": 0,
+      "programs": [
+        "agentfw",
+        "python3.12"
+      ]
+    },
+    {
+      "case": "prepare-and-reuse",
+      "passed": true,
+      "first": "prepared-not-active",
+      "second": "reused"
+    }
+  ],
+  "skipped": 0,
+  "provider": "owned-scripted-loopback",
+  "live_model_effectiveness": "not_tested",
+  "platform": {
+    "kernel": "7.0.0-1017-azure",
+    "kind": "linux"
+  },
+  "inputs_sha256": {
+    "git": "1124e33291a5a64c69a5e18af0adae444097e17e77cfb668e83efa022691757b",
+    "bwrap": "165a3809042abad7bd46ab0af860cd8f4b34da817875bfe0c3dba7ea46ee04f0",
+    "agentfw": "da953bd7b0091cc25ec831b7f90e590a3d87eae733f155ce6f650a3ef53d8da2",
+    "git_launcher": "25f80b9ae57d85f853efb9670859214950aa3e3175024afdb0b8a6b2065318ff",
+    "sandbox_tests": "cc2c8ac51bc8a19efb0968e2bfacac8693156ea24e13bdad51c2db7678deb46f",
+    "node_archive": "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f"
+  },
+  "component_python_sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+  "source_before": {
+    "commit": "22ab8b973ecc6acf8530a502b5286feb9bccc376",
+    "tree": "4472e5416309b2975298b344973db0de5ec86df1",
+    "dirty": false
+  },
+  "component": {
+    "component": "b1f07884edab17cc3a994343d4581d8b92d284ab503d9743a52f992a81c90e11",
+    "archive_sha256": "f0020e4aed0b82dc3b98879534ad5c120c22984fe6225f086271232aa18e1717",
+    "files": 91,
+    "commit": "22ab8b973ecc6acf8530a502b5286feb9bccc376"
+  },
+  "project_before_sha256": {
+    "project": "6b4b3f8a65351f8de88dd72d6be5186a647123c0e4e39fe9def7048e0dc03a14",
+    "repository": "3567496bd44d44deef02467665e0dfb989ccce7223883f5d3003826c155fe7a2",
+    "home": "6fa1e95a0600f58744bdb46c25e07fdd18b97d021b50ebe95c143a44aea797ad"
+  },
+  "selection_sha256": "5c4c637eea931c1abae4eccc5305c8f20c40dc4f703b3b6b5dfe7ee50cb90234",
+  "project_presets": {
+    "format": "sw-installed-project-presets-qualification/1",
+    "status": "incomplete",
+    "source": {
+      "commit": "22ab8b973ecc6acf8530a502b5286feb9bccc376",
+      "tree": "4472e5416309b2975298b344973db0de5ec86df1",
+      "dirty": false
+    },
+    "expected": [
+      "two-explicit-presets",
+      "inert-check",
+      "stale-workspace",
+      "changed-selection",
+      "changed-profile",
+      "changed-budget",
+      "changed-last-input",
+      "budget-no-fallback",
+      "provider-rotation",
+      "stale-update",
+      "damaged-store",
+      "concurrent-update",
+      "two-protected-reads",
+      "cross-project-authority",
+      "frozen-running-settings",
+      "stop-one-sibling-continues",
+      "private-catalog",
+      "owned-cleanup"
+    ],
+    "cases": [
+      {
+        "id": "two-explicit-presets",
+        "status": "passed",
+        "attempted": true
+      },
+      {
+        "id": "inert-check",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "stale-workspace",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "changed-selection",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "changed-profile",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "changed-budget",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "changed-last-input",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "budget-no-fallback",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "provider-rotation",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "stale-update",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "damaged-store",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "concurrent-update",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "two-protected-reads",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "cross-project-authority",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "frozen-running-settings",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "stop-one-sibling-continues",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "private-catalog",
+        "status": "incomplete",
+        "attempted": false
+      },
+      {
+        "id": "owned-cleanup",
+        "status": "incomplete",
+        "attempted": false
+      }
+    ],
+    "active_case": "two-explicit-presets",
+    "last_cli": {
+      "action": "create",
+      "exit": 0,
+      "expected_exit": 0,
+      "reason": null
+    }
+  },
+  "project_recovery": {
+    "format": "sw-installed-project-recovery-qualification/1",
+    "status": "incomplete",
+    "source": {
+      "commit": "22ab8b973ecc6acf8530a502b5286feb9bccc376",
+      "tree": "4472e5416309b2975298b344973db0de5ec86df1",
+      "dirty": false
+    },
+    "expected": [
+      "private-export-consent",
+      "declarative-export",
+      "fresh-home-explicit-provider-inputs",
+      "unresolved-preview-inert",
+      "stale-plan-refused",
+      "tampered-archive-refused",
+      "changed-destination-catalog-refused",
+      "two-record-atomic-import",
+      "duplicate-import-explicit",
+      "native-interruption-recovery",
+      "source-sibling-state-preserved"
+    ],
+    "cases": [
+      {
+        "id": "private-export-consent",
+        "status": "passed",
+        "attempted": true,
+        "published_archives": 0
+      },
+      {
+        "id": "declarative-export",
+        "status": "passed",
+        "attempted": true,
+        "records": 2,
+        "authority_or_credentials": false
+      },
+      {
+        "id": "fresh-home-explicit-provider-inputs",
+        "status": "passed",
+        "attempted": true,
+        "supplied_separately": true
+      },
+      {
+        "id": "unresolved-preview-inert",
+        "status": "passed",
+        "attempted": true,
+        "selected_started": 0,
+        "network_connections": 0,
+        "home_unchanged": true
+      },
+      {
+        "id": "stale-plan-refused",
+        "status": "passed",
+        "attempted": true,
+        "catalog_created": false
+      },
+      {
+        "id": "tampered-archive-refused",
+        "status": "passed",
+        "attempted": true,
+        "catalog_created": false
+      },
+      {
+        "id": "changed-destination-catalog-refused",
+        "status": "passed",
+        "attempted": true,
+        "existing_entry_preserved": true
+      },
+      {
+        "id": "two-record-atomic-import",
+        "status": "passed",
+        "attempted": true,
+        "records": 2,
+        "fresh_versions": true,
+        "existing_entry_preserved": true
+      },
+      {
+        "id": "duplicate-import-explicit",
+        "status": "passed",
+        "attempted": true,
+        "records_overwritten": 0
+      },
+      {
+        "id": "native-interruption-recovery",
+        "status": "incomplete",
+        "attempted": true
+      },
+      {
+        "id": "source-sibling-state-preserved",
+        "status": "incomplete",
+        "attempted": false
+      }
+    ],
+    "authority_restored": false,
+    "active_case": "native-interruption-recovery",
+    "last_cli": {
+      "action": "import-preview",
+      "exit": 0,
+      "expected_exit": 0,
+      "status": "preview"
+    },
+    "interruption_witness": {
+      "phase": "waiting_for_stage_fsync",
+      "stage_fsynced": false,
+      "publication_observed": false,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "trace_bytes": 1340,
+      "trace_sha256": "db344cd4e5bd89e7034d1a2c20516c47746e54f2963f439855c7465656e01f0e",
+      "observed_fsync_calls": 0,
+      "stage_present": false,
+      "catalog_present": false,
+      "owned_processes_stopped": true
+    }
+  },
+  "error": "project_interruption_stage_fsync_unobserved"
+}

@@ -38,9 +38,9 @@ import pilot_resumable_download as resumable
 import pilot_prerequisite_cache_exchange as exchange
 import pilot_source_identity as SOURCE_IDENTITY
 SOURCES = {
-    "git": ("2.51.2", "git-2.51.2",
-            "https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz",
-            "233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3", 64 * 1024 * 1024),
+    "git": ("2.51.3", "git-2.51.3",
+            "https://www.kernel.org/pub/software/scm/git/git-2.51.3.tar.xz",
+            "8e6ff1adf702c26e75de1846498d00575ff7e9919305b38b4e27c5514062b13d", 64 * 1024 * 1024),
     "bwrap": ("0.13.1", "bubblewrap-0.13.1",
               "https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz",
               "0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d", 16 * 1024 * 1024),

@@ -225,6 +225,164 @@ fn identical_accepted_snapshots_report_no_drift_and_accept_nothing() {
     }
 }
 
+#[test]
+fn git_runtime_license_provenance_is_optional_exact_and_verified() {
+    let identity: Value = serde_json::from_slice(GIT_IDENTITY).unwrap();
+    let reference = &identity["runtime_license_provenance"];
+    let mut req = request(GIT, GIT);
+    req.before_identity = Some(InputFile {
+        name: "upstream-identity.json".into(),
+        bytes: GIT_IDENTITY.to_vec(),
+        dir: Some(profile_dir("git-readonly-v1")),
+    });
+    let outcome = run(&req);
+    assert_eq!(outcome.exit, EXIT_NO_DRIFT);
+    assert!(
+        outcome.report["inputs"]["before_identity"]["referenced_files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|file| file["path"] == reference["path"]
+                && file["sha256"] == reference["sha256"]
+                && file["status"] == "verified")
+    );
+    assert_accepts_nothing(&outcome);
+    req.after = Some(file(
+        "changed.json",
+        &mutate(GIT, |snapshot| {
+            snapshot["result"]["tools"][0]["description"] = json!("Changed description");
+        }),
+    ));
+    let changed = run(&req);
+    assert_eq!(changed.exit, EXIT_REVIEW_REQUIRED);
+    assert_accepts_nothing(&changed);
+    req.after = Some(file("after.json", GIT));
+
+    let legacy = mutate(GIT_IDENTITY, |identity| {
+        identity
+            .as_object_mut()
+            .unwrap()
+            .remove("runtime_license_provenance");
+    });
+    req.before_identity.as_mut().unwrap().bytes = legacy;
+    let outcome = run(&req);
+    assert_eq!(outcome.exit, EXIT_NO_DRIFT);
+    assert_accepts_nothing(&outcome);
+}
+
+#[test]
+fn git_runtime_license_provenance_rejects_malformed_and_changed_references() {
+    let identity: Value = serde_json::from_slice(GIT_IDENTITY).unwrap();
+    let reference = &identity["runtime_license_provenance"];
+    let path = reference["path"].as_str().unwrap();
+    let digest = reference["sha256"].as_str().unwrap();
+    let mut req = request(GIT, GIT);
+    req.before_identity = Some(InputFile {
+        name: "upstream-identity.json".into(),
+        bytes: GIT_IDENTITY.to_vec(),
+        dir: Some(profile_dir("git-readonly-v1")),
+    });
+    for malformed in [
+        Value::Null,
+        json!([]),
+        json!("untyped"),
+        json!({}),
+        json!({"path": path}),
+        json!({"sha256": digest}),
+        json!({"path": path, "sha256": digest, "unknown": true}),
+        json!({"path": 7, "sha256": digest}),
+        json!({"path": path, "sha256": 7}),
+    ] {
+        req.before_identity.as_mut().unwrap().bytes = mutate(GIT_IDENTITY, |identity| {
+            identity["runtime_license_provenance"] = malformed;
+        });
+        assert_eq!(refusal(&req), "identity_incomplete");
+    }
+    for (path, digest, expected) in [
+        (
+            "../Cargo.lock",
+            digest.to_owned(),
+            "invalid_referenced_path",
+        ),
+        ("/etc/passwd", digest.to_owned(), "invalid_referenced_path"),
+        ("invalid:path", digest.to_owned(), "invalid_referenced_path"),
+        (
+            r"invalid\path",
+            digest.to_owned(),
+            "invalid_referenced_path",
+        ),
+        (path, "A".repeat(64), "identity_incomplete"),
+        (path, "0".repeat(64), "referenced_digest_mismatch"),
+        (
+            "missing-provenance.json",
+            digest.to_owned(),
+            "invalid_referenced_path",
+        ),
+    ] {
+        req.before_identity.as_mut().unwrap().bytes = mutate(GIT_IDENTITY, |identity| {
+            identity["runtime_license_provenance"] = json!({"path": path, "sha256": digest});
+        });
+        assert_eq!(refusal(&req), expected);
+    }
+
+    let private = tempfile::tempdir().unwrap();
+    for name in identity["files"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .chain(std::iter::once(path))
+    {
+        let target = private.path().join(name);
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::copy(profile_dir("git-readonly-v1").join(name), target).unwrap();
+    }
+    req.before_identity.as_mut().unwrap().bytes = GIT_IDENTITY.to_vec();
+    req.before_identity.as_mut().unwrap().dir = Some(private.path().to_path_buf());
+    assert_eq!(run(&req).exit, EXIT_NO_DRIFT);
+    let boundary = mutate(GIT_IDENTITY, |identity| {
+        let files = identity["files"].as_object_mut().unwrap();
+        while files.len() < MAX_REFERENCED_FILES - 1 {
+            let name = format!("extra-{}.json", files.len());
+            std::fs::write(private.path().join(&name), b"bounded fixture").unwrap();
+            files.insert(name, json!(sha_hex(b"bounded fixture")));
+        }
+    });
+    req.before_identity.as_mut().unwrap().bytes = boundary;
+    assert_eq!(run(&req).exit, EXIT_NO_DRIFT);
+    req.before_identity.as_mut().unwrap().bytes = GIT_IDENTITY.to_vec();
+    std::fs::write(private.path().join(path), b"changed provenance").unwrap();
+    assert_eq!(refusal(&req), "referenced_digest_mismatch");
+    let provenance = private.path().join(path);
+    std::fs::File::create(&provenance)
+        .unwrap()
+        .set_len(MAX_REFERENCED_FILE_BYTES + 1)
+        .unwrap();
+    assert_eq!(refusal(&req), "invalid_referenced_path");
+    std::fs::remove_file(&provenance).unwrap();
+    std::fs::create_dir(&provenance).unwrap();
+    assert_eq!(refusal(&req), "invalid_referenced_path");
+    std::fs::remove_dir(&provenance).unwrap();
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(profile_dir("git-readonly-v1").join(path), &provenance).unwrap();
+        assert_eq!(refusal(&req), "invalid_referenced_path");
+        std::fs::remove_file(&provenance).unwrap();
+    }
+
+    req.before_identity.as_mut().unwrap().bytes = mutate(GIT_IDENTITY, |identity| {
+        identity["unrecognized_metadata"] = json!({});
+    });
+    assert_eq!(refusal(&req), "invalid_identity");
+    req.before_identity.as_mut().unwrap().bytes = mutate(GIT_IDENTITY, |identity| {
+        let files = identity["files"].as_object_mut().unwrap();
+        while files.len() < MAX_REFERENCED_FILES {
+            files.insert(format!("extra-{}.json", files.len()), json!("0".repeat(64)));
+        }
+    });
+    assert_eq!(refusal(&req), "invalid_identity");
+}
+
 // 2. Inert metadata: nature inert, identity still unaccepted --------------
 
 #[test]

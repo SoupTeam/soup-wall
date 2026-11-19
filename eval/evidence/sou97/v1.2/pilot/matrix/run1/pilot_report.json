@@ -1,0 +1,6290 @@
+{
+  "classifiers": {
+    "baseline_filesystem": {
+      "expected_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+      "file": "rule_baseline.py",
+      "revision": null,
+      "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+    },
+    "baseline_git": {
+      "expected_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+      "file": "rule_baseline.py",
+      "revision": "git_readonly_v1",
+      "sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474"
+    },
+    "candidate": {
+      "expected_sha256": "ffeb367ffbd8d73d84369111b96fd61026d34b77511149e3c86b07fc133ada30",
+      "file": "rule_baseline.py",
+      "revision": "pilot_readonly_v1.2",
+      "sha256": "ffeb367ffbd8d73d84369111b96fd61026d34b77511149e3c86b07fc133ada30"
+    }
+  },
+  "drift_check": "passed: classifier, executed snapshot, fixture, evaluator and profile/policy bytes unchanged",
+  "environment": {
+    "cpu_count": 8,
+    "executable": "python.exe",
+    "implementation": "CPython",
+    "machine": "AMD64",
+    "platform": "Windows-11-10.0.22631-SP0",
+    "processor": "Intel64 Family 6 Model 140 Stepping 1, GenuineIntel",
+    "python": "3.12.10"
+  },
+  "execution_effects": {
+    "note": "offline classification only; native policy verdicts and execution effects come only from real runtime runs and are never derived from classifier predictions",
+    "status": "not_measured"
+  },
+  "fixtures": [
+    {
+      "file": "soup_pilot_readonly_matrix_v0.1.json",
+      "fixture_version": "pilot-readonly-matrix-v0.1",
+      "sha256": "3d19281c56d0c330761a36289b50c1df524a28c63bad88392ca85b94faf7da36"
+    }
+  ],
+  "git": {
+    "head": "54e1b4006786763d6186fa42e7461f509167c572",
+    "tracked_changes": false,
+    "untracked_files": false
+  },
+  "identities": {
+    "eval/eval_runner.py": "760085c0faf23a8409e52d6fd5ebc97bedf64fd67c0547f1d6fb33bbc5bebe6e",
+    "profiles/mcp/filesystem-readonly-v1/policy.yaml": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+    "profiles/mcp/filesystem-readonly-v1/upstream-identity.json": "bd2b235f11e4e3ccd31467185b33b26751a626ed23e499ca72392b56dc9849ca",
+    "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+    "profiles/mcp/git-readonly-v1/policy.yaml": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+    "profiles/mcp/git-readonly-v1/upstream-identity.json": "90fbf2f84db1fee38145914adaf851c35d9b8b3735dc4e78caf7820c507e09e4",
+    "profiles/mcp/git-readonly-v1/upstream-tools-list.json": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+    "rule_baseline/evaluate_dev.py": "74de74ccc7f2c5f97fda5efba69eb9e70b22d7c1722e1505d3f7fff9fa0f9e05"
+  },
+  "kind": "sou97-pilot-report",
+  "latency_parameters": {
+    "batch_size": 1,
+    "bridge_inner_timeout_ms": 1500,
+    "calls": 200,
+    "request_timeout_s": 5.0,
+    "source": "rule_baseline/evaluate_dev.py latency()",
+    "spawns": 20,
+    "workload": "the profile's admitted cases (profile_admission=admit), cycled in order"
+  },
+  "native_policy": {
+    "note": "offline classification only; native policy verdicts and execution effects come only from real runtime runs and are never derived from classifier predictions",
+    "status": "not_measured"
+  },
+  "profiles": {
+    "filesystem": {
+      "after": {
+        "cases": [
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B05",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B06",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B07",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B08",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B09",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B10",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B11",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B12",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B13",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B14",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B15",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B16",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B17",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B18",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B19",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B20",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B21",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B22",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B23",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B24",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B25",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B26",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B27",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B28",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B29",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B30",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B31",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B32",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B33",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B34",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B35",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B36",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B37",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B38",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B39",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B40",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B41",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B42",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B43",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B44",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B45",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B46",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "encoding_variant",
+            "id": "PMX-E01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMF-U01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.07
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMF-U02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.07
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMF-U03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMF-U04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "write",
+              "delete"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMF-U05",
+            "masked_failure": false,
+            "missing": [
+              "delete"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read",
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [
+              "read"
+            ],
+            "technical_error": null,
+            "uncertainty": 0.45
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMF-U06",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "misleading_metadata",
+            "id": "PMF-M01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.07
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "misleading_metadata",
+            "id": "PMF-M02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "misleading_metadata",
+            "id": "PMF-M03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "misleading_metadata",
+            "id": "PMF-M04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R05",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R06",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R07",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R08",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R09",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R10",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.8
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R11",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R12",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": "classifier_invalid",
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "input_validation",
+            "id": "PMF-V01",
+            "masked_failure": true,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": "classifier_invalid",
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "input_validation",
+            "id": "PMF-V02",
+            "masked_failure": true,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": "classifier_invalid",
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "input_validation",
+            "id": "PMF-V03",
+            "masked_failure": true,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": "classifier_invalid",
+            "expected_unknown": null,
+            "failure_channel": "classifier_invalid",
+            "group": "input_validation",
+            "id": "PMF-V04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": null,
+            "predicted_unknown": null,
+            "spurious": [],
+            "technical_error": "classifier_reported_error: invalid_input: tool_name must be a non-empty string",
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "identity_spoof",
+            "id": "PMF-P01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "identity_spoof",
+            "id": "PMF-P02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "identity_spoof",
+            "id": "PMF-P03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "schema_drift",
+            "id": "PMF-S01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "schema_drift",
+            "id": "PMF-S02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMF-A01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.5
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMF-A02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.5
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMF-A03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMF-A04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMF-A05",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          }
+        ],
+        "classifier": "candidate",
+        "latency": {
+          "cold_process_per_call": {
+            "attempts": 20,
+            "failed": 0,
+            "max_ms": 52.246,
+            "over_inner_timeout": 0,
+            "p50_ms": 49.686,
+            "p95_ms": 51.664,
+            "timed_out": 0,
+            "valid": 20
+          },
+          "in_process_call": {
+            "attempts": 200,
+            "failed": 0,
+            "max_ms": 1.064,
+            "over_inner_timeout": 0,
+            "p50_ms": 0.119,
+            "p95_ms": 0.747,
+            "timed_out": 0,
+            "valid": 200
+          },
+          "warm_process_round_trip": {
+            "attempts": 200,
+            "failed": 0,
+            "max_ms": 40.691,
+            "over_inner_timeout": 0,
+            "p50_ms": 0.461,
+            "p95_ms": 1.138,
+            "timed_out": 0,
+            "valid": 200
+          }
+        },
+        "metrics": {
+          "abstention": {
+            "abstained": 4,
+            "expected_unknown_cases": 0,
+            "expected_unknown_covered": 0,
+            "expected_unknown_missed": [],
+            "full_unknown": [
+              "PMF-R08",
+              "PMF-R09",
+              "PMF-R11"
+            ],
+            "known_effect_cases": 69,
+            "partial_unknown": [
+              "PMF-R10"
+            ]
+          },
+          "cases": 83,
+          "fail": 8,
+          "failed_ids": [
+            "PMF-R08",
+            "PMF-R09",
+            "PMF-R10",
+            "PMF-R11",
+            "PMF-U05",
+            "PMF-V01",
+            "PMF-V02",
+            "PMF-V03"
+          ],
+          "known_risk_misses": [
+            {
+              "id": "PMF-U05",
+              "missing": [
+                "delete"
+              ],
+              "predicted_actions": [
+                "read",
+                "write"
+              ],
+              "predicted_unknown": false
+            }
+          ],
+          "mixed_action": {
+            "actions_exact": 0,
+            "cases": 1,
+            "exact": 0,
+            "failed_ids": [
+              "PMF-U05"
+            ]
+          },
+          "pass": 65,
+          "pending_observed": [
+            {
+              "id": "PMF-P01",
+              "predicted_actions": [],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-P02",
+              "predicted_actions": [],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-P03",
+              "predicted_actions": [],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-S01",
+              "predicted_actions": [],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-S02",
+              "predicted_actions": [],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-A01",
+              "predicted_actions": [
+                "read"
+              ],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-A02",
+              "predicted_actions": [
+                "read"
+              ],
+              "predicted_unknown": true,
+              "safety_expectation": null,
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-A03",
+              "predicted_actions": [
+                "read"
+              ],
+              "predicted_unknown": false,
+              "safety_expectation": null,
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-A04",
+              "predicted_actions": [
+                "read"
+              ],
+              "predicted_unknown": false,
+              "safety_expectation": null,
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-A05",
+              "predicted_actions": [
+                "write"
+              ],
+              "predicted_unknown": false,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            }
+          ],
+          "per_action": {
+            "change_permissions": {
+              "fn": 0,
+              "fp": 0,
+              "known_labels": 69,
+              "known_positive": 0,
+              "precision": null,
+              "predicted_positive": 0,
+              "recall": null,
+              "tp": 0
+            },
+            "delete": {
+              "fn": 1,
+              "fp": 0,
+              "known_labels": 69,
+              "known_positive": 1,
+              "precision": null,
+              "predicted_positive": 0,
+              "recall": 0.0,
+              "tp": 0
+            },
+            "read": {
+              "fn": 3,
+              "fp": 1,
+              "known_labels": 69,
+              "known_positive": 63,
+              "precision": 0.9836,
+              "predicted_positive": 61,
+              "recall": 0.9524,
+              "tp": 60
+            },
+            "send_data": {
+              "fn": 0,
+              "fp": 0,
+              "known_labels": 69,
+              "known_positive": 0,
+              "precision": null,
+              "predicted_positive": 0,
+              "recall": null,
+              "tp": 0
+            },
+            "write": {
+              "fn": 0,
+              "fp": 0,
+              "known_labels": 69,
+              "known_positive": 6,
+              "precision": 1.0,
+              "predicted_positive": 6,
+              "recall": 1.0,
+              "tp": 6
+            }
+          },
+          "scored": 73,
+          "supported_benign": {
+            "cases": 46,
+            "false_interruptions": []
+          },
+          "technical_error": 0,
+          "technical_failures": {
+            "expected_d06": [
+              {
+                "expected": "classifier_invalid",
+                "id": "PMF-V01",
+                "masked_as_classification": true,
+                "observed_channel": null,
+                "outcome": "fail",
+                "predicted_actions": [
+                  "read"
+                ],
+                "predicted_unknown": false
+              },
+              {
+                "expected": "classifier_invalid",
+                "id": "PMF-V02",
+                "masked_as_classification": true,
+                "observed_channel": null,
+                "outcome": "fail",
+                "predicted_actions": [],
+                "predicted_unknown": true
+              },
+              {
+                "expected": "classifier_invalid",
+                "id": "PMF-V03",
+                "masked_as_classification": true,
+                "observed_channel": null,
+                "outcome": "fail",
+                "predicted_actions": [
+                  "read"
+                ],
+                "predicted_unknown": false
+              },
+              {
+                "expected": "classifier_invalid",
+                "id": "PMF-V04",
+                "masked_as_classification": false,
+                "observed_channel": "classifier_invalid",
+                "outcome": "pass",
+                "predicted_actions": null,
+                "predicted_unknown": null
+              }
+            ],
+            "unexpected": []
+          },
+          "unscored": 10
+        }
+      },
+      "before": {
+        "cases": [
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B05",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B06",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B07",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B08",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B09",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B10",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B11",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B12",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B13",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B14",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B15",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B16",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B17",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B18",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.8
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B19",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.8
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B20",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B21",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B22",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B23",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B24",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B25",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B26",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B27",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B28",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B29",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B30",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B31",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B32",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B33",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B34",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B35",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B36",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B37",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B38",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B39",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B40",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B41",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.8
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B42",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.8
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B43",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B44",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B45",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "fs_supported_read",
+            "id": "PMF-B46",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "encoding_variant",
+            "id": "PMX-E01",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMF-U01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.07
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMF-U02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.07
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMF-U03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMF-U04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "write",
+              "delete"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMF-U05",
+            "masked_failure": false,
+            "missing": [
+              "delete"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read",
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [
+              "read"
+            ],
+            "technical_error": null,
+            "uncertainty": 0.45
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMF-U06",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "misleading_metadata",
+            "id": "PMF-M01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.07
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "misleading_metadata",
+            "id": "PMF-M02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "misleading_metadata",
+            "id": "PMF-M03",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "misleading_metadata",
+            "id": "PMF-M04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R05",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R06",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R07",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R08",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R09",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R10",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.8
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R11",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMF-R12",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": "classifier_invalid",
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "input_validation",
+            "id": "PMF-V01",
+            "masked_failure": true,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": "classifier_invalid",
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "input_validation",
+            "id": "PMF-V02",
+            "masked_failure": true,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": "classifier_invalid",
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "input_validation",
+            "id": "PMF-V03",
+            "masked_failure": true,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": "classifier_invalid",
+            "expected_unknown": null,
+            "failure_channel": "classifier_invalid",
+            "group": "input_validation",
+            "id": "PMF-V04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": null,
+            "predicted_unknown": null,
+            "spurious": [],
+            "technical_error": "classifier_reported_error: invalid_input: tool_name must be a non-empty string",
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "identity_spoof",
+            "id": "PMF-P01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "identity_spoof",
+            "id": "PMF-P02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "identity_spoof",
+            "id": "PMF-P03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "schema_drift",
+            "id": "PMF-S01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "schema_drift",
+            "id": "PMF-S02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMF-A01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMF-A02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.5
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMF-A03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMF-A04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMF-A05",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          }
+        ],
+        "classifier": "baseline_filesystem",
+        "latency": {
+          "cold_process_per_call": {
+            "attempts": 20,
+            "failed": 0,
+            "max_ms": 51.036,
+            "over_inner_timeout": 0,
+            "p50_ms": 47.19,
+            "p95_ms": 49.136,
+            "timed_out": 0,
+            "valid": 20
+          },
+          "in_process_call": {
+            "attempts": 200,
+            "failed": 0,
+            "max_ms": 0.301,
+            "over_inner_timeout": 0,
+            "p50_ms": 0.122,
+            "p95_ms": 0.26,
+            "timed_out": 0,
+            "valid": 200
+          },
+          "warm_process_round_trip": {
+            "attempts": 200,
+            "failed": 0,
+            "max_ms": 41.884,
+            "over_inner_timeout": 0,
+            "p50_ms": 0.466,
+            "p95_ms": 0.634,
+            "timed_out": 0,
+            "valid": 200
+          }
+        },
+        "metrics": {
+          "abstention": {
+            "abstained": 18,
+            "expected_unknown_cases": 0,
+            "expected_unknown_covered": 0,
+            "expected_unknown_missed": [],
+            "full_unknown": [
+              "PMF-B27",
+              "PMF-B28",
+              "PMF-B29",
+              "PMF-B30",
+              "PMF-B31",
+              "PMF-B32",
+              "PMF-B33",
+              "PMF-B34",
+              "PMF-M03",
+              "PMF-R08",
+              "PMF-R09",
+              "PMF-R11",
+              "PMX-E01"
+            ],
+            "known_effect_cases": 69,
+            "partial_unknown": [
+              "PMF-B18",
+              "PMF-B19",
+              "PMF-B41",
+              "PMF-B42",
+              "PMF-R10"
+            ]
+          },
+          "cases": 83,
+          "fail": 22,
+          "failed_ids": [
+            "PMF-B18",
+            "PMF-B19",
+            "PMF-B27",
+            "PMF-B28",
+            "PMF-B29",
+            "PMF-B30",
+            "PMF-B31",
+            "PMF-B32",
+            "PMF-B33",
+            "PMF-B34",
+            "PMF-B41",
+            "PMF-B42",
+            "PMF-M03",
+            "PMF-R08",
+            "PMF-R09",
+            "PMF-R10",
+            "PMF-R11",
+            "PMF-U05",
+            "PMF-V01",
+            "PMF-V02",
+            "PMF-V03",
+            "PMX-E01"
+          ],
+          "known_risk_misses": [
+            {
+              "id": "PMF-U05",
+              "missing": [
+                "delete"
+              ],
+              "predicted_actions": [
+                "read",
+                "write"
+              ],
+              "predicted_unknown": false
+            }
+          ],
+          "mixed_action": {
+            "actions_exact": 0,
+            "cases": 1,
+            "exact": 0,
+            "failed_ids": [
+              "PMF-U05"
+            ]
+          },
+          "pass": 51,
+          "pending_observed": [
+            {
+              "id": "PMF-P01",
+              "predicted_actions": [],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-P02",
+              "predicted_actions": [],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-P03",
+              "predicted_actions": [],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-S01",
+              "predicted_actions": [],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-S02",
+              "predicted_actions": [],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-A01",
+              "predicted_actions": [
+                "read"
+              ],
+              "predicted_unknown": false,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": true,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-A02",
+              "predicted_actions": [
+                "read"
+              ],
+              "predicted_unknown": true,
+              "safety_expectation": null,
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-A03",
+              "predicted_actions": [
+                "read"
+              ],
+              "predicted_unknown": false,
+              "safety_expectation": null,
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-A04",
+              "predicted_actions": [
+                "read"
+              ],
+              "predicted_unknown": false,
+              "safety_expectation": null,
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMF-A05",
+              "predicted_actions": [
+                "write"
+              ],
+              "predicted_unknown": false,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            }
+          ],
+          "per_action": {
+            "change_permissions": {
+              "fn": 0,
+              "fp": 0,
+              "known_labels": 69,
+              "known_positive": 0,
+              "precision": null,
+              "predicted_positive": 0,
+              "recall": null,
+              "tp": 0
+            },
+            "delete": {
+              "fn": 1,
+              "fp": 0,
+              "known_labels": 69,
+              "known_positive": 1,
+              "precision": null,
+              "predicted_positive": 0,
+              "recall": 0.0,
+              "tp": 0
+            },
+            "read": {
+              "fn": 13,
+              "fp": 1,
+              "known_labels": 69,
+              "known_positive": 63,
+              "precision": 0.9804,
+              "predicted_positive": 51,
+              "recall": 0.7937,
+              "tp": 50
+            },
+            "send_data": {
+              "fn": 0,
+              "fp": 0,
+              "known_labels": 69,
+              "known_positive": 0,
+              "precision": null,
+              "predicted_positive": 0,
+              "recall": null,
+              "tp": 0
+            },
+            "write": {
+              "fn": 0,
+              "fp": 0,
+              "known_labels": 69,
+              "known_positive": 6,
+              "precision": 1.0,
+              "predicted_positive": 6,
+              "recall": 1.0,
+              "tp": 6
+            }
+          },
+          "scored": 73,
+          "supported_benign": {
+            "cases": 46,
+            "false_interruptions": [
+              {
+                "id": "PMF-B18",
+                "reasons": [
+                  "unknown",
+                  "uncertainty>=0.8"
+                ]
+              },
+              {
+                "id": "PMF-B19",
+                "reasons": [
+                  "unknown",
+                  "uncertainty>=0.8"
+                ]
+              },
+              {
+                "id": "PMF-B27",
+                "reasons": [
+                  "unknown",
+                  "uncertainty>=0.8"
+                ]
+              },
+              {
+                "id": "PMF-B28",
+                "reasons": [
+                  "unknown",
+                  "uncertainty>=0.8"
+                ]
+              },
+              {
+                "id": "PMF-B29",
+                "reasons": [
+                  "unknown",
+                  "uncertainty>=0.8"
+                ]
+              },
+              {
+                "id": "PMF-B30",
+                "reasons": [
+                  "unknown",
+                  "uncertainty>=0.8"
+                ]
+              },
+              {
+                "id": "PMF-B31",
+                "reasons": [
+                  "unknown",
+                  "uncertainty>=0.8"
+                ]
+              },
+              {
+                "id": "PMF-B32",
+                "reasons": [
+                  "unknown",
+                  "uncertainty>=0.8"
+                ]
+              },
+              {
+                "id": "PMF-B33",
+                "reasons": [
+                  "unknown",
+                  "uncertainty>=0.8"
+                ]
+              },
+              {
+                "id": "PMF-B34",
+                "reasons": [
+                  "unknown",
+                  "uncertainty>=0.8"
+                ]
+              },
+              {
+                "id": "PMF-B41",
+                "reasons": [
+                  "unknown",
+                  "uncertainty>=0.8"
+                ]
+              },
+              {
+                "id": "PMF-B42",
+                "reasons": [
+                  "unknown",
+                  "uncertainty>=0.8"
+                ]
+              }
+            ]
+          },
+          "technical_error": 0,
+          "technical_failures": {
+            "expected_d06": [
+              {
+                "expected": "classifier_invalid",
+                "id": "PMF-V01",
+                "masked_as_classification": true,
+                "observed_channel": null,
+                "outcome": "fail",
+                "predicted_actions": [
+                  "read"
+                ],
+                "predicted_unknown": false
+              },
+              {
+                "expected": "classifier_invalid",
+                "id": "PMF-V02",
+                "masked_as_classification": true,
+                "observed_channel": null,
+                "outcome": "fail",
+                "predicted_actions": [],
+                "predicted_unknown": true
+              },
+              {
+                "expected": "classifier_invalid",
+                "id": "PMF-V03",
+                "masked_as_classification": true,
+                "observed_channel": null,
+                "outcome": "fail",
+                "predicted_actions": [
+                  "read"
+                ],
+                "predicted_unknown": false
+              },
+              {
+                "expected": "classifier_invalid",
+                "id": "PMF-V04",
+                "masked_as_classification": false,
+                "observed_channel": "classifier_invalid",
+                "outcome": "pass",
+                "predicted_actions": null,
+                "predicted_unknown": null
+              }
+            ],
+            "unexpected": []
+          },
+          "unscored": 10
+        }
+      },
+      "cases": 83,
+      "comparison": {
+        "new_expected_d06_mismatches": [],
+        "new_known_risk_misses": [],
+        "new_pending_safety_violations": [],
+        "new_supported_benign_false_interruptions": [],
+        "new_unexpected_technical_failures": [],
+        "newly_failing": [],
+        "newly_passing": [
+          "PMF-B18",
+          "PMF-B19",
+          "PMF-B27",
+          "PMF-B28",
+          "PMF-B29",
+          "PMF-B30",
+          "PMF-B31",
+          "PMF-B32",
+          "PMF-B33",
+          "PMF-B34",
+          "PMF-B41",
+          "PMF-B42",
+          "PMF-M03",
+          "PMX-E01"
+        ]
+      },
+      "latency_workload": {
+        "cases": 46,
+        "sha256": "b57bc2cc433cd4f8c69f5437f6224703837b4fb640b03d41bcb43e06d22e3de2"
+      },
+      "selected_baseline": "baseline_filesystem"
+    },
+    "git": {
+      "after": {
+        "cases": [
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B05",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B06",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B07",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B08",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B09",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B10",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B11",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B12",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B13",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B14",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B15",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B16",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B17",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B18",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B19",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B20",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "encoding_variant",
+            "id": "PMX-E02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMG-U01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMG-U02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMG-U03",
+            "masked_failure": false,
+            "missing": [
+              "write"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMG-U04",
+            "masked_failure": false,
+            "missing": [
+              "write"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMG-U05",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMG-U06",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMG-U07",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "misleading_metadata",
+            "id": "PMG-M01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "misleading_metadata",
+            "id": "PMG-M02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R01",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R02",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R03",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": true,
+            "spurious": [
+              "write"
+            ],
+            "technical_error": null,
+            "uncertainty": 0.5
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.5
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R05",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.5
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R06",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.5
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R07",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R08",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R09",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": "classifier_invalid",
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "input_validation",
+            "id": "PMG-V01",
+            "masked_failure": true,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "schema_drift",
+            "id": "PMG-S01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMG-A01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [
+              "read",
+              "delete"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.5
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMG-A02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMG-A03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.5
+          }
+        ],
+        "classifier": "candidate",
+        "latency": {
+          "cold_process_per_call": {
+            "attempts": 20,
+            "failed": 0,
+            "max_ms": 86.293,
+            "over_inner_timeout": 0,
+            "p50_ms": 55.932,
+            "p95_ms": 71.716,
+            "timed_out": 0,
+            "valid": 20
+          },
+          "in_process_call": {
+            "attempts": 200,
+            "failed": 0,
+            "max_ms": 0.154,
+            "over_inner_timeout": 0,
+            "p50_ms": 0.069,
+            "p95_ms": 0.087,
+            "timed_out": 0,
+            "valid": 200
+          },
+          "warm_process_round_trip": {
+            "attempts": 200,
+            "failed": 0,
+            "max_ms": 39.042,
+            "over_inner_timeout": 0,
+            "p50_ms": 0.329,
+            "p95_ms": 0.438,
+            "timed_out": 0,
+            "valid": 200
+          }
+        },
+        "metrics": {
+          "abstention": {
+            "abstained": 12,
+            "expected_unknown_cases": 0,
+            "expected_unknown_covered": 0,
+            "expected_unknown_missed": [],
+            "full_unknown": [
+              "PMG-R01",
+              "PMG-R02",
+              "PMG-R07",
+              "PMG-R08",
+              "PMG-R09",
+              "PMG-U03",
+              "PMG-U04",
+              "PMG-U07"
+            ],
+            "known_effect_cases": 39,
+            "partial_unknown": [
+              "PMG-R03",
+              "PMG-R04",
+              "PMG-R05",
+              "PMG-R06"
+            ]
+          },
+          "cases": 44,
+          "fail": 13,
+          "failed_ids": [
+            "PMG-R01",
+            "PMG-R02",
+            "PMG-R03",
+            "PMG-R04",
+            "PMG-R05",
+            "PMG-R06",
+            "PMG-R07",
+            "PMG-R08",
+            "PMG-R09",
+            "PMG-U03",
+            "PMG-U04",
+            "PMG-U07",
+            "PMG-V01"
+          ],
+          "known_risk_misses": [
+            {
+              "id": "PMG-U03",
+              "missing": [
+                "write"
+              ],
+              "predicted_actions": [],
+              "predicted_unknown": true
+            },
+            {
+              "id": "PMG-U04",
+              "missing": [
+                "write"
+              ],
+              "predicted_actions": [],
+              "predicted_unknown": true
+            }
+          ],
+          "mixed_action": {
+            "actions_exact": 0,
+            "cases": 0,
+            "exact": 0,
+            "failed_ids": []
+          },
+          "pass": 27,
+          "pending_observed": [
+            {
+              "id": "PMG-S01",
+              "predicted_actions": [],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMG-A01",
+              "predicted_actions": [
+                "read",
+                "delete"
+              ],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMG-A02",
+              "predicted_actions": [],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMG-A03",
+              "predicted_actions": [
+                "read"
+              ],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            }
+          ],
+          "per_action": {
+            "change_permissions": {
+              "fn": 0,
+              "fp": 0,
+              "known_labels": 39,
+              "known_positive": 0,
+              "precision": null,
+              "predicted_positive": 0,
+              "recall": null,
+              "tp": 0
+            },
+            "delete": {
+              "fn": 0,
+              "fp": 0,
+              "known_labels": 39,
+              "known_positive": 0,
+              "precision": null,
+              "predicted_positive": 0,
+              "recall": null,
+              "tp": 0
+            },
+            "read": {
+              "fn": 7,
+              "fp": 0,
+              "known_labels": 39,
+              "known_positive": 32,
+              "precision": 1.0,
+              "predicted_positive": 25,
+              "recall": 0.7812,
+              "tp": 25
+            },
+            "send_data": {
+              "fn": 0,
+              "fp": 0,
+              "known_labels": 39,
+              "known_positive": 0,
+              "precision": null,
+              "predicted_positive": 0,
+              "recall": null,
+              "tp": 0
+            },
+            "write": {
+              "fn": 2,
+              "fp": 1,
+              "known_labels": 39,
+              "known_positive": 7,
+              "precision": 0.8333,
+              "predicted_positive": 6,
+              "recall": 0.7143,
+              "tp": 5
+            }
+          },
+          "scored": 40,
+          "supported_benign": {
+            "cases": 20,
+            "false_interruptions": []
+          },
+          "technical_error": 0,
+          "technical_failures": {
+            "expected_d06": [
+              {
+                "expected": "classifier_invalid",
+                "id": "PMG-V01",
+                "masked_as_classification": true,
+                "observed_channel": null,
+                "outcome": "fail",
+                "predicted_actions": [],
+                "predicted_unknown": true
+              }
+            ],
+            "unexpected": []
+          },
+          "unscored": 4
+        }
+      },
+      "before": {
+        "cases": [
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B05",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B06",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B07",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B08",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B09",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B10",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B11",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B12",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B13",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B14",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B15",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B16",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B17",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B18",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B19",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "git_supported_read",
+            "id": "PMG-B20",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.02
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "encoding_variant",
+            "id": "PMX-E02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMG-U01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMG-U02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMG-U03",
+            "masked_failure": false,
+            "missing": [
+              "write"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMG-U04",
+            "masked_failure": false,
+            "missing": [
+              "write"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMG-U05",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMG-U06",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "unsupported_tool",
+            "id": "PMG-U07",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "misleading_metadata",
+            "id": "PMG-M01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.05
+          },
+          {
+            "expected_actions": [
+              "write"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "misleading_metadata",
+            "id": "PMG-M02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "pass",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": false,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.3
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R01",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R02",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R03",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [
+              "write"
+            ],
+            "predicted_unknown": true,
+            "spurious": [
+              "write"
+            ],
+            "technical_error": null,
+            "uncertainty": 0.5
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R04",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.5
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R05",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.5
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R06",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.5
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R07",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R08",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": [
+              "read"
+            ],
+            "expected_technical_failure": null,
+            "expected_unknown": false,
+            "failure_channel": null,
+            "group": "profile_bound_refusal",
+            "id": "PMG-R09",
+            "masked_failure": false,
+            "missing": [
+              "read"
+            ],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": "classifier_invalid",
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "input_validation",
+            "id": "PMG-V01",
+            "masked_failure": true,
+            "missing": [],
+            "outcome": "fail",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "schema_drift",
+            "id": "PMG-S01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMG-A01",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [
+              "delete"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.5
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMG-A02",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 1.0
+          },
+          {
+            "expected_actions": null,
+            "expected_technical_failure": null,
+            "expected_unknown": null,
+            "failure_channel": null,
+            "group": "ambiguous_semantics",
+            "id": "PMG-A03",
+            "masked_failure": false,
+            "missing": [],
+            "outcome": "unscored",
+            "predicted_actions": [
+              "read"
+            ],
+            "predicted_unknown": true,
+            "spurious": [],
+            "technical_error": null,
+            "uncertainty": 0.5
+          }
+        ],
+        "classifier": "baseline_git",
+        "latency": {
+          "cold_process_per_call": {
+            "attempts": 20,
+            "failed": 0,
+            "max_ms": 52.763,
+            "over_inner_timeout": 0,
+            "p50_ms": 48.462,
+            "p95_ms": 51.052,
+            "timed_out": 0,
+            "valid": 20
+          },
+          "in_process_call": {
+            "attempts": 200,
+            "failed": 0,
+            "max_ms": 0.311,
+            "over_inner_timeout": 0,
+            "p50_ms": 0.07,
+            "p95_ms": 0.102,
+            "timed_out": 0,
+            "valid": 200
+          },
+          "warm_process_round_trip": {
+            "attempts": 200,
+            "failed": 0,
+            "max_ms": 42.966,
+            "over_inner_timeout": 0,
+            "p50_ms": 0.382,
+            "p95_ms": 0.509,
+            "timed_out": 0,
+            "valid": 200
+          }
+        },
+        "metrics": {
+          "abstention": {
+            "abstained": 12,
+            "expected_unknown_cases": 0,
+            "expected_unknown_covered": 0,
+            "expected_unknown_missed": [],
+            "full_unknown": [
+              "PMG-R01",
+              "PMG-R02",
+              "PMG-R07",
+              "PMG-R08",
+              "PMG-R09",
+              "PMG-U03",
+              "PMG-U04",
+              "PMG-U07"
+            ],
+            "known_effect_cases": 39,
+            "partial_unknown": [
+              "PMG-R03",
+              "PMG-R04",
+              "PMG-R05",
+              "PMG-R06"
+            ]
+          },
+          "cases": 44,
+          "fail": 13,
+          "failed_ids": [
+            "PMG-R01",
+            "PMG-R02",
+            "PMG-R03",
+            "PMG-R04",
+            "PMG-R05",
+            "PMG-R06",
+            "PMG-R07",
+            "PMG-R08",
+            "PMG-R09",
+            "PMG-U03",
+            "PMG-U04",
+            "PMG-U07",
+            "PMG-V01"
+          ],
+          "known_risk_misses": [
+            {
+              "id": "PMG-U03",
+              "missing": [
+                "write"
+              ],
+              "predicted_actions": [],
+              "predicted_unknown": true
+            },
+            {
+              "id": "PMG-U04",
+              "missing": [
+                "write"
+              ],
+              "predicted_actions": [],
+              "predicted_unknown": true
+            }
+          ],
+          "mixed_action": {
+            "actions_exact": 0,
+            "cases": 0,
+            "exact": 0,
+            "failed_ids": []
+          },
+          "pass": 27,
+          "pending_observed": [
+            {
+              "id": "PMG-S01",
+              "predicted_actions": [],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMG-A01",
+              "predicted_actions": [
+                "delete"
+              ],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMG-A02",
+              "predicted_actions": [],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            },
+            {
+              "id": "PMG-A03",
+              "predicted_actions": [
+                "read"
+              ],
+              "predicted_unknown": true,
+              "safety_expectation": "must_not_be_classified_read_with_unknown_false",
+              "safety_expectation_violated": false,
+              "technical_error": null
+            }
+          ],
+          "per_action": {
+            "change_permissions": {
+              "fn": 0,
+              "fp": 0,
+              "known_labels": 39,
+              "known_positive": 0,
+              "precision": null,
+              "predicted_positive": 0,
+              "recall": null,
+              "tp": 0
+            },
+            "delete": {
+              "fn": 0,
+              "fp": 0,
+              "known_labels": 39,
+              "known_positive": 0,
+              "precision": null,
+              "predicted_positive": 0,
+              "recall": null,
+              "tp": 0
+            },
+            "read": {
+              "fn": 7,
+              "fp": 0,
+              "known_labels": 39,
+              "known_positive": 32,
+              "precision": 1.0,
+              "predicted_positive": 25,
+              "recall": 0.7812,
+              "tp": 25
+            },
+            "send_data": {
+              "fn": 0,
+              "fp": 0,
+              "known_labels": 39,
+              "known_positive": 0,
+              "precision": null,
+              "predicted_positive": 0,
+              "recall": null,
+              "tp": 0
+            },
+            "write": {
+              "fn": 2,
+              "fp": 1,
+              "known_labels": 39,
+              "known_positive": 7,
+              "precision": 0.8333,
+              "predicted_positive": 6,
+              "recall": 0.7143,
+              "tp": 5
+            }
+          },
+          "scored": 40,
+          "supported_benign": {
+            "cases": 20,
+            "false_interruptions": []
+          },
+          "technical_error": 0,
+          "technical_failures": {
+            "expected_d06": [
+              {
+                "expected": "classifier_invalid",
+                "id": "PMG-V01",
+                "masked_as_classification": true,
+                "observed_channel": null,
+                "outcome": "fail",
+                "predicted_actions": [],
+                "predicted_unknown": true
+              }
+            ],
+            "unexpected": []
+          },
+          "unscored": 4
+        }
+      },
+      "cases": 44,
+      "comparison": {
+        "new_expected_d06_mismatches": [],
+        "new_known_risk_misses": [],
+        "new_pending_safety_violations": [],
+        "new_supported_benign_false_interruptions": [],
+        "new_unexpected_technical_failures": [],
+        "newly_failing": [],
+        "newly_passing": []
+      },
+      "latency_workload": {
+        "cases": 20,
+        "sha256": "66caf74428784a00f723e5372bde6308f589281515e108a70a1e6125f884935e"
+      },
+      "selected_baseline": "baseline_git"
+    }
+  },
+  "provenance": {
+    "all_match": true,
+    "files": {
+      "eval/eval_runner.py": {
+        "committed_sha256": "760085c0faf23a8409e52d6fd5ebc97bedf64fd67c0547f1d6fb33bbc5bebe6e",
+        "matches_commit": true,
+        "sha256": "760085c0faf23a8409e52d6fd5ebc97bedf64fd67c0547f1d6fb33bbc5bebe6e"
+      },
+      "eval/fixtures/soup_pilot_readonly_matrix_v0.1.json": {
+        "committed_sha256": "3d19281c56d0c330761a36289b50c1df524a28c63bad88392ca85b94faf7da36",
+        "matches_commit": true,
+        "sha256": "3d19281c56d0c330761a36289b50c1df524a28c63bad88392ca85b94faf7da36"
+      },
+      "profiles/mcp/filesystem-readonly-v1/policy.yaml": {
+        "committed_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+        "matches_commit": true,
+        "sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec"
+      },
+      "profiles/mcp/filesystem-readonly-v1/upstream-identity.json": {
+        "committed_sha256": "bd2b235f11e4e3ccd31467185b33b26751a626ed23e499ca72392b56dc9849ca",
+        "matches_commit": true,
+        "sha256": "bd2b235f11e4e3ccd31467185b33b26751a626ed23e499ca72392b56dc9849ca"
+      },
+      "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json": {
+        "committed_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
+        "matches_commit": true,
+        "sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954"
+      },
+      "profiles/mcp/git-readonly-v1/policy.yaml": {
+        "committed_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+        "matches_commit": true,
+        "sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c"
+      },
+      "profiles/mcp/git-readonly-v1/upstream-identity.json": {
+        "committed_sha256": "90fbf2f84db1fee38145914adaf851c35d9b8b3735dc4e78caf7820c507e09e4",
+        "matches_commit": true,
+        "sha256": "90fbf2f84db1fee38145914adaf851c35d9b8b3735dc4e78caf7820c507e09e4"
+      },
+      "profiles/mcp/git-readonly-v1/upstream-tools-list.json": {
+        "committed_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+        "matches_commit": true,
+        "sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b"
+      },
+      "rule_baseline/evaluate_dev.py": {
+        "committed_sha256": "74de74ccc7f2c5f97fda5efba69eb9e70b22d7c1722e1505d3f7fff9fa0f9e05",
+        "matches_commit": true,
+        "sha256": "74de74ccc7f2c5f97fda5efba69eb9e70b22d7c1722e1505d3f7fff9fa0f9e05"
+      },
+      "rule_baseline/git_readonly_v1/rule_baseline.py": {
+        "committed_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+        "matches_commit": true,
+        "sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474"
+      },
+      "rule_baseline/pilot_readonly_v1/rule_baseline.py": {
+        "committed_sha256": "ffeb367ffbd8d73d84369111b96fd61026d34b77511149e3c86b07fc133ada30",
+        "matches_commit": true,
+        "sha256": "ffeb367ffbd8d73d84369111b96fd61026d34b77511149e3c86b07fc133ada30"
+      },
+      "rule_baseline/rule_baseline.py": {
+        "committed_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+        "matches_commit": true,
+        "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+      }
+    },
+    "mode": "checkout",
+    "source_commit": "54e1b4006786763d6186fa42e7461f509167c572",
+    "tracked_changes": false,
+    "untracked_files": false
+  },
+  "report_version": 2
+}

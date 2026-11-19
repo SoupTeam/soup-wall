@@ -18,6 +18,7 @@ use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
 use crate::handlers::Shared;
+use crate::tenant_store::operator_audit::OperatorContext;
 use crate::tenant_store::{
     AdminIdentity, AdminRole, NewUsageReconciliationImport, PolicyDeploymentAction,
     PolicySimulationCase, TenantPolicyDocument, UsageQuotaPolicy, UsageRetentionPolicy,
@@ -179,6 +180,8 @@ pub async fn require_admin_token(
     mut request: Request<Body>,
     next: Next,
 ) -> Response {
+    let received_at = crate::tenant_store::now_unix();
+    let attempt = crate::operator_audit_api::Attempt::identify(&mut request).await;
     let presented = request
         .headers()
         .get(ADMIN_AUTH_HEADER)
@@ -209,16 +212,31 @@ pub async fn require_admin_token(
         None
     };
     let Some(identity) = identity else {
-        tracing::warn!(path = %request.uri().path(), "rejected unauthenticated admin request");
+        if let Some(attempt) = &attempt {
+            attempt
+                .record(
+                    &state,
+                    &OperatorContext::admin(None, received_at),
+                    StatusCode::UNAUTHORIZED,
+                )
+                .await;
+        }
+        tracing::warn!("rejected unauthenticated admin request");
         return error(
             StatusCode::UNAUTHORIZED,
             "admin_authentication_error",
             "admin authentication required",
         );
     };
+    let operator = OperatorContext::admin(Some(&identity.admin_id), received_at);
     let required = required_admin_role(request.method(), request.uri().path());
     if !identity.role.permits(required) {
-        tracing::warn!(path = %request.uri().path(), role = ?identity.role, "rejected insufficient admin role");
+        if let Some(attempt) = &attempt {
+            attempt
+                .record(&state, &operator, StatusCode::FORBIDDEN)
+                .await;
+        }
+        tracing::warn!(role = ?identity.role, "rejected insufficient admin role");
         return error(
             StatusCode::FORBIDDEN,
             "admin_authorization_error",
@@ -226,7 +244,12 @@ pub async fn require_admin_token(
         );
     }
     request.extensions_mut().insert(identity);
-    next.run(request).await
+    request.extensions_mut().insert(operator.clone());
+    let response = next.run(request).await;
+    if let Some(attempt) = attempt {
+        attempt.record(&state, &operator, response.status()).await;
+    }
+    response
 }
 
 fn required_admin_role(method: &axum::http::Method, path: &str) -> AdminRole {
@@ -1079,13 +1102,14 @@ pub async fn get_model_policy(
 
 /// Replace an exact model allowlist. Send a JSON `null` body to clear it and
 /// restore the operator-level model behaviour for the tenant.
-pub async fn set_model_policy(
+pub(crate) async fn set_model_policy(
     State(state): State<Shared>,
     Extension(identity): Extension<AdminIdentity>,
+    Extension(operator): Extension<OperatorContext>,
     Path(tenant_id): Path<String>,
     Json(policy): Json<Option<crate::tenant_store::TenantModelPolicy>>,
 ) -> Response {
-    let result = match store(&state) {
+    let result = match store(&state).map(|store| store.for_operator(&operator)) {
         Ok(store) => {
             async {
                 let version = store
@@ -1125,13 +1149,14 @@ pub async fn set_model_policy(
     }
 }
 
-pub async fn create_policy_version(
+pub(crate) async fn create_policy_version(
     State(state): State<Shared>,
     Extension(identity): Extension<AdminIdentity>,
+    Extension(operator): Extension<OperatorContext>,
     Path(tenant_id): Path<String>,
     Json(request): Json<CreatePolicyVersionRequest>,
 ) -> Response {
-    let result = match store(&state) {
+    let result = match store(&state).map(|store| store.for_operator(&operator)) {
         Ok(store) => {
             store
                 .create_policy_version_async(&tenant_id, &identity.admin_id, request.document)
@@ -1273,12 +1298,13 @@ pub async fn simulate_policy_version(
     }
 }
 
-pub async fn approve_policy_version(
+pub(crate) async fn approve_policy_version(
     State(state): State<Shared>,
     Extension(identity): Extension<AdminIdentity>,
+    Extension(operator): Extension<OperatorContext>,
     Path((tenant_id, version_id)): Path<(String, String)>,
 ) -> Response {
-    let result = match store(&state) {
+    let result = match store(&state).map(|store| store.for_operator(&operator)) {
         Ok(store) => {
             store
                 .approve_policy_version_async(&tenant_id, &version_id, &identity.admin_id)
@@ -1292,14 +1318,16 @@ pub async fn approve_policy_version(
     }
 }
 
-pub async fn activate_policy_version(
+pub(crate) async fn activate_policy_version(
     State(state): State<Shared>,
     Extension(identity): Extension<AdminIdentity>,
+    Extension(operator): Extension<OperatorContext>,
     Path((tenant_id, version_id)): Path<(String, String)>,
 ) -> Response {
     deploy_policy_version(
         &state,
         &identity,
+        &operator,
         &tenant_id,
         &version_id,
         PolicyDeploymentAction::Activate,
@@ -1307,14 +1335,16 @@ pub async fn activate_policy_version(
     .await
 }
 
-pub async fn rollback_policy_version(
+pub(crate) async fn rollback_policy_version(
     State(state): State<Shared>,
     Extension(identity): Extension<AdminIdentity>,
+    Extension(operator): Extension<OperatorContext>,
     Path((tenant_id, version_id)): Path<(String, String)>,
 ) -> Response {
     deploy_policy_version(
         &state,
         &identity,
+        &operator,
         &tenant_id,
         &version_id,
         PolicyDeploymentAction::Rollback,
@@ -1325,11 +1355,12 @@ pub async fn rollback_policy_version(
 async fn deploy_policy_version(
     state: &Shared,
     identity: &AdminIdentity,
+    operator: &OperatorContext,
     tenant_id: &str,
     version_id: &str,
     action: PolicyDeploymentAction,
 ) -> Response {
-    let result = match store(state) {
+    let result = match store(state).map(|store| store.for_operator(operator)) {
         Ok(store) => {
             store
                 .deploy_policy_version_async(tenant_id, version_id, &identity.admin_id, action)

@@ -1,0 +1,679 @@
+[
+  {
+    "number": 585,
+    "run": "41705360233",
+    "artifact_sha256": "e1b50241086cb4fa2cb3ae50881630e5d58f74f05ead381b1439bf46398236d4",
+    "report_sha256": "ac04389db648db03a0b2be2c3d83afda4570f196c491eae5e4975ce3f0677e1f",
+    "driver": "ffbad27a93febf3b4f9d788c24bce17b21d4017a",
+    "status": "observed",
+    "error": null,
+    "observations": {
+      "authorization": false,
+      "boot_identity_sha256": "799abcdec6b68c97b73e570cc8a5aa748c975852f44c7887b98ff24367d2d33f",
+      "diagnostic": "SOU-216 pre-install process visibility",
+      "driver_source": {
+        "commit": "ffbad27a93febf3b4f9d788c24bce17b21d4017a",
+        "dirty": false,
+        "tree": "7b1b2a1c64f3b6895f69aa6b14a8fa0e78c920c1"
+      },
+      "effective_capabilities": 0,
+      "process_observation": {
+        "authorization": false,
+        "unavailable": [
+          {
+            "errno": 13,
+            "error_type": "PermissionError",
+            "process_identity_sha256": "8a80772fb9c578c9658ccc3328ed08a2072c5966035acab907c389d932e59093",
+            "provenance": {
+              "ancestry": [
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 34359738368,
+                  "process_identity_sha256": "8a80772fb9c578c9658ccc3328ed08a2072c5966035acab907c389d932e59093",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 1001,
+                    "filesystem": 1001,
+                    "real": 1001,
+                    "saved": 1001
+                  }
+                },
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 2199023255551,
+                  "process_identity_sha256": "dd9f49439886c2d2f013fafb4e24fc950fc311ebfd2249f35d4b18f0e396a240",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 0,
+                    "filesystem": 0,
+                    "real": 0,
+                    "saved": 0
+                  }
+                }
+              ],
+              "authorization": false,
+              "predates_driver": true
+            },
+            "role": "systemd",
+            "stage": "cwd"
+          },
+          {
+            "errno": 13,
+            "error_type": "PermissionError",
+            "process_identity_sha256": "74640f6fdfd4bfce17dd4733d62b83c8fff823cf5c48ce777b56b48896ae7771",
+            "provenance": {
+              "ancestry": [
+                {
+                  "comm_sha256": "2e116ddeef00000388fc93947316ea096c6db31bf0f1385a0db8acbe7038ed9e",
+                  "effective_capabilities": 0,
+                  "process_identity_sha256": "74640f6fdfd4bfce17dd4733d62b83c8fff823cf5c48ce777b56b48896ae7771",
+                  "role": "(sd-pam)",
+                  "state": "S",
+                  "uids": {
+                    "effective": 1001,
+                    "filesystem": 1001,
+                    "real": 1001,
+                    "saved": 1001
+                  }
+                },
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 34359738368,
+                  "process_identity_sha256": "8a80772fb9c578c9658ccc3328ed08a2072c5966035acab907c389d932e59093",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 1001,
+                    "filesystem": 1001,
+                    "real": 1001,
+                    "saved": 1001
+                  }
+                },
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 2199023255551,
+                  "process_identity_sha256": "dd9f49439886c2d2f013fafb4e24fc950fc311ebfd2249f35d4b18f0e396a240",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 0,
+                    "filesystem": 0,
+                    "real": 0,
+                    "saved": 0
+                  }
+                }
+              ],
+              "authorization": false,
+              "predates_driver": true
+            },
+            "role": "(sd-pam)",
+            "stage": "cwd"
+          }
+        ]
+      },
+      "product_executed": false,
+      "uid": 1001
+    },
+    "scope": "process diagnosis and empty CI session preparation only; not application acceptance",
+    "url": "https://github.com/SoupTeam/soup-wall/actions/runs/41705360233"
+  },
+  {
+    "number": 586,
+    "run": "41708018868",
+    "artifact_sha256": "b9ab0c16663c6d71af52d279848a2b33ad1464f29a70707038fa6f2acb7caec0",
+    "report_sha256": "2f9902a5748e32673188cd51ddc7344ea0544273b92cf8f7e7f563aa3312bd11",
+    "driver": "fa989cc976ba0cdf9213239b0ac375b340914263",
+    "status": "failed",
+    "error": "session_unit_count_bound",
+    "encrypted_provenance_sha256": "9c845711ca605adc6186effd7091dd643026ddfe908496ce54f7b530d4f566b9",
+    "private_provenance_sha256": "1e1e55e440d5e8117168e9a7ea336955f38d163612e83aae0e3a3d6f805e4bed",
+    "recipient_certificate_sha256": "70fe2f78676803487c792babc7d49d867c6c12877790d79b93593fd6b8ba69f4",
+    "private_provenance_authenticated_decryption_verified": true,
+    "observations": {
+      "authorization": false,
+      "before": {
+        "authorization": false,
+        "unavailable": [
+          {
+            "errno": 13,
+            "error_type": "PermissionError",
+            "process_identity_sha256": "beabf1c774d7e6177ef6377630a0b7ae9da5d138448ca2697ce9bd57eb7f847b",
+            "provenance": {
+              "ancestry": [
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 34359738368,
+                  "process_identity_sha256": "beabf1c774d7e6177ef6377630a0b7ae9da5d138448ca2697ce9bd57eb7f847b",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 1001,
+                    "filesystem": 1001,
+                    "real": 1001,
+                    "saved": 1001
+                  }
+                },
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 2199023255551,
+                  "process_identity_sha256": "a1b6310c11c8cc9584e976ffd6fc917824763a2bc487bd4fb30e7dd51f17da98",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 0,
+                    "filesystem": 0,
+                    "real": 0,
+                    "saved": 0
+                  }
+                }
+              ],
+              "authorization": false,
+              "predates_driver": true
+            },
+            "role": "systemd",
+            "stage": "cwd"
+          },
+          {
+            "errno": 13,
+            "error_type": "PermissionError",
+            "process_identity_sha256": "1c145ce41475a47135b3b8e823c7964dc5be9937140552089e16afb1d5189e3d",
+            "provenance": {
+              "ancestry": [
+                {
+                  "comm_sha256": "2e116ddeef00000388fc93947316ea096c6db31bf0f1385a0db8acbe7038ed9e",
+                  "effective_capabilities": 0,
+                  "process_identity_sha256": "1c145ce41475a47135b3b8e823c7964dc5be9937140552089e16afb1d5189e3d",
+                  "role": "(sd-pam)",
+                  "state": "S",
+                  "uids": {
+                    "effective": 1001,
+                    "filesystem": 1001,
+                    "real": 1001,
+                    "saved": 1001
+                  }
+                },
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 34359738368,
+                  "process_identity_sha256": "beabf1c774d7e6177ef6377630a0b7ae9da5d138448ca2697ce9bd57eb7f847b",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 1001,
+                    "filesystem": 1001,
+                    "real": 1001,
+                    "saved": 1001
+                  }
+                },
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 2199023255551,
+                  "process_identity_sha256": "a1b6310c11c8cc9584e976ffd6fc917824763a2bc487bd4fb30e7dd51f17da98",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 0,
+                    "filesystem": 0,
+                    "real": 0,
+                    "saved": 0
+                  }
+                }
+              ],
+              "authorization": false,
+              "predates_driver": true
+            },
+            "role": "(sd-pam)",
+            "stage": "cwd"
+          }
+        ]
+      },
+      "boot_identity_sha256": "7b49ed6007c0de10d2fbb7d2808dcf67ac52a005e50962f6e06178a8c5b76db1",
+      "context_before": {
+        "apparmor_context_sha256": "059f3fbad9298d09b1364f5cbed86919da8933eb7e12939d89196681f98a6df9",
+        "apparmor_restrict_userns": "1",
+        "cgroup_sha256": "6999eed49d4c985c3452a1e9ec6f6f352a3317b3607a7769c26917e2383f0ed2",
+        "effective_capabilities": 0,
+        "namespaces": {
+          "cgroup": "cgroup:[4026531835]",
+          "mnt": "mnt:[4026531832]",
+          "net": "net:[4026531833]",
+          "pid": "pid:[4026531836]",
+          "user": "user:[4026531837]"
+        },
+        "ptrace_scope": "1",
+        "uid": 1001
+      },
+      "diagnostic": "SOU-216 owned CI user-session preparation",
+      "driver_source": {
+        "commit": "fa989cc976ba0cdf9213239b0ac375b340914263",
+        "dirty": false,
+        "tree": "ebc4b37c270cd71579a013f701f36d6649acfb90"
+      },
+      "encrypted_provenance_sha256": "9c845711ca605adc6186effd7091dd643026ddfe908496ce54f7b530d4f566b9",
+      "error": "session_unit_count_bound",
+      "native_removal_guard_changed": false,
+      "private_provenance": "CMS encrypted; private key retained locally, no raw argv/environment captured",
+      "private_provenance_sha256": "1e1e55e440d5e8117168e9a7ea336955f38d163612e83aae0e3a3d6f805e4bed",
+      "product_executed": false,
+      "recipient_certificate_sha256": "70fe2f78676803487c792babc7d49d867c6c12877790d79b93593fd6b8ba69f4",
+      "status": "failed"
+    },
+    "scope": "process diagnosis and empty CI session preparation only; not application acceptance",
+    "url": "https://github.com/SoupTeam/soup-wall/actions/runs/41708018868"
+  },
+  {
+    "number": 587,
+    "run": "41708695515",
+    "artifact_sha256": "6d910acdbb309c995b1e26a25b9e19168e5ace1e33d25675a44ce54820dfd66e",
+    "report_sha256": "31d6f1c34ddcbc390522a175ddb841d26bce1af0f1fa11f5aaea5d90bb10d128",
+    "driver": "8ce2af32c84e4f7ab0976861d44f62372617e910",
+    "status": "failed",
+    "error": "JSONDecodeError",
+    "observations": {
+      "authorization": false,
+      "before": {
+        "authorization": false,
+        "unavailable": [
+          {
+            "errno": 13,
+            "error_type": "PermissionError",
+            "process_identity_sha256": "fd97a4bac020bb7b6d71ab9bd91a62f143ef681037677cce876506ccf7c84d22",
+            "provenance": {
+              "ancestry": [
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 34359738368,
+                  "process_identity_sha256": "fd97a4bac020bb7b6d71ab9bd91a62f143ef681037677cce876506ccf7c84d22",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 1001,
+                    "filesystem": 1001,
+                    "real": 1001,
+                    "saved": 1001
+                  }
+                },
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 2199023255551,
+                  "process_identity_sha256": "3839e49ab69df906908ba65a56c061b0f433e801124dab0253a0c659dd13f0b2",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 0,
+                    "filesystem": 0,
+                    "real": 0,
+                    "saved": 0
+                  }
+                }
+              ],
+              "authorization": false,
+              "predates_driver": true
+            },
+            "role": "systemd",
+            "stage": "cwd"
+          },
+          {
+            "errno": 13,
+            "error_type": "PermissionError",
+            "process_identity_sha256": "36812acc6315bda04a9b991438d3417d141f27547278c68eb5b5d1cd41d65096",
+            "provenance": {
+              "ancestry": [
+                {
+                  "comm_sha256": "2e116ddeef00000388fc93947316ea096c6db31bf0f1385a0db8acbe7038ed9e",
+                  "effective_capabilities": 0,
+                  "process_identity_sha256": "36812acc6315bda04a9b991438d3417d141f27547278c68eb5b5d1cd41d65096",
+                  "role": "(sd-pam)",
+                  "state": "S",
+                  "uids": {
+                    "effective": 1001,
+                    "filesystem": 1001,
+                    "real": 1001,
+                    "saved": 1001
+                  }
+                },
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 34359738368,
+                  "process_identity_sha256": "fd97a4bac020bb7b6d71ab9bd91a62f143ef681037677cce876506ccf7c84d22",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 1001,
+                    "filesystem": 1001,
+                    "real": 1001,
+                    "saved": 1001
+                  }
+                },
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 2199023255551,
+                  "process_identity_sha256": "3839e49ab69df906908ba65a56c061b0f433e801124dab0253a0c659dd13f0b2",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 0,
+                    "filesystem": 0,
+                    "real": 0,
+                    "saved": 0
+                  }
+                }
+              ],
+              "authorization": false,
+              "predates_driver": true
+            },
+            "role": "(sd-pam)",
+            "stage": "cwd"
+          }
+        ]
+      },
+      "boot_identity_sha256": "615ccde28ff2e5bef468ae90252947230e51b4dfa00d1fb9d24179161f790006",
+      "context_before": {
+        "apparmor_context_sha256": "059f3fbad9298d09b1364f5cbed86919da8933eb7e12939d89196681f98a6df9",
+        "apparmor_restrict_userns": "1",
+        "cgroup_sha256": "6999eed49d4c985c3452a1e9ec6f6f352a3317b3607a7769c26917e2383f0ed2",
+        "effective_capabilities": 0,
+        "namespaces": {
+          "cgroup": "cgroup:[4026531835]",
+          "mnt": "mnt:[4026531832]",
+          "net": "net:[4026531833]",
+          "pid": "pid:[4026531836]",
+          "user": "user:[4026531837]"
+        },
+        "ptrace_scope": "1",
+        "uid": 1001
+      },
+      "diagnostic": "SOU-216 owned CI user-session preparation",
+      "driver_source": {
+        "commit": "8ce2af32c84e4f7ab0976861d44f62372617e910",
+        "dirty": false,
+        "tree": "e58051c9210216069f6cdf257bf188c28b8f88b1"
+      },
+      "encrypted_provenance_sha256": "2b837ed0b473b9b2af95031e45a493a8e6a20c45f120c031cadd283533b438d0",
+      "error": "JSONDecodeError",
+      "native_removal_guard_changed": false,
+      "private_provenance": "CMS encrypted; private key retained locally, no raw argv/environment captured",
+      "private_provenance_sha256": "a310b3c507ac0939b132e71bc786ea41548150b097306f3f4993b7788c7a48b5",
+      "product_executed": false,
+      "recipient_certificate_sha256": "70fe2f78676803487c792babc7d49d867c6c12877790d79b93593fd6b8ba69f4",
+      "status": "failed"
+    },
+    "private_provenance_authenticated_decryption_verified": true,
+    "encrypted_provenance_sha256": "2b837ed0b473b9b2af95031e45a493a8e6a20c45f120c031cadd283533b438d0",
+    "private_provenance_sha256": "a310b3c507ac0939b132e71bc786ea41548150b097306f3f4993b7788c7a48b5",
+    "recipient_certificate_sha256": "70fe2f78676803487c792babc7d49d867c6c12877790d79b93593fd6b8ba69f4",
+    "scope": "process diagnosis and empty CI session preparation only; not application acceptance",
+    "url": "https://github.com/SoupTeam/soup-wall/actions/runs/41708695515"
+  },
+  {
+    "number": 588,
+    "run": "41709392593",
+    "artifact_sha256": "b961fc08761deddebf9acab65f95067ae5d7eefabe111a8ef5179f647a89f5d9",
+    "report_sha256": "2adebd8fc6c31a28699eee9849899f7cce01e6a8b96e378d7320ca2742ace9a2",
+    "driver": "b4485030c8ac99f97628314bfad9d2015535ae0a",
+    "status": "quiesced-empty-ci-user-session",
+    "error": null,
+    "observations": {
+      "after": {
+        "authorization": false,
+        "unavailable": []
+      },
+      "authorization": false,
+      "before": {
+        "authorization": false,
+        "unavailable": [
+          {
+            "errno": 13,
+            "error_type": "PermissionError",
+            "process_identity_sha256": "235e36b4491a2d5b90e494e1774d67e27161f1897e46aaaf2228ed94e5a136e6",
+            "provenance": {
+              "ancestry": [
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 34359738368,
+                  "process_identity_sha256": "235e36b4491a2d5b90e494e1774d67e27161f1897e46aaaf2228ed94e5a136e6",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 1001,
+                    "filesystem": 1001,
+                    "real": 1001,
+                    "saved": 1001
+                  }
+                },
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 2199023255551,
+                  "process_identity_sha256": "89f55644f88caf4d98c80fec076d8bcd439b3f82c233753e549b1e3622d6a500",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 0,
+                    "filesystem": 0,
+                    "real": 0,
+                    "saved": 0
+                  }
+                }
+              ],
+              "authorization": false,
+              "predates_driver": true
+            },
+            "role": "systemd",
+            "stage": "cwd"
+          },
+          {
+            "errno": 13,
+            "error_type": "PermissionError",
+            "process_identity_sha256": "52b62ba4dceed4a9ec28b1a62f56805b9fa546b8f3e12b46e69a9eebb1e28160",
+            "provenance": {
+              "ancestry": [
+                {
+                  "comm_sha256": "2e116ddeef00000388fc93947316ea096c6db31bf0f1385a0db8acbe7038ed9e",
+                  "effective_capabilities": 0,
+                  "process_identity_sha256": "52b62ba4dceed4a9ec28b1a62f56805b9fa546b8f3e12b46e69a9eebb1e28160",
+                  "role": "(sd-pam)",
+                  "state": "S",
+                  "uids": {
+                    "effective": 1001,
+                    "filesystem": 1001,
+                    "real": 1001,
+                    "saved": 1001
+                  }
+                },
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 34359738368,
+                  "process_identity_sha256": "235e36b4491a2d5b90e494e1774d67e27161f1897e46aaaf2228ed94e5a136e6",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 1001,
+                    "filesystem": 1001,
+                    "real": 1001,
+                    "saved": 1001
+                  }
+                },
+                {
+                  "comm_sha256": "e0031c189e34e10d9c202fa8d75f72d3296a239164fe6b07e7dc206c7b723d98",
+                  "effective_capabilities": 2199023255551,
+                  "process_identity_sha256": "89f55644f88caf4d98c80fec076d8bcd439b3f82c233753e549b1e3622d6a500",
+                  "role": "systemd",
+                  "state": "S",
+                  "uids": {
+                    "effective": 0,
+                    "filesystem": 0,
+                    "real": 0,
+                    "saved": 0
+                  }
+                }
+              ],
+              "authorization": false,
+              "predates_driver": true
+            },
+            "role": "(sd-pam)",
+            "stage": "cwd"
+          }
+        ]
+      },
+      "boot_identity_sha256": "1ac00639d3e17c3c95c1501dc41cbe44d6466deea8592fd7c652de19a982940d",
+      "context_before": {
+        "apparmor_context_sha256": "059f3fbad9298d09b1364f5cbed86919da8933eb7e12939d89196681f98a6df9",
+        "apparmor_restrict_userns": "1",
+        "cgroup_sha256": "6999eed49d4c985c3452a1e9ec6f6f352a3317b3607a7769c26917e2383f0ed2",
+        "effective_capabilities": 0,
+        "namespaces": {
+          "cgroup": "cgroup:[4026531835]",
+          "mnt": "mnt:[4026531832]",
+          "net": "net:[4026531833]",
+          "pid": "pid:[4026531836]",
+          "user": "user:[4026531837]"
+        },
+        "ptrace_scope": "1",
+        "uid": 1001
+      },
+      "diagnostic": "SOU-216 owned CI user-session preparation",
+      "driver_source": {
+        "commit": "b4485030c8ac99f97628314bfad9d2015535ae0a",
+        "dirty": false,
+        "tree": "a65d31e1483abfce5155cf3f43d15053669916c4"
+      },
+      "empty_vendor_user_units": [
+        {
+          "sub": "running",
+          "unit": "init.scope"
+        },
+        {
+          "sub": "listening",
+          "unit_sha256": "788177b5751fe096d3d4e43818bfd074e70f4f8f439e3cc02d5667ced1967970",
+          "vendor_file_sha256": [
+            "eb9bcc798c347ea00544ca79f3ca07f3f6bd675235c9d73a42b6dcc9fd16a927"
+          ]
+        },
+        {
+          "sub": "listening",
+          "unit_sha256": "af80d456e0b7f4ddde7cb5b5bf6278200fec94c87c5d4f48ee75e2baf1fc9c28",
+          "vendor_file_sha256": [
+            "ecf24112b56a505e2bf90bcefe07d5582a3804213218ff49a38fe0a3345c7e3b"
+          ]
+        },
+        {
+          "sub": "listening",
+          "unit_sha256": "a4b460f073e7a2228f4879061b350c156b219c9e0a59d4e176eeea05872a6735",
+          "vendor_file_sha256": [
+            "894cfb7aaa5e75092ad738cd6b3cb1b2ac05c6082ae89071ef38d25558ba289e"
+          ]
+        },
+        {
+          "sub": "listening",
+          "unit_sha256": "f6b69a5349cca6eb96434baf5270f23d37baa8e79ab5f7f01504933bf063cee9",
+          "vendor_file_sha256": [
+            "cea4b6b204d6b6701407c67ae1a1a8452e11593ea7f1e9805272f6c31c725213"
+          ]
+        },
+        {
+          "sub": "listening",
+          "unit_sha256": "f8d0af7cf1f7f3e1cf48c22e1978334aca0127a861da70005979e6c9ba4168ee",
+          "vendor_file_sha256": [
+            "211ad1fe19647e1174aa862f11bed3a519cebea32fe7ad0ab6fb8916fa8fb62d"
+          ]
+        },
+        {
+          "sub": "listening",
+          "unit_sha256": "4c990b2453596c7314546204106e39d3a4300442fad44959aa0a528bfacc3a55",
+          "vendor_file_sha256": [
+            "5ed1ff1e351db978cfa581c6e11278e685099a8195cbe68a7754a4165a169985"
+          ]
+        },
+        {
+          "sub": "listening",
+          "unit_sha256": "1d26388fd52f839615aa9a03102689b4848664a2f7ef1255611d7cf2b3c8710c",
+          "vendor_file_sha256": [
+            "cd1b35c7f3c2b6550d7f0766416772824402e8e5269379cd09fdb005801346de"
+          ]
+        },
+        {
+          "sub": "listening",
+          "unit_sha256": "458c87d5b4b9edf1ada25d47b6a3661d0b53dec55234da0d895dfb03ab3c7907",
+          "vendor_file_sha256": [
+            "707d5397576405a1142f722f24bcc5bddcc9ef5bbb7bbad8a3ea99f456356a76"
+          ]
+        },
+        {
+          "sub": "listening",
+          "unit_sha256": "1b06d117cc76084c6aecde2e2298456d9f13ca5434a6d462de97a9874bbd5c28",
+          "vendor_file_sha256": [
+            "aac4edde42d58f6246a28bf53b4c3f917d3ccf5064ccf401f14d918df68eccfa"
+          ]
+        },
+        {
+          "sub": "active",
+          "unit_sha256": "4e98c83386c2917574b9f7982104eb6e0851f43d04cc821a46c2cb6513d33500",
+          "vendor_file_sha256": [
+            "0e24f3f2aba65c96ed47f17b50f8a338d840fc5314dc2f8f4d931ed2423bbdef"
+          ]
+        },
+        {
+          "sub": "active",
+          "unit_sha256": "f2c674cfcdfeadd36aab33f0ca958498ea5f3c6e69bbc673531e181206c77242",
+          "vendor_file_sha256": [
+            "64cd66152e3e1307bd80162c690a14fe32b98498588ebd6a642888b23e8307c3"
+          ]
+        },
+        {
+          "sub": "active",
+          "unit_sha256": "96a27e7cfba6825a286a43527e770456e957bf055ac58b1d6326c28b266b75d5",
+          "vendor_file_sha256": [
+            "5d1426401aa2b79ff4a9bb711ab781a5e70894a9da985e0a8b389121ecc8a0ce"
+          ]
+        },
+        {
+          "sub": "active",
+          "unit_sha256": "38cd1883d9be09c5adb873c5effffcadc8d6b6de01d0a78eb144b04eb75c1898",
+          "vendor_file_sha256": [
+            "7b922fd160bf0d353c07f162ce1a889ba05bfeb34d51f315c7a7059dbacd6928"
+          ]
+        },
+        {
+          "sub": "active",
+          "unit_sha256": "e9c5c3c1ca6c18bc9ae6bf7bf3d2f3be627c00e822ba54d7f0ff6517e19a1ec8",
+          "vendor_file_sha256": [
+            "664a530864df1f13f13b6a7faf556e7b421b808a9c6c8038fcb31158024b2a14"
+          ]
+        },
+        {
+          "sub": "waiting",
+          "unit_sha256": "a805e6a2c1baac9f11a943eb13ab7038c5626449ffa6b382fb1c49064220a1cc",
+          "vendor_file_sha256": [
+            "2aad5faceba1104670893ac332fcd3702d148d6ee32420019bcdf76d184d34d1"
+          ]
+        }
+      ],
+      "encrypted_provenance_sha256": "a4a145ca61b77e0aab1e57fb0c06b92aa104f50d8858418c8c874fccfea90d7e",
+      "native_removal_guard_changed": false,
+      "private_provenance": "CMS encrypted; private key retained locally, no raw argv/environment captured",
+      "private_provenance_sha256": "13b942f6639567c6b457db1bee0527915ffe5fa76e0481b5393faedd079c5642",
+      "product_executed": false,
+      "quiescence": {
+        "command": "systemctl --user exit",
+        "exit_requested": true,
+        "original_processes_exited": true,
+        "root_unit_attested": true,
+        "scope": "empty owned per-user service manager on disposable hosted CI only",
+        "target_process_identities_sha256": [
+          "235e36b4491a2d5b90e494e1774d67e27161f1897e46aaaf2228ed94e5a136e6",
+          "52b62ba4dceed4a9ec28b1a62f56805b9fa546b8f3e12b46e69a9eebb1e28160"
+        ]
+      },
+      "recipient_certificate_sha256": "70fe2f78676803487c792babc7d49d867c6c12877790d79b93593fd6b8ba69f4",
+      "status": "quiesced-empty-ci-user-session"
+    },
+    "private_provenance_authenticated_decryption_verified": true,
+    "encrypted_provenance_sha256": "a4a145ca61b77e0aab1e57fb0c06b92aa104f50d8858418c8c874fccfea90d7e",
+    "private_provenance_sha256": "13b942f6639567c6b457db1bee0527915ffe5fa76e0481b5393faedd079c5642",
+    "recipient_certificate_sha256": "70fe2f78676803487c792babc7d49d867c6c12877790d79b93593fd6b8ba69f4",
+    "scope": "process diagnosis and empty CI session preparation only; not application acceptance",
+    "url": "https://github.com/SoupTeam/soup-wall/actions/runs/41709392593"
+  }
+]

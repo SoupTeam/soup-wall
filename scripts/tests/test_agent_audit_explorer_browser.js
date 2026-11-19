@@ -11,7 +11,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
 const template = fs.readFileSync(path.join(__dirname, '..', 'agent-audit-explorer.html'), 'utf8');
-const inlineScript = template.match(/<script>\n([^]*?)\n<\/script>/)?.[0]?.replace(/^<script>/, '').replace(/<\/script>$/, '');
+const inlineScript = template.match(/<script>(\n[^]*?\n)<\/script>/i)?.[1];
 assert.ok(inlineScript, 'inline script missing');
 const scriptHash = crypto.createHash('sha256').update(inlineScript).digest('base64');
 assert.ok(template.includes(`script-src 'sha256-${scriptHash}'`), 'CSP inline-script hash is stale');

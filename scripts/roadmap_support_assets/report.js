@@ -56,6 +56,15 @@ function evidenceCard(item) {
     for (const key of ["implementation", "policy", "registry", "runtime", "server"]) {
       fact(dl, `${key} SHA-256`, item.observed.identity[key]);
     }
+    if (item.observed.tree) fact(dl, "Observed tree", item.observed.tree);
+    if (item.observed.driver_source) fact(dl, "Measurement driver", item.observed.driver_source);
+    if (item.observed.scope) {
+      const scope = item.observed.scope;
+      fact(dl, "Linux-v1 scope", scope.selected ? `selected · ${scope.state} · ${scope.document_sha256}` : "not selected");
+    }
+    if (item.observed.refusals !== undefined) fact(dl, "Expected maintenance refusals", item.observed.refusals);
+    for (const companion of item.observed.companions || []) fact(dl, `Companion ${companion.role}`, companion.sha256);
+    for (const gap of item.observed.unverified || []) fact(dl, "Unverified", gap);
   }
   details.append(dl);
   return details;

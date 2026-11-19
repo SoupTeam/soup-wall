@@ -2741,6 +2741,8 @@ pub async fn set_customer_workspace_model_policy(
     headers: HeaderMap,
     Json(policy): Json<Option<TenantModelPolicy>>,
 ) -> Response {
+    use crate::tenant_store::operator_audit::{AuditOperation, AuditOutcome, OperatorContext};
+    let received_at = crate::tenant_store::now_unix();
     let Some(store) = state.tenant_store.as_ref() else {
         return unavailable();
     };
@@ -2758,10 +2760,27 @@ pub async fn set_customer_workspace_model_policy(
             return control_plane_unavailable();
         }
     };
+    let operator = OperatorContext::workspace(&session.access.principal_id, received_at);
+    let audit_refusal = async |outcome| {
+        if let Ok(Some(workspace)) = store
+            .active_workspace_by_id_async(&session.access.workspace_id)
+            .await
+        {
+            crate::operator_audit_api::record_attempt(
+                &state,
+                &workspace.tenant_id,
+                &operator,
+                AuditOperation::ModelPolicySet,
+                outcome,
+            )
+            .await;
+        }
+    };
     let csrf = headers
         .get(CUSTOMER_CSRF_HEADER)
         .and_then(|value| value.to_str().ok());
     if !csrf.is_some_and(|csrf| cipher.verifies_browser_csrf_token(token, csrf)) {
+        audit_refusal(AuditOutcome::Denied).await;
         return customer_csrf_invalid();
     }
     let permitted = match store
@@ -2779,9 +2798,11 @@ pub async fn set_customer_workspace_model_policy(
         }
     };
     if !permitted {
+        audit_refusal(AuditOutcome::Denied).await;
         return customer_forbidden();
     }
     match store
+        .for_operator(&operator)
         .set_workspace_model_policy_async(
             &session.access.workspace_id,
             &session.access.principal_id,
@@ -2791,6 +2812,7 @@ pub async fn set_customer_workspace_model_policy(
     {
         Ok(()) => customer_json(policy),
         Err(error_value) => {
+            audit_refusal(AuditOutcome::Failed).await;
             tracing::warn!(error = %error_value, "failed to save customer model policy");
             error(
                 StatusCode::BAD_REQUEST,

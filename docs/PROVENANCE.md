@@ -16,7 +16,7 @@ Model weights, benchmark datasets, container base images, and frontend assets ne
 
 The locked workspace includes the Gateway's identity and storage dependencies. The SAML adapter uses [`saml-rs 0.6.1`](https://github.com/salasebas/saml-rs/releases/tag/v0.6.1) (MIT), `bergshamra 0.9.2` (BSD-2-Clause), and [`kryptering 0.6.0`](https://github.com/kushaldas/kryptering/releases/tag/v0.6.0) (BSD-2-Clause). Kryptering is a pinned local package with a narrowly scoped platform patch. [Its intake record](../vendor/kryptering/PATCH.md) records the original registry archive checksum, upstream revision, retained license and source, omitted development assets, exact delta and update procedure. The upstream source differs only in its platform guard and error message; cryptographic operations are unchanged. The optional ML dependency also has a reviewed local patch; see below. Other dependencies remain registry packages. The 0.6 migration explicitly retains signed assertions, signed authentication requests, audience validation, and zero clock-skew tolerance; it does not adopt the new five-minute validation default. Metadata signature verification, replay protection, and the provider boundary remain required.
 
-The optional ML graph pins `candle-core 0.11.0` to [a reviewed local patch](../vendor/candle-core/PATCH.md) to use fixed `zip 9.0.4` without suppressing RUSTSEC-2026-0367/0368/0369. Its registry archive SHA-256 and four-file delta are recorded in the patch note; the original license and all upstream source/test fixtures are retained. Three archive-name readers propagate ZIP 9's fallible filename API, and a deprecated import is removed. Tensor computation and application ML features are unchanged. The license gate requires the exact path, version, manifest and license digests from `reviewed_paths`; unlisted or modified path dependencies fail. Both patched dependencies remain excluded from workspace membership.
+The optional ML graph pins `candle-core 0.11.0` to [a reviewed local patch](../vendor/candle-core/PATCH.md) to use fixed `zip 9.0.5` without suppressing RUSTSEC-2026-0367/0368/0369 or GHSA-m665-v7pm-7grj. Its registry archive SHA-256 and four-file delta are recorded in the patch note; the original license and all upstream source/test fixtures are retained. Three archive-name readers propagate ZIP 9's fallible filename API, and a deprecated import is removed. Tensor computation and application ML features are unchanged. The license gate requires the exact path, version, manifest and license digests from `reviewed_paths`; unlisted or modified path dependencies fail. Both patched dependencies remain excluded from workspace membership.
 
 All release targets select the AWS-LC document provider, using the workspace's existing `aws-lc-rs 1.18.2` dependency (Apache-2.0 OR ISC). The patch adds only non-FIPS Windows x86_64 MSVC to kryptering's existing Linux and non-FIPS macOS x86_64/aarch64 support. [AWS-LC itself supports Windows MSVC](https://aws.github.io/aws-lc-rs/platform_support.html). Windows ARM, Windows GNU and Windows FIPS are not admitted by this patch. Unsupported targets fail at the provider guard; there is no RustCrypto fallback. The complete application `Cargo.lock` and release graphs exclude `rsa`. Keep the vendored package excluded from the application workspace so upstream development dependencies do not enter that lock.
 
@@ -101,7 +101,7 @@ identity. No server implementation is copied or rewritten into Agent.
 separately retains the pinned upstream notices outside that tree; the complete
 package tree digest is verified before sandbox execution.
 
-The acceptance runtime downloads official Node.js `22.22.0` and bubblewrap
+The acceptance runtime downloads official Node.js `22.23.5` and bubblewrap
 `0.13.1` archives by SHA-256. Node.js retains its upstream license/third-party
 notices; bubblewrap is a separate LGPL-2.0-or-later executable, built from its
 unmodified official release source. Neither executable is linked into or
@@ -131,9 +131,9 @@ record the complete selected Python graph and its separate upstream licenses;
 the installer preserves package metadata and license files. Discovery bytes are
 behavioral fixtures, not a replacement server implementation.
 
-CPython 3.11.14 uses the pinned Astral python-build-standalone 20251014 original
+CPython 3.11.18 uses the pinned Astral python-build-standalone 20261026 original
 distribution, with Python/third-party distribution notices retained in the
-runtime tree. Git 2.51.2 is a separate GPL-2.0 executable built from its pinned
+runtime tree. Git 2.51.3 is a separate GPL-2.0 executable built from its pinned
 official source archive; its COPYING file remains in the build source. The
 existing separately built bubblewrap 0.13.1 remains LGPL-2.0-or-later. These
 executables are not linked into or redistributed with the Apache-2.0 Agent.
