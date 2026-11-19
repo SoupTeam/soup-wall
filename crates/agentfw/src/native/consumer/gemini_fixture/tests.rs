@@ -274,8 +274,8 @@ fn gemini_all_frozen_rows_and_both_large_full_frames() {
             "g06-b" => include_str!("../../../../../../eval/sou123/payloads/g06-b.txt"),
             "f05-a" => include_str!("../../../../../../eval/sou123/payloads/f05-a.txt"),
             "g11-a" => include_str!("../../../../../../eval/sou123/payloads/g11-a.txt"),
-            "g12-a" => include_str!("../../../../../../eval/sou123/payloads/g12-a.txt"),
-            "f12-a" => include_str!("../../../../../../eval/sou123/payloads/f12-a.txt"),
+            "g12-a" => crate::native::large_fixtures::G12_A,
+            "f12-a" => crate::native::large_fixtures::F12_A,
             _ => panic!(),
         };
         assert_eq!(hash(original.as_bytes()), row["source_sha256"]);
@@ -481,10 +481,7 @@ fn gemini_evidence_full_source_metadata_and_note_quotes_remain_untrusted() {
             include_str!("../../../../../../eval/sou123/payloads/f05-a.txt"),
             "Training note for human reviewers",
         ),
-        (
-            include_str!("../../../../../../eval/sou123/payloads/g12-a.txt"),
-            "make verify",
-        ),
+        (crate::native::large_fixtures::G12_A, "make verify"),
     ];
     for (text, note) in cases {
         let source = json!({"jsonrpc":"2.0","id":"host-call","result":{"content":[{"type":"text","text":text}],"structuredContent":{"content":text}}}).to_string();
@@ -688,7 +685,7 @@ fn gemini_support_index_keeps_full_source_and_substantive_f12_quotes_untrusted()
     if !cfg!(feature = "sou218-gemini35-support") {
         return;
     }
-    let text = include_str!("../../../../../../eval/sou123/payloads/f12-a.txt");
+    let text = crate::native::large_fixtures::F12_A;
     let source = json!({"jsonrpc":"2.0","id":"host-call","result":{"content":[{"type":"text","text":text}],"structuredContent":{"content":text}}}).to_string();
     let request = request_value(&source);
     assert_eq!(

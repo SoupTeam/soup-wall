@@ -118,8 +118,8 @@ fn analysis_fixture_capture_keeps_six_originals_and_full_envelope_limits() {
         include_str!("../../../../../eval/sou123/payloads/g06-b.txt"),
         include_str!("../../../../../eval/sou123/payloads/f05-a.txt"),
         include_str!("../../../../../eval/sou123/payloads/g11-a.txt"),
-        include_str!("../../../../../eval/sou123/payloads/g12-a.txt"),
-        include_str!("../../../../../eval/sou123/payloads/f12-a.txt"),
+        crate::native::large_fixtures::G12_A,
+        crate::native::large_fixtures::F12_A,
     ] {
         let env = analysis_env(text);
         purpose_fixture_grant(&env);

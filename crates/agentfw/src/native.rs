@@ -27,6 +27,13 @@ pub mod execution;
 mod invocation;
 // SOU-218 executable contract experiment. No shipped endpoint or release path.
 pub mod consumer;
+// Share the two 256 KiB corpus originals across all test codegen units.
+#[cfg(test)]
+mod large_fixtures {
+    pub(super) static G12_A: &str = include_str!("../../../eval/sou123/payloads/g12-a.txt");
+    pub(super) static F12_A: &str = include_str!("../../../eval/sou123/payloads/f12-a.txt");
+}
+
 pub mod liveness;
 pub mod pilot_cleanup;
 pub mod pilot_stop;

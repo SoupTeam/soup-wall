@@ -175,14 +175,8 @@ mod tests {
                 include_str!("../../../../../eval/sou123/payloads/g11-a.txt"),
                 600,
             ),
-            (
-                include_str!("../../../../../eval/sou123/payloads/g12-a.txt"),
-                262144,
-            ),
-            (
-                include_str!("../../../../../eval/sou123/payloads/f12-a.txt"),
-                262144,
-            ),
+            (crate::native::large_fixtures::G12_A, 262144),
+            (crate::native::large_fixtures::F12_A, 262144),
         ];
         let manifest: Value =
             serde_json::from_str(include_str!("../../../../../eval/sou123/manifest.json")).unwrap();

@@ -630,12 +630,12 @@ mod tests {
     #[test]
     fn analysis_large_actual_custody_serial_budget_concurrency_refusal_and_reclaim() {
         let records = [
-            super::super::execution::tests::analysis_custody_fixture(include_str!(
-                "../../../../eval/sou123/payloads/g12-a.txt"
-            )),
-            super::super::execution::tests::analysis_custody_fixture(include_str!(
-                "../../../../eval/sou123/payloads/f12-a.txt"
-            )),
+            super::super::execution::tests::analysis_custody_fixture(
+                crate::native::large_fixtures::G12_A,
+            ),
+            super::super::execution::tests::analysis_custody_fixture(
+                crate::native::large_fixtures::F12_A,
+            ),
         ];
         let prepare = |q: &mut Quarantine, id: &str, value: &Value| {
             let content = value["content"].as_str().unwrap();

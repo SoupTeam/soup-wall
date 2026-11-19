@@ -302,14 +302,8 @@ async fn connected_analysis_child() {
             "g11-a",
             include_str!("../../../../../eval/sou123/payloads/g11-a.txt"),
         ),
-        (
-            "g12-a",
-            include_str!("../../../../../eval/sou123/payloads/g12-a.txt"),
-        ),
-        (
-            "f12-a",
-            include_str!("../../../../../eval/sou123/payloads/f12-a.txt"),
-        ),
+        ("g12-a", crate::native::large_fixtures::G12_A),
+        ("f12-a", crate::native::large_fixtures::F12_A),
     ] {
         let mut held = child();
         let captured = execution::tests::analysis_capture(&held.0, text);
@@ -568,8 +562,8 @@ async fn connected_gemini_provider_child() {
             "small-g06" => include_str!("../../../../../eval/sou123/payloads/g06-b.txt"),
             "small-f05" => include_str!("../../../../../eval/sou123/payloads/f05-a.txt"),
             "small-g11" => include_str!("../../../../../eval/sou123/payloads/g11-a.txt"),
-            "large-git" => include_str!("../../../../../eval/sou123/payloads/g12-a.txt"),
-            "large-files" => include_str!("../../../../../eval/sou123/payloads/f12-a.txt"),
+            "large-git" => crate::native::large_fixtures::G12_A,
+            "large-files" => crate::native::large_fixtures::F12_A,
             _ => include_str!("../../../../../eval/sou123/payloads/g05-a.txt"),
         };
         let mut held = child();

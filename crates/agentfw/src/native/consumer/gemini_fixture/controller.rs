@@ -123,8 +123,8 @@ fn row(index: usize) -> Result<Row> {
         Some("g06-b") => include_str!("../../../../../../eval/sou123/payloads/g06-b.txt"),
         Some("f05-a") => include_str!("../../../../../../eval/sou123/payloads/f05-a.txt"),
         Some("g11-a") => include_str!("../../../../../../eval/sou123/payloads/g11-a.txt"),
-        Some("g12-a") => include_str!("../../../../../../eval/sou123/payloads/g12-a.txt"),
-        Some("f12-a") => include_str!("../../../../../../eval/sou123/payloads/f12-a.txt"),
+        Some("g12-a") => crate::native::large_fixtures::G12_A,
+        Some("f12-a") => crate::native::large_fixtures::F12_A,
         _ => anyhow::bail!("gemini_corpus_source"),
     };
     ensure!(
