@@ -1797,16 +1797,26 @@ async fn codex_metadata_acceptance(modern: bool) {
 
     let thread = "codex-thread";
     let metadata = if modern {
-        codex_current_metadata()
+        let mut metadata = codex_current_metadata();
+        metadata["x-codex-turn-metadata"]["workspaces"]["/owned/workspace"]
+            ["associated_remote_urls"]["origin"] = json!("https://example.invalid/private-remote");
+        metadata
     } else {
         json!({"threadId":thread,"progressToken":1})
     };
     let read = format!(" {{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{{\"name\":\"read_document\",\"arguments\":{{}},\"_meta\":{metadata}}}}} ");
     assert_eq!(fixture.exchange(&read).await.as_deref(), Some(READ_RESULT));
-    assert_eq!(
-        std::fs::read_to_string(&fixture.ledger).unwrap(),
-        format!("{read}\n")
-    );
+    let forwarded = std::fs::read_to_string(&fixture.ledger).unwrap();
+    if modern {
+        let mut expected: Value = serde_json::from_str(&read).unwrap();
+        expected["params"]["_meta"]["x-codex-turn-metadata"]
+            .as_object_mut()
+            .unwrap()
+            .remove("workspaces");
+        assert_eq!(serde_json::from_str::<Value>(&forwarded).unwrap(), expected);
+    } else {
+        assert_eq!(forwarded, format!("{read}\n"));
+    }
 
     for (id, tool, args, rule) in [
         (

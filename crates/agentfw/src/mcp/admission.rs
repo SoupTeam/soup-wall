@@ -15,7 +15,11 @@ use anyhow::{bail, ensure, Context};
 use futures_util::{FutureExt, StreamExt};
 use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
-use serde_json::{json, Value};
+use serde_json::{
+    json,
+    value::{to_raw_value, RawValue},
+    Value,
+};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::process::Command;
@@ -2289,16 +2293,18 @@ fn codex_turn_metadata(value: &Value) -> anyhow::Result<()> {
                 ],
             )?;
             ensure!(
-                workspace.as_object().is_some_and(|m| m.len() == 3)
-                    && workspace["has_changes"].is_boolean()
-                    && workspace["latest_git_commit_hash"]
-                        .as_str()
-                        .is_some_and(|s| s.len() == 40 && s.bytes().all(|b| b.is_ascii_hexdigit())),
+                workspace.get("has_changes").is_none_or(Value::is_boolean)
+                    && workspace
+                        .get("latest_git_commit_hash")
+                        .is_none_or(|hash| hash.is_null()
+                            || hash.as_str().is_some_and(|s| matches!(s.len(), 40 | 64)
+                                && s.bytes().all(|b| b.is_ascii_hexdigit()))),
                 "invalid Codex workspace metadata"
             );
-            let remotes = workspace["associated_remote_urls"]
-                .as_object()
-                .context("invalid Codex remotes")?;
+            let Some(remotes) = workspace.get("associated_remote_urls") else {
+                continue;
+            };
+            let remotes = remotes.as_object().context("invalid Codex remotes")?;
             ensure!(
                 remotes.len() <= 16
                     && remotes.iter().all(|(name, url)| !name.is_empty()
@@ -2312,6 +2318,34 @@ fn codex_turn_metadata(value: &Value) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Keep the original request for admission and custody. Workspace metadata is
+/// host-local context and can include paths and credentials in Git remote URLs.
+fn codex_server_frame(raw: &[u8], value: &Value) -> anyhow::Result<Option<Vec<u8>>> {
+    let meta = &value["params"]["_meta"];
+    let turn = "x-codex-turn-metadata";
+    if value["method"] != "tools/call" || meta[turn].get("workspaces").is_none() {
+        return Ok(None);
+    }
+
+    let mut meta = meta.clone();
+    meta[turn]
+        .as_object_mut()
+        .context("invalid Codex turn metadata")?
+        .remove("workspaces");
+    let meta = to_raw_value(&meta)?;
+    // Preserve the original JSON values (including argument number spelling)
+    // on the server side too. Only the validated metadata value is rewritten.
+    let mut envelope: BTreeMap<String, &RawValue> = serde_json::from_slice(raw)?;
+    let mut params: BTreeMap<String, &RawValue> =
+        serde_json::from_str(envelope.get("params").context("MCP params absent")?.get())?;
+    params.insert("_meta".into(), &meta);
+    let params = to_raw_value(&params)?;
+    envelope.insert("params".into(), &params);
+    let mut bytes = serde_json::to_vec(&envelope)?;
+    bytes.push(b'\n');
+    Ok(Some(bytes))
 }
 
 fn result_kind(value: &Value) -> anyhow::Result<&'static str> {
@@ -3758,7 +3792,8 @@ where
                 };
                 pending = Some(next);
                 deadline = tokio::time::Instant::now() + IO_TIMEOUT;
-                write(child, &raw).await?;
+                let outgoing = codex_server_frame(&raw, &value)?;
+                write(child, outgoing.as_deref().unwrap_or(&raw)).await?;
                 drop(policy_boundary);
             }
             raw = line(server, &mut server_partial) => {

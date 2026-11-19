@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,7 +38,6 @@ def main():
     args.out.parent.mkdir(parents=True, exist_ok=True)
     checks = []
     report = {"source_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-              "codex_version": subprocess.check_output([args.codex, "--version"], text=True).strip(),
               "server": "@modelcontextprotocol/server-filesystem@2026.8.31", "checks": checks,
               "external_provider_requests": 0, "live_model_evaluation": False, "passed": False}
 
@@ -46,7 +46,10 @@ def main():
         if not condition:
             raise AssertionError(name)
 
+    args.out.touch(exist_ok=False)
     try:
+        report.update(ACCEPTANCE.host_identity(args.codex))
+        report["wire_fixture_sha256"] = INSTALL.sha(ROOT / "scripts/fixtures/codex-0.169.0-call.json")
         check("host_version", report["codex_version"] == "codex-cli 0.169.0-alpha.11.1")
         with tempfile.TemporaryDirectory(prefix="codex-filesystem-", dir=ROOT / "target") as tmp:
             root = Path(tmp)
@@ -103,12 +106,22 @@ def main():
                     config_path.write_text("model='fixture'\n[mcp_servers.notes]\ncommand=" + json.dumps(original[0])
                                            + "\nargs=" + json.dumps([original[1], "/workspace"]) + "\n")
                     config_path.chmod(0o600)
+                    initial = config_path.read_text()
+                    initial_config = tomllib.loads(initial)
                     base = ["--host", "codex", "--path", str(config_path), "--server", "notes", "--home", str(home), "--agent", str(binary)]
                     launch = ["--server-profile", str(profile / "profile.json"), "--classifier-script", str(ROOT / "rule_baseline/rule_baseline.py"),
                               "--classifier-python", str(Path(sys.executable).resolve())]
                     for op in ["preview", "connect", "inspect"]:
                         result = subprocess.run([str(binary), "mcp-connection", op, *base, *launch], capture_output=True, text=True, timeout=60)
                         check(op, result.returncode == 0)
+                        if op == "preview":
+                            check("preview_no_write", config_path.read_text() == initial)
+                        else:
+                            check(f"{op}_configured", json.loads(result.stdout)["status"] == "configured")
+                            wrapped = tomllib.loads(config_path.read_text())["mcp_servers"]["notes"]
+                            check(f"{op}_wrapper", wrapped["command"] == "/usr/bin/env"
+                                  and "--native-admission" in wrapped["args"]
+                                  and wrapped["args"][-3:] == [original[0], original[1], "/workspace"])
                     steps = [("mcp__notes__read_text_file", {"path": "/workspace/notes.txt"}),
                              ("mcp__notes__write_file", {"path": "/workspace/forbidden.txt", "content": "must not appear"}),
                              ("mcp__notes__read_text_file", {"path": "/workspace/injected.txt"}),
@@ -135,7 +148,10 @@ def main():
                     finally:
                         provider.close()
                     result = subprocess.run([str(binary), "mcp-connection", "disconnect", *base], capture_output=True, text=True, timeout=30)
-                    check("disconnect", result.returncode == 0)
+                    check("disconnect", result.returncode == 0 and json.loads(result.stdout)["status"] == "disconnected")
+                    restored = tomllib.loads(config_path.read_text())
+                    restored.pop("model_providers")
+                    check("original_entry_restored", restored == initial_config)
                 finally:
                     DEMO.stop(daemon)
             report["passed"] = True

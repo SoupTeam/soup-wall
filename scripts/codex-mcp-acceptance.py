@@ -74,19 +74,29 @@ class Provider:
         self.thread.join()
 
 
+def host_identity(executable):
+    binary = Path(shutil.which(executable) or executable).resolve(strict=True)
+    return {
+        "codex_version": subprocess.check_output([str(binary), "--version"], text=True, timeout=10).strip(),
+        "codex_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--agentfw", type=Path, required=True)
-    parser.add_argument("--codex", required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--codex")
+    mode.add_argument("--lifecycle-only", action="store_true", help="verify the TOML lifecycle without starting Codex")
     parser.add_argument("--out", type=Path, required=True)
     options = parser.parse_args()
     binary = options.agentfw.resolve()
     checks = []
     completed = False
     report = {"source_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-              "codex_version": subprocess.check_output([options.codex, "--version"], text=True).strip(),
+              "mode": "lifecycle_only" if options.lifecycle_only else "actual_host",
               "external_provider_requests": 0, "live_model_evaluation": False, "checks": checks,
-              "coverage": {"selected_stdio_mcp": "tested_below", "builtin_shell_file_subagents": "not_enforced",
+              "coverage": {"selected_stdio_mcp": "controlled_probe" if options.lifecycle_only else "tested_below", "builtin_shell_file_subagents": "not_enforced",
                            "authenticated_cross_tool_session": "not_implemented"}}
 
     def check(name, condition):
@@ -94,12 +104,16 @@ def main():
         if not condition:
             raise AssertionError(name)
 
-    check("pinned_host_version", report["codex_version"] == "codex-cli 0.169.0-alpha.11.1")
-    report["agentfw_sha256"] = hashlib.sha256(binary.read_bytes()).hexdigest()
-    report["source_files_sha256"] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in [ROOT / "Cargo.lock", *sorted((ROOT / "crates/agentfw").rglob("*.rs")), Path(__file__)]}
     options.out.parent.mkdir(parents=True, exist_ok=True)
+    options.out.touch(exist_ok=False)
     try:
+        if not options.lifecycle_only:
+            report.update(host_identity(options.codex))
+            check("pinned_host_version", report["codex_version"] == "codex-cli 0.169.0-alpha.11.1")
+        report["agentfw_sha256"] = hashlib.sha256(binary.read_bytes()).hexdigest()
+        report["source_files_sha256"] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in [ROOT / "Cargo.lock", ROOT / "scripts/fixtures/codex-0.169.0-call.json",
+                      *sorted((ROOT / "crates/agentfw").rglob("*.rs")), Path(__file__)]}
         with tempfile.TemporaryDirectory(prefix="soup-codex-", dir=ROOT / "target") as tmp:
             root = Path(tmp)
             installed = root / "agentfw"
@@ -117,7 +131,7 @@ def main():
                             "args": ["-I", str(DEMO.FIXTURE), "--notes", str(stack.notes),
                                      "--ledger", str(stack.ledger), "--recipient", stack.receiver.url]}
                 suffix = "\n[mcp_servers.unrelated]\ncommand = 'untouched'\nenv = { TOKEN = 'synthetic-secret' }\n"
-                initial = ("# owned acceptance\nmodel = 'fixture' # keep\n[mcp_servers.demo]\ncommand = "
+                initial = ("# owned acceptance\nmodel = 'fixture' # keep\n[mcp_servers.demo]\n# selected command\ncommand = "
                            + json.dumps(original["command"]) + "\nargs = " + json.dumps(original["args"]) + "\n" + suffix)
                 config.write_text(initial)
                 config.chmod(0o600)
@@ -136,6 +150,7 @@ def main():
                 check("preview_no_write", config.read_text() == initial)
                 check("connect_configured", connection("connect")["status"] == "configured")
                 connected = config.read_bytes()
+                check("wrapper_present", tomllib.loads(connected.decode())["mcp_servers"]["demo"]["command"] == "/usr/bin/env")
                 connection("connect")
                 check("reconnect_idempotent", config.read_bytes() == connected)
                 check("unrelated_text_preserved", config.read_text().endswith(suffix))
@@ -153,6 +168,7 @@ def main():
                 check("probe_executed_once", len(DEMO.lines(stack.ledger)) == 1)
                 connection("disconnect")
                 check("disconnect_restores_semantics", tomllib.loads(config.read_text()) == tomllib.loads(initial))
+                check("disconnect_preserves_selected_comment", "# selected command\ncommand" in config.read_text())
                 connection("connect")
                 connected = config.read_bytes()
                 config.write_text(config.read_text().replace("# keep", "# concurrent edit"))
@@ -164,6 +180,10 @@ def main():
                 connection("disconnect", success=False)
                 check("selected_conflict_preserved", config.read_bytes() == conflict)
                 config.write_bytes(connected)
+                if options.lifecycle_only:
+                    connection("disconnect")
+                    completed = True
+                    return
 
                 # Real host: only an isolated home, loopback provider and owned MCP server.
                 # The unrelated fake server is disabled for this acceptance host run.
