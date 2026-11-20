@@ -31,18 +31,6 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Check standalone demonstration syntax
         run: python3 -m py_compile scripts/managed-policy-demo.py
-      - name: Install Linux sandbox runtime
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y bubblewrap
-      - name: Qualify the job-scoped bubblewrap copy for reader tests
-        id: reader_sandbox
-        env:
-          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
-        run: |
-          set -euo pipefail
-          source=/usr/bin/bwrap
-          python3 -I -B scripts/ci_bwrap_userns.py install --source "$source" \
-            --sha256 "$(sha256sum "$source" | cut -d ' ' -f1)" \
-            --report "$RUNNER_TEMP/reader-sandbox-install.json"
       - name: Verify native policy transition boundaries and managed activation
         run: cargo test --locked -p agentfw --lib
       - name: Build the real Console and Agent
@@ -53,11 +41,6 @@ jobs:
         run: |
           python3 -m py_compile scripts/managed-credential-rotation-demo.py
           python3 scripts/managed-credential-rotation-demo.py --backend sqlite --no-build
-      - name: Remove the job-scoped reader sandbox profile
-        if: always() && steps.reader_sandbox.outcome != 'skipped'
-        env:
-          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
-        run: python3 -I -B scripts/ci_bwrap_userns.py cleanup --report "$RUNNER_TEMP/reader-sandbox-cleanup.json"
       - name: Archive non-secret SOU-55 credential witness
         if: always()
         uses: actions/upload-artifact@v4
