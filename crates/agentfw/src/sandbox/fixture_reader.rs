@@ -265,11 +265,45 @@ mod linux {
         Ok(hash.finalize().into())
     }
 
+    fn reader_bwrap() -> Result<std::path::PathBuf> {
+        let system = fs::canonicalize("/usr/bin/bwrap").context("required bwrap unavailable")?;
+        let Some(selected) = std::env::var_os("SOU111_BWRAP") else {
+            return Ok(system);
+        };
+        let job = std::env::var("GITHUB_JOB")?;
+        ensure!(
+            matches!(job.as_str(), "test" | "all-features"),
+            "reader sandbox job"
+        );
+        let run = std::env::var("GITHUB_RUN_ID")?.parse::<u64>()?;
+        let attempt = std::env::var("GITHUB_RUN_ATTEMPT")?.parse::<u32>()?;
+        let job_hash = format!("{:x}", Sha256::digest(job.as_bytes()));
+        let directory = std::path::Path::new("/usr/lib").join(format!(
+            "soup-wall-ci-bwrap-{run}-{attempt}-{}",
+            &job_hash[..16]
+        ));
+        let expected = directory.join("bwrap");
+        ensure!(
+            expected.as_os_str() == selected && fs::canonicalize(&expected)? == expected,
+            "unexpected job sandbox path"
+        );
+        let owner = fs::metadata(directory)?;
+        ensure!(
+            owner.uid() == 0 && owner.mode() & 0o022 == 0,
+            "untrusted job sandbox directory"
+        );
+        ensure!(
+            file_hash(&mut fs::File::open(&expected)?)? == file_hash(&mut fs::File::open(system)?)?,
+            "job sandbox differs from installed bubblewrap"
+        );
+        Ok(expected)
+    }
+
     /// Open the live executable before entering the user namespace. Bubblewrap
     /// mounts this held inode, never a replaceable checkout or parent proc path.
     /// Only runtime libraries are mounted; no /usr/bin, home, project or /etc.
     fn command(mode: &str, outside: &str, port: u16, child: UnixStream) -> Result<Command> {
-        let bwrap = fs::canonicalize("/usr/bin/bwrap").context("required bwrap unavailable")?;
+        let bwrap = reader_bwrap()?;
         let metadata = fs::metadata(&bwrap)?;
         ensure!(
             metadata.is_file() && metadata.uid() == 0 && metadata.mode() & 0o6022 == 0,
