@@ -6871,7 +6871,7 @@ async fn sou89_capacity_reclaimed_when_authority_expired_sessions_are_present() 
         .unwrap()
         .advance_test_time_ms(61_000);
 
-    // Starting a new session now triggers reap_lost_sessions and succeeds by reclaiming capacity.
+    // Starting a new session now reaps the lost sessions and succeeds by reclaiming capacity.
     let (s, r, _) = scoped_start_with_ttl(
         &f,
         "child-recovered",
