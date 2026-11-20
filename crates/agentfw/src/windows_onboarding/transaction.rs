@@ -155,6 +155,7 @@ fn check_files(state: &State) -> Result<()> {
 
 fn options(state: &State, agent: PathBuf) -> Options {
     Options {
+        host: crate::mcp::connection::Host::Claude,
         path: state.selection.host_config.clone(),
         server: state.selection.server.clone(),
         home: state.selection.home.clone(),

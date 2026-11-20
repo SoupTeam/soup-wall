@@ -155,3 +155,13 @@ in [the fixture requirements](../scripts/scim-directory-requirements.txt);
 run reports record the installed client/model/HTTP engine versions and source
 hashes. PostgreSQL uses the existing digest-pinned disposable TLS fixture.
 The pinned httpx2 2.13.1 transport is BSD-3-Clause (Pydantic Services / Tom Christie); its packaged license is retained in the isolated environment.
+
+## Codex connection TOML editing
+
+The Codex configuration adapter uses unmodified crates.io `toml_edit 0.22.27`
+([upstream](https://github.com/toml-rs/toml)), licensed MIT OR Apache-2.0,
+with `serde_spanned 0.6.9`, `toml_datetime 0.6.11`, `toml_write 0.1.2`
+(MIT OR Apache-2.0), and `winnow 0.7.15` (MIT). Versions and archive checksums
+are pinned in Cargo.lock. Their published license files remain in the registry
+sources and are inspected by the workspace license-policy gate. No parser code
+is vendored or modified. Existing workspace `serde` and `indexmap` are reused.

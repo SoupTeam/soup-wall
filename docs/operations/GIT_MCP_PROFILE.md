@@ -450,7 +450,7 @@ All five Ask cases and the existing timing bounds still require qualification.
 Select `git-readonly-first-parent-v1` with the installed pilot's `--git-profile`
 option on native Linux. For an independent private installation, select
 `--first-parent` in `scripts/install-sou68-git-profile.py` and pair the resulting
-profile and registry with `rule_baseline/git_readonly_first_parent_v1/rule_baseline.py`
+profile and registry with the [first-parent classifier](../../rule_baseline/git_readonly_first_parent_v1/rule_baseline.py)
 under the enforcing pilot policy. The [profile contract](../../profiles/mcp/git-readonly-first-parent-v1/contract.json)
 adds the single literal `HEAD~1` in `git_diff.target`.
 
