@@ -145,7 +145,7 @@ fn gemini_session_pipe_roundtrip_and_scope_rejection() {
             .write_all(&serde_json::to_vec(&payload).unwrap())
             .unwrap();
         drop(write);
-        let status = std::process::Command::new(std::env::current_exe().unwrap())
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
             .args([
                 "native::consumer::gemini_fixture::controller::session::gemini_session_pipe_child",
                 "--ignored",
@@ -156,9 +156,13 @@ fn gemini_session_pipe_roundtrip_and_scope_rejection() {
                 "SOUP_WALL_SESSION_TEST_VALID",
                 if mode == "valid" { "1" } else { "0" },
             )
-            .status()
+            .output()
             .unwrap();
-        assert!(status.success());
+        assert!(
+            output.status.success(),
+            "child failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }
 #[test]

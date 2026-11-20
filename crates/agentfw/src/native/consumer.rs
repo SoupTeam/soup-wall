@@ -257,16 +257,20 @@ mod lifecycle_tests {
     fn repeated_completed_runs_reclaim_slots_via_protected_handlers() {
         // Multiple libtest filters allow the trusted launcher argv marker and
         // the single ignored helper, without changing production verification.
-        let status = std::process::Command::new(std::env::current_exe().unwrap())
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
             .args([
                 "pilot-launch",
                 "native::consumer::lifecycle_tests::handler_lifecycle_child",
                 "--ignored",
                 "--nocapture",
             ])
-            .status()
+            .output()
             .unwrap();
-        assert!(status.success());
+        assert!(
+            output.status.success(),
+            "child failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]
