@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Descriptor-relative, bounded snapshots and single-file atomic publication.
+use crate::hashing::sha256_hex;
 use anyhow::{ensure, Context, Result};
 use serde::Serialize;
 use std::{
@@ -70,7 +71,7 @@ fn identity(meta: &Metadata, parent: &Metadata, bytes: &[u8]) -> Identity {
         size: meta.len(),
         modified: (meta.mtime(), meta.mtime_nsec()),
         changed: (meta.ctime(), meta.ctime_nsec()),
-        sha256: super::hash(bytes),
+        sha256: sha256_hex(bytes),
     }
 }
 fn stable(a: &Metadata, b: &Metadata) -> bool {
@@ -177,7 +178,7 @@ impl Root {
             );
             let staged = snapshot_at(&self.dir, OsStr::new(&leaf), bytes.len(), true)?;
             ensure!(
-                super::equal(&super::hash(&staged.bytes), &super::hash(bytes)),
+                super::equal(&sha256_hex(&staged.bytes), &sha256_hex(bytes)),
                 "managed_connection_stage_bytes_changed"
             );
             ensure!(

@@ -67,7 +67,7 @@ async fn http_admissible_overflow_spends_receipt_audits_small_and_allows_useful_
         reply["reason_codes"][0],
         "native_mcp_result_evidence_incomplete"
     );
-    assert_eq!(reply["content_sha256"], hash(original.as_bytes()));
+    assert_eq!(reply["content_sha256"], sha256_hex(original.as_bytes()));
     assert_eq!(http(&st, "result", result).await.0, StatusCode::CONFLICT);
     let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
     assert!(audit.lines().all(|line| line.len() < 65536));
@@ -94,8 +94,9 @@ fn maximum_review_frame_reaches_selected_native_inspect_and_actual_small_audit()
         .find(|t| t["name"] == "git_show")
         .unwrap();
     let bytes=json!({"contract_version":CONTRACT,"registry_id":"bounded-git","tools":[{"name":"git_show","schema_sha256":canonical_digest(&def["inputSchema"]),"action_class":"read_only","result_provenance":"untrusted","egress":[],"mcp_result_profile":crate::mcp::server_profile::git::FORMAT}]}).to_string().into_bytes();
-    Arc::get_mut(&mut st).unwrap().native =
-        Some(NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into()).unwrap());
+    Arc::get_mut(&mut st).unwrap().native = Some(
+        NativeState::from_bytes(&bytes, &sha256_hex(&bytes), "native-unit-key".into()).unwrap(),
+    );
     allow(&st);
     start(&st, "bound-git");
     let native = st.native.as_ref().unwrap();

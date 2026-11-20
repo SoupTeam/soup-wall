@@ -5,10 +5,10 @@
 mod input;
 mod io;
 
+use crate::hashing::sha256_hex;
 use clap::{Args, ValueEnum};
 use serde::Serialize;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use soup_wall_agent::{AgentFirewall, AgentPolicySet, SafetyFloor, Verdict, DEFAULT_TAINT_CAP};
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -101,11 +101,8 @@ fn encoded_len(value: &impl Serialize, limit: usize) -> Result<usize> {
     serde_json::to_writer(&mut sink, value).map_err(|_| Failure("offline_output_bounds"))?;
     Ok(sink.length)
 }
-fn hash(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
 fn identity(bytes: &[u8]) -> Value {
-    json!({"sha256":hash(bytes),"bytes":bytes.len()})
+    json!({"sha256":sha256_hex(bytes),"bytes":bytes.len()})
 }
 // A deliberately narrow lexical subset checked before serde_yaml can expand
 // aliases. Plain scalars retain apostrophes/quotes as data; quoted scalars must
@@ -255,7 +252,7 @@ fn evaluate(input: &input::Input, policy: AgentPolicySet, bytes: &[u8], label: &
         incomplete |= out.provenance_incomplete;
         let operator = trace.policy.operator_rule.map(|n| {
             json!({
-            "index":n,"name_sha256":hash(policy.agent_policies[n].name.as_bytes())})
+            "index":n,"name_sha256":sha256_hex(policy.agent_policies[n].name.as_bytes())})
         });
         let mut reasons = vec![if operator.is_some() {
             "operator_rule"
@@ -266,7 +263,7 @@ fn evaluate(input: &input::Input, policy: AgentPolicySet, bytes: &[u8], label: &
             Some(SafetyFloor::ShippedDeny { rule }) => {
                 reasons.push("shipped_hard_deny");
                 json!({"kind":"shipped_hard_deny","index":rule,
-                    "name_sha256":out.rule.as_ref().map(|s| hash(s.as_bytes()))})
+                    "name_sha256":out.rule.as_ref().map(|s| sha256_hex(s.as_bytes()))})
             }
             Some(SafetyFloor::IncompleteProvenance) => {
                 reasons.push("incomplete_provenance_ask");
@@ -335,7 +332,7 @@ pub fn simulate(input: &[u8], policy_a: &[u8], policy_b: Option<&[u8]>) -> Resul
         json!({"format":"sw-policy-offline-report/1","simulated":true,"protection_claim":false,
         "status":if complete {"complete"} else {"incomplete"},"input":identity(input),
         "evaluator":{"scope":"legacy-agent-event-inspection/1","agent_version":"0.2.0",
-            "shipped_floor_policy_sha256":hash(SHIPPED.as_bytes()),
+            "shipped_floor_policy_sha256":sha256_hex(SHIPPED.as_bytes()),
             "context":"declared_simulation_data_not_authenticated_provenance","judge_execution":"none"},
         "policies":policies,"comparison":comparison}),
     )

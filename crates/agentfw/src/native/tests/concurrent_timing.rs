@@ -66,7 +66,7 @@ fn result_timing_contains_only_fixed_fields_and_hashes_on_refusal() {
     assert_eq!(row["outcome"], "native_call_unknown_or_spent");
     assert_eq!(row["release_decision"], false);
     for key in ["session_sha256", "call_sha256", "content_sha256"] {
-        assert_eq!(row[key], hash(secret.as_bytes()));
+        assert_eq!(row[key], sha256_hex(secret.as_bytes()));
     }
     assert!(row.to_string().len() < 2048);
     assert!(!row.to_string().contains(secret));

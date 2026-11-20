@@ -493,6 +493,7 @@ pub async fn barrier(State(st): State<Shared>, headers: axum::http::HeaderMap) -
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hashing::sha256_hex;
     use soup_wall_agent::{AgentEvent, AgentPolicySet, EventKind, Provenance, DEFAULT_TAINT_CAP};
 
     fn fresh() -> (NativeState, AgentFirewall) {
@@ -501,7 +502,7 @@ mod tests {
             "action_class":"read_only","result_provenance":"untrusted","egress":[]}]})).unwrap();
         let native = NativeState::from_bytes(
             &bytes,
-            &super::super::hash(&bytes),
+            &sha256_hex(&bytes),
             "private-test-native-key".into(),
         )
         .unwrap();
