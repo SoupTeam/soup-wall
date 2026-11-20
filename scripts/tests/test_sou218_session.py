@@ -155,6 +155,11 @@ class SessionTests(unittest.TestCase):
                 with self.assertRaises(ValueError): sup.dispatch(req)
                 sup.dispatch({"action":"stop"}); worker.join(timeout=3)
 
+    def test_operator_refuses_ci_before_reading_configuration(self):
+        with patch.dict(os.environ, {"CI": "true"}):
+            with self.assertRaisesRegex(ValueError, "^personal_linux_only$"):
+                M.serve(None)
+
     def test_real_terminal_hidden_entry_status_stop_without_provider(self):
         import pty, select, signal, socket, sys
         with tempfile.TemporaryDirectory() as d:
@@ -163,9 +168,10 @@ class SessionTests(unittest.TestCase):
             synthetic = "synthetic_terminal_key_1234567890"
             pid, fd = pty.fork()
             if pid == 0:
-                os.execv(sys.executable, [sys.executable, str(SPEC.origin), "serve", "--session", str(live),
+                # Model the personal terminal with only the synthetic fixture environment.
+                os.execve(sys.executable, [sys.executable, str(SPEC.origin), "serve", "--session", str(live),
                     "--repo", str(repo), "--allowed-root", str(state), "--template-config", str(cfg),
-                    "--project", "test-project", "--rows", "2", "--minutes", "1"])
+                    "--project", "test-project", "--rows", "2", "--minutes", "1"], {"HOME": d, "PATH": os.defpath})
             transcript = bytearray()
             def until(marker):
                 deadline = time.time()+10
