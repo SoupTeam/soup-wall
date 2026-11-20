@@ -221,7 +221,7 @@ fn ordinary_exit_cannot_skip_unavailable_owner_confirmation() {
     run.home = home;
     run.files = vec![FileIdentity {
         path: config.clone(),
-        sha256: digest(&fs::read(config).unwrap()),
+        sha256: sha256_hex(&fs::read(config).unwrap()),
     }];
     let guard = RunGuard {
         _manifest: fs::File::create(dir.join("fixture-manifest")).unwrap(),
@@ -254,7 +254,7 @@ async fn ordinary_exit_refuses_unsupported_owner_contract_before_network() {
     run.home = home;
     run.files = vec![FileIdentity {
         path: config.clone(),
-        sha256: digest(&fs::read(config).unwrap()),
+        sha256: sha256_hex(&fs::read(config).unwrap()),
     }];
     let guard = RunGuard {
         _manifest: fs::File::create(dir.join("fixture-manifest")).unwrap(),
@@ -304,7 +304,7 @@ async fn ordinary_exit_revokes_before_waiting_for_exact_owner_acknowledgement() 
         run.authorities.insert("git".into(), "d".repeat(64));
         run.files = vec![FileIdentity {
             path: config.clone(),
-            sha256: digest(&fs::read(config).unwrap()),
+            sha256: sha256_hex(&fs::read(config).unwrap()),
         }];
         let revoked = Arc::new(AtomicBool::new(false));
         let ready = Arc::new(AtomicBool::new(false));
@@ -395,7 +395,7 @@ fn stop_never_sends_credentials_to_a_changed_daemon_destination() {
     run.home = home;
     run.files = vec![FileIdentity {
         path: path.clone(),
-        sha256: digest(&bytes),
+        sha256: sha256_hex(&bytes),
     }];
     assert!(stop_config(&run).is_ok());
     fs::write(&path, b"bind: 127.0.0.1\nport: 54321\n").unwrap();

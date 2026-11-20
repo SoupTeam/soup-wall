@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Run selection for the existing native approval broker. No bearer authority is persisted here.
 
+use crate::hashing::sha256_hex;
 use crate::{
     native::{approval, child_authority},
     pilot_launcher::ValidatedConfig,
@@ -10,7 +11,7 @@ use anyhow::{ensure, Context, Result};
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use std::{
     collections::BTreeMap,
     fs,
@@ -240,9 +241,6 @@ pub(crate) fn descriptor(file: &fs::File) -> i32 {
     }
 }
 
-fn digest(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
 fn id(value: &str) -> Result<()> {
     ensure!(
         !value.is_empty()
@@ -626,7 +624,7 @@ impl RunGuard {
                 .map(|(server, grant)| {
                     (
                         server.clone(),
-                        digest(child_authority::encode_token(grant).as_bytes()),
+                        sha256_hex(child_authority::encode_token(grant).as_bytes()),
                     )
                 })
                 .collect(),
@@ -641,7 +639,7 @@ impl RunGuard {
             .flatten()
             .map(|path| {
                 Ok(FileIdentity {
-                    sha256: digest(&read_file(&path, false)?),
+                    sha256: sha256_hex(&read_file(&path, false)?),
                     path,
                 })
             })
@@ -943,7 +941,7 @@ fn read_stop(dir: &Path, run: &Run, bytes: &[u8]) -> Result<StopMarker> {
     let marker: StopMarker = serde_json::from_slice(&read_file(&dir.join("stop.json"), true)?)?;
     ensure!(
         marker.contract == "sw-pilot-stop/1"
-            && marker.run_sha256 == digest(bytes)
+            && marker.run_sha256 == sha256_hex(bytes)
             && matches!(marker.status.as_str(), "requested" | "revoked" | "stopped"),
         "invalid pilot stop receipt"
     );
@@ -975,7 +973,7 @@ fn write_stop(dir: &Path, run: &Run, bytes: &[u8], status: &str) -> Result<()> {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     let mut marker = StopMarker {
         contract: "sw-pilot-stop/1".into(),
-        run_sha256: digest(bytes),
+        run_sha256: sha256_hex(bytes),
         status: status.into(),
         signature: String::new(),
     };
@@ -1033,7 +1031,7 @@ fn stop_config(run: &Run) -> Result<Config> {
     );
     let bytes = read_file(&identity.path, false)?;
     ensure!(
-        digest(&bytes) == identity.sha256,
+        sha256_hex(&bytes) == identity.sha256,
         "pilot stop incomplete: daemon configuration changed"
     );
     // Parse the same verified bytes; never reopen a mutable endpoint selection.
@@ -1250,7 +1248,7 @@ fn operation(action: &OperatorAction) -> &'static str {
 }
 
 fn verified_identity(run: &Run, bytes: &[u8]) -> Value {
-    json!({"run_id": run.run_id, "run_sha256": digest(bytes),
+    json!({"run_id": run.run_id, "run_sha256": sha256_hex(bytes),
         "instance_id": run.instance_id, "registry_sha256": run.registry_sha256})
 }
 
@@ -1341,7 +1339,7 @@ fn operate(
     );
     for file in &run.files {
         require!(
-            digest(&read_file(&file.path, false)?) == file.sha256,
+            sha256_hex(&read_file(&file.path, false)?) == file.sha256,
             SelectionChanged,
             "pilot selection changed; no continuation issued"
         );

@@ -393,7 +393,7 @@ fn the_owned_profile_classifier_is_removed_only_with_its_recorded_bytes() {
     adopt_step_changes(&mut journal.inventory, &before, &after, &outputs);
     journal
         .files
-        .insert("classifier".into(), sha256(b"print('reviewed')"));
+        .insert("classifier".into(), sha256_hex(b"print('reviewed')"));
     std::fs::write(&classifier, b"print('operator edit')").unwrap();
     let results = run_rollback(&mut journal, &paths, false);
     assert!(results

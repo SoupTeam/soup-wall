@@ -11,6 +11,7 @@
 //! Output is bounded and built only from fixed vocabulary, validated tokens and short
 //! digests: raw arguments, path/secret values and arbitrary exception text never reach it.
 
+use crate::hashing::sha256_hex;
 use std::collections::BTreeSet;
 use std::io::Read;
 use std::path::Path;
@@ -20,7 +21,7 @@ use serde::{Deserialize, Deserializer};
 use serde_json::{json, Map, Value};
 use soup_wall_agent::ActionClass;
 
-use crate::classifier_runtime::package::{sha, Store, Verified, WORKER_PROTOCOL};
+use crate::classifier_runtime::package::{Store, Verified, WORKER_PROTOCOL};
 use crate::classifier_runtime::worker::{PackagedClassifier, MAX_INPUT, REQUEST_DEADLINE};
 use crate::mcp::admission::{parse_classifier_reply, Invocation};
 use crate::mcp::server_profile::{self, ToolProfile};
@@ -489,7 +490,7 @@ fn validation_code(error: &anyhow::Error) -> Code {
 // ---------------------------------------------------------------- redaction helpers
 
 fn digest8(domain: &str, value: &str) -> String {
-    sha(format!("{domain}\0{value}").as_bytes())[..8].to_owned()
+    sha256_hex(format!("{domain}\0{value}").as_bytes())[..8].to_owned()
 }
 
 /// A tool name is shown only when it is one of the reviewed profile's own names; any other
@@ -695,8 +696,8 @@ pub fn preview_with(
     let supplied_schema_digest = frame
         .schema
         .as_ref()
-        .map(|s| sha(&serde_json::to_vec(s).unwrap_or_default()));
-    let supplied_description_digest = frame.description.as_ref().map(|d| sha(d.as_bytes()));
+        .map(|s| sha256_hex(&serde_json::to_vec(s).unwrap_or_default()));
+    let supplied_description_digest = frame.description.as_ref().map(|d| sha256_hex(d.as_bytes()));
     let differs = definition.is_some()
         && (frame
             .description
@@ -711,8 +712,8 @@ pub fn preview_with(
         "metadata".into(),
         json!({
             "reviewed": definition.is_some(),
-            "reviewed_description_sha256": reviewed_description.as_ref().map(|d| sha(d.as_bytes())),
-            "reviewed_schema_sha256": reviewed_schema.as_ref().map(|s| sha(&serde_json::to_vec(s).unwrap_or_default())),
+            "reviewed_description_sha256": reviewed_description.as_ref().map(|d| sha256_hex(d.as_bytes())),
+            "reviewed_schema_sha256": reviewed_schema.as_ref().map(|s| sha256_hex(&serde_json::to_vec(s).unwrap_or_default())),
             "supplied_description_sha256": supplied_description_digest,
             "supplied_schema_sha256": supplied_schema_digest,
             "supplied_differs_from_reviewed": if definition.is_some() && supplied_present { json!(differs) } else { json!(null) },
@@ -885,7 +886,7 @@ pub fn identity(home: &Path, choice: ProfileChoice) -> Result<Value, Code> {
         .current()
         .map_err(|error| package_code(&error))?;
     let manifest_digest = load_reviewed(choice)
-        .map(|r| sha(&serde_json::to_vec(&r.manifest).unwrap_or_default()))
+        .map(|r| sha256_hex(&serde_json::to_vec(&r.manifest).unwrap_or_default()))
         .ok();
     Ok(json!({
         "source": SOURCE,

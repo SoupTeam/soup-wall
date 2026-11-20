@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 use super::super::{inspect, parse, NativeState, Response};
 use super::*;
+use crate::hashing::sha256_hex;
 use crate::{
     audit::AuditSink,
     handlers::{AppState, Sessions as HookSessions},
@@ -253,7 +254,7 @@ fn env(approval: Option<u64>) -> Env {
         json!({"contract_version": CONTRACT, "registry_id": "unit-approval", "tools": tools})
             .to_string()
             .into_bytes();
-    let digest = super::super::hash(&bytes);
+    let digest = sha256_hex(&bytes);
     let mut native = NativeState::from_bytes(&bytes, &digest, "native-unit-key".into()).unwrap();
     if let Some(ttl) = approval {
         native = native

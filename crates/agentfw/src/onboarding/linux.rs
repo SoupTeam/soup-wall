@@ -3,6 +3,7 @@
 //! command (`install`, `lifecycle`, `mcp-connection`) or writes a file this
 //! operation creates with `create_new`; every step is journaled first.
 
+use crate::hashing::sha256_hex;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
@@ -78,10 +79,6 @@ pub(crate) const STEPS: [&str; 9] = [
 
 // ------------------------------------------------------------------ utilities
 
-pub(crate) fn sha256(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
-
 fn sha256_file(path: &Path) -> std::io::Result<String> {
     let mut file = File::open(path)?;
     let mut hasher = Sha256::new();
@@ -144,7 +141,7 @@ fn hex64(value: &str) -> bool {
 
 /// Reports carry a stable digest of a path string, never the path itself.
 fn path_digest(path: &Path) -> String {
-    sha256(path.as_os_str().as_encoded_bytes())[..16].to_string()
+    sha256_hex(path.as_os_str().as_encoded_bytes())[..16].to_string()
 }
 
 fn canonical(value: &Value) -> String {
@@ -361,7 +358,7 @@ impl SelectedProfile {
             "package": {"root": c.package_root, "tree_sha256": c.package_tree_sha256},
             "bwrap": {"path": c.bwrap_path, "sha256": c.bwrap_sha256},
             "git": pin(&c.git), "git_launcher": pin(&c.git_launcher),
-            "libraries_sha256": sha256(canonical(&json!(c.libraries.iter()
+            "libraries_sha256": sha256_hex(canonical(&json!(c.libraries.iter()
                 .map(|l| json!([l.path, l.sha256])).collect::<Vec<_>>())).as_bytes()),
         })
     }
@@ -393,7 +390,7 @@ fn port_in_use(port: u16) -> bool {
 fn expected_policy_digest(text: &str) -> Option<(String, usize)> {
     let policy = soup_wall_agent::AgentPolicySet::from_yaml(text).ok()?;
     Some((
-        sha256(&serde_json::to_vec(&policy).ok()?),
+        sha256_hex(&serde_json::to_vec(&policy).ok()?),
         policy.agent_policies.len(),
     ))
 }
@@ -464,7 +461,7 @@ pub(crate) fn check_inputs(inputs: &Inputs) -> (Vec<Check>, Facts) {
     // Classifier assets for the isolated self-test.
     let expected = inputs.classifier_sha256.trim();
     match read_limited(&inputs.classifier_script, 1024 * 1024) {
-        Ok(bytes) if hex64(expected) && sha256(&bytes) == expected => {
+        Ok(bytes) if hex64(expected) && sha256_hex(&bytes) == expected => {
             facts.classifier_bytes = bytes;
             checks.push(ok(
                 "classifier",
@@ -497,7 +494,7 @@ pub(crate) fn check_inputs(inputs: &Inputs) -> (Vec<Check>, Facts) {
 
     // Reviewed registry (profile).
     match read_limited(&inputs.registry, MAX_REGISTRY) {
-        Ok(bytes) if sha256(&bytes) == inputs.registry_sha256 => {
+        Ok(bytes) if sha256_hex(&bytes) == inputs.registry_sha256 => {
             match serde_json::from_slice::<Value>(&bytes) {
                 Ok(value)
                     if value["contract_version"] == "sw-native/1"
@@ -555,7 +552,7 @@ pub(crate) fn check_inputs(inputs: &Inputs) -> (Vec<Check>, Facts) {
     // Policy: reviewed file or the shipped default.
     let policy = match (&inputs.policy, &inputs.policy_sha256) {
         (Some(path), Some(digest)) => match read_limited(path, MAX_POLICY) {
-            Ok(bytes) if sha256(&bytes) == *digest => Some((bytes, "reviewed")),
+            Ok(bytes) if sha256_hex(&bytes) == *digest => Some((bytes, "reviewed")),
             Ok(_) => {
                 checks.push(refused(
                     "policy",
@@ -712,7 +709,7 @@ fn check_profile(inputs: &Inputs, checks: &mut Vec<Check>, facts: &mut Facts) {
     };
     use crate::mcp::server_profile::{git, ProfileConfig, FORMAT, MAX_PROFILE_BYTES};
     let bytes = match plain_path(path).map(|_| read_limited(path, MAX_PROFILE_BYTES as u64)) {
-        Ok(Ok(bytes)) if sha256(&bytes) == *digest => bytes,
+        Ok(Ok(bytes)) if sha256_hex(&bytes) == *digest => bytes,
         Ok(Ok(_)) => {
             checks.push(refused(
                 "server_profile",
@@ -942,7 +939,7 @@ fn check_host(
         ));
         return;
     };
-    facts.host_sha256 = sha256(&bytes);
+    facts.host_sha256 = sha256_hex(&bytes);
     facts.other_servers = servers.len().saturating_sub(1);
     facts.other_settings = value
         .as_object()
@@ -956,7 +953,7 @@ fn check_host(
         ));
         return;
     };
-    facts.entry_sha256 = sha256(canonical(entry).as_bytes());
+    facts.entry_sha256 = sha256_hex(canonical(entry).as_bytes());
     let args_ok = entry
         .get("args")
         .is_none_or(|a| a.as_array().is_some_and(|a| a.iter().all(Value::is_string)));
@@ -1026,12 +1023,12 @@ pub(crate) fn plan(inputs: &Inputs, facts: &Facts) -> (Value, String, String) {
         "classifier": {"kind": inputs.classifier, "script": inputs.classifier_script, "sha256": inputs.classifier_sha256,
                        "python": inputs.classifier_python},
         "registry": {"path": inputs.registry, "sha256": inputs.registry_sha256},
-        "policy": {"source": facts.policy_source, "sha256": sha256(&facts.policy_bytes)},
+        "policy": {"source": facts.policy_source, "sha256": sha256_hex(&facts.policy_bytes)},
         "workspace": inputs.workspace, "agent_home": home,
         "host_config": {"path": inputs.host_config, "sha256": facts.host_sha256, "server": inputs.server,
                         "entry_sha256": facts.entry_sha256},
         "port": inputs.port,
-        "probe": inputs.probe_tool.as_ref().map(|t| json!({"tool": t, "args_sha256": sha256(inputs.probe_args.clone().unwrap_or_default().as_bytes())})),
+        "probe": inputs.probe_tool.as_ref().map(|t| json!({"tool": t, "args_sha256": sha256_hex(inputs.probe_args.clone().unwrap_or_default().as_bytes())})),
         "version_label": version_label(&facts.agent_sha256),
     });
     let mut identity = identity;
@@ -1040,11 +1037,11 @@ pub(crate) fn plan(inputs: &Inputs, facts: &Facts) -> (Value, String, String) {
         identity["classifier"]["python_sha256"] = json!(facts.classifier_python_sha256);
         identity["classifier"]["owned_copy"] = json!(home.join(OWNED_DIR).join(PROFILE_CLASSIFIER));
     }
-    let digest = sha256(canonical(&identity).as_bytes());
+    let digest = sha256_hex(canonical(&identity).as_bytes());
     let mut core = identity.clone();
     core["host_config"]["sha256"] = Value::Null;
     core["host_config"]["entry_sha256"] = Value::Null;
-    let core_digest = sha256(canonical(&core).as_bytes());
+    let core_digest = sha256_hex(canonical(&core).as_bytes());
     (identity, digest, core_digest)
 }
 
@@ -1116,7 +1113,7 @@ fn entry_of(path: &Path) -> Option<InventoryEntry> {
         let target = std::fs::read_link(path).ok()?;
         InventoryEntry {
             kind: "symlink".into(),
-            sha256: Some(sha256(target.as_os_str().as_encoded_bytes())),
+            sha256: Some(sha256_hex(target.as_os_str().as_encoded_bytes())),
         }
     } else if file_type.is_dir() {
         InventoryEntry {
@@ -1434,7 +1431,7 @@ fn labels(inputs: &Inputs, facts: &Facts) -> Value {
         "agent": {"sha256": facts.agent_sha256, "path_digest": path_digest(&inputs.agent)},
         "classifier": {"kind": inputs.classifier, "sha256": inputs.classifier_sha256, "python_version": facts.python_version},
         "registry": {"registry_id": facts.registry_id, "sha256": inputs.registry_sha256},
-        "policy": {"source": facts.policy_source, "file_sha256": sha256(&facts.policy_bytes),
+        "policy": {"source": facts.policy_source, "file_sha256": sha256_hex(&facts.policy_bytes),
                    "expected_daemon_digest": facts.expected_policy_digest, "rule_count": facts.policy_rules},
         "workspace": {"path_digest": path_digest(&inputs.workspace)},
         "agent_home": {"path_digest": path_digest(&inputs.agent_home)},
@@ -1726,7 +1723,7 @@ impl Session<'_> {
                     StepError::Incomplete(format!("could not write the owned {label} file"))
                 })?,
             }
-            self.journal.files.insert(label, sha256(&bytes));
+            self.journal.files.insert(label, sha256_hex(&bytes));
         }
         Ok(())
     }
@@ -1998,7 +1995,7 @@ impl Session<'_> {
         self.evidence.insert("self_test".into(), json!({
             "result": status, "exit_code": output.code,
             "summary": result.as_ref().map(|r| r["summary"].clone()),
-            "report_sha256": read_limited(&report, 4 * 1024 * 1024).ok().map(|b| sha256(&b)),
+            "report_sha256": read_limited(&report, 4 * 1024 * 1024).ok().map(|b| sha256_hex(&b)),
             "scope": "isolated temporary workspace and daemon; it does not show that the configured host is protected"}));
         match status.as_str() {
             "passed" => Ok(()),
@@ -2182,7 +2179,7 @@ fn profile_witness(
     let useful = first.as_ref().is_some_and(|r| !mcp_refused(r));
     let first_digest = first
         .as_ref()
-        .map(|r| sha256(canonical(&r["result"]).as_bytes()));
+        .map(|r| sha256_hex(canonical(&r["result"]).as_bytes()));
     details["useful"] = json!({"ok": useful, "result_sha256": first_digest});
     let before = inventory(&workspace);
     let denied = call(&mut session, 4, refused_tool, &refused_args);
@@ -2195,7 +2192,7 @@ fn profile_witness(
     let continued = second.as_ref().is_some_and(|r| !mcp_refused(r));
     let second_digest = second
         .as_ref()
-        .map(|r| sha256(canonical(&r["result"]).as_bytes()));
+        .map(|r| sha256_hex(canonical(&r["result"]).as_bytes()));
     details["continuation"] =
         json!({"ok": continued, "same_result": continued && second_digest == first_digest});
     drop(session);

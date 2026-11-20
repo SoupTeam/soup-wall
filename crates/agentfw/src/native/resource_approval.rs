@@ -7,13 +7,14 @@
 //! authority. Explicitly excludes Windows, macOS, POST (SOU-73), and real-fs
 //! MCP create-file (SOU-83).
 
+use crate::hashing::sha256_hex;
 use serde_json::{json, Value};
 
 use super::resource::{
     self, Admission, CREATE_FILE_EXECUTOR_PROFILE, CREATE_FILE_MAX_CONTENT,
     READ_DOCUMENT_EXECUTOR_PROFILE,
 };
-use super::{hash, Tool};
+use super::Tool;
 
 pub const RESOURCE_APPROVAL_CONTRACT: &str = "sw-native-resource-approval/1";
 
@@ -70,7 +71,7 @@ pub fn is_supported_linux_resource_tool_profile(tool: &Tool) -> bool {
 
     // Linux read_document (direct/1)
     if policy.is_read_bound_or_named(&tool.name) {
-        let expected_sha256 = super::hash(READ_DOCUMENT_EXECUTOR_PROFILE.as_bytes());
+        let expected_sha256 = sha256_hex(READ_DOCUMENT_EXECUTOR_PROFILE.as_bytes());
         if policy.executor_sha256 != expected_sha256 {
             return false;
         }
@@ -182,7 +183,7 @@ pub fn build_resource_details(
         if content.len() > CREATE_FILE_MAX_CONTENT {
             return Err("native_content_over_cap");
         }
-        let content_sha256 = hash(content.as_bytes());
+        let content_sha256 = sha256_hex(content.as_bytes());
 
         return Ok(json!({
             "operation": "create_file",
@@ -329,9 +330,9 @@ mod tests {
             executor_sha256: if is_https {
                 crate::mcp::https_get::executor_profile_sha256()
             } else if is_read {
-                super::super::hash(READ_DOCUMENT_EXECUTOR_PROFILE.as_bytes())
+                sha256_hex(READ_DOCUMENT_EXECUTOR_PROFILE.as_bytes())
             } else {
-                super::super::hash(profile.as_bytes())
+                sha256_hex(profile.as_bytes())
             },
             classifier_sha256: "c".repeat(64),
             post: None,
@@ -522,7 +523,7 @@ mod tests {
         assert_eq!(details["operation"], "create_file");
         assert_eq!(details["path"], "/workspace/doc.txt");
         assert_eq!(details["content_length"], 11);
-        assert_eq!(details["content_bytes_sha256"], hash(b"hello world"));
+        assert_eq!(details["content_bytes_sha256"], sha256_hex(b"hello world"));
 
         assert!(revalidate_resource_execution(&create_tool, &valid_args, None).is_ok());
 
@@ -563,7 +564,7 @@ mod tests {
         assert_eq!(details["content_length"], 23);
         assert_eq!(
             details["content_bytes_sha256"],
-            hash(b"custom selector content")
+            sha256_hex(b"custom selector content")
         );
 
         assert!(revalidate_resource_execution(&create_tool, &args, None).is_ok());
