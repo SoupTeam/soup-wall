@@ -26,6 +26,8 @@ if [[ ${1:-} == --isolated ]]; then
   run_check fmt cargo fmt --all -- --check
   run_check clippy cargo clippy --offline --locked -p agentfw --all-targets -- -D warnings
   run_check provenance cargo test --offline --locked -p soup-wall-agent
+  # Exercise the kernel boundary before the library suite wraps reader exits as EOF.
+  run_check reader-preflight /usr/bin/bwrap --unshare-user --ro-bind / / /usr/bin/true
   run_check library cargo test --offline --locked -p agentfw --lib
   run_check native cargo test --offline --locked -p agentfw --test native_endpoint
   run_check hooks cargo test --offline --locked -p agentfw --test hook_endpoint
