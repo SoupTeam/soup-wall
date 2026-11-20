@@ -76,6 +76,18 @@ jobs:
       - name: Prepare locked sources for explicit source mode
         if: env.SOU166_MODE == 'source'
         run: cargo fetch --locked
+      - name: Install Linux sandbox runtime
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y bubblewrap
+      - name: Qualify the job-scoped bubblewrap copy for reader tests
+        id: reader_sandbox
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          source=/usr/bin/bwrap
+          python3 -I -B scripts/ci_bwrap_userns.py install --source "$source" \
+            --sha256 "$(sha256sum "$source" | cut -d ' ' -f1)" \
+            --report "$RUNNER_TEMP/reader-sandbox-install.json"
       - name: Initialize private current-job artifact locations
         run: |
           printf 'SOU166_BUNDLE=%s/sou166-selected\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
@@ -141,6 +153,11 @@ jobs:
           python3 scripts/verify-sou54-create-races.py --run --repo "$PWD" \
             --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou54-create-races-results.json" 2>&1 | tee "$RUNNER_TEMP/sou54-races.log"
+      - name: Remove the job-scoped reader sandbox profile
+        if: always() && steps.reader_sandbox.outcome != 'skipped'
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: python3 -I -B scripts/ci_bwrap_userns.py cleanup --report "$RUNNER_TEMP/reader-sandbox-cleanup.json"
       - name: Retain sanitized outcomes and source/build witnesses
         if: always()
         uses: actions/upload-artifact@v7
