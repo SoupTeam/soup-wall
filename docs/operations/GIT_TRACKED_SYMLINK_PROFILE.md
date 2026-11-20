@@ -215,7 +215,7 @@ The single `compiler-artifact` entry with `target.name == "agentfw"`,
 Run using those exact candidates:
 
 ```sh
-python3 -B scripts/verify-sou150-tracked-symlinks.py --run \
+python3 -B scripts/verify-tracked-symlinks.py --run \
   --agentfw "$PWD/target/debug/agentfw" \
   --git /verified/static-git --git-sha256 "$VERIFIED_GIT_SHA256" \
   --bwrap /verified/bwrap --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \

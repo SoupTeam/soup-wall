@@ -186,7 +186,7 @@ above for an installed connection.
 
 ## Reproduction
 
-`scripts/verify-sou78-linux.sh` exports the committed tree into a disposable ordinary-UID
+`scripts/verify-profile-lifecycle-linux.sh` exports the committed tree into a disposable ordinary-UID
 container, disables external networking/capabilities and runs strict lint, affected test
 suites and `scripts/verify-sou78-owned.py`. The latter uses a real managed Agent, real
 stdio collectors and a scripted host; it makes no paid-model or installed-UI claim.

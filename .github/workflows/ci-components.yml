@@ -644,7 +644,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
       - name: Install hash-pinned official SDKs
-        run: python -m pip install --require-hashes -r scripts/requirements-sou92.txt
+        run: python -m pip install --require-hashes -r scripts/requirements-sdk-compat.txt
       - name: Build exact candidate
         shell: bash
         run: |
@@ -654,12 +654,12 @@ jobs:
           cargo build --locked -p llm-firewall --bin llm-firewall --message-format=json > "$RUNNER_TEMP/sou92-build.jsonl"
           sha256sum target/debug/llm-firewall > "$RUNNER_TEMP/sou92-binary.txt"
       - name: Evidence grading controls
-        run: python -B -m unittest discover -s scripts/tests -p test_sou92_sdk.py -v
+        run: python -B -m unittest discover -s scripts/tests -p test_sdk.py -v
       - name: Actual SDKs through Gateway with independent effects
         shell: bash
         run: |
           set -euo pipefail
-          python -B scripts/verify-sou92-sdk.py --run --gateway "$PWD/target/debug/llm-firewall" \
+          python -B scripts/verify-sdk.py --run --gateway "$PWD/target/debug/llm-firewall" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou92-results.json" \
             2>&1 | tee "$RUNNER_TEMP/sou92-driver.log"
       - name: Retain complete and interrupted evidence
@@ -1407,11 +1407,11 @@ jobs:
           cargo clippy --locked --offline -p agentfw --all-targets -- -D warnings
           cargo fmt --all --check
           python3 -B -m unittest discover -s scripts/tests -p 'test_sou159*.py' -v
-          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=1 scripts/fixtures/sou159_faults.c -ldl -o "$SOU159_SCRATCH/faults/stage-fault.so"
-          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=2 scripts/fixtures/sou159_faults.c -ldl -o "$SOU159_SCRATCH/faults/publication-fault.so"
-          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=3 scripts/fixtures/sou159_faults.c -ldl -o "$SOU159_SCRATCH/faults/committed-error.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=1 scripts/fixtures/replace_file_faults.c -ldl -o "$SOU159_SCRATCH/faults/stage-fault.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=2 scripts/fixtures/replace_file_faults.c -ldl -o "$SOU159_SCRATCH/faults/publication-fault.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=3 scripts/fixtures/replace_file_faults.c -ldl -o "$SOU159_SCRATCH/faults/committed-error.so"
           sha256sum "$CARGO_TARGET_DIR/debug/agentfw" > "$SOU159_SCRATCH/binary.txt"
-          python3 -B scripts/verify-sou159-replace-file.py --run --agentfw "$CARGO_TARGET_DIR/debug/agentfw" \
+          python3 -B scripts/verify-replace-file.py --run --agentfw "$CARGO_TARGET_DIR/debug/agentfw" \
             --fault-libraries "$SOU159_SCRATCH/faults" --output "$SOU159_SCRATCH/runtime.json"
           BASH
       - name: Retain current-source finite evidence
@@ -1591,7 +1591,7 @@ jobs:
           python3 -B scripts/qualify-pilot-removal.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/removal-fault.so" --output "$SOU161_SCRATCH/removal"
-          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou189_diff_fault.c -ldl -o "$SOU161_SCRATCH/diff-fault.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/edit_diff_fault.c -ldl -o "$SOU161_SCRATCH/diff-fault.so"
           python3 -B scripts/qualify-edit-diff.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/diff-fault.so" --foreign "$SOU161_SCRATCH/foreign-record" \
@@ -1603,15 +1603,15 @@ jobs:
             --python /usr/bin/python3.12 --foreign-state "$SOU161_SCRATCH/inventory-foreign" \
             --output "$SOU161_SCRATCH/inventory"
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_export_set.py' -v
-          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou186_export_fault.c -ldl -o "$SOU161_SCRATCH/export-set-fault.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/edit_export_fault.c -ldl -o "$SOU161_SCRATCH/export-set-fault.so"
           python3 -B scripts/qualify-edit-export-set.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/export-set-fault.so" --output "$SOU161_SCRATCH/export-set"
-          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou179_review_fault.c -ldl -o "$SOU161_SCRATCH/review-fault.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/edit_review_fault.c -ldl -o "$SOU161_SCRATCH/review-fault.so"
           python3 -B scripts/qualify-edit-review.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/review-fault.so" --output "$SOU161_SCRATCH/review"
-          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou187_apply_fault.c -ldl -o "$SOU161_SCRATCH/application-fault.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/edit_apply_fault.c -ldl -o "$SOU161_SCRATCH/application-fault.so"
           python3 -B scripts/qualify-edit-application.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/application-fault.so" --output "$SOU161_SCRATCH/application"
@@ -1621,7 +1621,7 @@ jobs:
           python3 -B scripts/qualify-installed-edit-stop.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/stop-runtime"
-          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou168_publish_fault.c -ldl -o "$SOU161_SCRATCH/publish-fault.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/edit_publish_fault.c -ldl -o "$SOU161_SCRATCH/publish-fault.so"
           python3 -B scripts/qualify-edit-refresh.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --publish-fault "$SOU161_SCRATCH/publish-fault.so" \
@@ -1631,8 +1631,8 @@ jobs:
             --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/archive-runtime" \
             --low-space "$SOU161_SCRATCH/low-space" --foreign-record "$SOU161_SCRATCH/foreign-record"
           mkdir -m 700 "$SOU161_SCRATCH/quota-faults"
-          gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=1 scripts/fixtures/sou170_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/withheld.so"
-          gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=2 scripts/fixtures/sou170_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/interrupted.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=1 scripts/fixtures/edit_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/withheld.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=2 scripts/fixtures/edit_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/interrupted.so"
           python3 -B scripts/qualify-edit-quota.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --faults "$SOU161_SCRATCH/quota-faults" --output "$SOU161_SCRATCH/quota"
@@ -1955,7 +1955,7 @@ jobs:
         with:
           components: rustfmt,clippy
       - name: Exact-source Linux profile and owned-process checks
-        run: bash scripts/verify-sou78-linux.sh
+        run: bash scripts/verify-profile-lifecycle-linux.sh
       - name: Retain exact-source Linux results
         if: always()
         uses: actions/upload-artifact@v7
@@ -2056,8 +2056,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -B -m unittest discover -s scripts/tests -p test_sou110_literal_arguments.py -v
-          python3 -B scripts/verify-sou110-literal-arguments.py --run \
+          python3 -B -m unittest discover -s scripts/tests -p test_literal_arguments.py -v
+          python3 -B scripts/verify-literal-arguments.py --run \
             --agentfw "$PWD/target/debug/agentfw" \
             --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
             --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --strace /usr/bin/strace \
@@ -2094,8 +2094,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -B -m unittest discover -s scripts/tests -p test_sou114_pilot_doctor.py -v
-          python3 -B scripts/verify-sou114-pilot-doctor.py --run \
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_doctor.py -v
+          python3 -B scripts/verify-pilot-doctor.py --run \
             --agentfw "$PWD/target/debug/agentfw" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
             --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --git "$RUNNER_TEMP/sou100-git-source/git" \
@@ -2139,7 +2139,7 @@ jobs:
       - name: Profile and evidence controls, safe archive runtime compatibility
         if: github.event.inputs.original_create_only != 'true'
         run: |
-          python3 -B -m unittest discover -s scripts/tests -p test_sou62_real_mcp.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_real_filesystem_mcp.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_wsl_preflight.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_wsl_qualification.py -v
@@ -4590,9 +4590,9 @@ jobs:
           cargo test --locked -p agentfw server_profile --lib
           cargo test --locked -p agentfw real_server --lib
           cargo test --locked -p agentfw syscall_filter --lib
-          python3 -B -m unittest discover -s scripts/tests -p test_sou68_real_mcp.py -v
-          python3 -B -m unittest discover -s scripts/tests -p test_sou107_profile.py -v
-          python3 -B -m unittest discover -s scripts/tests -p test_sou62_real_mcp.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_real_git_mcp.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_git_local_clone_profile.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_real_filesystem_mcp.py -v
           python3 -B -m unittest discover -s rule_baseline -p 'test_*.py' -v
           python3 eval/eval_runner.py eval/fixtures/soup_task1_evaluation_cases_v0.4.json --classifier-path rule_baseline/git_readonly_v1 --out-dir target/sou68-core-evaluation
           python3 eval/eval_runner.py eval/fixtures/soup_task1_mixed_actions_urtisto_v0.1.json eval/fixtures/soup_task1_benign_comparison_urtisto_v0.1.json --classifier-path rule_baseline/git_readonly_v1 --out-dir target/sou68-mixed-evaluation
@@ -4625,7 +4625,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -B scripts/verify-sou244-git-first-parent.py --allow-download \
+          python3 -B scripts/verify-git-first-parent.py --allow-download \
             --agentfw "$PWD/target/debug/agentfw" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" \
@@ -4635,7 +4635,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -B scripts/verify-sou107-real-git.py --run --agentfw "$PWD/target/debug/agentfw" \
+          python3 -B scripts/verify-git-local-clone.py --run --agentfw "$PWD/target/debug/agentfw" \
             --git "$RUNNER_TEMP/sou107-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou107-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --sandbox-test-binary "$SOU68_TEST_BINARY" \
             --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
@@ -4658,7 +4658,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo test --locked -p agentfw server_profile::git --lib
-          python3 -B scripts/verify-sou137-local-git-refs.py --run --agentfw "$PWD/target/debug/agentfw" \
+          python3 -B scripts/verify-local-git-refs.py --run --agentfw "$PWD/target/debug/agentfw" \
             --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --sandbox-test-binary "$SOU68_TEST_BINARY" \
@@ -4670,8 +4670,8 @@ jobs:
         run: |
           set -euo pipefail
           cargo test --locked -p agentfw server_profile::git --lib
-          python3 -B -m unittest discover -s scripts/tests -p test_sou147_shallow_git.py -v
-          python3 -B scripts/verify-sou147-shallow-git.py --run --agentfw "$PWD/target/debug/agentfw" \
+          python3 -B -m unittest discover -s scripts/tests -p test_shallow_git.py -v
+          python3 -B scripts/verify-shallow-git.py --run --agentfw "$PWD/target/debug/agentfw" \
             --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --sandbox-test-binary "$SOU68_TEST_BINARY" \
@@ -4683,10 +4683,10 @@ jobs:
         run: |
           set -euo pipefail
           cargo test --locked -p agentfw server_profile::git --lib
-          python3 -B -m unittest discover -s scripts/tests -p test_sou146_git_file_revisions.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_git_file_revisions.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_native_git_liveness_control.py -v
           cargo test --locked -p agentfw --lib verified_git
-          python3 -B scripts/verify-sou146-git-file-revisions.py --run --agentfw "$PWD/target/debug/agentfw" \
+          python3 -B scripts/verify-git-file-revisions.py --run --agentfw "$PWD/target/debug/agentfw" \
             --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --sandbox-test-binary "$SOU68_TEST_BINARY" \
@@ -4699,9 +4699,9 @@ jobs:
           set -euo pipefail
           cargo test --locked -p agentfw git_tracked_symlinks --lib
           cargo test --locked -p agentfw --lib verified_git
-          python3 -B -m unittest discover -s scripts/tests -p test_sou150_profile.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_git_tracked_symlinks_profile.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_native_git_liveness_control.py -v
-          python3 -B scripts/verify-sou150-tracked-symlinks.py --run --agentfw "$PWD/target/debug/agentfw" \
+          python3 -B scripts/verify-tracked-symlinks.py --run --agentfw "$PWD/target/debug/agentfw" \
             --git "$RUNNER_TEMP/sou107-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou107-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --sandbox-test-binary "$SOU68_TEST_BINARY" \
@@ -5664,7 +5664,7 @@ jobs:
           sha256sum target/debug/agentfw > "$RUNNER_TEMP/sou79-binary.txt"
           python3 -B - <<'PY'
           import unittest
-          suite=unittest.defaultTestLoader.discover('scripts/tests',pattern='test_sou79_resource_budgets.py')
+          suite=unittest.defaultTestLoader.discover('scripts/tests',pattern='test_resource_budgets.py')
           if not suite.countTestCases(): raise SystemExit('required observer controls missing')
           result=unittest.TextTestRunner(verbosity=2).run(suite)
           raise SystemExit(0 if result.wasSuccessful() else 1)
@@ -6171,7 +6171,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -B scripts/test-sou89-selected-contracts.py
+          python3 -B scripts/test-selected-liveness-contracts.py
       - name: Require original filesystem Git and independently observed crash recovery
         if: github.event.inputs.budget_membership_only != 'true'
         shell: bash
