@@ -33,6 +33,26 @@ jobs:
       SOU166_ARCHIVE_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_sha256 }}
       SOU166_MANIFEST_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.manifest_sha256 }}
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
+      - name: Align shared-build glibc from signed Ubuntu packages
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -501,6 +521,25 @@ jobs:
       producer_attempt: ${{ steps.build.outputs.producer_attempt }}
       image_version: ${{ steps.build.outputs.image_version }}
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
+      - name: Align shared-build glibc from signed Ubuntu packages
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -1247,6 +1286,26 @@ jobs:
       SOU166_ARCHIVE_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_sha256 }}
       SOU166_MANIFEST_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.manifest_sha256 }}
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
+      - name: Align shared-build glibc from signed Ubuntu packages
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -1459,6 +1518,12 @@ jobs:
                 's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
             fi
           done
+      - name: Align shared-build glibc from signed Ubuntu packages
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -1685,6 +1750,26 @@ jobs:
       SOU166_ARCHIVE_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_sha256 }}
       SOU166_MANIFEST_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.manifest_sha256 }}
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
+      - name: Align shared-build glibc from signed Ubuntu packages
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -1800,6 +1885,26 @@ jobs:
       SOU166_ARCHIVE_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_sha256 }}
       SOU166_MANIFEST_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.manifest_sha256 }}
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
+      - name: Align shared-build glibc from signed Ubuntu packages
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -4978,6 +5083,26 @@ jobs:
       SOU166_ARCHIVE_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_sha256 }}
       SOU166_MANIFEST_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.manifest_sha256 }}
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
+      - name: Align shared-build glibc from signed Ubuntu packages
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
