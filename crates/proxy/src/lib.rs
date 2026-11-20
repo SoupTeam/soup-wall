@@ -79,18 +79,8 @@ pub fn build_firewall(cfg: &Config) -> anyhow::Result<Firewall> {
 /// The axum router.
 pub fn app(state: Shared) -> Router {
     let max_body_bytes = state.config.max_body_bytes;
-    let probes = Router::new()
-        .route("/healthz", get(healthz))
-        .route("/metrics", get(metrics))
-        .route("/readyz", get(readyz));
-    let api = Router::new()
-        .route("/v1/chat/completions", post(chat_completions))
-        .route("/v1/responses", post(responses))
-        .route("/v1/messages", post(messages))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            auth::require_proxy_token,
-        ));
+    let probes = probe_routes();
+    let api = provider_routes(&state);
     let oidc_login_enabled = state.tenant_store.is_some() && state.oidc_state_cipher.is_some();
     let saml_login_enabled =
         state.tenant_store.is_some() && state.oidc_state_cipher.is_some() && state.saml.is_some();
@@ -100,373 +90,9 @@ pub fn app(state: Shared) -> Router {
         // admin header. Every data-changing request remains on the separately
         // authenticated /admin/v1 API below.
         let dashboard = Router::new().route("/admin", get(admin_ui::dashboard));
-        let managed_agent = Router::new()
-            .route("/agent/v1/whoami", get(managed_agent_api::whoami))
-            .route("/agent/v1/policy", get(managed_agent_api::fetch_policy))
-            .route(
-                "/agent/v1/policy/ack",
-                post(managed_agent_api::acknowledge_policy),
-            )
-            .route(
-                "/agent/v1/heartbeat/registrations",
-                post(heartbeat_api::register).layer(axum::extract::DefaultBodyLimit::max(
-                    tenant_store::agent_heartbeat::MAX_BODY_BYTES,
-                )),
-            )
-            .route(
-                "/agent/v1/heartbeats",
-                post(heartbeat_api::record).layer(axum::extract::DefaultBodyLimit::max(
-                    tenant_store::agent_heartbeat::MAX_BODY_BYTES,
-                )),
-            );
-        let scim_api = Router::new()
-            .route("/scim/v2/ResourceTypes", get(scim::resource_types))
-            .route("/scim/v2/ResourceTypes/:id", get(scim::get_resource_type))
-            .route("/scim/v2/Schemas", get(scim::schemas))
-            .route("/scim/v2/Schemas/:id", get(scim::get_schema))
-            .route(
-                "/scim/v2/ServiceProviderConfig",
-                get(scim::service_provider_config),
-            )
-            .route(
-                "/scim/v2/Users",
-                get(scim::list_users).post(scim::create_user),
-            )
-            .route(
-                "/scim/v2/Users/:user_id",
-                get(scim::get_user)
-                    .patch(scim::patch_user)
-                    .delete(scim::delete_user),
-            )
-            .route(
-                "/scim/v2/Groups",
-                get(scim::list_groups).post(scim::create_group),
-            )
-            .route(
-                "/scim/v2/Groups/:group_id",
-                get(scim::get_group)
-                    .patch(scim::patch_group)
-                    .delete(scim::delete_group),
-            )
-            .route_layer(middleware::from_fn_with_state(
-                state.clone(),
-                scim::require_scim_token,
-            ));
-        let admin = Router::new()
-            .route("/admin/v1/whoami", get(admin::whoami))
-            .route(
-                "/admin/v1/organizations",
-                post(admin::create_organization).get(admin::list_organizations),
-            )
-            .route(
-                "/admin/v1/organizations/:organization_id",
-                axum::routing::patch(admin::set_organization_state),
-            )
-            .route(
-                "/admin/v1/organizations/:organization_id/tenants",
-                post(admin::create_organization_tenant),
-            )
-            .route(
-                "/admin/v1/organizations/:organization_id/workspaces",
-                get(admin::list_organization_workspaces),
-            )
-            .route(
-                "/admin/v1/organizations/:organization_id/onboarding",
-                get(admin::get_organization_onboarding),
-            )
-            .route(
-                "/admin/v1/organizations/:organization_id/scim-tokens",
-                post(admin::issue_scim_token).get(admin::list_scim_tokens),
-            )
-            .route(
-                "/admin/v1/organizations/:organization_id/oidc",
-                axum::routing::get(admin::get_organization_oidc_connection)
-                    .put(admin::set_organization_oidc_connection)
-                    .delete(admin::delete_organization_oidc_connection),
-            )
-            .route(
-                "/admin/v1/organizations/:organization_id/saml",
-                axum::routing::get(admin::get_organization_saml_connection)
-                    .put(admin::set_organization_saml_connection)
-                    .delete(admin::delete_organization_saml_connection),
-            )
-            .route(
-                "/admin/v1/tenants",
-                post(admin::create_tenant).get(admin::list_tenants),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id",
-                axum::routing::patch(admin::set_tenant_state).delete(admin::delete_tenant),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/tokens",
-                post(admin::issue_token).get(admin::list_tokens),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agent-fleet",
-                get(fleet_api::inventory),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agent-fleet/:agent_id",
-                get(fleet_api::detail),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agent-fleet/:agent_id/heartbeat",
-                get(heartbeat_api::status),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agent-fleet-detail",
-                get(fleet_api::selected_detail),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agent-triage",
-                get(fleet_api::triage),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents",
-                post(managed_agent_api::enroll).get(managed_agent_api::list),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/:agent_id/revoke",
-                post(managed_agent_api::revoke),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/:agent_id/credential-rotations",
-                post(managed_agent_api::rotate_credential),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/credential-rotations",
-                post(managed_agent_api::rotate_selected_credential),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/enrollment",
-                get(managed_agent_api::selected_enrollment),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/revoke",
-                post(managed_agent_api::revoke_selected_agent),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions",
-                post(managed_agent_api::create_revision).get(managed_agent_api::list_revisions),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision",
-                get(managed_agent_api::read_revision),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision/approve",
-                post(managed_agent_api::approve_revision),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision/deploy",
-                post(managed_agent_api::deploy_revision),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/policy-revision",
-                get(managed_agent_api::read_selected_revision),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/policy-revision/approve",
-                post(managed_agent_api::approve_selected_revision),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/policy-revision/deploy",
-                post(managed_agent_api::deploy_selected_revision),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/policy-revisions",
-                get(managed_agent_api::list_selected_revisions)
-                    .post(managed_agent_api::create_selected_revision),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/policy-deployments",
-                get(managed_agent_api::selected_deployments),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/:agent_id/deployments",
-                get(managed_agent_api::deployments),
-            )
-            // SOU-242: owner-confirmed stale-restore recovery for one Agent.
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/:agent_id/stale-recovery",
-                get(stale_recovery_api::status),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/:agent_id/stale-recovery/preview",
-                post(stale_recovery_api::preview).layer(DefaultBodyLimit::max(
-                    crate::tenant_store::managed_stale_recovery::MAX_BODY_BYTES,
-                )),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/agents/:agent_id/stale-recovery/confirm",
-                post(stale_recovery_api::confirm).layer(DefaultBodyLimit::max(
-                    crate::tenant_store::managed_stale_recovery::MAX_BODY_BYTES,
-                )),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/groups",
-                post(managed_agent_api::create_group).get(managed_agent_api::list_groups),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/groups/:group_id",
-                get(managed_agent_api::get_group).delete(managed_agent_api::delete_group),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/groups/:group_id/members",
-                post(managed_agent_api::add_group_member)
-                    .get(managed_agent_api::list_group_members),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/groups/:group_id/members/:agent_id",
-                delete(managed_agent_api::remove_group_member),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/groups/:group_id/revisions",
-                post(managed_agent_api::create_group_revision)
-                    .get(managed_agent_api::list_group_revisions),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/groups/:group_id/revisions/:revision/approve",
-                post(managed_agent_api::approve_group_revision),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout",
-                post(managed_agent_api::start_group_rollout)
-                    .get(managed_agent_api::get_group_rollout),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/preview",
-                post(managed_agent_api::preview_group_rollout),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/reconciliation",
-                get(managed_agent_api::reconciliation_status),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/advance",
-                post(managed_agent_api::advance_group_rollout),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/rollback",
-                post(managed_agent_api::rollback_group_rollout),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/pause",
-                post(managed_agent_api::pause_group_rollout),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/resume",
-                post(managed_agent_api::resume_group_rollout),
-            )
-            .route(
-                "/admin/v1/managed-issuer",
-                get(managed_agent_api::issuer_public_key),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/limits",
-                axum::routing::get(admin::get_limits).put(admin::set_limits),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/model-policy",
-                axum::routing::get(admin::get_model_policy).put(admin::set_model_policy),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/policy-versions",
-                get(admin::list_policy_versions).post(admin::create_policy_version),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/policy-versions/:version_id",
-                get(admin::get_policy_version),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/policy-versions/:version_id/export",
-                get(admin::export_policy_version),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/policy-versions/:version_id/simulate",
-                post(admin::simulate_policy_version),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/policy-versions/:version_id/approve",
-                post(admin::approve_policy_version),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/policy-versions/:version_id/activate",
-                post(admin::activate_policy_version),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/policy-versions/:version_id/rollback",
-                post(admin::rollback_policy_version),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/policy-deployments",
-                get(admin::list_policy_deployments),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/security-events",
-                get(admin::list_security_events),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/webhook-destinations",
-                get(admin::list_webhook_destinations).post(admin::create_webhook_destination),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/webhook-destinations/:destination_id/deactivate",
-                post(admin::deactivate_webhook_destination),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/webhook-deliveries",
-                get(admin::list_webhook_deliveries),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/operator-audit",
-                get(operator_audit_api::history),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/audit",
-                axum::routing::get(admin::list_audit),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/usage/reconciliation",
-                get(admin::list_usage_reconciliation_runs).post(admin::import_usage_reconciliation),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/usage/reconciliation/:run_id",
-                get(admin::list_usage_reconciliation_observations),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/usage/retention/policy",
-                get(admin::get_usage_retention_policy).put(admin::set_usage_retention_policy),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/usage/retention/runs",
-                get(admin::list_usage_retention_runs).post(admin::run_usage_retention),
-            )
-            .route(
-                "/admin/v1/tenants/:tenant_id/usage/quota",
-                get(admin::get_usage_quota_status).put(admin::set_usage_quota_policy),
-            )
-            .route(
-                "/admin/v1/tokens/:token_id/revoke",
-                post(admin::revoke_token),
-            )
-            .route(
-                "/admin/v1/scim-tokens/:token_id/revoke",
-                post(admin::revoke_scim_token),
-            )
-            .route(
-                "/admin/v1/admins",
-                post(admin::create_admin).get(admin::list_admins),
-            )
-            .route(
-                "/admin/v1/admins/:admin_id/revoke",
-                post(admin::revoke_admin),
-            )
-            .layer(middleware::from_fn_with_state(
-                state.clone(),
-                admin::require_admin_token,
-            ));
+        let managed_agent = managed_agent_routes();
+        let scim_api = scim_routes(&state);
+        let admin = admin_routes(&state);
         probes
             .merge(api)
             .merge(admin)
@@ -477,145 +103,552 @@ pub fn app(state: Shared) -> Router {
         probes.merge(api)
     };
     let router = if oidc_login_enabled {
-        router
-            .route("/auth/oidc/start", get(oidc_auth::start_login))
-            .route(
-                "/auth/oidc/invitation/start",
-                post(oidc_auth::start_invitation_login),
-            )
-            .route("/auth/oidc/callback", get(oidc_auth::callback))
-            .route("/auth/logout", post(oidc_auth::logout))
-            .route("/auth/session/rotate", post(oidc_auth::rotate_session))
-            .route("/auth/session/refresh", post(oidc_auth::rotate_session))
-            .route("/customer", get(customer_ui::dashboard))
-            .route("/customer/invitation", get(invitation_ui::accept))
-            .route("/customer/v1/session", get(oidc_auth::customer_session))
-            .route("/customer/v1/csrf", get(oidc_auth::customer_csrf))
-            .route(
-                "/customer/v1/service-accounts",
-                get(oidc_auth::customer_service_accounts)
-                    .post(oidc_auth::create_customer_service_account),
-            )
-            .route(
-                "/customer/v1/service-accounts/:account_id/revoke",
-                post(oidc_auth::revoke_customer_service_account),
-            )
-            .route(
-                "/customer/v1/audit",
-                get(oidc_auth::customer_workspace_audit),
-            )
-            .route(
-                "/customer/v1/proxy-audit",
-                get(oidc_auth::customer_workspace_proxy_audit),
-            )
-            .route(
-                "/customer/v1/usage",
-                get(oidc_auth::customer_workspace_usage),
-            )
-            .route(
-                "/customer/v1/billing/invoice-preview",
-                get(oidc_auth::customer_workspace_invoice_preview),
-            )
-            .route(
-                "/customer/v1/usage/export.csv",
-                get(oidc_auth::export_customer_workspace_usage),
-            )
-            .route(
-                "/customer/v1/usage/reconciliation",
-                get(oidc_auth::customer_workspace_usage_reconciliation_runs),
-            )
-            .route(
-                "/customer/v1/usage/reconciliation/:run_id",
-                get(oidc_auth::customer_workspace_usage_reconciliation_observations),
-            )
-            .route(
-                "/customer/v1/usage/retention",
-                get(oidc_auth::customer_workspace_usage_retention)
-                    .put(oidc_auth::set_customer_workspace_usage_retention),
-            )
-            .route(
-                "/customer/v1/usage/quota",
-                get(oidc_auth::customer_workspace_usage_quota)
-                    .put(oidc_auth::set_customer_workspace_usage_quota),
-            )
-            .route(
-                "/customer/v1/members",
-                get(oidc_auth::customer_workspace_members)
-                    .post(oidc_auth::assign_customer_workspace_scim_user)
-                    .patch(oidc_auth::update_customer_workspace_membership),
-            )
-            .route(
-                "/customer/v1/invitations",
-                get(oidc_auth::customer_workspace_invitations)
-                    .post(oidc_auth::create_customer_workspace_invitation),
-            )
-            .route(
-                "/customer/v1/invitations/:invitation_id/revoke",
-                post(oidc_auth::revoke_customer_workspace_invitation),
-            )
-            .route(
-                "/customer/v1/invitations/:invitation_id/resend",
-                post(oidc_auth::resend_customer_workspace_invitation),
-            )
-            .route(
-                "/customer/v1/scim-users",
-                get(oidc_auth::customer_workspace_scim_users),
-            )
-            .route(
-                "/customer/v1/scim-groups",
-                get(oidc_auth::customer_workspace_scim_groups),
-            )
-            .route(
-                "/customer/v1/group-mappings",
-                get(oidc_auth::customer_workspace_scim_group_mappings)
-                    .post(oidc_auth::create_customer_workspace_scim_group_mapping),
-            )
-            .route(
-                "/customer/v1/group-mappings/:group_id",
-                delete(oidc_auth::delete_customer_workspace_scim_group_mapping),
-            )
-            .route(
-                "/customer/v1/controls",
-                get(oidc_auth::customer_workspace_controls),
-            )
-            .route(
-                "/customer/v1/model-policy",
-                put(oidc_auth::set_customer_workspace_model_policy),
-            )
-            .route(
-                "/customer/v1/limits",
-                put(oidc_auth::set_customer_workspace_limits),
-            )
-            .route(
-                "/customer/v1/webhook-destinations",
-                get(oidc_auth::customer_webhook_destinations)
-                    .post(oidc_auth::create_customer_webhook_destination),
-            )
-            .route(
-                "/customer/v1/webhook-destinations/:destination_id/deactivate",
-                post(oidc_auth::deactivate_customer_webhook_destination),
-            )
-            .route(
-                "/customer/v1/webhook-deliveries",
-                get(oidc_auth::customer_webhook_deliveries),
-            )
+        oidc_routes(router)
     } else {
         router
     };
     let router = if saml_login_enabled {
-        router
-            .route("/auth/saml/start", get(saml_auth::start_login))
-            .route(
-                "/auth/saml/invitation/start",
-                post(saml_auth::start_invitation_login),
-            )
-            .route("/auth/saml/acs", post(saml_auth::acs))
+        saml_routes(router)
     } else {
         router
     };
     router
         .layer(DefaultBodyLimit::max(max_body_bytes))
         .with_state(state)
+}
+
+/// Unauthenticated liveness, readiness and metrics probes.
+fn probe_routes() -> Router<Shared> {
+    Router::new()
+        .route("/healthz", get(healthz))
+        .route("/metrics", get(metrics))
+        .route("/readyz", get(readyz))
+}
+
+/// The provider-compatible inference API, behind the proxy token.
+fn provider_routes(state: &Shared) -> Router<Shared> {
+    Router::new()
+        .route("/v1/chat/completions", post(chat_completions))
+        .route("/v1/responses", post(responses))
+        .route("/v1/messages", post(messages))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_proxy_token,
+        ))
+}
+
+/// The API that enrolled Agents call (`/agent/v1`).
+fn managed_agent_routes() -> Router<Shared> {
+    Router::new()
+        .route("/agent/v1/whoami", get(managed_agent_api::whoami))
+        .route("/agent/v1/policy", get(managed_agent_api::fetch_policy))
+        .route(
+            "/agent/v1/policy/ack",
+            post(managed_agent_api::acknowledge_policy),
+        )
+        .route(
+            "/agent/v1/heartbeat/registrations",
+            post(heartbeat_api::register).layer(axum::extract::DefaultBodyLimit::max(
+                tenant_store::agent_heartbeat::MAX_BODY_BYTES,
+            )),
+        )
+        .route(
+            "/agent/v1/heartbeats",
+            post(heartbeat_api::record).layer(axum::extract::DefaultBodyLimit::max(
+                tenant_store::agent_heartbeat::MAX_BODY_BYTES,
+            )),
+        )
+}
+
+/// SCIM 2.0 provisioning, behind the SCIM token.
+fn scim_routes(state: &Shared) -> Router<Shared> {
+    Router::new()
+        .route("/scim/v2/ResourceTypes", get(scim::resource_types))
+        .route("/scim/v2/ResourceTypes/:id", get(scim::get_resource_type))
+        .route("/scim/v2/Schemas", get(scim::schemas))
+        .route("/scim/v2/Schemas/:id", get(scim::get_schema))
+        .route(
+            "/scim/v2/ServiceProviderConfig",
+            get(scim::service_provider_config),
+        )
+        .route(
+            "/scim/v2/Users",
+            get(scim::list_users).post(scim::create_user),
+        )
+        .route(
+            "/scim/v2/Users/:user_id",
+            get(scim::get_user)
+                .patch(scim::patch_user)
+                .delete(scim::delete_user),
+        )
+        .route(
+            "/scim/v2/Groups",
+            get(scim::list_groups).post(scim::create_group),
+        )
+        .route(
+            "/scim/v2/Groups/:group_id",
+            get(scim::get_group)
+                .patch(scim::patch_group)
+                .delete(scim::delete_group),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            scim::require_scim_token,
+        ))
+}
+
+/// The operator administration API, behind the admin token.
+fn admin_routes(state: &Shared) -> Router<Shared> {
+    Router::new()
+        .route("/admin/v1/whoami", get(admin::whoami))
+        .route(
+            "/admin/v1/organizations",
+            post(admin::create_organization).get(admin::list_organizations),
+        )
+        .route(
+            "/admin/v1/organizations/:organization_id",
+            axum::routing::patch(admin::set_organization_state),
+        )
+        .route(
+            "/admin/v1/organizations/:organization_id/tenants",
+            post(admin::create_organization_tenant),
+        )
+        .route(
+            "/admin/v1/organizations/:organization_id/workspaces",
+            get(admin::list_organization_workspaces),
+        )
+        .route(
+            "/admin/v1/organizations/:organization_id/onboarding",
+            get(admin::get_organization_onboarding),
+        )
+        .route(
+            "/admin/v1/organizations/:organization_id/scim-tokens",
+            post(admin::issue_scim_token).get(admin::list_scim_tokens),
+        )
+        .route(
+            "/admin/v1/organizations/:organization_id/oidc",
+            axum::routing::get(admin::get_organization_oidc_connection)
+                .put(admin::set_organization_oidc_connection)
+                .delete(admin::delete_organization_oidc_connection),
+        )
+        .route(
+            "/admin/v1/organizations/:organization_id/saml",
+            axum::routing::get(admin::get_organization_saml_connection)
+                .put(admin::set_organization_saml_connection)
+                .delete(admin::delete_organization_saml_connection),
+        )
+        .route(
+            "/admin/v1/tenants",
+            post(admin::create_tenant).get(admin::list_tenants),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id",
+            axum::routing::patch(admin::set_tenant_state).delete(admin::delete_tenant),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/tokens",
+            post(admin::issue_token).get(admin::list_tokens),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agent-fleet",
+            get(fleet_api::inventory),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agent-fleet/:agent_id",
+            get(fleet_api::detail),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agent-fleet/:agent_id/heartbeat",
+            get(heartbeat_api::status),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agent-fleet-detail",
+            get(fleet_api::selected_detail),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agent-triage",
+            get(fleet_api::triage),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents",
+            post(managed_agent_api::enroll).get(managed_agent_api::list),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/:agent_id/revoke",
+            post(managed_agent_api::revoke),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/:agent_id/credential-rotations",
+            post(managed_agent_api::rotate_credential),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/credential-rotations",
+            post(managed_agent_api::rotate_selected_credential),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/enrollment",
+            get(managed_agent_api::selected_enrollment),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/revoke",
+            post(managed_agent_api::revoke_selected_agent),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions",
+            post(managed_agent_api::create_revision).get(managed_agent_api::list_revisions),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision",
+            get(managed_agent_api::read_revision),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision/approve",
+            post(managed_agent_api::approve_revision),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/:agent_id/revisions/:revision/deploy",
+            post(managed_agent_api::deploy_revision),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/policy-revision",
+            get(managed_agent_api::read_selected_revision),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/policy-revision/approve",
+            post(managed_agent_api::approve_selected_revision),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/policy-revision/deploy",
+            post(managed_agent_api::deploy_selected_revision),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/policy-revisions",
+            get(managed_agent_api::list_selected_revisions)
+                .post(managed_agent_api::create_selected_revision),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/policy-deployments",
+            get(managed_agent_api::selected_deployments),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/:agent_id/deployments",
+            get(managed_agent_api::deployments),
+        )
+        // SOU-242: owner-confirmed stale-restore recovery for one Agent.
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/:agent_id/stale-recovery",
+            get(stale_recovery_api::status),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/:agent_id/stale-recovery/preview",
+            post(stale_recovery_api::preview).layer(DefaultBodyLimit::max(
+                crate::tenant_store::managed_stale_recovery::MAX_BODY_BYTES,
+            )),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/agents/:agent_id/stale-recovery/confirm",
+            post(stale_recovery_api::confirm).layer(DefaultBodyLimit::max(
+                crate::tenant_store::managed_stale_recovery::MAX_BODY_BYTES,
+            )),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/groups",
+            post(managed_agent_api::create_group).get(managed_agent_api::list_groups),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/groups/:group_id",
+            get(managed_agent_api::get_group).delete(managed_agent_api::delete_group),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/groups/:group_id/members",
+            post(managed_agent_api::add_group_member).get(managed_agent_api::list_group_members),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/groups/:group_id/members/:agent_id",
+            delete(managed_agent_api::remove_group_member),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/groups/:group_id/revisions",
+            post(managed_agent_api::create_group_revision)
+                .get(managed_agent_api::list_group_revisions),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/groups/:group_id/revisions/:revision/approve",
+            post(managed_agent_api::approve_group_revision),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout",
+            post(managed_agent_api::start_group_rollout).get(managed_agent_api::get_group_rollout),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/preview",
+            post(managed_agent_api::preview_group_rollout),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/reconciliation",
+            get(managed_agent_api::reconciliation_status),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/advance",
+            post(managed_agent_api::advance_group_rollout),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/rollback",
+            post(managed_agent_api::rollback_group_rollout),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/pause",
+            post(managed_agent_api::pause_group_rollout),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/groups/:group_id/rollout/resume",
+            post(managed_agent_api::resume_group_rollout),
+        )
+        .route(
+            "/admin/v1/managed-issuer",
+            get(managed_agent_api::issuer_public_key),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/limits",
+            axum::routing::get(admin::get_limits).put(admin::set_limits),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/model-policy",
+            axum::routing::get(admin::get_model_policy).put(admin::set_model_policy),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/policy-versions",
+            get(admin::list_policy_versions).post(admin::create_policy_version),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/policy-versions/:version_id",
+            get(admin::get_policy_version),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/policy-versions/:version_id/export",
+            get(admin::export_policy_version),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/policy-versions/:version_id/simulate",
+            post(admin::simulate_policy_version),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/policy-versions/:version_id/approve",
+            post(admin::approve_policy_version),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/policy-versions/:version_id/activate",
+            post(admin::activate_policy_version),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/policy-versions/:version_id/rollback",
+            post(admin::rollback_policy_version),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/policy-deployments",
+            get(admin::list_policy_deployments),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/security-events",
+            get(admin::list_security_events),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/webhook-destinations",
+            get(admin::list_webhook_destinations).post(admin::create_webhook_destination),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/webhook-destinations/:destination_id/deactivate",
+            post(admin::deactivate_webhook_destination),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/webhook-deliveries",
+            get(admin::list_webhook_deliveries),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/operator-audit",
+            get(operator_audit_api::history),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/audit",
+            axum::routing::get(admin::list_audit),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/usage/reconciliation",
+            get(admin::list_usage_reconciliation_runs).post(admin::import_usage_reconciliation),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/usage/reconciliation/:run_id",
+            get(admin::list_usage_reconciliation_observations),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/usage/retention/policy",
+            get(admin::get_usage_retention_policy).put(admin::set_usage_retention_policy),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/usage/retention/runs",
+            get(admin::list_usage_retention_runs).post(admin::run_usage_retention),
+        )
+        .route(
+            "/admin/v1/tenants/:tenant_id/usage/quota",
+            get(admin::get_usage_quota_status).put(admin::set_usage_quota_policy),
+        )
+        .route(
+            "/admin/v1/tokens/:token_id/revoke",
+            post(admin::revoke_token),
+        )
+        .route(
+            "/admin/v1/scim-tokens/:token_id/revoke",
+            post(admin::revoke_scim_token),
+        )
+        .route(
+            "/admin/v1/admins",
+            post(admin::create_admin).get(admin::list_admins),
+        )
+        .route(
+            "/admin/v1/admins/:admin_id/revoke",
+            post(admin::revoke_admin),
+        )
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            admin::require_admin_token,
+        ))
+}
+
+/// Browser sign-in through OIDC and the customer self-service API that depends on it.
+fn oidc_routes(router: Router<Shared>) -> Router<Shared> {
+    router
+        .route("/auth/oidc/start", get(oidc_auth::start_login))
+        .route(
+            "/auth/oidc/invitation/start",
+            post(oidc_auth::start_invitation_login),
+        )
+        .route("/auth/oidc/callback", get(oidc_auth::callback))
+        .route("/auth/logout", post(oidc_auth::logout))
+        .route("/auth/session/rotate", post(oidc_auth::rotate_session))
+        .route("/auth/session/refresh", post(oidc_auth::rotate_session))
+        .route("/customer", get(customer_ui::dashboard))
+        .route("/customer/invitation", get(invitation_ui::accept))
+        .route("/customer/v1/session", get(oidc_auth::customer_session))
+        .route("/customer/v1/csrf", get(oidc_auth::customer_csrf))
+        .route(
+            "/customer/v1/service-accounts",
+            get(oidc_auth::customer_service_accounts)
+                .post(oidc_auth::create_customer_service_account),
+        )
+        .route(
+            "/customer/v1/service-accounts/:account_id/revoke",
+            post(oidc_auth::revoke_customer_service_account),
+        )
+        .route(
+            "/customer/v1/audit",
+            get(oidc_auth::customer_workspace_audit),
+        )
+        .route(
+            "/customer/v1/proxy-audit",
+            get(oidc_auth::customer_workspace_proxy_audit),
+        )
+        .route(
+            "/customer/v1/usage",
+            get(oidc_auth::customer_workspace_usage),
+        )
+        .route(
+            "/customer/v1/billing/invoice-preview",
+            get(oidc_auth::customer_workspace_invoice_preview),
+        )
+        .route(
+            "/customer/v1/usage/export.csv",
+            get(oidc_auth::export_customer_workspace_usage),
+        )
+        .route(
+            "/customer/v1/usage/reconciliation",
+            get(oidc_auth::customer_workspace_usage_reconciliation_runs),
+        )
+        .route(
+            "/customer/v1/usage/reconciliation/:run_id",
+            get(oidc_auth::customer_workspace_usage_reconciliation_observations),
+        )
+        .route(
+            "/customer/v1/usage/retention",
+            get(oidc_auth::customer_workspace_usage_retention)
+                .put(oidc_auth::set_customer_workspace_usage_retention),
+        )
+        .route(
+            "/customer/v1/usage/quota",
+            get(oidc_auth::customer_workspace_usage_quota)
+                .put(oidc_auth::set_customer_workspace_usage_quota),
+        )
+        .route(
+            "/customer/v1/members",
+            get(oidc_auth::customer_workspace_members)
+                .post(oidc_auth::assign_customer_workspace_scim_user)
+                .patch(oidc_auth::update_customer_workspace_membership),
+        )
+        .route(
+            "/customer/v1/invitations",
+            get(oidc_auth::customer_workspace_invitations)
+                .post(oidc_auth::create_customer_workspace_invitation),
+        )
+        .route(
+            "/customer/v1/invitations/:invitation_id/revoke",
+            post(oidc_auth::revoke_customer_workspace_invitation),
+        )
+        .route(
+            "/customer/v1/invitations/:invitation_id/resend",
+            post(oidc_auth::resend_customer_workspace_invitation),
+        )
+        .route(
+            "/customer/v1/scim-users",
+            get(oidc_auth::customer_workspace_scim_users),
+        )
+        .route(
+            "/customer/v1/scim-groups",
+            get(oidc_auth::customer_workspace_scim_groups),
+        )
+        .route(
+            "/customer/v1/group-mappings",
+            get(oidc_auth::customer_workspace_scim_group_mappings)
+                .post(oidc_auth::create_customer_workspace_scim_group_mapping),
+        )
+        .route(
+            "/customer/v1/group-mappings/:group_id",
+            delete(oidc_auth::delete_customer_workspace_scim_group_mapping),
+        )
+        .route(
+            "/customer/v1/controls",
+            get(oidc_auth::customer_workspace_controls),
+        )
+        .route(
+            "/customer/v1/model-policy",
+            put(oidc_auth::set_customer_workspace_model_policy),
+        )
+        .route(
+            "/customer/v1/limits",
+            put(oidc_auth::set_customer_workspace_limits),
+        )
+        .route(
+            "/customer/v1/webhook-destinations",
+            get(oidc_auth::customer_webhook_destinations)
+                .post(oidc_auth::create_customer_webhook_destination),
+        )
+        .route(
+            "/customer/v1/webhook-destinations/:destination_id/deactivate",
+            post(oidc_auth::deactivate_customer_webhook_destination),
+        )
+        .route(
+            "/customer/v1/webhook-deliveries",
+            get(oidc_auth::customer_webhook_deliveries),
+        )
+}
+
+/// Browser sign-in through SAML.
+fn saml_routes(router: Router<Shared>) -> Router<Shared> {
+    router
+        .route("/auth/saml/start", get(saml_auth::start_login))
+        .route(
+            "/auth/saml/invitation/start",
+            post(saml_auth::start_invitation_login),
+        )
+        .route("/auth/saml/acs", post(saml_auth::acs))
 }
 
 /// Test helper: a `Config` pointing upstream at `base`, fail_closed, no policy file.
