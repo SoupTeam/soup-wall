@@ -26,11 +26,6 @@ jobs:
       producer_attempt: ${{ steps.build.outputs.producer_attempt }}
       image_version: ${{ steps.build.outputs.image_version }}
     steps:
-      - name: Align shared-build glibc from signed Ubuntu packages
-        run: |
-          sudo apt-get -o APT::Update::Error-Mode=any update
-          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
-          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}

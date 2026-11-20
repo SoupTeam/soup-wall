@@ -271,10 +271,7 @@ mod linux {
             return Ok(system);
         };
         let job = std::env::var("GITHUB_JOB")?;
-        ensure!(
-            matches!(job.as_str(), "test" | "all-features"),
-            "reader sandbox job"
-        );
+        ensure!(job == "test", "reader sandbox job");
         let run = std::env::var("GITHUB_RUN_ID")?.parse::<u64>()?;
         let attempt = std::env::var("GITHUB_RUN_ATTEMPT")?.parse::<u32>()?;
         let job_hash = format!("{:x}", Sha256::digest(job.as_bytes()));

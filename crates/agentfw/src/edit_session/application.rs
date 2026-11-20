@@ -64,7 +64,7 @@ pub(super) struct Retained {
     #[arg(long)]
     receipt: Option<String>,
     /// Private acknowledgement returned only by a fully successful command.
-    #[arg(long, allow_hyphen_values = true)]
+    #[arg(long)]
     success_ack: Option<String>,
 }
 
