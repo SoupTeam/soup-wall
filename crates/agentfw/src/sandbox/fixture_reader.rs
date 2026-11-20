@@ -794,6 +794,7 @@ mod linux {
     }
 
     #[tokio::test]
+    #[ignore = "requires the SOU-111 reader sandbox"]
     async fn reader_kernel_witness() {
         // Required witness: no skip-on-missing-bwrap/namespace fallback.
         let directory = tempfile::tempdir().unwrap();

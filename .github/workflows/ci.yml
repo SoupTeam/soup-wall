@@ -263,6 +263,24 @@ jobs:
           if-no-files-found: warn
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
+      - name: Require all eight SOU-111 reader witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          witnesses=(
+            native::consumer::lifecycle_tests::connected_quarantine_reader
+            native::consumer::analysis_witness::connected_analysis_fixture
+            native::consumer::analysis_witness::connected_gemini_operator_capture_fixture
+            native::consumer::analysis_witness::connected_gemini_provider_fixture
+            native::consumer::analysis_witness::connected_gemini_serial_controller_fixture
+            native::consumer::crash_witness::analysis_output_daemon_crash
+            native::consumer::crash_witness::quarantine_reader_daemon_crash
+            sandbox::fixture_reader::linux::reader_kernel_witness
+          )
+          cargo test --locked -p agentfw --lib -- --ignored --exact "${witnesses[@]}" | tee "$RUNNER_TEMP/reader-witnesses.log"
+          for witness in "${witnesses[@]}"; do
+            grep -Fx "test $witness ... ok" "$RUNNER_TEMP/reader-witnesses.log"
+          done
       - name: Retain Task 3 attack scenario results
         if: always()
         uses: actions/upload-artifact@v7

@@ -200,6 +200,7 @@ fn headers() -> HeaderMap {
 }
 
 #[tokio::test]
+#[ignore = "requires the SOU-111 reader sandbox"]
 async fn quarantine_reader_daemon_crash() {
     for after_prefix in [false, true] {
         crash_at(after_prefix, false).await;
@@ -207,6 +208,7 @@ async fn quarantine_reader_daemon_crash() {
 }
 
 #[tokio::test]
+#[ignore = "requires the SOU-111 reader sandbox"]
 async fn analysis_output_daemon_crash() {
     crash_at(true, true).await;
 }

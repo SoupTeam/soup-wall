@@ -270,6 +270,7 @@ mod lifecycle_tests {
     }
 
     #[test]
+    #[ignore = "requires the SOU-111 reader sandbox"]
     fn connected_quarantine_reader() {
         let status = std::process::Command::new(std::env::current_exe().unwrap())
             .args([
