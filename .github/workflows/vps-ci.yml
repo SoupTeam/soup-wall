@@ -63,7 +63,7 @@ jobs:
           "VPS_OUTPUT=$output" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "CARGO_TARGET_DIR=$(Join-Path $env:SOUPZERO_CI_ROOT 'cache\ecosystem\soup-wall\cargo-target')" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "UV_CACHE_DIR=$(Join-Path $env:SOUPZERO_CI_ROOT 'cache\uv')" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           version: '0.12.6'
           enable-cache: false
