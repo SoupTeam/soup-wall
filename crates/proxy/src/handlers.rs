@@ -1463,6 +1463,62 @@ fn streaming_response(
     response
 }
 
+/// Send the upstream request of a streaming call. Returns the upstream
+/// response with the status and content type to relay, or `None` when the
+/// upstream does not answer within the configured timeout.
+async fn open_upstream_stream(
+    state: &AppState,
+    builder: reqwest::RequestBuilder,
+) -> Option<(reqwest::Response, StatusCode, String)> {
+    let upstream = match timeout(state.config.upstream_timeout(), builder.send()).await {
+        Err(_) | Ok(Err(_)) => return None,
+        Ok(Ok(response)) => response,
+    };
+    let status =
+        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let content_type = upstream
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("text/event-stream")
+        .to_string();
+    Some((upstream, status, content_type))
+}
+
+/// Close the books on a stream that was relayed to its end: finish the tenant
+/// audit with the upstream status, then emit the `stream_done` audit record.
+async fn finish_completed_stream(
+    state: &Shared,
+    tenant_audit: &Option<TenantAuditContext>,
+    status: StatusCode,
+    request_id: String,
+    started: Instant,
+) {
+    finish_tenant_stream(
+        state,
+        tenant_audit,
+        if status.is_success() {
+            "completed"
+        } else {
+            "failed"
+        },
+        status.as_u16(),
+    )
+    .await;
+
+    AuditRecord {
+        request_id,
+        direction: "output".into(),
+        decision: "stream_done".into(),
+        score: 0,
+        reasons: vec![],
+        owasp: Vec::new(),
+        atlas: Vec::new(),
+        latency_ms: started.elapsed().as_millis(),
+    }
+    .emit();
+}
+
 /// Forward typed Responses SSE events verbatim while inspecting decoded text
 /// deltas and completed function-call Items. JSON is parsed only after a complete
 /// SSE frame has arrived, so UTF-8 and event boundaries may cross network chunks.
@@ -1475,20 +1531,9 @@ async fn proxy_responses_stream(
     tenant_audit: Option<TenantAuditContext>,
     usage_context: StreamUsageContext,
 ) -> Response {
-    let upstream = match timeout(state.config.upstream_timeout(), builder.send()).await {
-        Err(_) | Ok(Err(_)) => {
-            return (StatusCode::BAD_GATEWAY, Json(error_body("upstream error"))).into_response();
-        }
-        Ok(Ok(response)) => response,
+    let Some((upstream, status, content_type)) = open_upstream_stream(&state, builder).await else {
+        return (StatusCode::BAD_GATEWAY, Json(error_body("upstream error"))).into_response();
     };
-    let status =
-        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let content_type = upstream
-        .headers()
-        .get(CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("text/event-stream")
-        .to_string();
     let window = state.config.stream_window.max(16);
     let (tx, body) = bounded_body(state.config.stream_buffer_capacity());
     let task_state = state.clone();
@@ -1827,29 +1872,7 @@ async fn proxy_responses_stream(
             }
         }
 
-        finish_tenant_stream(
-            &task_state,
-            &task_audit,
-            if status.is_success() {
-                "completed"
-            } else {
-                "failed"
-            },
-            status.as_u16(),
-        )
-        .await;
-
-        AuditRecord {
-            request_id,
-            direction: "output".into(),
-            decision: "stream_done".into(),
-            score: 0,
-            reasons: vec![],
-            owasp: Vec::new(),
-            atlas: Vec::new(),
-            latency_ms: started.elapsed().as_millis(),
-        }
-        .emit();
+        finish_completed_stream(&task_state, &task_audit, status, request_id, started).await;
     });
 
     streaming_response(status, content_type, body, tenant_audit)
@@ -1880,22 +1903,9 @@ async fn proxy_stream(
     usage_context: StreamUsageContext,
     tool_context: Option<StreamToolContext>,
 ) -> Response {
-    let upstream = match timeout(state.config.upstream_timeout(), builder.send()).await {
-        Err(_) | Ok(Err(_)) => {
-            return (StatusCode::BAD_GATEWAY, Json(error_body("upstream error"))).into_response()
-        }
-        Ok(Ok(response)) => response,
+    let Some((upstream, status, content_type)) = open_upstream_stream(&state, builder).await else {
+        return (StatusCode::BAD_GATEWAY, Json(error_body("upstream error"))).into_response();
     };
-
-    let status =
-        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let content_type = upstream
-        .headers()
-        .get(CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("text/event-stream")
-        .to_string();
-
     let window = state.config.stream_window.max(16);
     let (tx, body) = bounded_body(state.config.stream_buffer_capacity());
     let task_state = state.clone();
@@ -2283,28 +2293,7 @@ async fn proxy_stream(
                 }
             }
         }
-        finish_tenant_stream(
-            &task_state,
-            &task_audit,
-            if status.is_success() {
-                "completed"
-            } else {
-                "failed"
-            },
-            status.as_u16(),
-        )
-        .await;
-        AuditRecord {
-            request_id,
-            direction: "output".into(),
-            decision: "stream_done".into(),
-            score: 0,
-            reasons: vec![],
-            owasp: Vec::new(),
-            atlas: Vec::new(),
-            latency_ms: started.elapsed().as_millis(),
-        }
-        .emit();
+        finish_completed_stream(&task_state, &task_audit, status, request_id, started).await;
     });
 
     streaming_response(status, content_type, body, tenant_audit)
