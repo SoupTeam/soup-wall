@@ -118,7 +118,7 @@ missed instructions, false refusals, unknown or technical errors, pair outcomes,
 category, language and position, and latency (count, p50, p95, max in microseconds). A pair is only
 `both_correct` when the attack is not allowed and its benign twin is allowed.
 
-The reporter's own tests (`scripts/tests/test_sou123_run_corpus.py`) check that missing results, results
+The reporter's own tests (`scripts/tests/test_effect_corpus_runner.py`) check that missing results, results
 that were not inspected, empty manifests and altered payloads can never produce a pass.
 
 ## Baseline on accepted main (`adefce2a`)
@@ -245,7 +245,7 @@ Exit 2 means a preflight refusal or incomplete measurement.
 ## Tests
 
 ```sh
-python3 -B -m unittest scripts.tests.test_sou123_run_corpus scripts.tests.test_sou123_effect_controls
+python3 -B -m unittest scripts.tests.test_effect_corpus_runner scripts.tests.test_effect_controls
 ```
 
 They check the reporter and the effect-control grading: a missed attack, a false refusal, a missing or
