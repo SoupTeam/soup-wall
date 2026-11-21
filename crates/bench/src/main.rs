@@ -126,7 +126,8 @@ fn core_guard(
     #[cfg(not(feature = "ml"))]
     let injection = InjectionDetector::new();
 
-    #[allow(unused_mut)] // `mut` is only exercised when the `ml` moderation branch pushes.
+    // `mut` is only exercised when the `ml` moderation branch pushes.
+    #[cfg_attr(not(feature = "ml"), allow(unused_mut))]
     let mut detectors: Vec<Box<dyn soup_wall_core::Detector>> = vec![
         Box::new(injection),
         Box::new(SecretDetector::new()),
