@@ -832,8 +832,6 @@ mod linux {
                 child_socket,
             )
             .unwrap();
-            // Preserve bubblewrap startup diagnostics in this synthetic kernel witness.
-            command.stderr(Stdio::inherit());
             let mut process = crate::pilot_launcher::FixtureProcess::spawn(&mut command).unwrap();
             // Command retains its Stdio configuration after spawn. Close that
             // parent copy now, otherwise EOF would not prove recipient disposal.

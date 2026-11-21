@@ -102,7 +102,7 @@ class SessionTests(unittest.TestCase):
             repo, state, session, token, cfg, config, req = self.fixture(d)
             sup = M.Supervisor(session, repo, state, "test-project",
                                M.Budget(2, int(time.time()) + 60), "synthetic-key", token)
-            proc = Mock()
+            proc = Mock(pid=12345)
             if timeout:
                 proc.wait.side_effect = M.subprocess.TimeoutExpired("offline-worker", 5)
             # Keep a reader open for the synthetic grant, as a spawned worker would.
@@ -123,6 +123,10 @@ class SessionTests(unittest.TestCase):
                 self.assertEqual(status["remaining_reserved_budget"], 1)
                 expected = "terminal_cleanup_unconfirmed" if timeout else "stopped_inspect_logs"
                 self.assertEqual(status["jobs"][0]["status"], expected)
+                self.assertEqual(sup.unconfirmed_pid, 12345 if timeout else None)
+                if timeout:
+                    with self.assertRaisesRegex(SystemExit, r"PID 12345.*revoke the API key"):
+                        M.report_session_close(sup.unconfirmed_pid)
                 with self.assertRaises(ValueError):
                     sup.dispatch(req)
             finally:

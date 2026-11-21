@@ -129,6 +129,7 @@ class Supervisor:
         self.stopping = False
         self.events = 0
         self.proc = None
+        self.unconfirmed_pid = None
 
     def event(self, value):
         self.events += 1
@@ -238,9 +239,13 @@ class Supervisor:
                     if proc is not None:
                         self.stopping = True
                         try:
+                            # The worker alone receives the grant. Its bounded sleep
+                            # helper has a cleared environment, no grant FD, and
+                            # its own process group; it exits after 60 seconds.
                             proc.kill()
                             proc.wait(timeout=5)
                         except (OSError, subprocess.TimeoutExpired):
+                            self.unconfirmed_pid = proc.pid
                             job["status"] = "terminal_cleanup_unconfirmed"
                         else:
                             self.proc = None
@@ -326,7 +331,14 @@ def serve(args):
         worker.join()
         supervisor.key = None
         sock.close()
-        print("Session closed. A new session requires personal input.", flush=True)
+        report_session_close(supervisor.unconfirmed_pid)
+
+
+def report_session_close(unconfirmed_pid):
+    if unconfirmed_pid is not None:
+        raise SystemExit(f"Worker cleanup unconfirmed (PID {unconfirmed_pid}). "
+                         "Inspect the process and revoke the API key.")
+    print("Session closed. A new session requires personal input.", flush=True)
 
 
 def main():
