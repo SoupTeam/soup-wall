@@ -596,18 +596,33 @@ pub async fn health(State(st): State<Shared>) -> Json<serde_json::Value> {
     }))
 }
 
-// Refused identity cannot silently discard retrospectively delivered content.
-fn hook_identity_refusal(
-    st: &AppState,
-    payload: &HookPayload,
-    body: &str,
-    reason: &str,
-    started: Instant,
-) -> (StatusCode, Json<serde_json::Value>) {
-    // PostToolUse already happened: a refusal cannot retract content.
-    // Preserve sticky history loss even in shadow mode and for lifecycle events.
-    mark_lossy_provenance(st, &RootJsonScan::scan(body));
-    let _ = st.audit.write(&AuditLine {
+type HookReply = (StatusCode, Json<serde_json::Value>);
+
+/// The empty reply: the host proceeds on its own decision.
+fn pass_reply() -> HookReply {
+    (StatusCode::OK, Json(serde_json::json!({})))
+}
+
+/// An enforced `deny` decision for a PreToolUse the daemon refuses.
+fn deny_reply(reason: &str) -> HookReply {
+    let out = decision::Decision {
+        permission_decision: "deny",
+        reason: Some(reason.into()),
+        shadow: false,
+        would_have_been: Verdict::Deny,
+    }
+    .to_hook_output();
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(out).unwrap_or_default()),
+    )
+}
+
+/// The audit line for a hook request that is settled before policy inspection
+/// runs: an enforced deny with no rule, findings, taint, judge or approval.
+/// Callers override the fields that differ for their case.
+fn uninspected_audit_line(payload: &HookPayload, started: Instant) -> AuditLine {
+    AuditLine {
         at_ms: now_ms(),
         session: payload.session_id.clone(),
         agent_id: payload.agent_id.clone(),
@@ -616,8 +631,8 @@ fn hook_identity_refusal(
         event: payload.event.as_str().into(),
         tool: payload.tool_name.clone(),
         verdict: "deny".into(),
-        shadow: !st.config.enforce,
-        rule: Some(reason.into()),
+        shadow: false,
+        rule: None,
         risk_score: 0,
         findings: vec![],
         taint: None,
@@ -627,21 +642,347 @@ fn hook_identity_refusal(
         latency_us: started.elapsed().as_micros(),
         truncated: false,
         raw: None,
+    }
+}
+
+// Refused identity cannot silently discard retrospectively delivered content.
+fn hook_identity_refusal(
+    st: &AppState,
+    payload: &HookPayload,
+    body: &str,
+    reason: &str,
+    started: Instant,
+) -> HookReply {
+    // PostToolUse already happened: a refusal cannot retract content.
+    // Preserve sticky history loss even in shadow mode and for lifecycle events.
+    mark_lossy_provenance(st, &RootJsonScan::scan(body));
+    let _ = st.audit.write(&AuditLine {
+        shadow: !st.config.enforce,
+        rule: Some(reason.into()),
+        ..uninspected_audit_line(payload, started)
     });
     if payload.event == HookEvent::PreToolUse && st.config.enforce {
-        let out = decision::Decision {
-            permission_decision: "deny",
-            reason: Some(reason.into()),
-            shadow: false,
-            would_have_been: Verdict::Deny,
-        }
-        .to_hook_output();
-        return (
-            StatusCode::OK,
-            Json(serde_json::to_value(out).unwrap_or_default()),
-        );
+        return deny_reply(reason);
     }
-    (StatusCode::OK, Json(serde_json::json!({})))
+    pass_reply()
+}
+
+/// Read the request body within `max_body_bytes`. A body that cannot be read
+/// in full is never inspected: enforce mode denies it unless the readable
+/// prefix proves the event is not a PreToolUse.
+async fn read_hook_body(st: &AppState, body: axum::body::Body) -> Result<String, HookReply> {
+    let err = match read_bounded_string(body, st.config.max_body_bytes).await {
+        Ok(s) => return Ok(s),
+        Err(err) => err,
+    };
+    let (prefix, reason_msg) = match err {
+        BodyReadError::Oversized { prefix, total_len } => {
+            tracing::warn!(
+                len = total_len,
+                "hook body over cap; proceeding without inspection"
+            );
+            (prefix, "hook body exceeds configured max_body_bytes")
+        }
+        BodyReadError::Io { prefix, error } => {
+            tracing::warn!(error = %error, "hook body stream error");
+            (prefix, "hook body stream read error; refused by policy")
+        }
+        BodyReadError::InvalidUtf8 { prefix } => {
+            tracing::warn!("hook body contains invalid UTF-8");
+            (prefix, "invalid UTF-8 in hook body; refused by policy")
+        }
+    };
+    let lossy_prefix = String::from_utf8_lossy(&prefix);
+    let scan = RootJsonScan::scan(&lossy_prefix);
+    mark_lossy_provenance(st, &scan);
+    let is_proven_non_pre = scan.is_proven_non_pre() && scan.closed_object;
+    if st.config.enforce && !is_proven_non_pre {
+        return Err(deny_reply(reason_msg));
+    }
+    Err(pass_reply())
+}
+
+/// Parse the hook payload. An unparsable body is denied in enforce mode only
+/// when it may be a PreToolUse that names a protected tool.
+fn parse_hook_payload(st: &AppState, body: &str) -> Result<HookPayload, HookReply> {
+    let e = match serde_json::from_str(body) {
+        Ok(p) => return Ok(p),
+        Err(e) => e,
+    };
+    tracing::warn!(error = %e, "unparsable hook payload; proceeding");
+    let scan = RootJsonScan::scan(body);
+    mark_lossy_provenance(st, &scan);
+    let is_proven_non_pre = scan.is_proven_non_pre() && scan.closed_object;
+    let has_protected_tool = scan.has_protected_tool(body);
+    if st.config.enforce && (!is_proven_non_pre && has_protected_tool) {
+        return Err(deny_reply("unparsable hook payload; refused by policy"));
+    }
+    Err(pass_reply())
+}
+
+/// The tool call a PreToolUse asks about. Other events carry none.
+fn pre_tool_call(payload: &HookPayload) -> Option<(&str, &serde_json::Value)> {
+    (payload.event == HookEvent::PreToolUse).then(|| {
+        (
+            payload.tool_name.as_deref().unwrap_or(""),
+            &payload.tool_input,
+        )
+    })
+}
+
+/// Resolve who the hook speaks for: `(agent, parent, provenance server)`.
+///
+/// A shared hook bearer authenticates the transport, not an agent/parent.
+/// Scoped hooks must present the exact signed grant of an active collector.
+fn claimed_hook_identity(
+    st: &AppState,
+    payload: &HookPayload,
+    proof: Option<&str>,
+) -> Result<(String, Option<String>, Option<String>), &'static str> {
+    match &st.native {
+        Some(native) => native.resolve_hook_identity(
+            &payload.session_id,
+            payload.agent_id.as_deref(),
+            payload.parent_id.as_deref(),
+            proof,
+            pre_tool_call(payload),
+        ),
+        None if proof.is_some() || payload.agent_id.is_some() || payload.parent_id.is_some() => {
+            Err("native_hook_identity_unsupported")
+        }
+        None => Ok((
+            payload.agent_id.clone().unwrap_or_else(|| "main".into()),
+            None,
+            None,
+        )),
+    }
+}
+
+/// Tools whose PreToolUse is never treated as protected.
+const READ_ONLY_TOOLS: &[&str] = &[
+    "Read",
+    "Grep",
+    "Glob",
+    "NotebookRead",
+    "TodoRead",
+    "WebFetch",
+    "WebSearch",
+];
+
+/// How a payload names its tool: `(is_read_only, is_supported_pre)`.
+/// A PreToolUse is supported when it names a tool, and a `Bash` call also
+/// carries a string `command`.
+fn tool_shape(payload: &HookPayload) -> (bool, bool) {
+    let tool_opt = payload
+        .tool_name
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let is_read_only = tool_opt.is_some_and(|tool| READ_ONLY_TOOLS.contains(&tool));
+    let valid_bash_command = tool_opt == Some("Bash")
+        && payload
+            .tool_input
+            .as_object()
+            .and_then(|obj| obj.get("command"))
+            .and_then(|c| c.as_str())
+            .is_some();
+    let is_supported_pre =
+        is_read_only || valid_bash_command || (tool_opt.is_some() && tool_opt != Some("Bash"));
+    (is_read_only, is_supported_pre)
+}
+
+/// A PreToolUse with no tool name, or a `Bash` call without a command.
+fn unsupported_shape_reply(
+    st: &AppState,
+    payload: &HookPayload,
+    started: Instant,
+    body: String,
+) -> HookReply {
+    tracing::warn!(
+        session = %payload.session_id,
+        tool = ?payload.tool_name,
+        "unsupported or malformed PreToolUse shape"
+    );
+    if st.config.enforce {
+        let _ = st.audit.write(&AuditLine {
+            rule: Some("unsupported-pre-tool-use-shape".into()),
+            raw: st.config.capture_unknown_raw.then_some(body),
+            ..uninspected_audit_line(payload, started)
+        });
+        return deny_reply("unsupported PreToolUse shape; refused by policy");
+    }
+    pass_reply()
+}
+
+/// A payload whose `session_id` is empty: taint cannot be keyed by it.
+fn missing_session_reply(
+    st: &AppState,
+    payload: &HookPayload,
+    is_protected: bool,
+    started: Instant,
+    body: String,
+) -> HookReply {
+    tracing::warn!("hook payload missing or empty session_id");
+    if st.config.enforce && is_protected {
+        let _ = st.audit.write(&AuditLine {
+            session: String::new(),
+            rule: Some("invalid-session".into()),
+            raw: st.config.capture_unknown_raw.then_some(body),
+            ..uninspected_audit_line(payload, started)
+        });
+        return deny_reply("protected PreToolUse missing valid session_id");
+    }
+    pass_reply()
+}
+
+/// An event kind this build does not know about, or a session id too degenerate
+/// to key taint by (see `map::to_event`): proceed without blocking unless it is
+/// a protected PreToolUse in enforce mode. Raw bodies are omitted unless the
+/// operator explicitly opted into sensitive forensic capture.
+fn unrecognized_event_reply(
+    st: &AppState,
+    payload: &HookPayload,
+    seq: u64,
+    is_protected: bool,
+    started: Instant,
+    body: String,
+) -> HookReply {
+    tracing::warn!(session = %payload.session_id, "unrecognized hook event");
+    {
+        let mut fw = st.firewall.lock().expect("firewall mutex");
+        fw.mark_provenance_incomplete(&payload.session_id);
+    }
+    if st.config.enforce && is_protected {
+        let _ = st.audit.write(&AuditLine {
+            seq,
+            event: "unknown".into(),
+            rule: Some("unrecognized-protected-event".into()),
+            raw: st.config.capture_unknown_raw.then_some(body),
+            ..uninspected_audit_line(payload, started)
+        });
+        return deny_reply("unrecognized protected hook event; refused by policy");
+    }
+    let _ = st.audit.write(&AuditLine {
+        seq,
+        event: "unknown".into(),
+        verdict: "allow".into(),
+        shadow: !st.config.enforce,
+        raw: st.config.capture_unknown_raw.then_some(body),
+        ..uninspected_audit_line(payload, started)
+    });
+    pass_reply()
+}
+
+/// Take the native hook-authority lock and re-check the claimed identity under
+/// it. On refusal the lock is released before the caller reports the reason.
+fn lock_resolved_authority<'a>(
+    st: &'a AppState,
+    payload: &HookPayload,
+    claimed_agent: Option<&str>,
+    claimed_parent: Option<&str>,
+    proof: Option<&str>,
+) -> Result<Option<crate::native::HookAuthorityGuard<'a>>, &'static str> {
+    let authority = st
+        .native
+        .as_ref()
+        .map(|n| n.lock_hook_authority())
+        .transpose()?;
+    if let Some(guard) = &authority {
+        guard.resolve(
+            &payload.session_id,
+            claimed_agent,
+            claimed_parent,
+            proof,
+            pre_tool_call(payload),
+        )?;
+    }
+    Ok(authority)
+}
+
+/// Resolve `Escalate` into a concrete verdict via the judge. Also returns what
+/// the model said, for the audit log, so a verdict landing on `Ask` (or not)
+/// is explainable after the fact.
+///
+/// The judge sees the tainted CONTENT and its source — never the tool call.
+/// Following documentation is ordinary work; judge the content's intent.
+async fn judge_escalation(
+    st: &AppState,
+    session_id: &str,
+    outcome: &Outcome,
+) -> (Verdict, Option<String>) {
+    let (span, source) = match &outcome.taint {
+        Some(t) => (
+            st.spans.get(session_id, t.seq).unwrap_or_default(),
+            t.source.label(),
+        ),
+        None => (String::new(), "unknown".to_string()),
+    };
+    if span.trim().is_empty() {
+        // No retained content means nothing to judge — take the fallback rather
+        // than asking the model about an empty string.
+        let verdict = resolve_escalation(
+            Judgement::Unavailable("no retained span".into()),
+            outcome.fallback,
+        );
+        return (verdict, Some("Unavailable(\"no retained span\")".into()));
+    }
+    let j = st.judge.judge(&span, &source).await;
+    let judged = Some(format!("{j:?}"));
+    (resolve_escalation(j, outcome.fallback), judged)
+}
+
+/// Redeem a human approval, if the operator issued one for exactly this call,
+/// and return its nonce.
+fn redeem_human_approval(st: &AppState, payload: &HookPayload) -> Option<String> {
+    let tool = payload.tool_name.as_ref()?;
+    let action = crate::grant::ActionRef {
+        session: payload.session_id.clone(),
+        tool: tool.clone(),
+        args_fingerprint: crate::grant::action_fingerprint(tool, &payload.tool_input),
+    };
+    let grant = crate::grant::redeem_pending(
+        &st.grant_key,
+        &st.grants,
+        &st.grant_ledger,
+        &action,
+        now_ms(),
+        |grant, error| {
+            tracing::warn!(
+                nonce = %grant.nonce,
+                reason = error.reason(),
+                "a pending approval matched this action but was refused"
+            );
+        },
+    )?;
+    tracing::info!(
+        nonce = %grant.nonce,
+        tool = %tool,
+        "a human approval authorized this call"
+    );
+    Some(grant.nonce.clone())
+}
+
+fn audit_findings(outcome: &Outcome) -> Vec<AuditFinding> {
+    outcome
+        .findings
+        .iter()
+        .map(|(_, f)| AuditFinding {
+            detector: f.detector.clone(),
+            severity: format!("{:?}", f.severity).to_lowercase(),
+            owasp: f.owasp.clone(),
+            atlas: f.atlas.clone(),
+        })
+        .collect()
+}
+
+fn audit_taint(outcome: &Outcome) -> Option<AuditTaint> {
+    outcome.taint.as_ref().map(|t| AuditTaint {
+        source: t.source.label(),
+        origin: t.source.kind().to_string(),
+        source_name: t.source.source_name().map(str::to_string),
+        trust: format!("{:?}", t.source.trust()).to_lowercase(),
+        seq: t.seq,
+    })
 }
 
 /// Inspect authenticated hook traffic; unsupported protected requests receive an explicit disposition.
@@ -659,104 +1000,24 @@ pub async fn hook(
         return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({})));
     }
 
-    let body = match read_bounded_string(body, st.config.max_body_bytes).await {
-        Ok(s) => s,
-        Err(err) => {
-            let (prefix, reason_msg) = match err {
-                BodyReadError::Oversized { prefix, total_len } => {
-                    tracing::warn!(
-                        len = total_len,
-                        "hook body over cap; proceeding without inspection"
-                    );
-                    (prefix, "hook body exceeds configured max_body_bytes")
-                }
-                BodyReadError::Io { prefix, error } => {
-                    tracing::warn!(error = %error, "hook body stream error");
-                    (prefix, "hook body stream read error; refused by policy")
-                }
-                BodyReadError::InvalidUtf8 { prefix } => {
-                    tracing::warn!("hook body contains invalid UTF-8");
-                    (prefix, "invalid UTF-8 in hook body; refused by policy")
-                }
-            };
-            let lossy_prefix = String::from_utf8_lossy(&prefix);
-            let scan = RootJsonScan::scan(&lossy_prefix);
-            mark_lossy_provenance(&st, &scan);
-            let is_proven_non_pre = scan.is_proven_non_pre() && scan.closed_object;
-            if st.config.enforce && !is_proven_non_pre {
-                let out = decision::Decision {
-                    permission_decision: "deny",
-                    reason: Some(reason_msg.into()),
-                    shadow: false,
-                    would_have_been: Verdict::Deny,
-                }
-                .to_hook_output();
-                return (
-                    StatusCode::OK,
-                    Json(serde_json::to_value(out).unwrap_or_default()),
-                );
-            }
-            return (StatusCode::OK, Json(serde_json::json!({})));
-        }
+    let body = match read_hook_body(&st, body).await {
+        Ok(body) => body,
+        Err(reply) => return reply,
     };
 
     let started = Instant::now();
 
-    let mut payload: HookPayload = match serde_json::from_str(&body) {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::warn!(error = %e, "unparsable hook payload; proceeding");
-            let scan = RootJsonScan::scan(&body);
-            mark_lossy_provenance(&st, &scan);
-            let is_proven_non_pre = scan.is_proven_non_pre() && scan.closed_object;
-            let has_protected_tool = scan.has_protected_tool(&body);
-            if st.config.enforce && (!is_proven_non_pre && has_protected_tool) {
-                let out = decision::Decision {
-                    permission_decision: "deny",
-                    reason: Some("unparsable hook payload; refused by policy".into()),
-                    shadow: false,
-                    would_have_been: Verdict::Deny,
-                }
-                .to_hook_output();
-                return (
-                    StatusCode::OK,
-                    Json(serde_json::to_value(out).unwrap_or_default()),
-                );
-            }
-            return (StatusCode::OK, Json(serde_json::json!({})));
-        }
+    let mut payload = match parse_hook_payload(&st, &body) {
+        Ok(payload) => payload,
+        Err(reply) => return reply,
     };
 
     let claimed_agent = payload.agent_id.clone();
     let claimed_parent = payload.parent_id.clone();
-    // A shared hook bearer authenticates the transport, not an agent/parent.
-    // Scoped hooks must present the exact signed grant of an active collector.
     let proof = headers
         .get("x-agentfw-child-authority")
         .map(|h| h.to_str().unwrap_or(""));
-    let identity = match &st.native {
-        Some(native) => native.resolve_hook_identity(
-            &payload.session_id,
-            payload.agent_id.as_deref(),
-            payload.parent_id.as_deref(),
-            proof,
-            (payload.event == HookEvent::PreToolUse).then(|| {
-                (
-                    payload.tool_name.as_deref().unwrap_or(""),
-                    &payload.tool_input,
-                )
-            }),
-        ),
-        None if proof.is_some() || payload.agent_id.is_some() || payload.parent_id.is_some() => {
-            Err("native_hook_identity_unsupported")
-        }
-        None => Ok((
-            payload.agent_id.clone().unwrap_or_else(|| "main".into()),
-            None,
-            None,
-        )),
-    };
-    let provenance_server = match identity {
+    let provenance_server = match claimed_hook_identity(&st, &payload, proof) {
         Ok((agent, parent, server)) => {
             payload.agent_id = Some(agent);
             payload.parent_id = parent;
@@ -766,183 +1027,20 @@ pub async fn hook(
     };
 
     let is_pre = payload.event == HookEvent::PreToolUse;
-    let tool_opt = payload
-        .tool_name
-        .as_deref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty());
-    let is_read_only = tool_opt.is_some_and(|tool| {
-        const READ_ONLY: &[&str] = &[
-            "Read",
-            "Grep",
-            "Glob",
-            "NotebookRead",
-            "TodoRead",
-            "WebFetch",
-            "WebSearch",
-        ];
-        READ_ONLY.contains(&tool)
-    });
-    let valid_bash_command = tool_opt == Some("Bash")
-        && payload
-            .tool_input
-            .as_object()
-            .and_then(|obj| obj.get("command"))
-            .and_then(|c| c.as_str())
-            .is_some();
-    let is_supported_pre =
-        is_read_only || valid_bash_command || (tool_opt.is_some() && tool_opt != Some("Bash"));
-
+    let (is_read_only, is_supported_pre) = tool_shape(&payload);
     if is_pre && !is_supported_pre {
-        tracing::warn!(
-            session = %payload.session_id,
-            tool = ?payload.tool_name,
-            "unsupported or malformed PreToolUse shape"
-        );
-        if st.config.enforce {
-            let out = decision::Decision {
-                permission_decision: "deny",
-                reason: Some("unsupported PreToolUse shape; refused by policy".into()),
-                shadow: false,
-                would_have_been: Verdict::Deny,
-            }
-            .to_hook_output();
-            let _ = st.audit.write(&AuditLine {
-                at_ms: now_ms(),
-                session: payload.session_id.clone(),
-                agent_id: payload.agent_id.clone(),
-                parent_id: payload.parent_id.clone(),
-                seq: 0,
-                event: payload.event.as_str().to_string(),
-                tool: payload.tool_name.clone(),
-                verdict: "deny".into(),
-                shadow: false,
-                rule: Some("unsupported-pre-tool-use-shape".into()),
-                risk_score: 0,
-                findings: vec![],
-                taint: None,
-                judge: None,
-                approval: None,
-                egress_hosts: vec![],
-                latency_us: started.elapsed().as_micros(),
-                truncated: false,
-                raw: st.config.capture_unknown_raw.then_some(body),
-            });
-            return (
-                StatusCode::OK,
-                Json(serde_json::to_value(out).unwrap_or_default()),
-            );
-        }
-        return (StatusCode::OK, Json(serde_json::json!({})));
+        return unsupported_shape_reply(&st, &payload, started, body);
     }
 
     let is_protected = is_pre && !is_read_only;
 
     if payload.session_id.is_empty() {
-        tracing::warn!("hook payload missing or empty session_id");
-        if st.config.enforce && is_protected {
-            let out = decision::Decision {
-                permission_decision: "deny",
-                reason: Some("protected PreToolUse missing valid session_id".into()),
-                shadow: false,
-                would_have_been: Verdict::Deny,
-            }
-            .to_hook_output();
-            let _ = st.audit.write(&AuditLine {
-                at_ms: now_ms(),
-                session: String::new(),
-                agent_id: payload.agent_id.clone(),
-                parent_id: payload.parent_id.clone(),
-                seq: 0,
-                event: payload.event.as_str().to_string(),
-                tool: payload.tool_name.clone(),
-                verdict: "deny".into(),
-                shadow: false,
-                rule: Some("invalid-session".into()),
-                risk_score: 0,
-                findings: vec![],
-                taint: None,
-                judge: None,
-                approval: None,
-                egress_hosts: vec![],
-                latency_us: started.elapsed().as_micros(),
-                truncated: false,
-                raw: st.config.capture_unknown_raw.then_some(body),
-            });
-            return (
-                StatusCode::OK,
-                Json(serde_json::to_value(out).unwrap_or_default()),
-            );
-        }
-        return (StatusCode::OK, Json(serde_json::json!({})));
+        return missing_session_reply(&st, &payload, is_protected, started, body);
     }
 
-    // An event kind this build does not know about, or a session id too degenerate
-    // to key taint by (see `map::to_event`): proceed without blocking. Raw bodies
-    // are omitted unless the operator explicitly opted into sensitive forensic capture.
     let seq = st.sessions.next(&payload.session_id);
     let Some(mapped) = map::to_event(&payload, seq, now_ms(), st.config.max_record_bytes) else {
-        tracing::warn!(session = %payload.session_id, "unrecognized hook event");
-        {
-            let mut fw = st.firewall.lock().expect("firewall mutex");
-            fw.mark_provenance_incomplete(&payload.session_id);
-        }
-        if st.config.enforce && is_protected {
-            let out = decision::Decision {
-                permission_decision: "deny",
-                reason: Some("unrecognized protected hook event; refused by policy".into()),
-                shadow: false,
-                would_have_been: Verdict::Deny,
-            }
-            .to_hook_output();
-            let _ = st.audit.write(&AuditLine {
-                at_ms: now_ms(),
-                session: payload.session_id.clone(),
-                agent_id: payload.agent_id.clone(),
-                parent_id: payload.parent_id.clone(),
-                seq,
-                event: "unknown".into(),
-                tool: payload.tool_name.clone(),
-                verdict: "deny".into(),
-                shadow: false,
-                rule: Some("unrecognized-protected-event".into()),
-                risk_score: 0,
-                findings: vec![],
-                taint: None,
-                judge: None,
-                approval: None,
-                egress_hosts: vec![],
-                latency_us: started.elapsed().as_micros(),
-                truncated: false,
-                raw: st.config.capture_unknown_raw.then_some(body),
-            });
-            return (
-                StatusCode::OK,
-                Json(serde_json::to_value(out).unwrap_or_default()),
-            );
-        }
-        let _ = st.audit.write(&AuditLine {
-            at_ms: now_ms(),
-            session: payload.session_id.clone(),
-            agent_id: payload.agent_id.clone(),
-            parent_id: payload.parent_id.clone(),
-            seq,
-            event: "unknown".into(),
-            tool: payload.tool_name.clone(),
-            verdict: "allow".into(),
-            shadow: !st.config.enforce,
-            rule: None,
-            risk_score: 0,
-            findings: vec![],
-            taint: None,
-            judge: None,
-            approval: None,
-            egress_hosts: vec![],
-            latency_us: started.elapsed().as_micros(),
-            truncated: false,
-            raw: st.config.capture_unknown_raw.then_some(body),
-        });
-        return (StatusCode::OK, Json(serde_json::json!({})));
+        return unrecognized_event_reply(&st, &payload, seq, is_protected, started, body);
     };
     let mut event = mapped.event;
     if let (Some(server), EventKind::ToolResult { source, .. }) =
@@ -954,8 +1052,6 @@ pub async fn hook(
         let mut fw = st.firewall.lock().expect("firewall mutex");
         fw.mark_provenance_incomplete(&payload.session_id);
     }
-
-    let is_pre = payload.event == HookEvent::PreToolUse;
 
     // Retain untrusted content by the same sequence number the taint tracker
     // will fingerprint it under, so a later `Escalate` has something to hand the
@@ -981,32 +1077,16 @@ pub async fn hook(
     // the call. Scoped in its own block so the `std::sync::Mutex` guard is dropped
     // before the function's first `.await` — nothing here awaits while it is held.
     let (outcome, inspected_deployment) = {
-        let authority = match st
-            .native
-            .as_ref()
-            .map(|n| n.lock_hook_authority())
-            .transpose()
-        {
+        let authority = match lock_resolved_authority(
+            &st,
+            &payload,
+            claimed_agent.as_deref(),
+            claimed_parent.as_deref(),
+            proof,
+        ) {
             Ok(guard) => guard,
             Err(reason) => return hook_identity_refusal(&st, &payload, &body, reason, started),
         };
-        if let Some(guard) = &authority {
-            if let Err(reason) = guard.resolve(
-                &payload.session_id,
-                claimed_agent.as_deref(),
-                claimed_parent.as_deref(),
-                proof,
-                is_pre.then(|| {
-                    (
-                        payload.tool_name.as_deref().unwrap_or(""),
-                        &payload.tool_input,
-                    )
-                }),
-            ) {
-                drop(authority);
-                return hook_identity_refusal(&st, &payload, &body, reason, started);
-            }
-        }
         let has_active_bound_children = authority
             .as_ref()
             .is_some_and(|g| g.has_host(&payload.session_id));
@@ -1028,65 +1108,27 @@ pub async fn hook(
 
     // Resolve `Escalate` into a concrete verdict via the judge before deciding. The
     // `std::sync::Mutex` guard above is already dropped (scoped block), so the judge's
-    // `.await` never holds a lock. `judged` records what the model said for the audit
-    // log, so a verdict landing on `Ask` (or not) is explainable after the fact.
+    // `.await` never holds a lock.
     let mut verdict = outcome.verdict;
     let mut judged: Option<String> = None;
     if verdict == Verdict::Escalate {
-        // The judge sees the tainted CONTENT and its source — never the tool call.
-        // Following documentation is ordinary work; judge the content's intent.
-        let (span, source) = match &outcome.taint {
-            Some(t) => (
-                st.spans.get(&payload.session_id, t.seq).unwrap_or_default(),
-                t.source.label(),
-            ),
-            None => (String::new(), "unknown".to_string()),
-        };
-        if span.trim().is_empty() {
-            // No retained content means nothing to judge — take the fallback rather
-            // than asking the model about an empty string.
-            verdict = resolve_escalation(
-                Judgement::Unavailable("no retained span".into()),
-                outcome.fallback,
-            );
-            judged = Some("Unavailable(\"no retained span\")".into());
-        } else {
-            let j = st.judge.judge(&span, &source).await;
-            judged = Some(format!("{j:?}"));
-            verdict = resolve_escalation(j, outcome.fallback);
-        }
+        (verdict, judged) = judge_escalation(&st, &payload.session_id, &outcome).await;
     }
 
     // The judge may have awaited while managed policy activation acquired the
     // firewall mutex. Recheck the authoritative live deployment and serialize
     // approval redemption + final decision against activation; never emit an
     // old-policy Allow after a concurrent switch. No await is held under lock.
-    let final_authority = match st
-        .native
-        .as_ref()
-        .map(|n| n.lock_hook_authority())
-        .transpose()
-    {
+    let _final_authority = match lock_resolved_authority(
+        &st,
+        &payload,
+        claimed_agent.as_deref(),
+        claimed_parent.as_deref(),
+        proof,
+    ) {
         Ok(guard) => guard,
         Err(reason) => return hook_identity_refusal(&st, &payload, &body, reason, started),
     };
-    if let Some(guard) = &final_authority {
-        if let Err(reason) = guard.resolve(
-            &payload.session_id,
-            claimed_agent.as_deref(),
-            claimed_parent.as_deref(),
-            proof,
-            is_pre.then(|| {
-                (
-                    payload.tool_name.as_deref().unwrap_or(""),
-                    &payload.tool_input,
-                )
-            }),
-        ) {
-            drop(final_authority);
-            return hook_identity_refusal(&st, &payload, &body, reason, started);
-        }
-    }
     let _final_policy_guard = st.firewall.lock().expect("firewall mutex");
     let changed_while_in_flight = is_pre
         && _final_policy_guard
@@ -1105,40 +1147,13 @@ pub async fn hook(
         tracing::warn!("refused in-flight old-policy pre-tool decision after managed activation");
     }
 
-    // A human approval, if the operator issued one for exactly this call. Only
-    // `Ask` is redeemable: `Deny` is a policy refusal, and letting an approval
+    // Only `Ask` is redeemable: `Deny` is a policy refusal, and letting an approval
     // override it would turn every deny into a prompt an attacker can wait out.
     let mut approval = None;
     if is_pre && verdict == Verdict::Ask {
-        if let Some(tool) = &payload.tool_name {
-            let action = crate::grant::ActionRef {
-                session: payload.session_id.clone(),
-                tool: tool.clone(),
-                args_fingerprint: crate::grant::action_fingerprint(tool, &payload.tool_input),
-            };
-            let redeemed = crate::grant::redeem_pending(
-                &st.grant_key,
-                &st.grants,
-                &st.grant_ledger,
-                &action,
-                now_ms(),
-                |grant, error| {
-                    tracing::warn!(
-                        nonce = %grant.nonce,
-                        reason = error.reason(),
-                        "a pending approval matched this action but was refused"
-                    );
-                },
-            );
-            if let Some(grant) = redeemed {
-                tracing::info!(
-                    nonce = %grant.nonce,
-                    tool = %tool,
-                    "a human approval authorized this call"
-                );
-                approval = Some(grant.nonce.clone());
-                verdict = Verdict::Allow;
-            }
+        approval = redeem_human_approval(&st, &payload);
+        if approval.is_some() {
+            verdict = Verdict::Allow;
         }
     }
 
@@ -1161,23 +1176,8 @@ pub async fn hook(
         shadow: d.shadow,
         rule: decision_rule.clone(),
         risk_score: outcome.risk_score,
-        findings: outcome
-            .findings
-            .iter()
-            .map(|(_, f)| AuditFinding {
-                detector: f.detector.clone(),
-                severity: format!("{:?}", f.severity).to_lowercase(),
-                owasp: f.owasp.clone(),
-                atlas: f.atlas.clone(),
-            })
-            .collect(),
-        taint: outcome.taint.as_ref().map(|t| AuditTaint {
-            source: t.source.label(),
-            origin: t.source.kind().to_string(),
-            source_name: t.source.source_name().map(str::to_string),
-            trust: format!("{:?}", t.source.trust()).to_lowercase(),
-            seq: t.seq,
-        }),
+        findings: audit_findings(&outcome),
+        taint: audit_taint(&outcome),
         judge: judged,
         approval: approval.clone(),
         egress_hosts: outcome.egress_hosts.clone(),
