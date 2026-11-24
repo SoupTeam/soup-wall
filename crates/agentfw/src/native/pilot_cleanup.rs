@@ -154,3 +154,16 @@ pub async fn handler(
 fn owner_matches(request: &Request, epoch: &str, owner: &str) -> bool {
     request.epoch == epoch && bool::from(request.owner_token.as_bytes().ct_eq(owner.as_bytes()))
 }
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn unconfirmed_consumer_fixture(host: &str, server: &str) -> Record {
+    Record {
+        session: host.into(),
+        epoch: "fixture-epoch".into(),
+        owner: "fixture-owner".into(),
+        host_session: host.into(),
+        server_id: server.into(),
+        verified: false,
+        expires_at_ms: super::now_ms() + 180_000,
+    }
+}
