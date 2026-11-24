@@ -2,6 +2,7 @@
 //! Daemon-owned original-runtime custody. Wire metadata is descriptive only.
 //! The affine result below has no Deserialize/Clone or public constructor.
 
+use crate::hashing::sha256_hex;
 use std::collections::BTreeSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -168,7 +169,7 @@ impl Service {
         );
         let bytes = operator_bytes(&config.catalogue_path, 131072)?;
         ensure!(
-            super::hash(&bytes) == config.catalogue_sha256,
+            sha256_hex(&bytes) == config.catalogue_sha256,
             "verified_execution_catalogue_changed"
         );
         let crate::mcp::admission::Strict(value) = serde_json::from_slice(&bytes)?;
@@ -372,7 +373,7 @@ impl SessionContext {
             epoch: session_state.epoch.clone(),
             call_id: call_id.into(),
             binding: binding.into(),
-            request_sha256: super::hash(raw),
+            request_sha256: sha256_hex(raw),
             formatter_args: (call.tool == "read_multiple_files")
                 .then(|| request["params"]["arguments"].clone()),
             host_id: call.host_call_id.clone().expect("checked host ID"),
@@ -465,7 +466,7 @@ impl Consumed {
         if blocks != 2
             || block >= 2
             || text.len() != attribution.complete_text_bytes
-            || super::hash(text.as_bytes()) != attribution.text_sha256
+            || sha256_hex(text.as_bytes()) != attribution.text_sha256
         {
             return None;
         }
@@ -527,7 +528,7 @@ impl Dispatch {
                     .and_then(|raw| formatter::derive(args, raw))
             }),
             dispatch: self,
-            result_sha256: super::hash(bytes),
+            result_sha256: sha256_hex(bytes),
             result_bytes: bytes.len(),
         })
     }
@@ -543,8 +544,8 @@ impl OriginalResult {
             catalogue_sha256: d.context.catalogue.clone(),
             closure_sha256: d.context.runtime.digest().into(),
             process_generation_sha256: super::canonical_digest(&process.identity),
-            channel_generation_sha256: super::hash(d.context.channel.as_bytes()),
-            session_epoch_sha256: super::hash(d.epoch.as_bytes()),
+            channel_generation_sha256: sha256_hex(d.context.channel.as_bytes()),
+            session_epoch_sha256: sha256_hex(d.epoch.as_bytes()),
             native_call_id: d.call_id.clone(),
             invocation_sha256: d.request_sha256.clone(),
             original_result_sha256: self.result_sha256.clone(),
@@ -593,7 +594,7 @@ impl OriginalResult {
             || d.deadline != call.expires
             || now >= d.deadline
             || call.host_call_id.as_ref() != Some(&d.host_id)
-            || super::hash(content.as_bytes()) != self.result_sha256
+            || sha256_hex(content.as_bytes()) != self.result_sha256
             || content.len() != self.result_bytes
         {
             return Err("verified_execution_result_mismatch");

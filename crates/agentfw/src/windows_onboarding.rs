@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::hashing::sha256_hex;
 use anyhow::{ensure, Context, Result};
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -85,10 +85,6 @@ pub struct Preview {
     pub elapsed_ms: u128,
 }
 
-fn sha(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
-
 fn fresh(path: &Path) -> Result<()> {
     let _pin = connection::parent(path)?;
     match std::fs::symlink_metadata(path) {
@@ -122,14 +118,14 @@ fn asset(path: &Path, expected: &str, executable: bool) -> Result<(Vec<u8>, conn
         },
     )?;
     ensure!(
-        sha(&selected.0) == expected,
+        sha256_hex(&selected.0) == expected,
         "selected asset digest mismatch"
     );
     Ok(selected)
 }
 
 fn confirmation(selection: &Selection, identities: &Value) -> Result<String> {
-    Ok(sha(&serde_json::to_vec(&json!({
+    Ok(sha256_hex(&serde_json::to_vec(&json!({
         "schema_version": "sw-windows-onboarding-preview/1",
         "selection": selection,
         "identities": identities,
@@ -245,8 +241,8 @@ async fn preview_selected(selection: &Selection) -> Result<Preview> {
         "classifier_sha256": selection.classifier_sha256,
         "registry_sha256": selection.registry_sha256,
         "policy_source_sha256": selection.policy_sha256,
-        "policy_runtime_sha256": sha(&serde_json::to_vec(&policy)?),
-        "host_config_sha256": sha(&host_before.0),
+        "policy_runtime_sha256": sha256_hex(&serde_json::to_vec(&policy)?),
+        "host_config_sha256": sha256_hex(&host_before.0),
         "host_file_identity": host_before.1,
         "selected_entry_sha256": connection_report["selected_sha256"],
     });

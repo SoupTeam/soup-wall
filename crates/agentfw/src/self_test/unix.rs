@@ -6,6 +6,7 @@
 //! environment whose HOME is the owned workspace, so the operator's active
 //! Agent, settings, services and audit files are never read or changed.
 
+use crate::hashing::sha256_hex;
 use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -21,7 +22,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
-use super::fixture::{self, sha256};
+use super::fixture;
 use super::{base_report, overall, pending_scenarios, render_human, Args, Scenario, Status};
 
 static INTERRUPTED: AtomicBool = AtomicBool::new(false);
@@ -553,7 +554,7 @@ fn validate(args: &Args) -> Result<Assets, Vec<String>> {
         Some(path) => {
             match read_limited(path, 1024 * 1024 + 1) {
                 Ok(bytes) if bytes.len() <= 1024 * 1024 => {
-                    let digest = sha256(&bytes);
+                    let digest = sha256_hex(&bytes);
                     if digest != expected {
                         problems.push("the classifier source does not match --classifier-sha256 (wrong revision)".into());
                     }
@@ -616,8 +617,8 @@ fn validate(args: &Args) -> Result<Assets, Vec<String>> {
         "classifier": {"kind": args.classifier, "source": "rule-baseline/python", "source_sha256": script_sha,
                        "expected_sha256": expected, "python_version": python_version},
         "policy": {"source": "shipped default agent policy embedded in the self-test runner",
-                   "sha256": sha256(fixture::SHIPPED_POLICY.as_bytes())},
-        "registry": {"registry_id": fixture::REGISTRY_ID, "sha256": sha256(&fixture::registry())},
+                   "sha256": sha256_hex(fixture::SHIPPED_POLICY.as_bytes())},
+        "registry": {"registry_id": fixture::REGISTRY_ID, "sha256": sha256_hex(&fixture::registry())},
         "fixtures": {"version": fixture::FIXTURE_VERSION, "sha256": fixture::fixture_sha256()},
     });
     Ok(Assets {
@@ -643,7 +644,7 @@ fn start_daemon(
     deadline: Instant,
     configured: &mut serde_json::Map<String, Value>,
 ) -> Result<Daemon, Abort> {
-    let registry_sha = sha256(&fixture::registry());
+    let registry_sha = sha256_hex(&fixture::registry());
     let mut attempts = Vec::new();
     let mut candidates: Vec<Option<u16>> = vec![preferred, None, None];
     if preferred.is_none() {

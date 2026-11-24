@@ -18,6 +18,7 @@
 //! `journal.json` (only while an install is in flight) and transient
 //! `staging-*` directories. Nothing outside this directory is touched.
 
+use crate::hashing::sha256_hex;
 use std::collections::BTreeSet;
 use std::io::Read;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
@@ -51,10 +52,6 @@ const MAX_FILES: usize = 160;
 const MAX_MANIFEST: usize = 64 * 1024;
 const MAX_NAME: usize = 100;
 const MAX_INTERPRETER: u64 = 256 * 1024 * 1024;
-
-pub fn sha(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
 
 fn is_hex(value: &str, len: usize) -> bool {
     value.len() == len
@@ -300,7 +297,7 @@ pub struct Package {
 
 impl Package {
     pub fn id(&self) -> String {
-        sha(&self.manifest_bytes)
+        sha256_hex(&self.manifest_bytes)
     }
 }
 
@@ -315,7 +312,7 @@ pub fn parse(bytes: &[u8]) -> anyhow::Result<Package> {
     for entry in &manifest.files {
         let data = member(bytes, &mut at, &entry.path)?;
         ensure!(
-            data.len() as u64 == entry.size && sha(data) == entry.sha256,
+            data.len() as u64 == entry.size && sha256_hex(data) == entry.sha256,
             "archive member {} does not match the manifest",
             entry.path
         );
@@ -854,7 +851,10 @@ impl Store {
             "component directory has missing or unlisted entries"
         );
         let manifest_bytes = read_private(&dir.join(MANIFEST), MAX_MANIFEST as u64, Some(0o400))?;
-        ensure!(sha(&manifest_bytes) == id, "component manifest was altered");
+        ensure!(
+            sha256_hex(&manifest_bytes) == id,
+            "component manifest was altered"
+        );
         let manifest = parse_manifest(&manifest_bytes)?;
         let tree = dir.join(TREE);
         // Walk the whole tree: exactly the listed files and their directories.
@@ -903,7 +903,7 @@ impl Store {
             let bytes = read_private(&tree.join(&entry.path), MAX_FILE, Some(entry.mode_bits()))
                 .with_context(|| format!("component file {} cannot be used", entry.path))?;
             ensure!(
-                bytes.len() as u64 == entry.size && sha(&bytes) == entry.sha256,
+                bytes.len() as u64 == entry.size && sha256_hex(&bytes) == entry.sha256,
                 "component file {} changed since installation",
                 entry.path
             );
@@ -991,7 +991,7 @@ impl Store {
 
     pub fn preview(&self, archive: &[u8], expected: &str, python: &Path) -> anyhow::Result<Value> {
         ensure!(
-            sha(archive) == expected,
+            sha256_hex(archive) == expected,
             "archive SHA-256 does not match --sha256"
         );
         let package = parse(archive)?;
@@ -1011,7 +1011,7 @@ impl Store {
             "the installed front door supports native Linux x86_64 only"
         );
         ensure!(
-            sha(archive) == expected,
+            sha256_hex(archive) == expected,
             "archive SHA-256 does not match --sha256"
         );
         let package = parse(archive)?;
