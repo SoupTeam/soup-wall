@@ -2,12 +2,12 @@
 //! Inert narrowing of an explicitly selected reviewed profile and policy.
 //! No runtime, classifier worker, home discovery or activation is invoked.
 mod io;
+use crate::hashing::sha256_hex;
 use crate::mcp::{admission::Strict, profile_author};
 use anyhow::{ensure, Context, Result};
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use soup_wall_agent::{
     policy::{AgentCondition, AgentRule},
     ActionClass, AgentPolicySet, Verdict,
@@ -86,9 +86,6 @@ struct Restrictions {
     /// group is expressible only if it covers EVERY tool of each named class.
     deny_tools: Vec<String>,
     allowed_destinations: Option<Vec<String>>,
-}
-fn sha(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
 }
 fn strict<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
     let Strict(value) = serde_json::from_slice(bytes).context("candidate_strict_json")?;
@@ -251,7 +248,7 @@ impl Current {
         }
         let profile = profile_author::parse_profile_bytes(&inputs[0].bytes)?;
         ensure!(
-            profile.registry_sha256 == sha(&inputs[1].bytes),
+            profile.registry_sha256 == sha256_hex(&inputs[1].bytes),
             "candidate_registry_identity_mismatch"
         );
         let policy = crate::offline_replay::policy(&inputs[6].bytes)?;
@@ -265,12 +262,12 @@ impl Current {
         })
     }
     fn pins(&self) -> Value {
-        json!({"profile_sha256":sha(&self.inputs[0].bytes),
-            "registry_sha256":sha(&self.inputs[1].bytes),
+        json!({"profile_sha256":sha256_hex(&self.inputs[0].bytes),
+            "registry_sha256":sha256_hex(&self.inputs[1].bytes),
             "source_snapshot_sha256":self.profile.snapshot_sha256,
             "declaration_sha256":self.profile.declaration_sha256,
-            "policy_sha256":sha(&self.inputs[6].bytes),
-            "schemas":self.profile.tools.iter().map(|(name,t)| json!({"tool_sha256":sha(name.as_bytes()),
+            "policy_sha256":sha256_hex(&self.inputs[6].bytes),
+            "schemas":self.profile.tools.iter().map(|(name,t)| json!({"tool_sha256":sha256_hex(name.as_bytes()),
                 "schema_sha256":t.schema_sha256,"action_class":t.action_class})).collect::<Vec<_>>()})
     }
 }
@@ -329,15 +326,15 @@ impl Prepared {
         let pins = current.pins();
         let base_rules = current.policy.agent_policies.len();
         let old_scope = json!({"tools":current.profile.tools.iter().map(|(n,t)| json!({
-            "name_sha256":sha(n.as_bytes()),"action_class":t.action_class})).collect::<Vec<_>>(),
-            "destinations_sha256":current.policy.egress_allowlist.iter().map(|h|sha(h.as_bytes())).collect::<Vec<_>>()});
+            "name_sha256":sha256_hex(n.as_bytes()),"action_class":t.action_class})).collect::<Vec<_>>(),
+            "destinations_sha256":current.policy.egress_allowlist.iter().map(|h|sha256_hex(h.as_bytes())).collect::<Vec<_>>()});
         let new_scope = json!({"deny_actions":narrowed.agent_policies.iter()
             .take(narrowed.agent_policies.len()-current.policy.agent_policies.len())
             .filter_map(|r|r.when.action_class).collect::<Vec<_>>(),
             "deny_action_floors":narrowed.agent_policies.iter()
                 .take(narrowed.agent_policies.len()-current.policy.agent_policies.len())
                 .filter_map(|r|r.when.min_action_class).collect::<Vec<_>>(),
-            "destinations_sha256":narrowed.egress_allowlist.iter().map(|h|sha(h.as_bytes())).collect::<Vec<_>>(),
+            "destinations_sha256":narrowed.egress_allowlist.iter().map(|h|sha256_hex(h.as_bytes())).collect::<Vec<_>>(),
             "tools_registry_unchanged":true,"tool_constraints":"complete_class_and_all_higher_action_classes"});
         let mut inputs = current.inputs;
         inputs.push(restrictions);
@@ -345,13 +342,15 @@ impl Prepared {
         let restriction_bytes = serde_json::to_vec(&constraints)?;
         let manifest = serde_json::to_vec(&json!({"format":FORMAT,"active":false,"pins":pins,
             "input_bindings":inputs.iter().map(|i| &i.binding).collect::<Vec<_>>(),
-            "policy_sha256":sha(&policy),"constraints_sha256":sha(&restriction_bytes),
-            "export_destination":destination_binding,"examples_sha256":sha(&inputs[8].bytes)}))?;
-        let digest = sha(&[
-            b"agentfw/operator-policy-candidate/v1\0".as_slice(),
-            &manifest,
-        ]
-        .concat());
+            "policy_sha256":sha256_hex(&policy),"constraints_sha256":sha256_hex(&restriction_bytes),
+            "export_destination":destination_binding,"examples_sha256":sha256_hex(&inputs[8].bytes)}))?;
+        let digest = sha256_hex(
+            &[
+                b"agentfw/operator-policy-candidate/v1\0".as_slice(),
+                &manifest,
+            ]
+            .concat(),
+        );
         let mut report = json!({"format":FORMAT,"status":"preview","active":false,"executed":false,
             "protection_claim":false,"candidate_sha256":digest,"current":pins,
             "scope_diff":{"old":old_scope,"new":new_scope},"simulation":simulation,
@@ -473,9 +472,9 @@ fn run_inner(command: Command) -> Result<()> {
             // succeeded: the exported policy is the base rules unchanged, preceded by
             // Deny-only additions. Activation consumes these facts, never the hash alone.
             json!({"format":FORMAT,"status":"validated_inert","active":false,"executed":false,
-                "candidate_sha256":prepared.digest,"policy_sha256":sha(&prepared.policy),
+                "candidate_sha256":prepared.digest,"policy_sha256":sha256_hex(&prepared.policy),
                 "base_policy_sha256":prepared.base_policy_sha256,
-                "constraints_sha256":sha(&prepared.restrictions),
+                "constraints_sha256":sha256_hex(&prepared.restrictions),
                 "added_rules":prepared.added_rules,"restricting_only":true})
         }
     };

@@ -18,6 +18,7 @@
 //! `journal.json` (only while an install is in flight) and transient
 //! `staging-*` directories. Nothing outside this directory is touched.
 
+use crate::hashing::sha256_hex;
 use std::collections::BTreeSet;
 use std::io::Read;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
@@ -51,10 +52,6 @@ const MAX_FILES: usize = 160;
 const MAX_MANIFEST: usize = 64 * 1024;
 const MAX_NAME: usize = 100;
 const MAX_INTERPRETER: u64 = 256 * 1024 * 1024;
-
-pub fn sha(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
 
 fn is_hex(value: &str, len: usize) -> bool {
     value.len() == len
@@ -300,7 +297,7 @@ pub struct Package {
 
 impl Package {
     pub fn id(&self) -> String {
-        sha(&self.manifest_bytes)
+        sha256_hex(&self.manifest_bytes)
     }
 }
 
@@ -315,7 +312,7 @@ pub fn parse(bytes: &[u8]) -> anyhow::Result<Package> {
     for entry in &manifest.files {
         let data = member(bytes, &mut at, &entry.path)?;
         ensure!(
-            data.len() as u64 == entry.size && sha(data) == entry.sha256,
+            data.len() as u64 == entry.size && sha256_hex(data) == entry.sha256,
             "archive member {} does not match the manifest",
             entry.path
         );
@@ -854,7 +851,10 @@ impl Store {
             "component directory has missing or unlisted entries"
         );
         let manifest_bytes = read_private(&dir.join(MANIFEST), MAX_MANIFEST as u64, Some(0o400))?;
-        ensure!(sha(&manifest_bytes) == id, "component manifest was altered");
+        ensure!(
+            sha256_hex(&manifest_bytes) == id,
+            "component manifest was altered"
+        );
         let manifest = parse_manifest(&manifest_bytes)?;
         let tree = dir.join(TREE);
         // Walk the whole tree: exactly the listed files and their directories.
@@ -903,7 +903,7 @@ impl Store {
             let bytes = read_private(&tree.join(&entry.path), MAX_FILE, Some(entry.mode_bits()))
                 .with_context(|| format!("component file {} cannot be used", entry.path))?;
             ensure!(
-                bytes.len() as u64 == entry.size && sha(&bytes) == entry.sha256,
+                bytes.len() as u64 == entry.size && sha256_hex(&bytes) == entry.sha256,
                 "component file {} changed since installation",
                 entry.path
             );
@@ -991,7 +991,7 @@ impl Store {
 
     pub fn preview(&self, archive: &[u8], expected: &str, python: &Path) -> anyhow::Result<Value> {
         ensure!(
-            sha(archive) == expected,
+            sha256_hex(archive) == expected,
             "archive SHA-256 does not match --sha256"
         );
         let package = parse(archive)?;
@@ -1011,7 +1011,7 @@ impl Store {
             "the installed front door supports native Linux x86_64 only"
         );
         ensure!(
-            sha(archive) == expected,
+            sha256_hex(archive) == expected,
             "archive SHA-256 does not match --sha256"
         );
         let package = parse(archive)?;
@@ -1367,7 +1367,7 @@ mod tests {
                 .map(|(path, data)| FileEntry {
                     mode: "0400".into(),
                     path: path.clone(),
-                    sha256: sha(data),
+                    sha256: sha256_hex(data),
                     size: data.len() as u64,
                 })
                 .collect(),
@@ -1399,7 +1399,7 @@ mod tests {
     fn accepts_a_canonical_component() {
         let package = parse(&archive()).unwrap();
         assert_eq!(package.manifest.files.len(), 3);
-        assert_eq!(package.id(), sha(&package.manifest_bytes));
+        assert_eq!(package.id(), sha256_hex(&package.manifest_bytes));
     }
 
     #[test]
@@ -1529,7 +1529,9 @@ mod tests {
         let first = archive();
         assert!(store.install(&first, &"0".repeat(64), &python()).is_err());
         assert!(!store.current_path().exists());
-        let installed = store.install(&first, &sha(&first), &python()).unwrap();
+        let installed = store
+            .install(&first, &sha256_hex(&first), &python())
+            .unwrap();
         let id = installed["component"].as_str().unwrap().to_string();
         let verified = store.current().unwrap();
         assert!(verified.tree.join(ENTRY).is_file());
@@ -1576,7 +1578,9 @@ mod tests {
             store.current().unwrap_err().reason,
             "front_door_component_interrupted"
         );
-        assert!(store.install(&first, &sha(&first), &python()).is_err());
+        assert!(store
+            .install(&first, &sha256_hex(&first), &python())
+            .is_err());
         let recovered = store.recover().unwrap();
         assert_eq!(recovered["cleared_journal"], true);
         assert_eq!(recovered["selected"], id.as_str());
@@ -1584,7 +1588,9 @@ mod tests {
 
         // Update, a recorded interpreter mismatch, rollback.
         let second = archive_for("89abcdef0123456789abcdef0123456789abcdef");
-        let updated = store.install(&second, &sha(&second), &python()).unwrap();
+        let updated = store
+            .install(&second, &sha256_hex(&second), &python())
+            .unwrap();
         assert_eq!(updated["previous"], id.as_str());
         let new_id = updated["component"].as_str().unwrap().to_string();
         assert_ne!(new_id, id);
@@ -1666,8 +1672,12 @@ mod tests {
         let store = Store::new(&home);
         let first = archive();
         let second = archive_for("89abcdef0123456789abcdef0123456789abcdef");
-        store.install(&second, &sha(&second), &python()).unwrap();
-        let installed = store.install(&first, &sha(&first), &python()).unwrap();
+        store
+            .install(&second, &sha256_hex(&second), &python())
+            .unwrap();
+        let installed = store
+            .install(&first, &sha256_hex(&first), &python())
+            .unwrap();
         let unselected = installed["previous"].as_str().unwrap().to_string();
         let external = external_fixture(base.path(), &unselected);
         let before = snapshot(&external);
@@ -1695,7 +1705,9 @@ mod tests {
         std::fs::create_dir(&real).unwrap();
         let store = Store::new(&real);
         let first = archive();
-        let id = store.install(&first, &sha(&first), &python()).unwrap()["component"]
+        let id = store
+            .install(&first, &sha256_hex(&first), &python())
+            .unwrap()["component"]
             .as_str()
             .unwrap()
             .to_string();

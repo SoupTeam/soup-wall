@@ -31,10 +31,10 @@ fn shipped_read_has_byte_identities_and_an_explicit_simulation_scope() {
     assert_eq!(row(&report, 0)["simulated_verdict"], "allow");
     assert_eq!(report["simulated"], true);
     assert_eq!(report["protection_claim"], false);
-    assert_eq!(report["input"]["sha256"], hash(&bytes));
+    assert_eq!(report["input"]["sha256"], sha256_hex(&bytes));
     assert_eq!(
         report["policies"][0]["identity"]["sha256"],
-        hash(SHIPPED.as_bytes())
+        sha256_hex(SHIPPED.as_bytes())
     );
     let mut spaced = bytes.clone();
     spaced.extend_from_slice(b" \n");

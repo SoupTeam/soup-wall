@@ -23,9 +23,10 @@ pub fn inspect_workspace(path: &Path) -> Result<RootIdentity, Error> {
     }
 }
 
+/// Lowercase hexadecimal SHA-256 of exact content bytes. Kept under this name
+/// because it is part of the crate's public interface.
 pub fn content_sha256(bytes: &[u8]) -> String {
-    use sha2::{Digest, Sha256};
-    format!("{:x}", Sha256::digest(bytes))
+    crate::hashing::sha256_hex(bytes)
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]

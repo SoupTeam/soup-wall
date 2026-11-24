@@ -13,6 +13,7 @@ pub mod doctor;
 pub mod edit_session;
 pub mod grant;
 pub mod handlers;
+pub(crate) mod hashing;
 pub mod hook;
 pub mod install;
 pub mod judge;
