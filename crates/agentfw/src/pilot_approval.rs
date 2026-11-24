@@ -110,6 +110,8 @@ struct Run {
     files: Vec<FileIdentity>,
 }
 
+pub(crate) mod consumer;
+
 pub struct RunGuard {
     dir: PathBuf,
     run: Run,
@@ -253,7 +255,7 @@ fn id(value: &str) -> Result<()> {
     Ok(())
 }
 
-fn read_file(path: &Path, private: bool) -> Result<Vec<u8>> {
+pub(crate) fn read_file(path: &Path, private: bool) -> Result<Vec<u8>> {
     let mut options = fs::OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
