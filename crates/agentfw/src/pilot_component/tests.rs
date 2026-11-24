@@ -46,7 +46,7 @@ fn manifest_for(files: &[(String, Vec<u8>)]) -> Manifest {
             .map(|(path, data)| FileEntry {
                 mode: "0400".into(),
                 path: path.clone(),
-                sha256: sha(data),
+                sha256: sha256_hex(data),
                 size: data.len() as u64,
             })
             .collect(),
@@ -78,7 +78,7 @@ fn archive() -> Vec<u8> {
 fn accepts_a_canonical_component() {
     let package = parse(&archive()).unwrap();
     assert_eq!(package.manifest.files.len(), 3);
-    assert_eq!(package.id(), sha(&package.manifest_bytes));
+    assert_eq!(package.id(), sha256_hex(&package.manifest_bytes));
 }
 
 #[test]
@@ -208,7 +208,9 @@ fn lifecycle_verifies_refuses_tampering_recovers_rolls_back_and_removes_owned_st
     let first = archive();
     assert!(store.install(&first, &"0".repeat(64), &python()).is_err());
     assert!(!store.current_path().exists());
-    let installed = store.install(&first, &sha(&first), &python()).unwrap();
+    let installed = store
+        .install(&first, &sha256_hex(&first), &python())
+        .unwrap();
     let id = installed["component"].as_str().unwrap().to_string();
     let verified = store.current().unwrap();
     assert!(verified.tree.join(ENTRY).is_file());
@@ -255,7 +257,9 @@ fn lifecycle_verifies_refuses_tampering_recovers_rolls_back_and_removes_owned_st
         store.current().unwrap_err().reason,
         "front_door_component_interrupted"
     );
-    assert!(store.install(&first, &sha(&first), &python()).is_err());
+    assert!(store
+        .install(&first, &sha256_hex(&first), &python())
+        .is_err());
     let recovered = store.recover().unwrap();
     assert_eq!(recovered["cleared_journal"], true);
     assert_eq!(recovered["selected"], id.as_str());
@@ -263,7 +267,9 @@ fn lifecycle_verifies_refuses_tampering_recovers_rolls_back_and_removes_owned_st
 
     // Update, a recorded interpreter mismatch, rollback.
     let second = archive_for("89abcdef0123456789abcdef0123456789abcdef");
-    let updated = store.install(&second, &sha(&second), &python()).unwrap();
+    let updated = store
+        .install(&second, &sha256_hex(&second), &python())
+        .unwrap();
     assert_eq!(updated["previous"], id.as_str());
     let new_id = updated["component"].as_str().unwrap().to_string();
     assert_ne!(new_id, id);
@@ -345,8 +351,12 @@ fn removal_refuses_a_redirected_components_parent_and_keeps_external_state() {
     let store = Store::new(&home);
     let first = archive();
     let second = archive_for("89abcdef0123456789abcdef0123456789abcdef");
-    store.install(&second, &sha(&second), &python()).unwrap();
-    let installed = store.install(&first, &sha(&first), &python()).unwrap();
+    store
+        .install(&second, &sha256_hex(&second), &python())
+        .unwrap();
+    let installed = store
+        .install(&first, &sha256_hex(&first), &python())
+        .unwrap();
     let unselected = installed["previous"].as_str().unwrap().to_string();
     let external = external_fixture(base.path(), &unselected);
     let before = snapshot(&external);
@@ -374,7 +384,9 @@ fn removal_and_recovery_refuse_redirected_ancestors_and_linked_staging() {
     std::fs::create_dir(&real).unwrap();
     let store = Store::new(&real);
     let first = archive();
-    let id = store.install(&first, &sha(&first), &python()).unwrap()["component"]
+    let id = store
+        .install(&first, &sha256_hex(&first), &python())
+        .unwrap()["component"]
         .as_str()
         .unwrap()
         .to_string();

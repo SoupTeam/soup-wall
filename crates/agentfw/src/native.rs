@@ -3,6 +3,7 @@
 //! Legacy native/1 trusts the collector and does not attest runtime origin.
 //! The separate opt-in git-execute contract owns its actual original process pipes.
 
+use crate::hashing::sha256_hex;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -131,10 +132,6 @@ fn json_pointer(value: &str) -> bool {
     crate::mcp::resources::valid_pointer(value)
 }
 
-fn hash(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
-
 fn canonical(value: &Value) -> Value {
     match value {
         Value::Object(map) => serde_json::to_value(
@@ -149,11 +146,11 @@ fn canonical(value: &Value) -> Value {
 }
 
 fn args_hash(value: &Value) -> String {
-    hash(canonical(value).to_string().as_bytes())
+    sha256_hex(canonical(value).to_string().as_bytes())
 }
 
 pub fn canonical_digest(value: &Value) -> String {
-    hash(canonical(value).to_string().as_bytes())
+    sha256_hex(canonical(value).to_string().as_bytes())
 }
 
 fn binding(
@@ -693,7 +690,7 @@ impl HookAuthorityGuard<'_> {
 impl NativeState {
     pub fn from_bytes(bytes: &[u8], expected: &str, token: String) -> anyhow::Result<Self> {
         anyhow::ensure!(
-            bytes.len() <= MAX_BODY && is_digest(expected) && hash(bytes) == expected,
+            bytes.len() <= MAX_BODY && is_digest(expected) && sha256_hex(bytes) == expected,
             "native registry bytes do not match the explicit startup digest"
         );
         let registry: Registry = serde_json::from_slice(bytes)?;
@@ -993,7 +990,7 @@ impl NativeState {
         {
             return Err("native_hook_identity_mismatch");
         }
-        let digest = hash(proof.as_bytes());
+        let digest = sha256_hex(proof.as_bytes());
         let session = sessions
             .entries
             .values()
@@ -1677,7 +1674,7 @@ pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCo
             json!({
                 "host_session": s.host_session,
                 "agent_id": s.agent_id,
-                "binding_sha256": hash(s.epoch.as_bytes())
+                "binding_sha256": sha256_hex(s.epoch.as_bytes())
             })
         })
         .collect();
@@ -2180,7 +2177,7 @@ fn inspect_bound_measured(
         release: true,
         call_id: None,
         binding_sha256: None,
-        content_sha256: request.content.as_ref().map(|c| hash(c.as_bytes())),
+        content_sha256: request.content.as_ref().map(|c| sha256_hex(c.as_bytes())),
         resources_sha256: None,
         reason_codes: vec![],
         instance_id: None,
@@ -2279,7 +2276,7 @@ fn inspect_bound_measured(
                         ChildAuthorityError::MalformedToken => "native_child_authority_malformed",
                     }
                 })?;
-                let auth_digest = hash(token.as_bytes());
+                let auth_digest = sha256_hex(token.as_bytes());
                 state.spent_authorities.retain(|_, exp| *exp > now_ms);
                 if state.spent_authorities.contains_key(&auth_digest)
                     || state
@@ -2363,7 +2360,7 @@ fn inspect_bound_measured(
                     }
                     if state
                         .spent_authorities
-                        .contains_key(&hash(token.as_bytes()))
+                        .contains_key(&sha256_hex(token.as_bytes()))
                     {
                         return Err("native_child_authority_already_spent");
                     }
@@ -2395,7 +2392,9 @@ fn inspect_bound_measured(
                                 && s.agent_id.as_ref() == Some(parent)
                         })
                         .ok_or("native_child_parent_unavailable")?;
-                    if grant.nonce.split('.').nth(1) != Some(hash(ps.epoch.as_bytes()).as_str()) {
+                    if grant.nonce.split('.').nth(1)
+                        != Some(sha256_hex(ps.epoch.as_bytes()).as_str())
+                    {
                         return Err("native_child_parent_binding_mismatch");
                     }
                     validate_lineage(&state, ps, now_ms, now)?;
@@ -2450,7 +2449,7 @@ fn inspect_bound_measured(
             authority_digest: request
                 .child_authority
                 .as_ref()
-                .map(|proof| hash(proof.as_bytes())),
+                .map(|proof| sha256_hex(proof.as_bytes())),
             epoch: format!("native:{}", crate::token::generate()),
             owner_token: owner_token.clone(),
             seq: 1,
@@ -3208,7 +3207,7 @@ fn inspect_bound_measured(
                     "block": block_index, "facet": "tool_result",
                     "eligibility": if spans.is_some() { "consumed_original_formatter" } else { "baseline_no_bound_formatter" },
                     "channel": if spans.is_some() { Some(if block_index == 0 { "result.content[0].text" } else { "result.structuredContent.content" }) } else { None },
-                    "text_sha256": hash(content.as_bytes()), "comparison": comparison,
+                    "text_sha256": sha256_hex(content.as_bytes()), "comparison": comparison,
                     "correction_applied": correction_applied,
                     "production_authority": false, "task_complete": false,
                 });

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::Options;
+use crate::hashing::sha256_hex;
 use crate::private_file_windows::{current_user_sid, sid_to_string, PrivateAcl};
 use crate::windows_read::{checked_create_stage, CreateParent};
 use anyhow::{ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::ffi::c_void;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -34,11 +34,8 @@ use windows_sys::Win32::Storage::FileSystem::{
 
 const LIMIT: usize = 1024 * 1024;
 
-fn sha(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
 fn hash(value: &Value) -> String {
-    sha(&serde_json::to_vec(value).expect("JSON value serializes"))
+    sha256_hex(&serde_json::to_vec(value).expect("JSON value serializes"))
 }
 
 fn parse(bytes: &[u8]) -> Result<Value> {
@@ -391,7 +388,7 @@ fn executable(path: &Path) -> Result<String> {
             .is_some_and(|e| e.eq_ignore_ascii_case("exe")),
         "a native .exe is required"
     );
-    Ok(sha(&read_file(path, 512 * 1024 * 1024)?.0))
+    Ok(sha256_hex(&read_file(path, 512 * 1024 * 1024)?.0))
 }
 
 fn system_root() -> Result<PathBuf> {
@@ -415,7 +412,8 @@ fn runtime_selection(path: &Path) -> Result<(Runtime, String)> {
     let _workspace = CreateParent::prepare_workspace(&selection.workspace, &selection.workspace)?;
     let script = read_private(&selection.classifier_script)?;
     let python = executable(&selection.classifier_python)?;
-    let identity = hash(&json!({"runtime":sha(&bytes),"script":sha(&script),"python":python}));
+    let identity =
+        hash(&json!({"runtime":sha256_hex(&bytes),"script":sha256_hex(&script),"python":python}));
     Ok((selection, identity))
 }
 
@@ -505,7 +503,7 @@ struct Publication {
 fn journal_path(path: &Path) -> Result<PathBuf> {
     Ok(path.parent().context("missing parent")?.join(format!(
         ".soup-wall-publication-{}.json",
-        sha(path.to_str().context("path must be Unicode")?.as_bytes())
+        sha256_hex(path.to_str().context("path must be Unicode")?.as_bytes())
     )))
 }
 
@@ -531,16 +529,16 @@ fn finish(record: &Publication) -> Result<()> {
     let before = read_private(&dir.join("snapshot.json"))?;
     let proposed = read_private(&dir.join("proposed.json"))?;
     ensure!(
-        sha(&before) == record.before && sha(&proposed) == record.proposed,
+        sha256_hex(&before) == record.before && sha256_hex(&proposed) == record.proposed,
         "publication snapshots changed"
     );
     if exists(&backup)? {
         let displaced = read_file(&backup, LIMIT)?;
         ensure!(
             current.1 == record.proposed_id
-                && sha(&current.0) == record.proposed
+                && sha256_hex(&current.0) == record.proposed
                 && displaced.1 == record.before_id
-                && sha(&displaced.0) == record.before
+                && sha256_hex(&displaced.0) == record.before
                 && !exists(&stage)?,
             "publication conflict; retain all versions and journal"
         );
@@ -548,9 +546,9 @@ fn finish(record: &Publication) -> Result<()> {
         let staged = read_file(&stage, LIMIT)?;
         ensure!(
             current.1 == record.before_id
-                && sha(&current.0) == record.before
+                && sha256_hex(&current.0) == record.before
                 && staged.1 == record.proposed_id
-                && sha(&staged.0) == record.proposed,
+                && sha256_hex(&staged.0) == record.proposed,
             "interrupted publication is ambiguous; retain all versions and journal"
         );
     }
@@ -619,8 +617,8 @@ fn stage_publication(
         version: 1,
         path: path.into(),
         archive: name,
-        before: sha(before),
-        proposed: sha(bytes),
+        before: sha256_hex(before),
+        proposed: sha256_hex(bytes),
         before_id,
         proposed_id,
     };
@@ -733,7 +731,7 @@ impl ConfigFile {
     fn state_name(&self, name: &str) -> String {
         format!(
             ".soup-wall-{}.json",
-            sha(format!("{}\0{name}", self.path.display()).as_bytes())
+            sha256_hex(format!("{}\0{name}", self.path.display()).as_bytes())
         )
     }
     fn state(&self, name: &str) -> Result<Option<Owner>> {
@@ -894,7 +892,7 @@ async fn preflight(o: &Options) -> Result<Native> {
         .context("pinned native registry required")?;
     let registry_bytes = read_private(&installed.registry_path)?;
     ensure!(
-        sha(&registry_bytes) == installed.registry_sha256,
+        sha256_hex(&registry_bytes) == installed.registry_sha256,
         "native registry digest mismatch"
     );
     let native_token = read_private(&o.home.join("native-token"))?;
@@ -916,7 +914,8 @@ async fn preflight(o: &Options) -> Result<Native> {
             .context("Windows resource profiles require an explicit runtime selection")?;
         ensure!(
             selection.workspace == policy.workspace
-                && sha(&read_private(&selection.classifier_script)?) == policy.classifier_sha256,
+                && sha256_hex(&read_private(&selection.classifier_script)?)
+                    == policy.classifier_sha256,
             "runtime does not match the reviewed Windows resource policy"
         );
     }
@@ -958,7 +957,7 @@ async fn preflight(o: &Options) -> Result<Native> {
         binary,
         registry: installed.registry_sha256.clone(),
         config: hash(
-            &json!({"config":sha(&bytes),"runtime":o.runtime.as_deref().map(runtime_selection).transpose()?.map(|(_,id)|id)}),
+            &json!({"config":sha256_hex(&bytes),"runtime":o.runtime.as_deref().map(runtime_selection).transpose()?.map(|(_,id)|id)}),
         ),
     })
 }
@@ -1089,19 +1088,19 @@ pub(crate) async fn run_confirmed(
         );
         if owner.is_none() {
             ensure!(
-                sha(&config.bytes) == expected,
+                sha256_hex(&config.bytes) == expected,
                 "host changed since onboarding preview; conflict preserved"
             );
         }
     }
     let id = format!(
         "claude-{}",
-        &sha(format!("{}\0{}", o.path.display(), o.server).as_bytes())[..24]
+        &sha256_hex(format!("{}\0{}", o.path.display(), o.server).as_bytes())[..24]
     );
     let mut report = Report {
         status: "unknown",
         operation: operation.to_owned(),
-        config_sha256: sha(&config.bytes),
+        config_sha256: sha256_hex(&config.bytes),
         selected_sha256: hash(&entry),
         server_id: id.clone(),
         agent_sha256: None,
@@ -1267,7 +1266,7 @@ pub(crate) async fn run_confirmed(
     } else {
         snapshot?;
     }
-    report.config_sha256 = sha(&config.bytes);
+    report.config_sha256 = sha256_hex(&config.bytes);
     report.selected_sha256 = hash(&config.entry(&o.server)?);
     report.elapsed_ms = start.elapsed().as_millis();
     Ok(report)

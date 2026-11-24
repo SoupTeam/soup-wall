@@ -83,7 +83,7 @@ pub(super) fn fixture(dir: &std::path::Path) -> Shared {
     .into_bytes();
     Arc::new(AppState {
         native: Some(
-            NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into()).unwrap(),
+            NativeState::from_bytes(&bytes, &sha256_hex(&bytes), "native-unit-key".into()).unwrap(),
         ),
         firewall: Mutex::new(AgentFirewall::with_default_policy()),
         sessions: HookSessions::default(),
@@ -219,7 +219,7 @@ fn managed_transition_activate(st: &Shared, sequence: u64, policy: &str) {
         soup_wall_agent::AgentPolicySet::from_yaml(policy).unwrap(),
         format!("revision-{sequence}"),
         sequence,
-        hash(policy.as_bytes()),
+        sha256_hex(policy.as_bytes()),
     );
 }
 
@@ -793,7 +793,7 @@ fn registry_rejects_invalid_pointer_escapes_and_semantic_caller_claims() {
     }]}).to_string();
     assert!(NativeState::from_bytes(
         malformed.as_bytes(),
-        &hash(malformed.as_bytes()),
+        &sha256_hex(malformed.as_bytes()),
         "key".into()
     )
     .is_err());
@@ -865,8 +865,9 @@ fn selected_profile_fixture(dir: &std::path::Path, format: &str) -> Shared {
     .to_string()
     .into_bytes();
     let mut state = fixture(dir);
-    Arc::get_mut(&mut state).unwrap().native =
-        Some(NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into()).unwrap());
+    Arc::get_mut(&mut state).unwrap().native = Some(
+        NativeState::from_bytes(&bytes, &sha256_hex(&bytes), "native-unit-key".into()).unwrap(),
+    );
     state
 }
 
@@ -885,7 +886,10 @@ fn filesystem_roots_result_keeps_original_channels_and_inspection() {
         let st = fixture(dir.path());
         let response = mcp_host_completion(&st, &original, "value").unwrap();
         assert!(response.release);
-        assert_eq!(response.content_sha256, Some(hash(original.as_bytes())));
+        assert_eq!(
+            response.content_sha256,
+            Some(sha256_hex(original.as_bytes()))
+        );
         let native = st.native.as_ref().unwrap();
         let sessions = native.sessions.lock().unwrap();
         assert!(sessions.entries["mcp-test"].calls.is_empty());
@@ -930,7 +934,10 @@ fn selected_mcp_result_inspects_both_original_text_channels_and_keeps_raw_hash()
     let original = r#"{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"Useful original plain text."}],"structuredContent":{"content":"Different independently inspected ordinary text."}}}"#;
     let response = mcp_host_completion(&st, original, "value").unwrap();
     assert!(response.release);
-    assert_eq!(response.content_sha256, Some(hash(original.as_bytes())));
+    assert_eq!(
+        response.content_sha256,
+        Some(sha256_hex(original.as_bytes()))
+    );
     let native = st.native.as_ref().unwrap();
     let state = native.sessions.lock().unwrap();
     assert!(state.entries["mcp-test"].calls.is_empty());
@@ -967,7 +974,10 @@ fn selected_mcp_result_refuses_signature_split_between_original_channels() {
         let response = mcp_host_completion(&st, &original, "value").unwrap();
         assert!(!response.release, "{left:?} / {right:?}");
         assert_eq!(response.reason_codes, ["ask-injection-in-result"]);
-        assert_eq!(response.content_sha256, Some(hash(original.as_bytes())));
+        assert_eq!(
+            response.content_sha256,
+            Some(sha256_hex(original.as_bytes()))
+        );
         let native = st.native.as_ref().unwrap();
         let state = native.sessions.lock().unwrap();
         let session = &state.entries["mcp-test"];
@@ -1078,7 +1088,10 @@ fn selected_mcp_directive_across_channels_uses_unchanged_pilot_policy() {
         response.reason_codes,
         ["filesystem-profile-refuse-result-injection"]
     );
-    assert_eq!(response.content_sha256, Some(hash(original.as_bytes())));
+    assert_eq!(
+        response.content_sha256,
+        Some(sha256_hex(original.as_bytes()))
+    );
 }
 
 #[test]
@@ -1141,7 +1154,10 @@ fn selected_mcp_large_results_are_inspected_whole_within_the_result_budgets() {
         assert!(original.len() > MAX_CONTENT && original.len() <= MAX_MCP_RESULT_CONTENT);
         let response = mcp_host_completion(&st, &original, "value").unwrap();
         assert!(response.release, "{:?}", response.reason_codes);
-        assert_eq!(response.content_sha256, Some(hash(original.as_bytes())));
+        assert_eq!(
+            response.content_sha256,
+            Some(sha256_hex(original.as_bytes()))
+        );
         let native = st.native.as_ref().unwrap();
         let state = native.sessions.lock().unwrap();
         let session = &state.entries["mcp-test"];
@@ -1346,7 +1362,7 @@ print(json.dumps(selected, separators=(",",":")))
     let actual: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(actual["registry_id"], "filesystem-create-only-v1");
     let bytes = serde_json::to_vec(&actual).unwrap();
-    let native = NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into())
+    let native = NativeState::from_bytes(&bytes, &sha256_hex(&bytes), "native-unit-key".into())
         .expect("full exact original opt-in installer registry rejected by NativeState");
     let writable: Vec<_> = native
         .registry
@@ -1376,7 +1392,9 @@ print(json.dumps(selected, separators=(",",":")))
         .unwrap();
     let check_bad = |edited: Value| {
         let bytes = serde_json::to_vec(&edited).unwrap();
-        assert!(NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into()).is_err());
+        assert!(
+            NativeState::from_bytes(&bytes, &sha256_hex(&bytes), "native-unit-key".into()).is_err()
+        );
     };
     bad["registry_id"] = json!("arbitrary-registry-id");
     check_bad(bad);
@@ -1466,7 +1484,7 @@ fn selected_mcp_registry_rejects_unknown_profile_or_broadened_authority() {
         changed["tools"][0][key] = value;
         let bytes = changed.to_string().into_bytes();
         assert!(
-            NativeState::from_bytes(&bytes, &hash(&bytes), "key".into()).is_err(),
+            NativeState::from_bytes(&bytes, &sha256_hex(&bytes), "key".into()).is_err(),
             "{key}"
         );
     }
@@ -1636,8 +1654,9 @@ fn budget_fixture(
         {"name":"publish_note","schema_sha256":"a".repeat(64),"action_class":"side_effecting","result_provenance":"untrusted","egress":[]},
         {"name":"destroy_note","schema_sha256":"a".repeat(64),"action_class":"destructive","result_provenance":"untrusted","egress":[]}
     ]}).to_string().into_bytes();
-    state.native =
-        Some(NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into()).unwrap());
+    state.native = Some(
+        NativeState::from_bytes(&bytes, &sha256_hex(&bytes), "native-unit-key".into()).unwrap(),
+    );
     state.firewall = Mutex::new(
         AgentFirewall::with_taint_limits(
             soup_wall_agent::AgentPolicySet::from_yaml("agent_policies: []\ndefault: allow\n")

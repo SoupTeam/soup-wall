@@ -3,6 +3,7 @@
 //! mutation below is synthetic and built here, independently of the fixture
 //! generator. Example labels are re-checked against the runtime validator.
 
+use crate::hashing::sha256_hex;
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
@@ -345,7 +346,7 @@ fn git_runtime_license_provenance_rejects_malformed_and_changed_references() {
         while files.len() < MAX_REFERENCED_FILES - 1 {
             let name = format!("extra-{}.json", files.len());
             std::fs::write(private.path().join(&name), b"bounded fixture").unwrap();
-            files.insert(name, json!(sha_hex(b"bounded fixture")));
+            files.insert(name, json!(sha256_hex(b"bounded fixture")));
         }
     });
     req.before_identity.as_mut().unwrap().bytes = boundary;
@@ -1026,7 +1027,7 @@ fn reordered_tools_and_keys_keep_findings_and_examples_stable() {
     let mut value: Value = serde_json::from_slice(&plain).unwrap();
     value["result"]["tools"].as_array_mut().unwrap().reverse();
     let shuffled = reverse_keys(&value).into_bytes();
-    assert_ne!(sha_hex(&plain), sha_hex(&shuffled));
+    assert_ne!(sha256_hex(&plain), sha256_hex(&shuffled));
     let a = run(&request(FS, &plain));
     let b = run(&request(FS, &shuffled));
     let substantive = |o: &Outcome| -> Vec<Value> {
@@ -1169,7 +1170,7 @@ fn accepted_identity_rules_match_the_committed_pins() {
         assert_eq!(profile_author::digest(t), i["originalDefinitionSha256"]);
     }
     let git: Value = serde_json::from_slice(GIT_IDENTITY).unwrap();
-    assert_eq!(sha_hex(GIT), git["files"]["upstream-tools-list.json"]);
+    assert_eq!(sha256_hex(GIT), git["files"]["upstream-tools-list.json"]);
 }
 
 // 18. Determinism --------------------------------------------------------------------------

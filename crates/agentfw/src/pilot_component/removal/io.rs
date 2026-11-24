@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! No-follow descriptor operations. Only enumerated exact objects may be removed.
-use super::{decode, ensure, sha, Context, Result};
+use super::{decode, ensure, Context, Result};
+use crate::hashing::sha256_hex;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
@@ -297,7 +298,7 @@ impl Dir {
         } else {
             let (raw, id) = self.read(name, 1024 * 1024, b)?;
             ensure!(
-                id == *expected && hash.is_some_and(|h| super::same(&sha(&raw), h)),
+                id == *expected && hash.is_some_and(|h| super::same(&sha256_hex(&raw), h)),
                 "removal_object_substituted"
             );
         }

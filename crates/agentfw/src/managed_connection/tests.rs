@@ -297,7 +297,7 @@ fn saved_policy(f: &Fixture) -> crate::managed_policy::SignedAgentPolicy {
         expires_at_unix: 2000,
         issuer_key_id: "operator".into(),
         policy_yaml: "default: deny\n".into(),
-        policy_sha256: hash(b"default: deny\n"),
+        policy_sha256: sha256_hex(b"default: deny\n"),
         signature_hex: String::new(),
     };
     saved.signature_hex = pair

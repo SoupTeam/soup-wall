@@ -253,7 +253,7 @@ fn env(approval: Option<u64>) -> Env {
         json!({"contract_version": CONTRACT, "registry_id": "unit-approval", "tools": tools})
             .to_string()
             .into_bytes();
-    let digest = super::super::hash(&bytes);
+    let digest = super::super::sha256_hex(&bytes);
     let mut native = NativeState::from_bytes(&bytes, &digest, "native-unit-key".into()).unwrap();
     if let Some(ttl) = approval {
         native = native
