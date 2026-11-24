@@ -303,6 +303,11 @@ enum McpCommands {
         #[arg(long)]
         home: Option<PathBuf>,
     },
+    /// Request an analysis purpose for a daemon-owned quarantine record (inert).
+    AnalysisPurpose {
+        #[arg(long)]
+        quarantine_id: String,
+    },
     /// Manage authenticated child authority grants.
     ChildAuthority {
         #[command(subcommand)]
@@ -736,6 +741,9 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             std::process::exit(agentfw::mcp::schema_upgrade::run_cli(*args))
         }
         Cmd::Mcp(McpCommands::McpProfile { home, command }) => run_mcp_profile(home, command),
+        Cmd::Mcp(McpCommands::AnalysisPurpose { quarantine_id }) => {
+            run_analysis_purpose(&quarantine_id)
+        }
         Cmd::Mcp(McpCommands::ChildAuthority { action }) => run_child_authority(action),
         Cmd::Mcp(McpCommands::McpVerified {
             id,
@@ -1255,6 +1263,16 @@ fn run_mcp_profile(
 }
 
 /// Mint or verify a child authority token under the existing daemon native token.
+fn run_analysis_purpose(quarantine_id: &str) -> anyhow::Result<()> {
+    use agentfw::native::analysis_purpose;
+    let token = std::fs::read_to_string(Config::home()?.join("native-token"))
+        .map_err(|_| anyhow::anyhow!("analysis purpose needs the existing daemon native token"))?;
+    anyhow::ensure!(!token.trim().is_empty(), "daemon native token is empty");
+    let key = analysis_purpose::derive_key(token.trim());
+    analysis_purpose::operator_request(&key, quarantine_id)
+        .map_err(|reason| anyhow::anyhow!(reason))
+}
+
 fn run_child_authority(action: ChildAuthorityCmd) -> anyhow::Result<()> {
     use agentfw::native::child_authority;
     let home = Config::home()?;
@@ -2124,6 +2142,23 @@ mod cli_tests {
 #[cfg(test)]
 mod archive_cli_scope_tests {
     use super::*;
+
+    #[test]
+    fn analysis_purpose_cli_accepts_only_quarantine_selector() {
+        let args = ["agentfw", "analysis-purpose", "--quarantine-id", "record1"];
+        assert!(matches!(Cli::try_parse_from(args).unwrap().cmd,
+            Cmd::Mcp(McpCommands::AnalysisPurpose { quarantine_id }) if quarantine_id == "record1"));
+        for extra in [
+            "--response-sha256",
+            "--consumer-identity",
+            "--allow",
+            "--drained",
+        ] {
+            let mut forged = args.to_vec();
+            forged.extend([extra, "caller-claim"]);
+            assert!(Cli::try_parse_from(forged).is_err());
+        }
+    }
 
     #[test]
     fn archive_parser_matches_supported_platform() {
