@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Operator-owned MCP admission authoring. Discovery is *never* authority.
 //! Outputs are inert files until an operator separately configures a collector.
+use crate::hashing::sha256_hex;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -11,7 +12,6 @@ use anyhow::{ensure, Context, Result};
 use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
 use crate::mcp::admission::{Invocation, Strict};
 use crate::mcp::input::InputSchema;
@@ -231,9 +231,6 @@ struct Prepared {
     declaration_document: Value,
 }
 
-fn sha(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
 fn canonical(value: &Value) -> Value {
     match value {
         Value::Object(map) => {
@@ -244,7 +241,7 @@ fn canonical(value: &Value) -> Value {
     }
 }
 pub fn digest(value: &Value) -> String {
-    sha(canonical(value).to_string().as_bytes())
+    sha256_hex(canonical(value).to_string().as_bytes())
 }
 
 fn safe_path(path: &Path, exists: bool) -> Result<()> {
@@ -727,7 +724,7 @@ fn prepare(snapshot_path: &Path, declaration_path: &Path) -> Result<Prepared> {
                 action_class: action,
                 result_provenance: "untrusted".into(),
                 authority_sha256: digest(&entry),
-                review_sha256: sha(d.operator_review.as_deref().unwrap().as_bytes()),
+                review_sha256: sha256_hex(d.operator_review.as_deref().unwrap().as_bytes()),
                 workspace,
                 scoped_resources,
                 egress_selectors: egress,
@@ -745,14 +742,18 @@ fn prepare(snapshot_path: &Path, declaration_path: &Path) -> Result<Prepared> {
         json!({"contract_version":native::CONTRACT,"registry_id":decl.registry_id,"tools":entries});
     let registry = json_bytes(&registry_value)?;
     // Validate against the actual production native deserializers and permissions.
-    NativeState::from_bytes(&registry, &sha(&registry), "profile-validation-only".into())?;
+    NativeState::from_bytes(
+        &registry,
+        &sha256_hex(&registry),
+        "profile-validation-only".into(),
+    )?;
     let profile = Profile {
         format: OUTPUT_FORMAT.into(),
         server_id: snapshot.server_id,
         server_version: snapshot.server_version,
         snapshot_sha256: source_hash,
         declaration_sha256: decl_hash,
-        registry_sha256: sha(&registry),
+        registry_sha256: sha256_hex(&registry),
         tools: summaries,
         limits: vec![
             "Discovery never grants authority".into(),

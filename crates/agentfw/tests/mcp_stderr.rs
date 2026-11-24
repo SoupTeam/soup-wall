@@ -3,6 +3,9 @@
 //! public synthetic fixtures; captured bytes never appear in assertion output.
 #![cfg(any(unix, windows))]
 
+mod common;
+
+use common::sha256_hex;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -18,7 +21,6 @@ use axum::extract::{Request, State};
 use axum::middleware::{self, Next};
 use axum::response::Response;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use soup_wall_agent::{AgentFirewall, AgentPolicySet, DEFAULT_TAINT_CAP};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
@@ -100,10 +102,6 @@ for raw in sys.stdin:
  else: continue
  print(json.dumps(reply,separators=(',',':')),flush=True)
 "#;
-
-fn digest(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
 
 fn contains_marker(bytes: &[u8]) -> bool {
     let markers: [&[u8]; 4] = [MARKER, SECRET, b"\x1b[31m", b"\xff\xfe\x00"];
@@ -232,7 +230,9 @@ async fn stall_call(State(faults): State<Arc<Faults>>, request: Request, next: N
 
 fn daemon_state(home: &Path, registry: &[u8], port: u16) -> Arc<AppState> {
     Arc::new(AppState {
-        native: Some(NativeState::from_bytes(registry, &digest(registry), TOKEN.into()).unwrap()),
+        native: Some(
+            NativeState::from_bytes(registry, &sha256_hex(registry), TOKEN.into()).unwrap(),
+        ),
         firewall: Mutex::new(AgentFirewall::new(
             AgentPolicySet::from_yaml(POLICY).unwrap(),
             DEFAULT_TAINT_CAP,
@@ -484,7 +484,7 @@ impl Fixture {
         .unwrap();
         assert!(bootstrap.success(), "private fixture bootstrap failed");
         let schema = json!({"type":"object","properties":{},"additionalProperties":false});
-        let registry = json!({"contract_version":CONTRACT,"registry_id":"sou76-owned-registry","tools":[{"name":"read_document","schema_sha256":digest(schema.to_string().as_bytes()),"action_class":"read_only","result_provenance":"untrusted","egress":[]}]});
+        let registry = json!({"contract_version":CONTRACT,"registry_id":"sou76-owned-registry","tools":[{"name":"read_document","schema_sha256":sha256_hex(schema.to_string().as_bytes()),"action_class":"read_only","result_provenance":"untrusted","egress":[]}]});
         let registry = serde_json::to_vec(&registry).unwrap();
         let path = root.path().join("registry.json");
         std::fs::write(&path, &registry).unwrap();
@@ -495,7 +495,7 @@ impl Fixture {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         let path = path.to_string_lossy().replace('\'', "''");
-        std::fs::write(home.join("config.yaml"), format!("port: {port}\nenforce: true\nnative:\n  registry_path: '{path}'\n  registry_sha256: '{}'\n", digest(&registry))).unwrap();
+        std::fs::write(home.join("config.yaml"), format!("port: {port}\nenforce: true\nnative:\n  registry_path: '{path}'\n  registry_sha256: '{}'\n", sha256_hex(&registry))).unwrap();
         std::fs::write(root.path().join("owned-stderr-server.py"), SERVER).unwrap();
         let faults = Arc::new(Faults::default());
         let application = app(daemon_state(&home, &registry, port))

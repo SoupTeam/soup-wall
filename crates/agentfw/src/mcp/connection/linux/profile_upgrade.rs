@@ -43,13 +43,13 @@ fn classifier_path(o: &Options, c: &Classifier) -> PathBuf {
 fn stage_classifier(o: &Options, c: &Classifier) -> Result<()> {
     let bytes = classifier_bytes(&c.source)?;
     ensure!(
-        sha(&bytes) == c.sha256 && executable(&c.python)? == c.python_sha256,
+        sha256_hex(&bytes) == c.sha256 && executable(&c.python)? == c.python_sha256,
         "classifier identity changed"
     );
     let path = classifier_path(o, c);
     if path.try_exists()? {
         ensure!(
-            sha(&read_private(&path)?) == c.sha256,
+            sha256_hex(&read_private(&path)?) == c.sha256,
             "staged classifier changed"
         );
     } else {
@@ -113,7 +113,7 @@ struct Journal {
 }
 
 fn id(o: &Options) -> String {
-    sha(format!("{}\0{}", o.path.display(), o.server).as_bytes())
+    sha256_hex(format!("{}\0{}", o.path.display(), o.server).as_bytes())
 }
 fn state_name(o: &Options) -> String {
     format!(".soup-wall-profile-{}.json", id(o))
@@ -380,7 +380,7 @@ async fn preview(target: &Target, config: &ConfigFile) -> Result<(Value, Owner, 
         .collect();
     let classifier = if let Some(path) = &target.classifier_script {
         ensure!(path.is_absolute(), "absolute classifier path required");
-        let digest = sha(&classifier_bytes(path)?);
+        let digest = sha256_hex(&classifier_bytes(path)?);
         let workspace = policies
             .first()
             .map(|p| p.workspace.clone())
@@ -452,7 +452,7 @@ async fn preview(target: &Target, config: &ConfigFile) -> Result<(Value, Owner, 
     let binding = json!({"domain":"agentfw/owned-profile-preview/v1", "path":o.path,"server":o.server,
         "home":o.home,"owner":owner,"installed":installed,
         "profile_state_sha256":crate::mcp::profile_author::digest(&serde_json::to_value(&state)?),
-        "host_config":sha(&config.bytes),"agent":native.binary,
+        "host_config":sha256_hex(&config.bytes),"agent":native.binary,
         "agent_config":native.config,"registry":native.registry,"policy":native.policy,
         "native_instance":runtime["instance_id"],"original_binary_sha256":executable(Path::new(owner.original["command"].as_str().context("original command absent")?))?,"source":source.bundle_sha256,"target":candidate.bundle_sha256,
         "generation":generation,"rollback":target.rollback,"classifier":classifier,"host_session":target.host_session,"profile_server_id":source_profile.server_id});
@@ -536,7 +536,7 @@ async fn finish(o: &Options, config: &mut ConfigFile, j: &mut Journal) -> Result
     let selected = config.entry(&o.server)?;
     if selected != proposed.wrapped {
         ensure!(
-            selected == j.before.wrapped && sha(&config.bytes) == j.before_host_sha256,
+            selected == j.before.wrapped && sha256_hex(&config.bytes) == j.before_host_sha256,
             "host configuration changed; conflict preserved"
         );
         j.proposed = Some(proposed.clone());
@@ -608,7 +608,7 @@ async fn apply(target: Target, approval: String) -> Result<Value> {
         operation: format!("op-{}", crate::token::generate()),
         phase: "prepared".into(),
         before: owner,
-        before_host_sha256: sha(&config.bytes),
+        before_host_sha256: sha256_hex(&config.bytes),
         source_path: target.source_profile.clone(),
         source_bundle,
         source_registry_path,
@@ -733,7 +733,7 @@ async fn recover(o: Options) -> Result<Value> {
     }
     ensure!(
         config.state(&o.server)?.as_ref() == Some(&j.before)
-            && sha(&config.bytes) == j.before_host_sha256,
+            && sha256_hex(&config.bytes) == j.before_host_sha256,
         "baseline host ownership changed; conflict preserved"
     );
     let native = preflight(&o).await?;
@@ -896,7 +896,8 @@ async fn collector(o: Options, generation: u64) -> Result<Value> {
     if let Some(c) = &installed.classifier {
         let path = classifier_path(&o, c);
         ensure!(
-            sha(&read_private(&path)?) == c.sha256 && executable(&c.python)? == c.python_sha256,
+            sha256_hex(&read_private(&path)?) == c.sha256
+                && executable(&c.python)? == c.python_sha256,
             "installed classifier changed"
         );
         command

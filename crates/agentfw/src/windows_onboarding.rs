@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::hashing::sha256_hex;
 use anyhow::{ensure, Context, Result};
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -85,10 +85,6 @@ pub struct Preview {
     pub elapsed_ms: u128,
 }
 
-fn sha(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
-
 fn fresh(path: &Path) -> Result<()> {
     let _pin = connection::parent(path)?;
     match std::fs::symlink_metadata(path) {
@@ -122,14 +118,14 @@ fn asset(path: &Path, expected: &str, executable: bool) -> Result<(Vec<u8>, conn
         },
     )?;
     ensure!(
-        sha(&selected.0) == expected,
+        sha256_hex(&selected.0) == expected,
         "selected asset digest mismatch"
     );
     Ok(selected)
 }
 
 fn confirmation(selection: &Selection, identities: &Value) -> Result<String> {
-    Ok(sha(&serde_json::to_vec(&json!({
+    Ok(sha256_hex(&serde_json::to_vec(&json!({
         "schema_version": "sw-windows-onboarding-preview/1",
         "selection": selection,
         "identities": identities,
@@ -245,8 +241,8 @@ async fn preview_selected(selection: &Selection) -> Result<Preview> {
         "classifier_sha256": selection.classifier_sha256,
         "registry_sha256": selection.registry_sha256,
         "policy_source_sha256": selection.policy_sha256,
-        "policy_runtime_sha256": sha(&serde_json::to_vec(&policy)?),
-        "host_config_sha256": sha(&host_before.0),
+        "policy_runtime_sha256": sha256_hex(&serde_json::to_vec(&policy)?),
+        "host_config_sha256": sha256_hex(&host_before.0),
         "host_file_identity": host_before.1,
         "selected_entry_sha256": connection_report["selected_sha256"],
     });
@@ -373,15 +369,15 @@ mod tests {
             drop(listener);
             let selection = Selection {
                 agent,
-                agent_sha256: sha(agent_bytes),
+                agent_sha256: sha256_hex(agent_bytes),
                 python,
-                python_sha256: sha(python_bytes),
+                python_sha256: sha256_hex(python_bytes),
                 classifier,
-                classifier_sha256: sha(classifier_bytes),
+                classifier_sha256: sha256_hex(classifier_bytes),
                 registry,
-                registry_sha256: sha(&registry_bytes),
+                registry_sha256: sha256_hex(&registry_bytes),
                 policy,
-                policy_sha256: sha(fixture::SHIPPED_POLICY.as_bytes()),
+                policy_sha256: sha256_hex(fixture::SHIPPED_POLICY.as_bytes()),
                 host_config,
                 server: "notes".into(),
                 home: path(".agentfw"),
@@ -504,13 +500,13 @@ mod tests {
     async fn invalid_registry_and_policy_fail_even_with_matching_hashes() {
         let mut fixture = Fixture::new();
         std::fs::write(&fixture.selection.registry, b"{}").unwrap();
-        fixture.selection.registry_sha256 = sha(b"{}");
+        fixture.selection.registry_sha256 = sha256_hex(b"{}");
         assert!(preview_selected(&fixture.selection).await.is_err());
         let bytes = fixture::registry();
         std::fs::write(&fixture.selection.registry, &bytes).unwrap();
-        fixture.selection.registry_sha256 = sha(&bytes);
+        fixture.selection.registry_sha256 = sha256_hex(&bytes);
         std::fs::write(&fixture.selection.policy, b"invalid: [").unwrap();
-        fixture.selection.policy_sha256 = sha(b"invalid: [");
+        fixture.selection.policy_sha256 = sha256_hex(b"invalid: [");
         assert!(preview_selected(&fixture.selection).await.is_err());
     }
 
