@@ -314,3 +314,28 @@ fn unknown_nested_plan_or_receipt_fields_and_uncertain_records_fail_closed() {
         }
     }
 }
+
+#[test]
+fn retained_application_accepts_hyphen_prefixed_ack() {
+    use clap::Parser;
+    #[derive(Parser)]
+    struct Options {
+        #[command(subcommand)]
+        action: super::super::Action,
+    }
+    let ack = format!("-{}", "a".repeat(42));
+    let options = Options::try_parse_from([
+        "agentfw",
+        "status",
+        "--journal",
+        "/journal",
+        "--expect-plan",
+        &"a".repeat(64),
+        "--success-ack",
+        &ack,
+    ])
+    .unwrap();
+    assert!(
+        matches!(options.action, super::super::Action::Status(args) if args.success_ack.as_ref() == Some(&ack))
+    );
+}
