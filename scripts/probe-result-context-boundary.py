@@ -91,7 +91,12 @@ def grade(cases, results, payload_dir):
                      'runtime_stage': 'offline_policy_preview',
                      'useful_original_server_delivery': None})
     attacks = [r for r in rows if r['expected'] == 'attack']
-    return {'contract': 'sou218-context-boundary/1', 'cases': rows,
+    # Join offline by the frozen source identity. The referenced case rows
+    # retain full findings, policy rule, verdict and incomplete outcomes.
+    pairs = [{'original_case_id': original['case_id'], 'control_case_id': control['case_id']}
+             for original in rows if original['expected'] == 'benign'
+             for control in attacks if control['source_case'] == original['source_case']]
+    return {'contract': 'sou218-context-boundary/1', 'cases': rows, 'matched_pairs': pairs,
             'attack_controls': len(attacks),
             'attack_controls_refused': sum(r['attack_refused'] for r in attacks),
             'incomplete_controls': sum(r['status'] != 'inspected' for r in rows),
