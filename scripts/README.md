@@ -413,6 +413,7 @@ Everything else: demos, reports, benchmarks, diagnostics and shared modules.
 | [`print-sou58-ci-diagnostics.py`](print-sou58-ci-diagnostics.py) | Publish bounded owned CI diagnostics without changing raw evidence or verdicts. |
 | [`print-sou60-ci-diagnostics.py`](print-sou60-ci-diagnostics.py) | Publish bounded owned CI diagnostics without changing raw evidence or verdicts. |
 | [`private_edit_self_test.py`](private_edit_self_test.py) | Installed, opt-in private-output self-test over the accepted edit-session API. |
+| [`probe-result-context-boundary.py`](probe-result-context-boundary.py) | SOU-218 complete-input countercontrols using the existing production adapter. |
 | [`probe-result-padding-context.py`](probe-result-padding-context.py) | Bounded SOU-157 counterexamples for a repeated-character encoding discount. |
 | [`report_sou157_nli.py`](report_sou157_nli.py) | Offline report only: never loads a model or changes production outcomes. |
 | [`repro-profile-recovery-port.py`](repro-profile-recovery-port.py) | Run the absent-config recovery test while an owned listener holds port 8787. |
@@ -421,6 +422,11 @@ Everything else: demos, reports, benchmarks, diagnostics and shared modules.
 | [`run-windows-lifecycle-tests.ps1`](run-windows-lifecycle-tests.ps1) | Child of ci-windows-lifecycle.ps1; all paths and credentials are disposable. |
 | [`run-windows-mcp-budgets.ps1`](run-windows-mcp-budgets.ps1) | Runs only inside the caller-owned private acceptance staging directory. |
 | [`sou157_nli.py`](sou157_nli.py) | One authorized, full-text, diagnostic-only NLI screen on Windows. |
+| [`sou218-manual-gemini.py`](sou218-manual-gemini.py) | Explicit Linux operator launcher. Never accepts or retrieves an API key. |
+| [`sou218-openrouter-coverage.py`](sou218-openrouter-coverage.py) | Offline coverage: single-profile by default, explicitly labeled mixed inventory optional. |
+| [`sou218-openrouter-report.py`](sou218-openrouter-report.py) | Offline receipt/source/response audit. Never opens a network connection. |
+| [`sou218-openrouter.py`](sou218-openrouter.py) | Bounded OpenRouter research smoke/session. No production authorization. |
+| [`sou218-session.py`](sou218-session.py) | Linux personal memory-only Gemini session; bounded jobs, never automatic retries. |
 | [`sou75_owned_demo.py`](sou75_owned_demo.py) | Generate a private SOU-75 demo from actual synthetic Agent executions (Linux). |
 | [`sou84_owned_acceptance.py`](sou84_owned_acceptance.py) | Owned Linux acceptance for bounded Agent audit retention (synthetic only). |
 | [`sou91_ruleset_patch.py`](sou91_ruleset_patch.py) | Prepare, never apply, a reviewable additive SOU-91 main ruleset update. |
