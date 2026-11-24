@@ -22,6 +22,10 @@ use serde::Serialize;
 use soup_wall_adapter::DecisionResponse;
 use soup_wall_agent::{AgentEvent, AgentFirewall, EventKind, Verdict};
 
+// Reviewed SOU-218 public-fixture milestone only. No production entry point.
+#[cfg(test)]
+pub(crate) mod fixture_reader;
+
 /// Network access for a sandboxed command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NetworkPolicy {
