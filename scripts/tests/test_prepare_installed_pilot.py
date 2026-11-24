@@ -21,6 +21,36 @@ PREP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PREP)
 
 
+@unittest.skipUnless(os.name == "posix", "private JSON writing requires POSIX permissions")
+class ReportEncodingControls(unittest.TestCase):
+    def test_compact_reports_preserve_all_data_and_default_manifest_bytes(self):
+        value = {'observations': [{'pid': 123, 'stopped': True} for _ in range(1500)]}
+        pretty = (json.dumps(value, sort_keys=True, indent=2) + '\n').encode()
+        self.assertGreater(len(pretty), PREP.MAX_JSON)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report = root / 'report.json'
+            PREP.write_json(report, value, compact=True)
+            self.assertLessEqual(report.stat().st_size, PREP.MAX_JSON)
+            self.assertEqual(json.loads(report.read_bytes()), value)
+            self.assertEqual(stat.S_IMODE(report.stat().st_mode), 0o600)
+            marker = root / 'marker.json'
+            PREP.write_json(marker, {'b': 2, 'a': 1})
+            expected = (json.dumps({'b': 2, 'a': 1}, sort_keys=True, indent=2) + '\n').encode()
+            self.assertEqual(marker.read_bytes(), expected)
+            with self.assertRaises(FileExistsError):
+                PREP.write_json(marker, value, compact=True)
+            self.assertEqual(marker.read_bytes(), expected)
+
+    def test_compact_encoding_retains_the_existing_size_refusal(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for compact in (False, True):
+                path = Path(temporary) / f'oversized-{compact}.json'
+                with self.assertRaisesRegex(ValueError, 'manifest_size_limit'):
+                    PREP.write_json(path, {'data': 'x' * PREP.MAX_JSON}, compact=compact)
+                self.assertFalse(path.exists())
+
+
 @unittest.skipUnless(os.name == "posix", "private installer logs require POSIX permissions")
 class InstallerFailurePrivacy(unittest.TestCase):
     @contextmanager

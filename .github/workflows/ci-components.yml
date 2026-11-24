@@ -33,6 +33,26 @@ jobs:
       SOU166_ARCHIVE_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_sha256 }}
       SOU166_MANIFEST_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.manifest_sha256 }}
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
+      - name: Align shared-build glibc from signed Ubuntu packages
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -501,6 +521,25 @@ jobs:
       producer_attempt: ${{ steps.build.outputs.producer_attempt }}
       image_version: ${{ steps.build.outputs.image_version }}
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
+      - name: Align shared-build glibc from signed Ubuntu packages
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -1247,6 +1286,26 @@ jobs:
       SOU166_ARCHIVE_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_sha256 }}
       SOU166_MANIFEST_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.manifest_sha256 }}
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
+      - name: Align shared-build glibc from signed Ubuntu packages
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -1459,6 +1518,12 @@ jobs:
                 's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
             fi
           done
+      - name: Align shared-build glibc from signed Ubuntu packages
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -1685,6 +1750,26 @@ jobs:
       SOU166_ARCHIVE_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_sha256 }}
       SOU166_MANIFEST_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.manifest_sha256 }}
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
+      - name: Align shared-build glibc from signed Ubuntu packages
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -1800,6 +1885,26 @@ jobs:
       SOU166_ARCHIVE_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_sha256 }}
       SOU166_MANIFEST_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.manifest_sha256 }}
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
+      - name: Align shared-build glibc from signed Ubuntu packages
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -1845,7 +1950,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou73-unit-use.json" -- test --locked --offline -p agentfw --lib -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou73-native-unit.log"
+          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou73-unit-use.json" -- test --locked --offline -p agentfw --lib -- --quiet 2>&1 | tee "$RUNNER_TEMP/sou73-native-unit.log"
           python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou73-router-use.json" -- test --locked --offline -p agentfw --test native_endpoint -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou73-native-router.log"
           python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou73-clippy-use.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings 2>&1 | tee "$RUNNER_TEMP/sou73-clippy.log"
       - name: Require nonempty passing native evidence
@@ -2294,6 +2399,19 @@ jobs:
             --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" \
             --out "$RUNNER_TEMP/profile-onboarding-filesystem" --work-parent "$RUNNER_TEMP" \
             2>&1 | tee "$RUNNER_TEMP/sou62-profile-onboarding.log"
+      - name: SOU-97 opt-in candidate classifier through the original filesystem server
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'sou97-candidate' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_SHA256="$(python3 -c 'import json; print(json.load(open("eval/pilot/sou97_gate_manifest_v1.json"))["candidate"]["sha256"])')"
+          python3 -B scripts/verify-sou62-real-mcp.py --run --agentfw "$PWD/target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" \
+            --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
+            --classifier-script "$PWD/rule_baseline/pilot_readonly_v1/rule_baseline.py" --classifier-sha256 "$CANDIDATE_SHA256" \
+            --output "$RUNNER_TEMP/sou97-filesystem-candidate" 2>&1 | tee "$RUNNER_TEMP/sou97-filesystem-candidate.log"
       - name: Publish bounded outcome
         if: always() && github.event.inputs.original_create_only != 'true'
         shell: bash
@@ -2389,6 +2507,10 @@ jobs:
             ${{ runner.temp }}/sou62-sou63-combined/*.json
             ${{ runner.temp }}/sou62-sou63-combined/*.log
             ${{ runner.temp }}/profile-onboarding-filesystem/*.json
+            ${{ runner.temp }}/sou97-*.log
+            ${{ runner.temp }}/sou97-filesystem-candidate/*.json
+            ${{ runner.temp }}/sou97-filesystem-candidate/*.jsonl
+            ${{ runner.temp }}/sou97-filesystem-candidate/*.log
           if-no-files-found: error
           retention-days: 30
 
@@ -3812,40 +3934,43 @@ jobs:
             ${{ runner.temp }}/installed-linked-worktrees.log
           if-no-files-found: warn
           retention-days: 30
-      - name: Quiesce an empty owned CI user session before pilot execution
+      - name: Prepare a dedicated ordinary user for installed pilot qualification
         if: github.event.inputs.installed_focus == 'clean-user'
         shell: bash
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          SOU216_CLEAN_USER_FOCUS: ${{ github.event.inputs.installed_focus }}
+          SOU216_NATIVE_PREPARATION: ${{ github.event.inputs.native_preparation_only }}
         run: |
           set -euo pipefail
-          python3 -I -B scripts/ci_pilot_user_session.py --quiesce
+          export SOU216_SOURCE_RECEIPT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["receipt"])' "$RUNNER_TEMP/sou111-assets/source-first.json")"
+          bash scripts/ci_clean_user_account.sh setup
       - name: Qualify pinned installed pilot in a clean ordinary-user environment
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'clean-user' && github.event.inputs.native_preparation_only == 'true'
         shell: bash
         env:
-          SOU216_CI_USER_SESSION_REPORT: ${{ runner.temp }}/sou216-user-session/report.json
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          SOU216_CLEAN_USER_FOCUS: ${{ github.event.inputs.installed_focus }}
+          SOU216_NATIVE_PREPARATION: ${{ github.event.inputs.native_preparation_only }}
         run: |
           set -euo pipefail
-          asset="$RUNNER_TEMP/sou111-assets"
-          receipt="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["receipt"])' "$asset/source-first.json")"
-          python3 -B scripts/qualify-installed-front-door.py --run --clean-user-only \
-            --runtime-source "$SOU216_RUNTIME_SOURCE" --source-build-receipt "$receipt" \
-            --runtime-source-commit "$GITHUB_SHA" \
-            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou216-clean-user" \
-            --component-python /usr/bin/python3.12 --strace "$(command -v strace)" \
-            --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
-            --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
-            --sandbox-tests "$SOU119_SANDBOX_TESTS" --node-archive "$asset/node.tar.xz" \
-            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python /usr/bin/python3.12 --allow-download \
-            2>&1 | tee "$RUNNER_TEMP/sou216-clean-user.log"
+          bash scripts/ci_clean_user_account.sh qualify 2>&1 | tee "$RUNNER_TEMP/sou216-clean-user.log"
       - name: Retain private process provenance after the installed-host attempt
         if: always() && github.event.inputs.installed_focus == 'clean-user'
         shell: bash
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
-        run: python3 -I -B scripts/ci_pilot_user_session.py --after-cleanup
+          SOU216_CLEAN_USER_FOCUS: ${{ github.event.inputs.installed_focus }}
+          SOU216_NATIVE_PREPARATION: ${{ github.event.inputs.native_preparation_only }}
+        run: bash scripts/ci_clean_user_account.sh after
+      - name: Seal and retain the selected original clean-user records
+        if: always() && github.event.inputs.installed_focus == 'clean-user'
+        shell: bash
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          SOU216_CLEAN_USER_FOCUS: ${{ github.event.inputs.installed_focus }}
+          SOU216_NATIVE_PREPARATION: ${{ github.event.inputs.native_preparation_only }}
+        run: bash scripts/ci_clean_user_account.sh export
       - name: Retain original clean-user outcomes including failed and incomplete attempts
         if: always() && github.event.inputs.installed_focus == 'clean-user'
         uses: actions/upload-artifact@v7
@@ -3857,6 +3982,7 @@ jobs:
             ${{ runner.temp }}/sou216-user-session-after-cleanup/report.json
             ${{ runner.temp }}/sou216-user-session-after-cleanup/private-provenance.cms
             ${{ runner.temp }}/sou216-clean-user/report.json
+            ${{ runner.temp }}/sou216-clean-user/installed-custody.cms
             ${{ runner.temp }}/sou216-clean-user/*/expected.private.json
             ${{ runner.temp }}/sou216-clean-user/walkthrough/report.json
             ${{ runner.temp }}/sou216-clean-user/ask/qualification.json
@@ -4005,8 +4131,10 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_scope.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door.py -v
           python3 -B scripts/pilot_scope.py --check
+          umask 077
+          receipt="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["receipt"])' "$asset/source-first.json")"
           # Installed commands select the scope; the standard useful/refused/cancel cases then run under it.
-          python3 -B scripts/qualify-installed-front-door.py --run --pilot-scope-only \
+          python3 -B scripts/qualify-installed-front-door.py --run --pilot-scope-only --source-build-receipt "$receipt" \
             --output "$RUNNER_TEMP/sou215-pilot-scope" --expected-commit "$(git rev-parse HEAD)" \
             --component-python /usr/bin/python3.12 \
             --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
@@ -4020,14 +4148,27 @@ jobs:
           # on the generation that the scope-selected prefix prepared.
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou215-pilot-scope/report.json").read_text())["pilot_scope"]["demo_selection"])')"
           python3 -B -c 'import json,sys; s=json.load(open(sys.argv[1])); assert s["files"]["policy"]["sha256"] and s["format"]' "$selection"
-          python3 -B scripts/qualify-installed-pilot.py --run --selection "$selection" \
+          python3 -B scripts/qualify-installed-pilot.py --run --selection "$selection" --parent-report "$RUNNER_TEMP/sou215-pilot-scope/report.json" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou215-installed-pilot" \
             2>&1 | tee "$RUNNER_TEMP/sou215-installed-pilot.log"
           # The first-use demo adds the explicit single-use Ask control, timeout and daemon-loss recovery on the same generation.
-          (cd "$HOME" && python3 -B "$GITHUB_WORKSPACE/scripts/pilot-demo.py" --run --selection "$selection" \
+          (cd "$HOME" && python3 -B "$GITHUB_WORKSPACE/scripts/pilot-demo.py" --run --selection "$selection" --parent-report "$RUNNER_TEMP/sou215-pilot-scope/report.json" \
             --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
             --strace "$(command -v strace)" --output "$RUNNER_TEMP/sou215-pilot-demo") \
             2>&1 | tee "$RUNNER_TEMP/sou215-pilot-demo.log"
+      - name: Seal sou215-pilot-scope installed pilot custody
+        if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'pilot-scope'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          output="$RUNNER_TEMP/sou215-pilot-scope"
+          if test -d "$output/custody"; then
+            cert=scripts/fixtures/sou243-custody-recipient.crt
+            test "$(sha256sum "$cert" | cut -d ' ' -f1)" = 5de07c5f15b1f7c15970769001e527aadacf91a32a826f840932c5cc379db5b2
+            tar -C "$output" -cf - custody | openssl cms -encrypt -binary -aes-256-gcm \
+              -out "$output/installed-custody.cms" -outform DER "$cert"
+          fi
       - name: Retain finite pilot scope reports including failure
         if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.installed_focus == 'pilot-scope'
         uses: actions/upload-artifact@v7
@@ -4035,6 +4176,7 @@ jobs:
           name: sou215-pilot-scope-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/sou215-pilot-scope/report.json
+            ${{ runner.temp }}/sou215-pilot-scope/installed-custody.cms
             ${{ runner.temp }}/sou215-pilot-scope.log
             ${{ runner.temp }}/sou215-pilot-scope/installed-tools/demo/report.json
             ${{ runner.temp }}/sou215-pilot-scope/installed-tools/support/report.json
@@ -4161,10 +4303,30 @@ jobs:
           "$SOU119_SANDBOX_TESTS" pinned_existing_workspace_refuses_replacement --list > "$RUNNER_TEMP/sou134-tests.list"
           python3 -c 'import pathlib,sys; assert "pinned_existing_workspace_refuses_replacement: test" in pathlib.Path(sys.argv[1]).read_text()' "$RUNNER_TEMP/sou134-tests.list"
           "$SOU119_SANDBOX_TESTS" pinned_existing_workspace_refuses_replacement
+          if [[ '${{ github.event.inputs.existing_project_only }}' == 'true' ]]; then
+            "$SOU119_SANDBOX_TESTS" 'real_server::outcomes::tests::' --list > "$RUNNER_TEMP/sou177-outcome-tests.list"
+            python3 -c 'import pathlib,sys; assert sum(line.endswith(": test") for line in pathlib.Path(sys.argv[1]).read_text().splitlines()) == 2' "$RUNNER_TEMP/sou177-outcome-tests.list"
+            "$SOU119_SANDBOX_TESTS" 'real_server::outcomes::tests::'
+            python3 -B -m unittest discover -s scripts/tests -p test_git_outcomes.py
+            python3 -B -m unittest discover -s scripts/tests -p test_pilot_launcher_witness.py
+            python3 -B -m unittest discover -s scripts/tests -p test_prepared_trace_bounds.py
+            python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py
+            python3 -B -m unittest discover -s scripts/tests -p test_git_workflow_scope.py
+          fi
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
+          project_failed=0
           python3 -B scripts/qualify-existing-pilot.py --selection "$selection" \
             --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
-            --output "$RUNNER_TEMP/sou134-qualification"
+            --output "$RUNNER_TEMP/sou134-qualification" || project_failed=1
+          if [[ '${{ github.event.inputs.existing_project_only }}' == 'true' ]]; then
+            for project in docs-code unicode-spaces local-history; do
+              python3 -B scripts/qualify-existing-pilot.py --selection "$selection" \
+                --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
+                --project-fixture "$project" --git-negative-controls \
+                --output "$RUNNER_TEMP/sou177-$project" || project_failed=1
+            done
+          fi
+          exit "$project_failed"
       - name: Qualify structured operator outcomes through both original servers
         if: (github.event_name == 'workflow_dispatch' && github.event.inputs.operator_results_only == 'true') && github.event.inputs.private_edit_self_test_only != 'true'
         shell: bash
@@ -4434,7 +4596,8 @@ jobs:
             ${{ runner.temp }}/sou141-ask-series/runs/*/stage-events.jsonl
             ${{ runner.temp }}/sou111-assets/native-read-lease.log
             ${{ runner.temp }}/sou111-assets/baseline-build.json
-            ${{ runner.temp }}/sou134-qualification/report.json
+            ${{ runner.temp }}/sou134-qualification/*.json
+            ${{ runner.temp }}/sou177-*/*.json
             ${{ runner.temp }}/sou120-demo/report.json
             ${{ runner.temp }}/sou135-inbox/qualification.json
             ${{ runner.temp }}/sou121-cleanup/report.json
@@ -4561,6 +4724,17 @@ jobs:
             --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou98-git" \
             2>&1 | tee "$RUNNER_TEMP/sou98-git.log"
+      - name: SOU-244 sealed first-parent original-server controls
+        if: ${{ !inputs.local_refs_only && !inputs.shallow_only && !inputs.file_revisions_only && !inputs.tracked_symlinks_only }}
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/verify-sou244-git-first-parent.py --allow-download \
+            --agentfw "$PWD/target/debug/agentfw" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou244-first-parent"
       - name: SOU-107 opt-in local-clone acceptance
         if: ${{ !(github.event_name == 'workflow_dispatch' && (inputs.local_refs_only || inputs.shallow_only || inputs.file_revisions_only || inputs.tracked_symlinks_only)) }}
         shell: bash
@@ -4638,12 +4812,95 @@ jobs:
             --sandbox-test-binary "$SOU68_TEST_BINARY" \
             --expected-commit "${{ github.sha }}" --output "$RUNNER_TEMP/sou150-acceptance" \
             2>&1 | tee "$RUNNER_TEMP/sou150-acceptance.log"
+      - name: SOU-97 opt-in candidate classifier through the original Git server
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_candidate == 'true' && !(inputs.local_refs_only || inputs.shallow_only || inputs.file_revisions_only || inputs.tracked_symlinks_only) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_SHA256="$(python3 -c 'import json; print(json.load(open("eval/pilot/sou97_gate_manifest_v1.json"))["candidate"]["sha256"])')"
+          python3 -B scripts/verify-sou68-real-mcp.py --run --agentfw "$PWD/target/debug/agentfw" \
+            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --sandbox-test-binary "$SOU68_TEST_BINARY" \
+            --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --expected-commit "$(git rev-parse HEAD)" \
+            --classifier-script "$PWD/rule_baseline/pilot_readonly_v1/rule_baseline.py" --classifier-sha256 "$CANDIDATE_SHA256" \
+            --output "$RUNNER_TEMP/sou97-git-candidate" 2>&1 | tee "$RUNNER_TEMP/sou97-git-candidate.log"
+      - name: SOU-97 diagnostic only (never acceptance) - original Git server cancellation overlap
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_diagnostic == 'true' }}
+        continue-on-error: true
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Required first: every diagnostic test, including the Linux-only ones, must run and pass; a skip fails.
+          if ! python3 -B - <<'PY' 2>&1 | tee "$RUNNER_TEMP/diagnostic-sou97-git-tests.log"; then
+          import sys, unittest
+          suite = unittest.defaultTestLoader.discover("scripts/tests", pattern="test_sou97_git_cancellation_diagnostic.py")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          print(f"diagnostic tests: run={result.testsRun} failures={len(result.failures)} errors={len(result.errors)} skipped={len(result.skipped)}")
+          sys.exit(0 if result.wasSuccessful() and result.testsRun > 0 and not result.skipped else 1)
+          PY
+            echo "::error title=SOU-97 Git diagnostic tests::diagnostic tests failed or skipped; the experiment did not run"
+            exit 1
+          fi
+          python3 -B scripts/diagnose-sou97-git-cancellation.py --run \
+            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --expected-commit "$(git rev-parse HEAD)" --trials 20 --max-seconds 480 \
+            --output "$RUNNER_TEMP/diagnostic-sou97-git" 2>&1 | tee "$RUNNER_TEMP/diagnostic-sou97-git.log"
+      - name: Retain SOU-97 diagnostic-only output (never acceptance evidence)
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_diagnostic == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou97-git-cancellation-diagnostic
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/diagnostic-sou97-git-tests.log
+            ${{ runner.temp }}/diagnostic-sou97-git.log
+            ${{ runner.temp }}/diagnostic-sou97-git/diagnostic.json
+      - name: SOU-97 diagnostic only (never acceptance) - protected Git overlap through sandbox and native relay
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_protected_diagnostic == 'true' }}
+        continue-on-error: true
+        timeout-minutes: 25
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Required first: every diagnostic test, including the Linux-only ones, must run and pass; a skip fails.
+          if ! python3 -B - <<'PY' 2>&1 | tee "$RUNNER_TEMP/diagnostic-sou97-git-protected-tests.log"; then
+          import sys, unittest
+          suite = unittest.defaultTestLoader.discover("scripts/tests", pattern="test_sou97_git_protected_overlap_diagnostic.py")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          print(f"diagnostic tests: run={result.testsRun} failures={len(result.failures)} errors={len(result.errors)} skipped={len(result.skipped)}")
+          sys.exit(0 if result.wasSuccessful() and result.testsRun > 0 and not result.skipped else 1)
+          PY
+            echo "::error title=SOU-97 Git protected diagnostic tests::diagnostic tests failed or skipped; the experiment did not run"
+            exit 1
+          fi
+          CANDIDATE_SHA256="$(python3 -c 'import json; print(json.load(open("eval/pilot/sou97_gate_manifest_v1.json"))["candidate"]["sha256"])')"
+          python3 -B scripts/diagnose-sou97-git-protected-overlap.py --run --agentfw "$PWD/target/debug/agentfw" \
+            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --expected-commit "$(git rev-parse HEAD)" \
+            --classifier-script "$PWD/rule_baseline/pilot_readonly_v1/rule_baseline.py" --classifier-sha256 "$CANDIDATE_SHA256" \
+            --sessions 6 --replay-iterations 2 --replay-arm auto --max-seconds 900 \
+            --output "$RUNNER_TEMP/diagnostic-sou97-git-protected" 2>&1 | tee "$RUNNER_TEMP/diagnostic-sou97-git-protected.log"
+      - name: Retain SOU-97 protected overlap diagnostic output (never acceptance evidence)
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_protected_diagnostic == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou97-git-protected-overlap-diagnostic
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/diagnostic-sou97-git-protected-tests.log
+            ${{ runner.temp }}/diagnostic-sou97-git-protected.log
+            ${{ runner.temp }}/diagnostic-sou97-git-protected/diagnostic.json
       - name: Retain exact-source synthetic evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: sou68-real-git-mcp-evidence
           path: |
+            ${{ runner.temp }}/sou244-first-parent/**
             ${{ runner.temp }}/sou146-acceptance/**
             ${{ runner.temp }}/sou146-acceptance.log
             ${{ runner.temp }}/sou150-acceptance/**
@@ -4664,6 +4921,10 @@ jobs:
             ${{ runner.temp }}/sou68-acceptance/*.json
             ${{ runner.temp }}/sou68-acceptance/*.log
             ${{ runner.temp }}/profile-onboarding-git/*.json
+            ${{ runner.temp }}/sou97-*.log
+            ${{ runner.temp }}/sou97-git-candidate/*.json
+            ${{ runner.temp }}/sou97-git-candidate/*.jsonl
+            ${{ runner.temp }}/sou97-git-candidate/*.log
           if-no-files-found: error
           retention-days: 30
 
@@ -4822,6 +5083,26 @@ jobs:
       SOU166_ARCHIVE_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_sha256 }}
       SOU166_MANIFEST_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.manifest_sha256 }}
     steps:
+      - name: Use signed Ubuntu mirror when archive DNS is unavailable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if timeout 5 getent ahosts archive.ubuntu.com >/dev/null; then
+            exit 0
+          fi
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [[ -f "$source" ]]; then
+              sudo sed --regexp-extended --in-place \
+                's#https?://(azure\.archive|archive|security)\.ubuntu\.com/ubuntu([/[:space:]]|$)#https://mirrors.edge.kernel.org/ubuntu\2#g' "$source"
+            fi
+          done
+      - name: Align shared-build glibc from signed Ubuntu packages
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}

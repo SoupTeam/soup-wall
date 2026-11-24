@@ -170,6 +170,25 @@ witness coverage and the positive Linux run remain required before completion.
 Existing filesystem acceptance runs alongside this profile in CI. Neither this
 profile nor its synthetic fixture constitutes general Git repository support.
 
+### Opt-in SOU-97 candidate classifier
+
+`--classifier-script PATH --classifier-sha256 SHA256` (both or neither) replaces the
+default `git_readonly_v1` classifier with an explicitly selected one. The run refuses
+unless the raw bytes match. The existing reads, refusals, overlap and daemon-loss
+checks are unchanged.
+
+Before them, candidate mode replays every runtime-reachable Git case of the
+[frozen matrix](../../eval/fixtures/soup_pilot_readonly_matrix_v0.1.json) through the
+protected chain. It checks dispatch with the collector audit and the
+`RepositoryWitness` inotify opens, and effects with repository snapshots and an
+owned receiver, then writes `sou97-runtime-evidence.json` for the
+[SOU-97 gate](../../eval/pilot/README.md).
+
+Four cases (PMG-B07, B08, B19 and B20) name synthetic revisions that no repository
+contains. The manifest lists them by ID, and the original server's own error is
+the required outcome for them. The workflow runs this mode only when dispatched
+with `sou97_candidate: true`.
+
 ## Failed-run diagnostics
 
 Selected-server stderr remains withheld from the MCP host and is not written as
@@ -425,3 +444,37 @@ second request, then checks its exact binding, distinct pending ID and zero new
 repository opens, worker reservations/workers or original result events before
 approval and after rejection. Events are never reset after the second send.
 All five Ask cases and the existing timing bounds still require qualification.
+
+## Opt-in first-parent diff (SOU-244)
+
+Select `git-readonly-first-parent-v1` with the installed pilot's `--git-profile`
+option on native Linux. For an independent private installation, select
+`--first-parent` in `scripts/install-sou68-git-profile.py` and pair the resulting
+profile and registry with `rule_baseline/git_readonly_first_parent_v1/rule_baseline.py`
+under the enforcing pilot policy. The [profile contract](../../profiles/mcp/git-readonly-first-parent-v1/contract.json)
+adds the single literal `HEAD~1` in `git_diff.target`.
+
+The original collector mounts one bounded sealed Git metadata and loose-object
+view. A diff using this literal requires typed, hash-verified HEAD and
+first-parent commits and their trees in that view. For a merge, stored parent
+order selects the first parent. A colliding workspace path, absent or invalid
+parent, or withdrawn view refuses the call. The retained descriptor watches
+and read leases are rechecked before dispatch and delivery. Packed objects,
+shallow data, replacement refs, grafts, commit graphs, alternates, and profiles
+combining revision extensions are outside this contract.
+
+The pinned original server receives `HEAD~1` unchanged inside the existing
+read-only sandbox. The enforcing policy inspects its full original result.
+The default and other Git profiles retain their existing input grammar.
+
+Use `eval/sou123/effect_controls.py --surface git --git-first-parent` to select
+the twelve frozen diff cases. With `--run` and the pinned offline runtime
+inputs, the report records original response, inspection, host delivery,
+continuation and effect witnesses. Benign result refusals remain false
+interruptions in the acceptance totals.
+
+Run `scripts/verify-sou244-git-first-parent.py` with the same pinned runtime
+binaries and `--expected-commit`. Supply `--python-archive` and `--wheelhouse`
+for offline runs or use `--allow-download` to resolve the reviewed installation
+pins. The standalone and reusable Linux Git jobs retain the report and logs
+under `sou244-first-parent` and fail unless all sixteen native controls complete.

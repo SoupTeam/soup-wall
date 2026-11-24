@@ -139,6 +139,7 @@ def collector_dispatches(text, binary, strict=True):
                 channels.add(key)
             if value.get("method") == "tools/call":
                 calls.append({"pid": pid, "fd": fd, "id": value.get("id"),
+                              "request_sha256":BASE.hashlib.sha256(frame + b"\n").hexdigest(),
                               "tool": value.get("params", {}).get("name"),
                               "args_sha256":BASE.hashlib.sha256(json.dumps(value.get("params",{}).get("arguments"),sort_keys=True,separators=(",",":"),ensure_ascii=False).encode()).hexdigest()})
     # On daemon loss the genuine host may attempt a fresh collector which is

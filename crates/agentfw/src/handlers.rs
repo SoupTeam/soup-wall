@@ -234,10 +234,7 @@ impl RootJsonScan {
             "WebFetch",
             "WebSearch",
         ];
-        if READ_ONLY.contains(&tool) {
-            return false;
-        }
-        true
+        !READ_ONLY.contains(&tool)
     }
 
     pub fn has_protected_tool(&self, raw: &str) -> bool {

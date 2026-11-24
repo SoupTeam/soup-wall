@@ -106,7 +106,13 @@ class SourceWorkflowIdentity(unittest.TestCase):
         step = workflow.split("      - name: Pin SOU-216 product candidate independently of the measurement driver\n", 1)[1]
         step = step.split("\n      - name: ", 1)[0]
         shell = "set -euo pipefail\numask 077\n" + textwrap.dedent(step.split("          umask 077\n", 1)[1])
-        self.assertIn('--runtime-source-commit "$GITHUB_SHA"', workflow)
+        account_driver = SCRIPT.with_name("ci_clean_user_account.sh").read_text()
+        self.assertIn("bash scripts/ci_clean_user_account.sh qualify", workflow)
+        self.assertIn('--runtime-source-commit "$GITHUB_SHA"', account_driver)
+        self.assertIn('--reuid "$uid" --regid "$gid" --clear-groups', account_driver)
+        self.assertIn('test "$uid" -ge 1000 && test "$uid" != "$runner_uid"', account_driver)
+        for key in ("GITHUB_EVENT_NAME", "SOU216_CLEAN_USER_FOCUS", "SOU216_NATIVE_PREPARATION"):
+            self.assertLess(account_driver.index(key), account_driver.index("useradd"))
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             workspace = root / "workspace"
