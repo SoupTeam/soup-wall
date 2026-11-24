@@ -1,5 +1,7 @@
 """Centralization must preserve exact-source and complete matrix qualification."""
+from contextlib import redirect_stdout
 from copy import deepcopy
+from io import StringIO
 from itertools import count
 import os
 from pathlib import Path
@@ -11,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import ci_admission as gate
 
 BASE, HEAD, MERGE = "a" * 40, "b" * 40, "c" * 40
+REGENERATED, TREE = "e" * 40, "7" * 40
 SELECTION = {"workflows": {"ci.yml": ["documentation"],
                           "scim-directory.yml": ["interoperability"]},
              "codeql": ["Analyze (rust)", "Analyze (python)", "Analyze (actions)",
@@ -31,6 +34,9 @@ class API:
         self.pr = {"state": "open", "draft": False, "base": {"sha": BASE},
                    "head": {"sha": HEAD}, "merge_commit_sha": MERGE, "changed_files": 1}
         self.parents = [BASE, HEAD]
+        self.commits = {}
+        self.commit_reads = []
+        self.commit_error = None
         self.pr_reads = 0
         self.next_pr_after_first = None
         self.runs = [{"id": 1, "path": ".github/workflows/ci.yml", "head_sha": HEAD,
@@ -58,8 +64,15 @@ class API:
             if self.pr_reads > 1 and self.next_pr_after_first is not None:
                 return self.next_pr_after_first
             return self.pr
-        if suffix == "/git/commits/" + MERGE:
+        if suffix == "/git/commits/" + MERGE and MERGE not in self.commits:
             return {"parents": [{"sha": sha} for sha in self.parents]}
+        if suffix.startswith("/git/commits/"):
+            self.commit_reads.append(suffix.rsplit("/", 1)[1])
+            if self.commit_error is not None:
+                raise gate.EvidenceAPIError(self.commit_error)
+            if suffix.rsplit("/", 1)[1] not in self.commits:
+                raise gate.EvidenceAPIError("http_404")
+            return self.commits[suffix.rsplit("/", 1)[1]]
         if suffix.startswith("/actions/runs/"):
             return next(run for run in self.runs + self.codeql
                         if run["id"] == int(suffix.rsplit("/", 1)[1]))
@@ -103,7 +116,8 @@ class API:
 
 class CentralAdmission(unittest.TestCase):
     def assess(self, api):
-        with patch.object(gate, "plan", return_value=SELECTION), patch.dict(os.environ, {"SOU91_SELECTIVE_CI": ""}):
+        with patch.object(gate, "plan", return_value=SELECTION), patch.dict(os.environ, {"SOU91_SELECTIVE_CI": ""}), \
+                redirect_stdout(StringIO()):
             return gate.inspect(api, 1, BASE, HEAD)[1]
 
     def test_central_run_qualifies_all_members_and_is_fetched_once(self):
@@ -240,6 +254,80 @@ class CentralAdmission(unittest.TestCase):
                 elif mode == "wrong-merge": api.jobs[1][0]["name"] = "impact / Candidate " + "d" * 40
                 else: api.jobs[1] = api.jobs[1][:2]
                 self.assertNotEqual(self.assess(api).state, "success")
+
+    def regenerated(self):
+        """GitHub recreated the test merge; the run still names the earlier SHA."""
+        api = API()
+        api.pr["merge_commit_sha"] = REGENERATED
+        for sha in (MERGE, REGENERATED):
+            api.commits[sha] = {"sha": sha, "tree": {"sha": TREE},
+                                "parents": [{"sha": BASE}, {"sha": HEAD}]}
+        return api
+
+    def test_regenerated_test_merge_with_same_tree_and_parents_qualifies(self):
+        api = self.regenerated()
+        log = StringIO()
+        with patch.object(gate, "plan", return_value=SELECTION), \
+                patch.dict(os.environ, {"SOU91_SELECTIVE_CI": ""}), redirect_stdout(log):
+            sha, verdict = gate.inspect(api, 1, BASE, HEAD)
+        self.assertEqual((sha, verdict.state), (REGENERATED, "success"))
+        # The status still targets the current test merge; the log names both.
+        self.assertEqual(log.getvalue(), "candidate " + REGENERATED + " is the regenerated test merge " +
+                         MERGE + ": same tree and parents\n")
+        # One lookup of the earlier candidate, even though two workflows share the run.
+        self.assertEqual(api.commit_reads, [REGENERATED, MERGE])
+
+    def test_regenerated_test_merge_with_other_content_stays_stale(self):
+        for change in ("tree", "base", "head", "parent-order", "third-parent",
+                       "wrong-object", "unknown-object", "malformed"):
+            with self.subTest(change=change):
+                api = self.regenerated()
+                earlier = api.commits[MERGE]
+                if change == "tree": earlier["tree"] = {"sha": "9" * 40}
+                elif change == "base": earlier["parents"][0] = {"sha": "d" * 40}
+                elif change == "head": earlier["parents"][1] = {"sha": "d" * 40}
+                elif change == "parent-order": earlier["parents"].reverse()
+                elif change == "third-parent": earlier["parents"].append({"sha": "d" * 40})
+                elif change == "wrong-object": earlier["sha"] = "d" * 40
+                elif change == "unknown-object": del api.commits[MERGE]
+                else: api.commits[MERGE] = {"sha": MERGE, "tree": TREE, "parents": [BASE, HEAD]}
+                verdict = self.assess(api)
+                self.assertEqual(verdict.state, "failure")
+                self.assertIn("stale merge-source planner", verdict.reason)
+
+    def test_regenerated_test_merge_needs_a_proven_current_identity(self):
+        for change in ("no-tree", "wrong-object"):
+            with self.subTest(change=change):
+                api = self.regenerated()
+                if change == "no-tree": del api.commits[REGENERATED]["tree"]
+                else: api.commits[REGENERATED]["sha"] = "d" * 40
+                self.assertEqual(self.assess(api).state, "failure")
+                # The earlier candidate is never read without a proven current merge.
+                self.assertEqual(api.commit_reads, [REGENERATED])
+
+    def test_regenerated_test_merge_never_hides_a_second_planner_or_a_failed_member(self):
+        api = self.regenerated()
+        api.jobs[1].append(job("impact / Candidate " + REGENERATED))
+        self.assertEqual(self.assess(api).state, "failure")
+        api = self.regenerated()
+        api.jobs[1][1]["conclusion"] = "failure"
+        self.assertEqual(self.assess(api).state, "failure")
+        api = self.regenerated()
+        api.jobs[1][0]["conclusion"] = "failure"
+        self.assertEqual(self.assess(api).state, "failure")
+
+    def test_unavailable_earlier_candidate_is_incomplete_evidence_not_a_verdict(self):
+        api = self.regenerated()
+        real = api.get
+
+        def get(suffix):
+            if suffix == "/git/commits/" + MERGE:
+                raise gate.EvidenceAPIError("http_503")
+            return real(suffix)
+
+        api.get = get
+        with self.assertRaises(gate.EvidenceAPIError):
+            self.assess(api)
 
     def test_legacy_failed_run_cannot_be_hidden_by_a_green_central_run(self):
         api = API()
