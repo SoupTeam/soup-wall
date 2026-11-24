@@ -91,6 +91,20 @@ cannot become a success by inference from the workflow conclusion. A genuinely
 absent required member remains blocking. Moving the head or base invalidates
 the result and requires current-source qualification.
 
+GitHub sometimes recreates a PR's test merge although neither the base nor the
+head moved. The new commit has the same tree and the same two parents but a
+later commit time, so its SHA differs and it carries no admission status. No PR
+event follows, and the finished `ci.yml` run still names the earlier SHA in its
+`impact / Candidate` job. The verifier reads both commits from the Git database
+and accepts the earlier planner only when the tree and the ordered parents are
+identical. A different tree, base or head, an unknown commit or a second
+planner job is still a stale candidate and fails. The status is written to the
+current test-merge SHA, and the verifier log names both commits. To requalify
+such a PR, rerun its most recent `SOU-91 trusted CI admission` run; the runtime
+suite does not need to run again. A rerun uses the verifier revision of the
+original run, so this applies to admission runs started after this behavior
+reached the default branch.
+
 GitHub's managed CodeQL default setup currently records analyses on the **PR
 head SHA**, while PR runtime workflows check out the test-merge SHA. Admission
 requires successful `actions`, `c-cpp`, `javascript-typescript`, `python` and

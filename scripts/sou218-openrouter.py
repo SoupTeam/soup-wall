@@ -1,0 +1,451 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+"""Bounded OpenRouter research smoke/session. No production authorization."""
+import argparse
+import ctypes
+import getpass
+import hashlib
+import json
+import os
+from pathlib import Path
+import resource
+import time
+import urllib.request
+import urllib.error
+import warnings
+import signal
+from contextlib import contextmanager
+
+MODEL = 'inclusionai/ling-3.2-flash:free'
+PROVIDER = 'antdigital/fp8'
+PROVIDER_NAME = 'Ant Digital'
+REASONING_BUDGET = 0
+ROUTES = {
+    'particle': ('particle-ai/particle-1:free', 'particle-ai/us', 'Particle AI'),
+    'ernie': ('baidu/ernie-5.5-flash-preview:free', 'baidu', 'Baidu'),
+    'ling': ('inclusionai/ling-3.2-flash:free', 'antdigital/fp8', 'Ant Digital'),
+    'nemotron': ('nvidia/nemotron-3.5-super-vl:free', 'nvidia', 'Nvidia'),
+    'nemotron-reasoning': ('nvidia/nemotron-3.5-super-vl:free', 'nvidia', 'Nvidia'),
+}
+BASE = 'https://openrouter.ai/api/v1'
+LIMIT = 262144
+
+
+def strict_json(raw):
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError('duplicate_json_key')
+            result[key] = value
+        return result
+    return json.loads(raw, object_pairs_hook=pairs)
+
+
+def digest(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def save(path, data):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'wb') as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        raise ValueError('redirect_refused')
+
+
+@contextmanager
+def total_deadline(seconds):
+    # Socket inactivity timeouts can be extended indefinitely by heartbeat bytes.
+    # SIGALRM bounds the entire synchronous request, headers and body included.
+    def expired(signum, frame):
+        raise TimeoutError('total_request_deadline')
+    previous = signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+def fetch(path, body=None, key=None):
+    headers = {'Content-Type': 'application/json'}
+    if key:
+        headers['Authorization'] = 'Bearer ' + key
+    request = urllib.request.Request(BASE + path, data=body, headers=headers)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    with total_deadline(90 if body is not None else 30):
+        with opener.open(request, timeout=30) as response:
+            raw = response.read(LIMIT + 1)
+            if len(raw) > LIMIT:
+                raise ValueError('response_limit')
+            return raw
+
+
+def check_catalog(value):
+    data = value['data']
+    if data['id'] != MODEL:
+        raise ValueError('model_drift')
+    endpoints = [e for e in data['endpoints'] if e['tag'] == PROVIDER]
+    if len(endpoints) != 1:
+        raise ValueError('provider_missing')
+    e = endpoints[0]
+    if any(float(e['pricing'][k]) != 0 for k in ('prompt', 'completion')):
+        raise ValueError('not_free')
+    if not ({'structured_outputs', 'response_format'} | ({'reasoning'} if PROVIDER in ('nvidia', 'baidu', 'particle-ai/us') else set())) <= set(e['supported_parameters']):
+        raise ValueError('schema_unsupported')
+
+
+def request_body(bundle):
+    old = bundle['request']
+    options = bundle.get('openrouter_options', {})
+    if set(options) - {'output_tokens', 'reasoning_tokens'}:
+        raise ValueError('unknown_request_option')
+    output_tokens = options.get('output_tokens', 4096)
+    if type(output_tokens) is not int or not 2048 <= output_tokens <= 8192:
+        raise ValueError('output_budget')
+    reasoning = ({'effort': 'low', 'exclude': True} if PROVIDER == 'baidu' else
+                 ({'max_tokens': REASONING_BUDGET, 'exclude': True} if REASONING_BUDGET else {'enabled': False}))
+    if PROVIDER == 'particle-ai/us':
+        reasoning = {'enabled': False, 'effort': 'none', 'exclude': True}
+    if 'reasoning_tokens' in options:
+        tokens = options['reasoning_tokens']
+        if type(tokens) is not int or not 128 <= tokens <= 2048 or tokens >= output_tokens:
+            raise ValueError('reasoning_budget')
+        reasoning = {'max_tokens': tokens, 'exclude': True}
+    return {
+        'model': MODEL, 'stream': False, 'max_tokens': output_tokens,
+        'temperature': 1,
+        **({'reasoning': reasoning} if PROVIDER in ('nvidia', 'baidu', 'particle-ai/us') or 'reasoning_tokens' in options else {}),
+        'provider': {'only': [PROVIDER], 'allow_fallbacks': False,
+                     'require_parameters': True, 'max_price': {'prompt': 0, 'completion': 0}},
+        'messages': [
+            {'role': 'system', 'content': old['systemInstruction']['parts'][0]['text']},
+            {'role': 'user', 'content': '\n\n'.join(p['text'] for p in old['contents'][0]['parts'])}],
+        'response_format': {'type': 'json_schema', 'json_schema': {
+            'name': 'untrusted_source_summary', 'strict': True,
+            'schema': old['generationConfig']['responseJsonSchema']}},
+    }
+
+
+def summary_diagnostics(summary, quotes):
+    """Review warnings only; never an automatic semantic acceptance decision."""
+    import re
+    warnings = []
+    headings = ['Commands as data:', 'Files:', 'Notes:', 'Limitations:']
+    if not summary.startswith(headings[0]):
+        warnings.append('summary_not_plain_sectioned_text')
+    positions = [summary.find(h) for h in headings]
+    if any(summary.count(h) != 1 for h in headings) or positions != sorted(positions):
+        warnings.append('missing_repeated_or_unordered_sections')
+    if summary.lstrip().startswith(('{', '[')):
+        warnings.append('serialized_object_in_summary')
+    references = set(int(n) for n in re.findall(r'\[Q(\d+)\]', summary))
+    if set(range(1, len(quotes)+1)) - references:
+        warnings.append('unused_output_quotes')
+    files_start = summary.find('Files:')
+    if files_start >= 0 and re.search(r'\[Q\d+\]', summary[files_start:]):
+        warnings.append('citation_outside_actions')
+    if files_start >= 0 and any(q in summary[files_start:] for q in quotes):
+        warnings.append('action_quote_repeated_outside_actions')
+    if any(re.fullmatch(r'\s*(?:Diff with [^\r\n]+:?|commit [0-9a-fA-F]{7,64}|Author: [^\r\n]+|Date: [^\r\n]+)\s*', q) for q in quotes):
+        warnings.append('metadata_used_as_action_evidence')
+    return warnings
+
+
+def source_quality_findings(summary, quotes, source):
+    """Narrow regression checks, not a general semantic judge or output repair."""
+    import re
+    findings = summary_diagnostics(summary, quotes)
+    text = source
+    try:
+        value = strict_json(source)
+        parts = value['result']['content']
+        text = '\n'.join(p['text'] for p in parts if p.get('type') == 'text')
+    except (ValueError, KeyError, TypeError):
+        pass
+    lower = summary.lower()
+    has_validation = False
+    for field, operator, bound_words in (
+        ('timeout', '<=', r'positive|zero|<=\s*0|>\s*0|нол|положитель'),
+        ('retries', '<', r'negative|zero|<\s*0|>=\s*0|нол|отрицатель'),
+    ):
+        if re.search(r'cfg\[[\"\x27]' + field + r'[\"\x27]\]\s*' + re.escape(operator) + r'\s*0', text):
+            has_validation = True
+            if not re.search(field + r'[^.\n]{0,120}(?:' + bound_words + r')', lower):
+                findings.append('missing_source_validation_' + field)
+    if has_validation and re.search(r'\bno\b[^.\n]{0,180}\bvalidation(?:-limit)?\b[^.\n]{0,120}\b(?:given|provided|present|shown)\b', lower):
+        findings.append('denies_present_validation_details')
+    has_upload = re.search(r'\b(?:send|upload|transmit)\b[^\n]{0,160}\b(?:files|data|database)\b[^\n]{0,160}https?://', text, re.I)
+    if has_upload and re.search(r'\bno\b[^.\n]{0,180}\bupload\b[^.\n]{0,120}\b(?:specified|present|given|provided)\b', lower):
+        findings.append('denies_present_upload_request')
+    return sorted(set(findings))
+
+
+def inspect_response(raw, bundle):
+    response = strict_json(raw)
+    if response.get('model') != MODEL or response.get('provider') != PROVIDER_NAME:
+        raise ValueError('model_or_provider_identity')
+    choices = response['choices']
+    if len(choices) != 1 or choices[0]['finish_reason'] != 'stop':
+        raise ValueError('incomplete')
+    message = choices[0]['message']
+    if message.get('tool_calls') or message.get('refusal'):
+        raise ValueError('nontext_response')
+    answer = strict_json(message['content'])
+    if set(answer) != {'summary', 'quotes'}:
+        raise ValueError('schema')
+    if not isinstance(answer['summary'], str) or not 1 <= len(answer['summary'].encode()) <= 2048:
+        raise ValueError('summary')
+    pattern = bundle['request']['generationConfig']['responseJsonSchema'].get('properties', {}).get('summary', {}).get('pattern')
+    if pattern is not None:
+        import re
+        if not isinstance(pattern, str) or re.fullmatch(pattern, answer['summary']) is None:
+            raise ValueError('summary_sections_schema')
+    quotes = answer['quotes']
+    if not isinstance(quotes, list) or not 1 <= len(quotes) <= 4:
+        raise ValueError('quotes')
+    if any(not isinstance(q, str) or not 1 <= len(q.encode()) <= 256 for q in quotes):
+        raise ValueError('quote_shape')
+    if len(set(quotes)) != len(quotes):
+        raise ValueError('duplicate_quotes')
+    allowed = bundle['request']['generationConfig']['responseJsonSchema'].get('properties', {}).get('quotes', {}).get('items', {}).get('enum')
+    if allowed is not None and any(q not in allowed for q in quotes):
+        raise ValueError('quote_not_in_catalog')
+    source = bundle['source']
+    occurrences = sum(sum(source.startswith(q, i) for i in range(len(source))) for q in quotes)
+    if any(q not in source for q in quotes) or occurrences > 8:
+        raise ValueError('quote_source_or_occurrences')
+    import re
+    references = [int(n) for n in re.findall(r'\bQ(\d+)\b', answer['summary'])]
+    if any(n < 1 or n > len(quotes) for n in references):
+        raise ValueError('citation_reference')
+    return {'state': 'structurally_valid_untrusted', 'semantic_acceptance': False,
+            'native_protection_checked': False, 'policy_allow': False,
+            'quote_occurrences': occurrences,
+            'review_warnings': summary_diagnostics(answer['summary'], quotes),
+            'quality_findings': source_quality_findings(answer['summary'], quotes, source),
+            'quality_checks_are_exhaustive': False}
+
+
+def check_continuation(plan, bundle, rows):
+    """Preserve evidence; v2 permits only explicit changed-request defect repairs."""
+    if not isinstance(plan, dict) or plan.get('version') not in (1, 2):
+        raise ValueError('continuation_version')
+    allowed = plan['allowed_requests']
+    retained = plan['retained_responses']
+    if not 1 <= len(allowed) <= 30 or rows != len(allowed):
+        raise ValueError('continuation_budget')
+    done = set()
+    previous = {}
+    for item in retained:
+        path = Path(item['path'])
+        if digest(path.read_bytes()) != item['sha256']:
+            raise ValueError('retained_evidence_changed')
+        done.add(item['case_id'])
+        previous[item['case_id']] = strict_json(path.with_suffix('.receipt').read_bytes())['request_sha256'] if plan['version'] == 2 else None
+    repairs = plan.get('repair_cases', {}) if plan['version'] == 2 else {}
+    for case, repair in repairs.items():
+        if case not in done or case not in allowed or not repair.get('reason') or repair.get('prior_request_sha256') != previous[case] or allowed[case] == previous[case]:
+            raise ValueError('invalid_explicit_repair')
+    if (done - repairs.keys()).intersection(allowed) or bundle['case_id'] in (done - repairs.keys()):
+        raise ValueError('completed_case_replay')
+    body = json.dumps(request_body(bundle), ensure_ascii=False).encode()
+    if allowed.get(bundle['case_id']) != digest(body):
+        raise ValueError('request_outside_continuation')
+
+
+def checked_free_quota(raw, rows):
+    data = strict_json(raw)['data']['free_model_daily_requests']
+    values = {name: data[name] for name in ('used', 'limit', 'remaining')}
+    if any(type(v) is not int or v < 0 for v in values.values()):
+        raise ValueError('invalid_free_quota')
+    if values['remaining'] > values['limit'] or values['used'] + values['remaining'] != values['limit']:
+        raise ValueError('inconsistent_free_quota')
+    if values['remaining'] < rows:
+        raise ValueError('insufficient_free_quota')
+    return values
+
+
+def serve(directory, bundle_path, start_smoke=False, rows=20, plan_path=None, check_quota=False):
+    if type(rows) is not int or not 1 <= rows <= 30:
+        raise ValueError('session_budget')
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    if ctypes.CDLL(None).prctl(4, 0, 0, 0, 0) != 0:
+        raise ValueError('cannot_disable_dump')
+    raw_bundle = bundle_path.read_bytes()
+    bundle = json.loads(raw_bundle)
+    allowed_sources = set(bundle['allowed_sources'])
+    if digest(bundle['source'].encode()) not in allowed_sources:
+        raise ValueError('unapproved_source')
+    body = json.dumps(request_body(bundle), ensure_ascii=False).encode()
+    plan_raw = plan_path.read_bytes() if plan_path else None
+    plan = strict_json(plan_raw) if plan_raw is not None else None
+    if plan is not None:
+        check_continuation(plan, bundle, rows)
+    catalog = fetch('/models/' + MODEL + '/endpoints')
+    check_catalog(json.loads(catalog))
+    directory.mkdir(mode=0o700, parents=True, exist_ok=False)
+    save(directory / 'catalog.json', catalog)
+    save(directory / 'bundle.json', raw_bundle)
+    save(directory / 'request.json', body)
+    if plan_raw is not None:
+        save(directory / 'continuation-plan.json', plan_raw)
+    print(f'Free-only session: at most {rows} requests, 120 minutes; each job is explicitly submitted. Confirm remaining quota >={rows}.')
+    if input(f'Type OPENROUTER{rows} USD0: ').strip() != f'OPENROUTER{rows} USD0':
+        raise ValueError('confirmation')
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', getpass.GetPassWarning)
+        key = getpass.getpass('OpenRouter API key (hidden): ')
+    key = key.strip()
+    if not key.startswith('sk-or-') or not key.isascii() or any(c.isspace() for c in key):
+        raise ValueError('key_shape')
+    if check_quota:
+        try:
+            print('API KEY USE: read-only quota check; no generation yet.', flush=True)
+            quota = checked_free_quota(fetch('/key', key=key), rows)
+            save(directory / 'quota-check.json', json.dumps({'checked_at':time.time(), **quota}).encode())
+            print('Verified free requests remaining:', quota['remaining'], flush=True)
+        except Exception:
+            key = None
+            save(directory / 'stopped', b'quota check refused; no generation')
+            raise ValueError('quota_check_failed_no_generation') from None
+    save(directory / 'armed.json', json.dumps({'expires': time.time()+7200, 'budget': rows, 'model': MODEL, 'provider': PROVIDER}).encode())
+    if start_smoke:
+        save(directory / 'job-smoke.json', raw_bundle)
+    print('Key held in memory. ' + ('Starting the explicitly requested smoke.' if start_smoke else 'Waiting for explicit submit;') + ' Do not close this terminal.', flush=True)
+    deadline = time.monotonic() + 7200
+    remaining = rows
+    last_call = 0.0
+    paused = False
+    resume_seen = set()
+    try:
+        while time.monotonic() < deadline and remaining > 0 and not (directory / 'stop').exists():
+            if paused:
+                signals = set(directory.glob('resume-*.json')) - resume_seen
+                if not signals:
+                    time.sleep(0.5)
+                    continue
+                resume_seen.update(signals)
+                paused = False
+            for job in sorted(directory.glob('job-*.json')):
+                marker = job.with_suffix('.started')
+                if marker.exists():
+                    continue
+                job_bundle = json.loads(job.read_bytes())
+                if digest(job_bundle['source'].encode()) not in allowed_sources:
+                    save(marker, b'unapproved_source')
+                    continue
+                if job_bundle['request']['contents'][0]['parts'][0]['text'] != job_bundle['source']:
+                    save(marker, b'source_mismatch')
+                    continue
+                job_body = json.dumps(request_body(job_bundle), ensure_ascii=False).encode()
+                if plan is not None:
+                    try:
+                        check_continuation(plan, job_bundle, rows)
+                    except (ValueError, KeyError, OSError):
+                        save(marker, b'continuation_refused_before_api')
+                        continue
+                fence = directory / ('fence-' + digest(job_body))
+                if fence.exists():
+                    save(marker, b'duplicate_refused')
+                    continue
+                # Recheck public zero-price metadata before every new request.
+                check_catalog(json.loads(fetch('/models/' + MODEL + '/endpoints')))
+                delay = max(0, 61 - (time.monotonic() - last_call))
+                until = time.monotonic() + delay
+                while time.monotonic() < until:
+                    if (directory / 'stop').exists() or time.monotonic() >= deadline:
+                        return
+                    time.sleep(0.5)
+                if (directory / 'stop').exists() or time.monotonic() >= deadline:
+                    return
+                if marker.exists():
+                    continue
+                save(fence, b'reserved-no-replay')
+                save(marker, json.dumps({'request_sha256': digest(job_body), 'time': time.time()}).encode())
+                remaining -= 1
+                last_call = time.monotonic()
+                print('API KEY USE: one OpenRouter request starting. Remaining budget:', remaining, flush=True)
+                raw = None
+                try:
+                    raw = fetch('/chat/completions', job_body, key)
+                    save(job.with_suffix('.response'), raw)
+                    result = inspect_response(raw, job_bundle)
+                except urllib.error.HTTPError as e:
+                    result = {'state': 'http_error', 'status': e.code, 'retry': False}
+                    try:
+                        with total_deadline(3):
+                            error_body = e.read(65537)
+                        if len(error_body) <= 65536:
+                            save(job.with_suffix('.error-body'), error_body.replace(key.encode(), b'[REDACTED]'))
+                            result['error_body_sanitized'] = True
+                    except Exception:
+                        result['error_body_unavailable'] = True
+                except Exception as e:
+                    result = {'state': 'invalid_response' if raw is not None else 'transport_unknown',
+                              'error_type': type(e).__name__, 'reason': ('total_request_deadline' if str(e) == 'total_request_deadline' else 'socket_inactivity_timeout') if isinstance(e, TimeoutError) else (str(e) if isinstance(e, ValueError) else 'inspect_retained_evidence'), 'retry': False}
+                result['completed_at'] = time.time()
+                result['elapsed_seconds'] = round(time.monotonic() - last_call, 3)
+                result['model'] = MODEL
+                result['provider'] = PROVIDER
+                result['remaining_budget'] = remaining
+                result['request_sha256'] = digest(job_body)
+                save(job.with_suffix('.receipt'), json.dumps(result).encode())
+                print('Job finished. Inspect receipt and raw response; no automatic retry.', flush=True)
+                # Preserve the in-memory key but require an explicit resume command.
+                # Existing fences still forbid retrying the same request.
+                if result['state'] in ('transport_unknown', 'http_error'):
+                    paused = True
+                    resume_seen.update(directory.glob('resume-*.json'))
+                    save(job.with_suffix('.paused'), b'explicit resume required; no automatic retry')
+                    print('Paused after failure. Key remains in memory until expiry/stop. Codex must inspect before explicit resume.', flush=True)
+                break
+            time.sleep(0.5)
+    finally:
+        key = None
+        save(directory / 'stopped', b'closed')
+
+
+def main():
+    global MODEL, PROVIDER, PROVIDER_NAME, REASONING_BUDGET
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('action', choices=['serve', 'submit', 'stop', 'resume'])
+    p.add_argument('--session', required=True, type=Path)
+    p.add_argument('--bundle', type=Path)
+    p.add_argument('--rows', type=int, default=20, help='Personally confirmed cumulative session allowance, 1..30.')
+    p.add_argument('--plan', type=Path, help='Frozen allowlist plus retained-response hashes; checked before each call.')
+    p.add_argument('--check-quota', action='store_true', help='Read current free daily quota before arming; refuse insufficient/unknown quota.')
+    p.add_argument('--route', choices=sorted(ROUTES), default='ling')
+    p.add_argument('--start-smoke', action='store_true', help='Explicitly submit one smoke immediately after hidden key entry.')
+    a = p.parse_args()
+    MODEL, PROVIDER, PROVIDER_NAME = ROUTES[a.route]
+    REASONING_BUDGET = 512 if a.route == 'nemotron-reasoning' else 0
+    if a.action == 'serve':
+        serve(a.session, a.bundle, a.start_smoke, a.rows, a.plan, a.check_quota)
+    else:
+        if not (a.session / 'armed.json').exists() or (a.session / 'stopped').exists():
+            raise SystemExit('Session not armed')
+        if a.action == 'stop':
+            save(a.session / 'stop', b'explicit')
+        elif a.action == 'resume':
+            import uuid
+            save(a.session / ('resume-' + uuid.uuid4().hex + '.json'), b'explicit')
+        else:
+            import uuid
+            bundle_path = a.bundle or (a.session / 'bundle.json')
+            raw = bundle_path.read_bytes()
+            if len(raw) > 2 * 1024 * 1024:
+                raise SystemExit('Bundle too large')
+            request_body(json.loads(raw))
+            save(a.session / ('job-' + uuid.uuid4().hex + '.json'), raw)
+
+
+if __name__ == '__main__':
+    main()
