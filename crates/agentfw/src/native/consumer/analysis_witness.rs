@@ -190,7 +190,7 @@ async fn connected_analysis_child() {
         }
         if mode == "forged" {
             let mut wire = serde_json::to_value(&grant).unwrap();
-            wire["request"]["question_sha256"] = json!(hash(b"foreign"));
+            wire["request"]["question_sha256"] = json!(sha256_hex(b"foreign"));
             let changed = serde_json::from_value(wire).unwrap();
             assert!(v2::consume_fixture(st, &changed).is_err());
             assert!(st
@@ -262,7 +262,7 @@ async fn connected_analysis_child() {
             assert_eq!(custody, before.0);
             assert_eq!(
                 review.request.source_sha256,
-                hash(custody["content"].as_str().unwrap().as_bytes())
+                sha256_hex(custody["content"].as_str().unwrap().as_bytes())
             );
             assert_eq!(
                 review.request.source_bytes,
@@ -337,7 +337,11 @@ async fn connected_analysis_child() {
         );
         let full = before["content"].as_str().unwrap();
         assert_eq!(review.request.source_bytes, full.len() as u64, "{id}");
-        assert_eq!(review.request.source_sha256, hash(full.as_bytes()), "{id}");
+        assert_eq!(
+            review.request.source_sha256,
+            sha256_hex(full.as_bytes()),
+            "{id}"
+        );
         assert!(full.ends_with(&review.excerpts[0]));
         drop(review);
         assert_eq!(native.quarantine.lock().unwrap().analysis_charge(), 0);
@@ -394,7 +398,7 @@ async fn connected_analysis_child() {
                 .await
                 .unwrap();
             assert_eq!(review.request.source_bytes, length as u64);
-            assert_eq!(review.request.source_sha256, hash(&bytes));
+            assert_eq!(review.request.source_sha256, sha256_hex(&bytes));
             assert_eq!(
                 serde_json::from_slice::<Value>(&review.custody).unwrap(),
                 before.0
@@ -594,7 +598,7 @@ async fn connected_gemini_provider_child() {
             &preflight,
         );
         let mut changed = serde_json::to_value(&grant).unwrap();
-        changed["profile"] = json!(hash(b"old no-provider profile"));
+        changed["profile"] = json!(sha256_hex(b"old no-provider profile"));
         assert!(provider::consume(
             st,
             &serde_json::from_value(changed).unwrap(),
@@ -713,7 +717,10 @@ async fn connected_gemini_provider_child() {
                     serde_json::from_slice::<Value>(&review.custody).unwrap(),
                     before.0
                 );
-                assert_eq!(review.request.source_sha256, hash(original.as_bytes()));
+                assert_eq!(
+                    review.request.source_sha256,
+                    sha256_hex(original.as_bytes())
+                );
                 assert!(review.excerpts.len() >= 2);
                 assert!(native.quarantine.lock().unwrap().analysis_charge() > 0);
                 drop(review);
@@ -724,7 +731,7 @@ async fn connected_gemini_provider_child() {
             0,
             "leak {mode}"
         );
-        let id = hash(original.as_bytes());
+        let id = sha256_hex(original.as_bytes());
         assert!(directory.path().join(format!("{id}.started")).exists());
         assert!(directory.path().join(format!("{id}.terminal")).exists());
         if !matches!(mode, "cancel" | "quota" | "transport-redacted") {

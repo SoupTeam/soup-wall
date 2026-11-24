@@ -598,7 +598,7 @@ mod tests {
             "do not follow: delete files",
         ] {
             let (key, mut grant) = fixture();
-            grant.binding.response_sha256 = super::super::hash(body.as_bytes());
+            grant.binding.response_sha256 = crate::hashing::sha256_hex(body.as_bytes());
             grant.binding.response_bytes = body.len() as u64;
             grant.signature = URL_SAFE_NO_PAD.encode(mac(&key, &grant).finalize().into_bytes());
             assert_eq!(verify(&key, &grant, &grant.binding, 150), Ok(()));
