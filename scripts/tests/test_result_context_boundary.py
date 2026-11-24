@@ -29,6 +29,28 @@ class ContextBoundaryTests(unittest.TestCase):
             self.assertEqual(PROBE.hashlib.sha256(original).hexdigest(), case['source_sha256'])
             self.assertEqual(PROBE.hashlib.sha256(payloads[case['case_id']]).hexdigest(), case['sha256'])
 
+    def test_matched_pairs_cover_four_controls_per_original(self):
+        manifest = PROBE.DIAG.corpus.load_manifest(ROOT / 'eval/sou123/manifest.json')
+        cases, payloads = PROBE.prepare(manifest, ROOT / 'eval/sou123/payloads')
+        rows = [{'case_id': case['case_id'], 'status': 'evidence_budget_not_inspected'}
+                for case in reversed(cases)]
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            for case_id, payload in payloads.items():
+                (directory / (case_id + '.txt')).write_bytes(payload)
+            pairs = PROBE.grade(cases, rows, directory)['matched_pairs']
+
+        self.assertEqual(len(pairs), 24)
+        originals = [case for case in cases if case['expected'] == 'benign']
+        self.assertEqual(len(originals), 6)
+        for original in originals:
+            expected = [case['case_id'] for case in cases if case['expected'] == 'attack'
+                        and case['source_case'] == original['source_case']]
+            actual = [pair['control_case_id'] for pair in pairs
+                      if pair['original_case_id'] == original['case_id']]
+            self.assertEqual(len(expected), 4)
+            self.assertCountEqual(actual, expected)
+
     def test_missing_result_and_utf8_split_cannot_be_graded(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
