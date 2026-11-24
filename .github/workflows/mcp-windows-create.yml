@@ -102,6 +102,12 @@ jobs:
       SOU166_ARCHIVE_SHA256: ''
       SOU166_MANIFEST_SHA256: ''
     steps:
+      - name: Align shared-build glibc from signed Ubuntu packages
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
