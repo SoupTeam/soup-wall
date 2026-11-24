@@ -32,6 +32,7 @@ from sou91_ruleset_patch import RULESET_ID
 
 CONTEXT = "SOU-91 candidate admission"
 SHA = re.compile(r"^[0-9a-f]{40}$")
+PLANNER_SHA = re.compile(r"Candidate ([0-9a-f]{40})$")
 REUSE_SWITCH = "enabled-after-controls"
 RECEIPT = re.compile(
     r"^https://github\.com/SoupTeam/soup-wall/actions/runs/([1-9][0-9]*)"
@@ -541,6 +542,55 @@ def evidence_digest(evidence: dict[str, Any], verifier_sha: str) -> str:
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
+def merge_identity(commit: object, sha: str | None = None) -> tuple[str, str, str] | None:
+    """Tree and ordered parents of a two-parent merge, or None when unproven."""
+    if not isinstance(commit, dict) or (sha is not None and commit.get("sha") != sha):
+        return None
+    tree = commit.get("tree")
+    parents = commit.get("parents")
+    if not isinstance(tree, dict) or not isinstance(parents, list) or len(parents) != 2 or \
+            any(not isinstance(item, dict) for item in parents):
+        return None
+    identity = (tree.get("sha"), parents[0].get("sha"), parents[1].get("sha"))
+    if any(not isinstance(item, str) or not SHA.fullmatch(item) for item in identity):
+        return None
+    return identity
+
+
+def planner_candidate(api: GitHub, jobs: list[dict[str, Any]], merge_sha: str,
+                      commit: dict[str, Any], cache: dict[str, bool]) -> str:
+    """Return the test-merge SHA whose planner job can qualify this candidate.
+
+    GitHub can recreate a PR test merge without any change to the PR: the same
+    tree and the same ordered parents, but a new commit time and so a new SHA.
+    No PR event follows, and the exact-source run keeps the earlier SHA in its
+    planner name. Accept that earlier SHA only when the Git database shows that
+    both commits are the same merge. A different tree, a different base or
+    head, an unknown commit or more than one planner stays a stale candidate.
+    """
+    planners = [str(job.get("name", "")) for job in jobs if "Candidate " in str(job.get("name", ""))]
+    match = PLANNER_SHA.search(planners[0]) if len(planners) == 1 else None
+    if match is None or match.group(1) == merge_sha:
+        return merge_sha
+    earlier = match.group(1)
+    if earlier not in cache:
+        current = merge_identity(commit, merge_sha)
+        same = False
+        if current is not None:
+            try:
+                same = merge_identity(api.get("/git/commits/" + earlier), earlier) == current
+            except EvidenceAPIError as error:
+                # An absent object proves nothing. Any other failure is
+                # incomplete evidence and stays pending in the caller.
+                if error.reason not in {"http_404", "http_422"}:
+                    raise
+        cache[earlier] = same
+        if same:
+            print("candidate " + merge_sha + " is the regenerated test merge " + earlier +
+                  ": same tree and parents", flush=True)
+    return earlier if cache[earlier] else merge_sha
+
+
 def candidate_script_bytes(api: GitHub, path: str, merge_sha: str,
                            listed_sha: object) -> bytes | None:
     """Read an exact merge blob as inert bytes; incomplete custody forces full CI."""
@@ -627,6 +677,7 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str,
     central = latest(actions, ".github/workflows/ci.yml", "pull_request", head_sha)
     job_cache: dict[tuple[int, int], list[dict[str, Any]]] = {}
     direct_cache: dict[int, dict[str, Any]] = {}
+    regenerated: dict[str, bool] = {}
     selected_runs: list[tuple[str, tuple[str, ...], dict[str, Any]]] = []
     for workflow, job_ids in selected["workflows"].items():
         if not job_ids:
@@ -664,12 +715,13 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str,
         if key not in job_cache:
             job_cache[key] = get_jobs(api, run)
         jobs = job_cache[key]
+        planner_sha = planner_candidate(api, jobs, merge_sha, commit, regenerated)
         planner = tuple(job["name"] for job in jobs if
-                        str(job.get("name", "")).endswith("Candidate " + merge_sha))
+                        str(job.get("name", "")).endswith("Candidate " + planner_sha))
         verdict = confirm_jobs(api, jobs, (*planner, *expected), run, head_sha, direct_cache)
         if verdict.state != "success":
             return merge_sha, Verdict(verdict.state, workflow + " " + run_label(run) + ": " + verdict.reason)
-        verdict = assess_job_names(jobs, expected, merge_sha, run, head_sha)
+        verdict = assess_job_names(jobs, expected, planner_sha, run, head_sha)
         if verdict.state != "success":
             return merge_sha, Verdict(verdict.state, workflow + " " + run_label(run) + ": " + verdict.reason)
         if evidence is not None:
