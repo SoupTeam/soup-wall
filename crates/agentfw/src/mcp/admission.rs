@@ -2194,7 +2194,7 @@ fn discovery_params(value: &Value) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Observed Claude and Codex identifiers are transport correlation only. They
+/// Observed Claude, Codex and Gemini identifiers are transport correlation only. They
 /// never supply native session identity, arguments, authority or provenance.
 fn call_metadata(value: &Value) -> anyhow::Result<()> {
     if value.get("x-codex-turn-metadata").is_some() {
@@ -2204,6 +2204,25 @@ fn call_metadata(value: &Value) -> anyhow::Result<()> {
         value,
         &["claudecode/toolUseId", "threadId", "progressToken"],
     )?;
+    // Gemini CLI 0.68.0 sends only a UUID v4 progress token. This is bounded
+    // transport correlation, not a native session ID or authority credential.
+    if value.as_object().is_some_and(|m| m.len() == 1)
+        && value["progressToken"].as_str().is_some_and(|s| {
+            let b = s.as_bytes();
+            b.len() == 36
+                && b[14] == b'4'
+                && matches!(b[19], b'8' | b'9' | b'a' | b'b')
+                && b.iter().enumerate().all(|(i, c)| {
+                    if [8, 13, 18, 23].contains(&i) {
+                        *c == b'-'
+                    } else {
+                        c.is_ascii_digit() || (b'a'..=b'f').contains(c)
+                    }
+                })
+        })
+    {
+        return Ok(());
+    }
     let host_id = match (value.get("claudecode/toolUseId"), value.get("threadId")) {
         (Some(id), None) | (None, Some(id)) => id,
         _ => bail!("unsupported MCP call correlation metadata"),

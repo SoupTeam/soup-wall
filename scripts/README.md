@@ -404,6 +404,9 @@ Everything else: demos, reports, benchmarks, diagnostics and shared modules.
 | [`classifier-runtime-windows-acceptance.py`](classifier-runtime-windows-acceptance.py) | SOU-81: the production collector, run from a clean installed directory, with the installed classifier package. |
 | [`codex-filesystem-acceptance.py`](codex-filesystem-acceptance.py) | Actual Codex CLI against the pinned original filesystem MCP, offline and USD0. |
 | [`codex-mcp-acceptance.py`](codex-mcp-acceptance.py) | Owned Codex CLI + native MCP acceptance; loopback scripted Responses, USD0. |
+| [`gemini-filesystem-acceptance.py`](gemini-filesystem-acceptance.py) | Actual Gemini CLI against the pinned original filesystem MCP, offline and USD0. |
+| [`gemini-hook-fault-acceptance.py`](gemini-hook-fault-acceptance.py) | Characterize the actual Gemini 0.68.0 callback boundary, including fail-open cases. |
+| [`gemini-mcp-acceptance.py`](gemini-mcp-acceptance.py) | Gemini CLI 0.68.0 with native stdio admission and an owned loopback provider. |
 | [`import-agentdojo-history.py`](import-agentdojo-history.py) | Import pinned public AgentDojo traces for offline policy replay, without execution. |
 | [`mapped_git_consumer.py`](mapped_git_consumer.py) | Opt-in mapped original Git consumer; public plans never provide authority. |
 | [`measure-sou17-latency.py`](measure-sou17-latency.py) | Paired local read latency: production admission versus a measurement-only control. |

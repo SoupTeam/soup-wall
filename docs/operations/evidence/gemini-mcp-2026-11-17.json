@@ -1,0 +1,626 @@
+{
+  "format": "soup-wall/gemini-mcp-acceptance/1",
+  "recorded_date": "2026-11-17",
+  "base_sha": "36a507198ca7e7b9e0371f61384b3d80ef56fed7",
+  "implementation_sha": "850ed39266bede81238a2fb88820427cffde71ab",
+  "environment": "Ubuntu 24.04 under WSL2, Linux x86_64",
+  "local_rust": "1.100.0; repository CI pins 1.99.1",
+  "acceptance": {
+    "generic_stdio": {
+      "source_sha": "850ed39266bede81238a2fb88820427cffde71ab",
+      "gemini_version": "0.68.0",
+      "agentfw_sha256": "fb012923e9ea60fc6634ff70845cb2d2cb97a1755766e50705c3aa0f5c9b9be3",
+      "gemini_entry_sha256": "fcc38edd4f864c2f5fa582d7d133c19b1a04c697ad3143ab8045f92b77644c68",
+      "node_sha256": "2f822d544601dfff107f57d945b649d15c5bf6302595735a6bd9cdc7ee9669bd",
+      "external_provider_requests": 0,
+      "checks": [
+        {
+          "check": "pinned_host_version",
+          "passed": true
+        },
+        {
+          "check": "preview_exit_1",
+          "passed": true
+        },
+        {
+          "check": "preview_redacted_2",
+          "passed": true
+        },
+        {
+          "check": "preview_no_write",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_4",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_5",
+          "passed": true
+        },
+        {
+          "check": "connect_configured",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_7",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_8",
+          "passed": true
+        },
+        {
+          "check": "reconnect_idempotent",
+          "passed": true
+        },
+        {
+          "check": "unrelated_bytes_preserved",
+          "passed": true
+        },
+        {
+          "check": "inspect_exit_11",
+          "passed": true
+        },
+        {
+          "check": "inspect_redacted_12",
+          "passed": true
+        },
+        {
+          "check": "probe_verified",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_14",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_15",
+          "passed": true
+        },
+        {
+          "check": "disconnect_restores_selected_entry",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_17",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_18",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_19",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_20",
+          "passed": true
+        },
+        {
+          "check": "unrelated_edit_survives",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_22",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_23",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_24",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_25",
+          "passed": true
+        },
+        {
+          "check": "selected_conflict_preserved",
+          "passed": true
+        },
+        {
+          "check": "real_host_exit",
+          "passed": true
+        },
+        {
+          "check": "private_settings_after_host",
+          "passed": true
+        },
+        {
+          "check": "real_host_completed_sequence",
+          "passed": true
+        },
+        {
+          "check": "exact_server_executions",
+          "passed": true
+        },
+        {
+          "check": "only_allowed_delivery",
+          "passed": true
+        },
+        {
+          "check": "delete_denied",
+          "passed": true
+        },
+        {
+          "check": "useful_read",
+          "passed": true
+        },
+        {
+          "check": "result_withheld",
+          "passed": true
+        },
+        {
+          "check": "ask_withheld",
+          "passed": true
+        },
+        {
+          "check": "builtin_coverage_boundary",
+          "passed": true
+        },
+        {
+          "check": "host_result_correlations",
+          "passed": true
+        },
+        {
+          "check": "host_result_dispositions",
+          "passed": true
+        },
+        {
+          "check": "outage_no_execution",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "selected_stdio_mcp": "tested_below",
+        "builtin_tools": "not_enforced",
+        "hooks": "not_installed"
+      },
+      "runtime_tree_sha256": "b319cf2e0d6f8bd67a39dbba93078d68d97a67fdc4554d733cae0a7cfd9cb148",
+      "runtime_file_count": 820,
+      "server_witness_sha256": "86d7643ada42c3beff8ed27c94966f680a32d1c204e4dff0eeb747fc5baacb69",
+      "passed": true,
+      "source_file_count": 250,
+      "source_files_manifest_sha256": "c397b223ee2ceaba6763af45fa0d749966f052ab3b3cf36334891b0050e02d63",
+      "source_files_sha256": {
+        "Cargo.lock": "cf588b3b510deac853e55b4bcf0547f26757b33a202b66f244fcdb454ee5c78f",
+        "crates/agentfw/src/gemini_hook.rs": "fdfbe47d113483f205f02378a2a9bc36556563afeef7f486f597e50e03ec8885",
+        "crates/agentfw/src/handlers.rs": "708056a7296b117a3af05e31135976a922459f088c2dad580bbe5448d05e89be",
+        "crates/agentfw/src/mcp/admission.rs": "e8a8b2b2b39edb4de465f5e80d2ec108edec192fdc255440f591446f601c1faa",
+        "crates/agentfw/src/mcp/connection/host_config/jsonc.rs": "48bd989f42e76523af0a597f768a2ecc3cfab72b2e580b4da9ee1fea108a7935",
+        "crates/agentfw/src/mcp/connection/host_config.rs": "9a2d10ed34311db37f3a1998f694999ca81b03a5a2afc75a24ec041ace6ed579",
+        "crates/agentfw/src/mcp/connection.rs": "198c51ade6def1b13fd1dc5c1060494e1579988625959c12ff2fe2b17f84a59e",
+        "scripts/gemini-filesystem-acceptance.py": "820f10bcd727939bbc3229d75c9f7fd44b641077e827362468aa32b5fdf3f0f4",
+        "scripts/gemini-hook-fault-acceptance.py": "ba59fb1c022d3892cb3a49517cf4e842b5204e5a9aea25d3924b949adb531d58",
+        "scripts/gemini-mcp-acceptance.py": "71f184102e2546d8624641ad7aa84e5093295ee008a9d92a7f92f3c41892fac2"
+      },
+      "live_model_evaluation": false
+    },
+    "signed_callbacks": {
+      "source_sha": "850ed39266bede81238a2fb88820427cffde71ab",
+      "gemini_version": "0.68.0",
+      "agentfw_sha256": "fb012923e9ea60fc6634ff70845cb2d2cb97a1755766e50705c3aa0f5c9b9be3",
+      "gemini_entry_sha256": "fcc38edd4f864c2f5fa582d7d133c19b1a04c697ad3143ab8045f92b77644c68",
+      "node_sha256": "2f822d544601dfff107f57d945b649d15c5bf6302595735a6bd9cdc7ee9669bd",
+      "external_provider_requests": 0,
+      "checks": [
+        {
+          "check": "pinned_host_version",
+          "passed": true
+        },
+        {
+          "check": "preview_exit_1",
+          "passed": true
+        },
+        {
+          "check": "preview_redacted_2",
+          "passed": true
+        },
+        {
+          "check": "preview_no_write",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_4",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_5",
+          "passed": true
+        },
+        {
+          "check": "connect_configured",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_7",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_8",
+          "passed": true
+        },
+        {
+          "check": "reconnect_idempotent",
+          "passed": true
+        },
+        {
+          "check": "unrelated_bytes_preserved",
+          "passed": true
+        },
+        {
+          "check": "inspect_exit_11",
+          "passed": true
+        },
+        {
+          "check": "inspect_redacted_12",
+          "passed": true
+        },
+        {
+          "check": "probe_verified",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_14",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_15",
+          "passed": true
+        },
+        {
+          "check": "disconnect_restores_selected_entry",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_17",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_18",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_19",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_20",
+          "passed": true
+        },
+        {
+          "check": "unrelated_edit_survives",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_22",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_23",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_24",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_25",
+          "passed": true
+        },
+        {
+          "check": "selected_conflict_preserved",
+          "passed": true
+        },
+        {
+          "check": "real_host_exit",
+          "passed": true
+        },
+        {
+          "check": "private_settings_after_host",
+          "passed": true
+        },
+        {
+          "check": "real_host_completed_sequence",
+          "passed": true
+        },
+        {
+          "check": "exact_server_executions",
+          "passed": true
+        },
+        {
+          "check": "only_allowed_delivery",
+          "passed": true
+        },
+        {
+          "check": "delete_denied",
+          "passed": true
+        },
+        {
+          "check": "useful_read",
+          "passed": true
+        },
+        {
+          "check": "result_withheld",
+          "passed": true
+        },
+        {
+          "check": "ask_withheld",
+          "passed": true
+        },
+        {
+          "check": "builtin_coverage_boundary",
+          "passed": true
+        },
+        {
+          "check": "host_result_correlations",
+          "passed": true
+        },
+        {
+          "check": "host_result_dispositions",
+          "passed": true
+        },
+        {
+          "check": "outage_no_execution",
+          "passed": true
+        },
+        {
+          "check": "shared_authenticated_session",
+          "passed": true
+        },
+        {
+          "check": "wrong_token_and_proof_no_execution_then_recovery",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "selected_stdio_mcp": "tested_below",
+        "builtin_tools": "refused_when_callback_runs; callback_crash_timeout_remain_host_fail_open",
+        "hooks": "one_signed_native_mcp_binding"
+      },
+      "runtime_tree_sha256": "b319cf2e0d6f8bd67a39dbba93078d68d97a67fdc4554d733cae0a7cfd9cb148",
+      "runtime_file_count": 820,
+      "shared_identity_witness": {
+        "native_calls": 5,
+        "before_callbacks": 8,
+        "after_callbacks": 5
+      },
+      "binding_sha256": "a547774bb5fc2daea36bc2578663c1f3274df4f571c0712745f1a0e31bea526d",
+      "server_witness_sha256": "ffde478ce7ded99c60fc1808d1a51264a59cbb564d6d063ca6e958a5b6934ee8",
+      "passed": true,
+      "source_file_count": 250,
+      "source_files_manifest_sha256": "c397b223ee2ceaba6763af45fa0d749966f052ab3b3cf36334891b0050e02d63",
+      "source_files_sha256": {
+        "Cargo.lock": "cf588b3b510deac853e55b4bcf0547f26757b33a202b66f244fcdb454ee5c78f",
+        "crates/agentfw/src/gemini_hook.rs": "fdfbe47d113483f205f02378a2a9bc36556563afeef7f486f597e50e03ec8885",
+        "crates/agentfw/src/handlers.rs": "708056a7296b117a3af05e31135976a922459f088c2dad580bbe5448d05e89be",
+        "crates/agentfw/src/mcp/admission.rs": "e8a8b2b2b39edb4de465f5e80d2ec108edec192fdc255440f591446f601c1faa",
+        "crates/agentfw/src/mcp/connection/host_config/jsonc.rs": "48bd989f42e76523af0a597f768a2ecc3cfab72b2e580b4da9ee1fea108a7935",
+        "crates/agentfw/src/mcp/connection/host_config.rs": "9a2d10ed34311db37f3a1998f694999ca81b03a5a2afc75a24ec041ace6ed579",
+        "crates/agentfw/src/mcp/connection.rs": "198c51ade6def1b13fd1dc5c1060494e1579988625959c12ff2fe2b17f84a59e",
+        "scripts/gemini-filesystem-acceptance.py": "820f10bcd727939bbc3229d75c9f7fd44b641077e827362468aa32b5fdf3f0f4",
+        "scripts/gemini-hook-fault-acceptance.py": "ba59fb1c022d3892cb3a49517cf4e842b5204e5a9aea25d3924b949adb531d58",
+        "scripts/gemini-mcp-acceptance.py": "71f184102e2546d8624641ad7aa84e5093295ee008a9d92a7f92f3c41892fac2"
+      },
+      "live_model_evaluation": false
+    },
+    "host_fault_characterization": {
+      "kind": "host_contract_characterization_not_enforcement_qualification",
+      "gemini_version": "0.68.0",
+      "source_sha": "850ed39266bede81238a2fb88820427cffde71ab",
+      "script_sha256": "ba59fb1c022d3892cb3a49517cf4e842b5204e5a9aea25d3924b949adb531d58",
+      "external_provider_requests": 0,
+      "cases": [
+        {
+          "case": "deny",
+          "host_exit": 0,
+          "timed_out": false,
+          "provider_requests": 3,
+          "file_written": false,
+          "result_reached_provider": false,
+          "mcp_executions": 0,
+          "receiver_deliveries": 0,
+          "observed": "callback_blocks_call_and_result",
+          "passed": true
+        },
+        {
+          "case": "exit2",
+          "host_exit": 0,
+          "timed_out": false,
+          "provider_requests": 3,
+          "file_written": false,
+          "result_reached_provider": false,
+          "mcp_executions": 0,
+          "receiver_deliveries": 0,
+          "observed": "callback_blocks_call_and_result",
+          "passed": true
+        },
+        {
+          "case": "error",
+          "host_exit": 0,
+          "timed_out": false,
+          "provider_requests": 3,
+          "file_written": true,
+          "result_reached_provider": true,
+          "mcp_executions": 0,
+          "receiver_deliveries": 0,
+          "observed": "callback_failure_is_fail_open",
+          "passed": true
+        },
+        {
+          "case": "timeout",
+          "host_exit": 0,
+          "timed_out": false,
+          "provider_requests": 3,
+          "file_written": true,
+          "result_reached_provider": true,
+          "mcp_executions": 0,
+          "receiver_deliveries": 0,
+          "observed": "callback_failure_is_fail_open",
+          "passed": true
+        },
+        {
+          "case": "mcp_ask",
+          "host_exit": 143,
+          "timed_out": true,
+          "provider_requests": 1,
+          "file_written": false,
+          "result_reached_provider": false,
+          "mcp_executions": 0,
+          "receiver_deliveries": 0,
+          "observed": "headless_MCP_Ask_did_not_continue",
+          "passed": true
+        }
+      ],
+      "passed": true,
+      "runtime_tree_sha256": "b319cf2e0d6f8bd67a39dbba93078d68d97a67fdc4554d733cae0a7cfd9cb148",
+      "runtime_file_count": 820,
+      "node_sha256": "2f822d544601dfff107f57d945b649d15c5bf6302595735a6bd9cdc7ee9669bd",
+      "gemini_entry_sha256": "fcc38edd4f864c2f5fa582d7d133c19b1a04c697ad3143ab8045f92b77644c68",
+      "source_file_count": 250,
+      "source_files_manifest_sha256": "c397b223ee2ceaba6763af45fa0d749966f052ab3b3cf36334891b0050e02d63",
+      "source_files_sha256": {
+        "Cargo.lock": "cf588b3b510deac853e55b4bcf0547f26757b33a202b66f244fcdb454ee5c78f",
+        "crates/agentfw/src/gemini_hook.rs": "fdfbe47d113483f205f02378a2a9bc36556563afeef7f486f597e50e03ec8885",
+        "crates/agentfw/src/handlers.rs": "708056a7296b117a3af05e31135976a922459f088c2dad580bbe5448d05e89be",
+        "crates/agentfw/src/mcp/admission.rs": "e8a8b2b2b39edb4de465f5e80d2ec108edec192fdc255440f591446f601c1faa",
+        "crates/agentfw/src/mcp/connection/host_config/jsonc.rs": "48bd989f42e76523af0a597f768a2ecc3cfab72b2e580b4da9ee1fea108a7935",
+        "crates/agentfw/src/mcp/connection/host_config.rs": "9a2d10ed34311db37f3a1998f694999ca81b03a5a2afc75a24ec041ace6ed579",
+        "crates/agentfw/src/mcp/connection.rs": "198c51ade6def1b13fd1dc5c1060494e1579988625959c12ff2fe2b17f84a59e",
+        "scripts/gemini-filesystem-acceptance.py": "820f10bcd727939bbc3229d75c9f7fd44b641077e827362468aa32b5fdf3f0f4",
+        "scripts/gemini-hook-fault-acceptance.py": "ba59fb1c022d3892cb3a49517cf4e842b5204e5a9aea25d3924b949adb531d58",
+        "scripts/gemini-mcp-acceptance.py": "71f184102e2546d8624641ad7aa84e5093295ee008a9d92a7f92f3c41892fac2"
+      },
+      "live_model_evaluation": false
+    },
+    "original_filesystem": {
+      "source_sha": "850ed39266bede81238a2fb88820427cffde71ab",
+      "gemini_version": "0.68.0",
+      "server": "@modelcontextprotocol/server-filesystem@2026.8.31",
+      "checks": [
+        {
+          "check": "host_version",
+          "passed": true
+        },
+        {
+          "check": "original_write_positive_control",
+          "passed": true
+        },
+        {
+          "check": "daemon_ready",
+          "passed": true
+        },
+        {
+          "check": "preview",
+          "passed": true
+        },
+        {
+          "check": "connect",
+          "passed": true
+        },
+        {
+          "check": "inspect",
+          "passed": true
+        },
+        {
+          "check": "host_exit",
+          "passed": true
+        },
+        {
+          "check": "complete_sequence",
+          "passed": true
+        },
+        {
+          "check": "host_outcomes",
+          "passed": true
+        },
+        {
+          "check": "useful_original_read",
+          "passed": true
+        },
+        {
+          "check": "result_injection_withheld",
+          "passed": true
+        },
+        {
+          "check": "write_witness_unchanged",
+          "passed": true
+        },
+        {
+          "check": "disconnect",
+          "passed": true
+        }
+      ],
+      "external_provider_requests": 0,
+      "live_model_evaluation": false,
+      "passed": true,
+      "runtime_tree_sha256": "b319cf2e0d6f8bd67a39dbba93078d68d97a67fdc4554d733cae0a7cfd9cb148",
+      "runtime_file_count": 820,
+      "pins": {
+        "profile_sha256": "141ec438a4dcd9e920bde9ed8adc17fc8df73b7f445f23c66119cb9d87489eeb",
+        "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+        "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+        "package_lock_sha256": "c320d8152786bcb785e41339c262c980c2c4c2106286e44fa7fd7d8ce92d23a7",
+        "node_version": "v22.23.5",
+        "bwrap_version": "bubblewrap 0.13.1"
+      },
+      "agentfw_sha256": "fb012923e9ea60fc6634ff70845cb2d2cb97a1755766e50705c3aa0f5c9b9be3",
+      "host_calls": [
+        {
+          "tool": "mcp_notes_read_text_file",
+          "status": "completed"
+        },
+        {
+          "tool": "mcp_notes_write_file",
+          "status": "failed"
+        },
+        {
+          "tool": "mcp_notes_read_text_file",
+          "status": "failed"
+        },
+        {
+          "tool": "mcp_notes_read_text_file",
+          "status": "completed"
+        }
+      ],
+      "source_file_count": 250,
+      "source_files_manifest_sha256": "c397b223ee2ceaba6763af45fa0d749966f052ab3b3cf36334891b0050e02d63",
+      "source_files_sha256": {
+        "Cargo.lock": "cf588b3b510deac853e55b4bcf0547f26757b33a202b66f244fcdb454ee5c78f",
+        "crates/agentfw/src/gemini_hook.rs": "fdfbe47d113483f205f02378a2a9bc36556563afeef7f486f597e50e03ec8885",
+        "crates/agentfw/src/handlers.rs": "708056a7296b117a3af05e31135976a922459f088c2dad580bbe5448d05e89be",
+        "crates/agentfw/src/mcp/admission.rs": "e8a8b2b2b39edb4de465f5e80d2ec108edec192fdc255440f591446f601c1faa",
+        "crates/agentfw/src/mcp/connection/host_config/jsonc.rs": "48bd989f42e76523af0a597f768a2ecc3cfab72b2e580b4da9ee1fea108a7935",
+        "crates/agentfw/src/mcp/connection/host_config.rs": "9a2d10ed34311db37f3a1998f694999ca81b03a5a2afc75a24ec041ace6ed579",
+        "crates/agentfw/src/mcp/connection.rs": "198c51ade6def1b13fd1dc5c1060494e1579988625959c12ff2fe2b17f84a59e",
+        "scripts/gemini-filesystem-acceptance.py": "820f10bcd727939bbc3229d75c9f7fd44b641077e827362468aa32b5fdf3f0f4",
+        "scripts/gemini-hook-fault-acceptance.py": "ba59fb1c022d3892cb3a49517cf4e842b5204e5a9aea25d3924b949adb531d58",
+        "scripts/gemini-mcp-acceptance.py": "71f184102e2546d8624641ad7aa84e5093295ee008a9d92a7f92f3c41892fac2"
+      }
+    }
+  },
+  "validation": {
+    "rust_workspace_serial": {
+      "passed": 2479,
+      "failed": 0,
+      "ignored": 40,
+      "binaries": 89
+    },
+    "clippy_workspace_all_targets": "passed",
+    "eval_unittests": 112,
+    "release_docs_unittests": 22,
+    "documentation_links": 1505
+  },
+  "limits": [
+    "One selected stdio MCP connection on Linux; no Windows/macOS lifecycle qualification.",
+    "Optional callbacks require an operator-issued private binding and active signed native collector; no persistent run launcher is installed.",
+    "Actual Gemini callback exit 1 and host timeout fail open; native MCP remains the enforcement boundary.",
+    "Headless MCP Ask is held without execution; no interactive approval UI or combined single-use grant flow qualified.",
+    "Built-ins, hosted tools, background/interactive shell, subagents and multi-server authority propagation are not qualified.",
+    "Scripted loopback providers and synthetic owned fixtures, not live model evaluation; no paid provider traffic."
+  ]
+}

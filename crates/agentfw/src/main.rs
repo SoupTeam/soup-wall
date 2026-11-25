@@ -196,6 +196,8 @@ enum DiagnosticCommands {
 
 #[derive(Subcommand)]
 enum LifecycleCommands {
+    /// Gemini 0.68.0 BeforeTool/AfterTool bridge for one signed native MCP binding.
+    GeminiHook(agentfw::gemini_hook::Args),
     /// Configure or disconnect one installed Linux managed Console connection.
     ManagedConsole {
         #[arg(long, global = true)]
@@ -632,6 +634,7 @@ fn main() -> anyhow::Result<()> {
 #[inline(never)]
 fn dispatch(command: Cmd) -> anyhow::Result<()> {
     match command {
+        Cmd::Lifecycle(LifecycleCommands::GeminiHook(args)) => agentfw::gemini_hook::run(args),
         Cmd::Diagnostics(DiagnosticCommands::ConfigurationProject { config: _, policy }) => {
             std::process::exit(agentfw::configuration_recovery::run_cli(policy));
         }

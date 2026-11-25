@@ -7,7 +7,7 @@ pub use host_config::Host;
 
 #[derive(clap::Args)]
 pub struct Options {
-    /// Host configuration format. Codex currently requires Linux.
+    /// Host configuration format. Codex and Gemini currently require Linux.
     #[arg(long, value_enum, default_value = "claude")]
     pub host: Host,
     #[arg(long)]
@@ -135,7 +135,7 @@ pub fn run(command: Command) -> anyhow::Result<()> {
     {
         anyhow::ensure!(
             o.options.host == Host::Claude,
-            "Codex connection lifecycle currently requires Linux"
+            "this host connection lifecycle currently requires Linux"
         );
     }
     let command = match command {
@@ -1864,10 +1864,10 @@ pub(crate) mod linux {
         #[test]
         fn publication_boundary_conflicts_and_crashes_retain_versions() {
             if let Some(path) = std::env::var_os("SW_PUBLICATION_CHILD") {
-                let host = if std::env::var("SW_PUBLICATION_HOST").as_deref() == Ok("codex") {
-                    super::super::Host::Codex
-                } else {
-                    super::super::Host::Claude
+                let host = match std::env::var("SW_PUBLICATION_HOST").as_deref() {
+                    Ok("codex") => super::super::Host::Codex,
+                    Ok("gemini") => super::super::Host::Gemini,
+                    _ => super::super::Host::Claude,
                 };
                 let mut config = ConfigFile::read_host(Path::new(&path), host).unwrap();
                 let error = config
@@ -1896,7 +1896,11 @@ pub(crate) mod linux {
                 "{}",
                 String::from_utf8_lossy(&output.stderr)
             );
-            for host in [super::super::Host::Claude, super::super::Host::Codex] {
+            for host in [
+                super::super::Host::Claude,
+                super::super::Host::Codex,
+                super::super::Host::Gemini,
+            ] {
                 for mode in [
                     "write-before",
                     "replace-before",
@@ -1909,10 +1913,15 @@ pub(crate) mod linux {
                     if host == super::super::Host::Codex {
                         std::fs::write(&path, b"# retained\n[mcp_servers.local]\ncommand = '/usr/bin/env'\nargs = []\n[settings]\ntheme = 'light'\n").unwrap();
                     }
+                    if host == super::super::Host::Gemini {
+                        std::fs::write(&path, b"{/* retained */\"mcpServers\":{\"local\":{\"command\":\"/usr/bin/env\",\"args\":[],},},\"settings\":{\"theme\":\"light\"},}").unwrap();
+                    }
                     let before = std::fs::read(&path).unwrap();
                     let payload = dir.path().join("external.json");
                     let bytes = if host == super::super::Host::Codex {
                         [before.as_slice(), b"# external committed edit\n"].concat()
+                    } else if host == super::super::Host::Gemini {
+                        [before.as_slice(), b"// external committed edit\n"].concat()
                     } else {
                         let mut external: Value = serde_json::from_slice(&before).unwrap();
                         external["settings"]["theme"] = json!("external committed edit");
@@ -1921,7 +1930,7 @@ pub(crate) mod linux {
                     std::fs::write(&payload, &bytes).unwrap();
                     let output = std::process::Command::new(std::env::current_exe().unwrap())
                     .args(["--exact", "mcp::connection::linux::tests::publication_boundary_conflicts_and_crashes_retain_versions", "--nocapture"])
-                    .env("SW_PUBLICATION_HOST", if host == super::super::Host::Codex {"codex"} else {"claude"})
+                    .env("SW_PUBLICATION_HOST", match host { super::super::Host::Codex => "codex", super::super::Host::Gemini => "gemini", super::super::Host::Claude => "claude" })
                     .env("LD_PRELOAD", &library).env("SW_PUBLICATION_MODE", mode)
                     .env("SW_PUBLICATION_EDIT", &payload).env("SW_PUBLICATION_CHILD", &path)
                     .output().unwrap();
