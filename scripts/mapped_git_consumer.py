@@ -45,7 +45,7 @@ def load(name, filename):
     return module
 
 
-PREP = load('sou157_preparation', 'prepare-sou157-git.py')
+PREP = load('sou157_preparation', 'prepare-mapped-git-cases.py')
 sha, canonical, require = PREP.sha, PREP.canonical, PREP.require
 
 

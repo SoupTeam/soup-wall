@@ -25,7 +25,7 @@ p.add_argument("--build-report",type=Path)
 a=p.parse_args()
 if a.sou157_mapped:
     import importlib.util
-    spec=importlib.util.spec_from_file_location("sou157_git_consumer",ROOT/"scripts/sou157_git_consumer.py")
+    spec=importlib.util.spec_from_file_location("mapped_git_consumer",ROOT/"scripts/mapped_git_consumer.py")
     consumer=importlib.util.module_from_spec(spec);spec.loader.exec_module(consumer)
     raise SystemExit(consumer.main(a))
 if sys.platform != "linux":

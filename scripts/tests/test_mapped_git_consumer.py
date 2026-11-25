@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import unittest
 
-SPEC = importlib.util.spec_from_file_location('consumer', Path(__file__).parents[1] / 'sou157_git_consumer.py')
+SPEC = importlib.util.spec_from_file_location('consumer', Path(__file__).parents[1] / 'mapped_git_consumer.py')
 C = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(C)
 
