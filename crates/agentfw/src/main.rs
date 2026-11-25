@@ -198,6 +198,8 @@ enum DiagnosticCommands {
 enum LifecycleCommands {
     /// Gemini 0.68.0 BeforeTool/AfterTool bridge for one signed native MCP binding.
     GeminiHook(agentfw::gemini_hook::Args),
+    /// Pinned OpenCode plugin callback with a private native binding.
+    OpencodeHook(agentfw::gemini_hook::Args),
     /// Configure or disconnect one installed Linux managed Console connection.
     ManagedConsole {
         #[arg(long, global = true)]
@@ -635,6 +637,7 @@ fn main() -> anyhow::Result<()> {
 fn dispatch(command: Cmd) -> anyhow::Result<()> {
     match command {
         Cmd::Lifecycle(LifecycleCommands::GeminiHook(args)) => agentfw::gemini_hook::run(args),
+        Cmd::Lifecycle(LifecycleCommands::OpencodeHook(args)) => agentfw::opencode_hook::run(args),
         Cmd::Diagnostics(DiagnosticCommands::ConfigurationProject { config: _, policy }) => {
             std::process::exit(agentfw::configuration_recovery::run_cli(policy));
         }
