@@ -226,6 +226,7 @@ async fn connection_confirmation_is_checked_before_daemon_access() {
     let selection = &fixture.selection;
     let before = std::fs::read(&selection.host_config).unwrap();
     let options = Options {
+        host: crate::mcp::connection::Host::Claude,
         path: selection.host_config.clone(),
         server: selection.server.clone(),
         home: selection.home.clone(),

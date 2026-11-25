@@ -982,6 +982,53 @@ fn source_result_rejects_cross_call_session_result_epoch_and_restart_substitutio
         );
     }
 }
+#[tokio::test]
+async fn verified_invocation_hash_matches_server_frame_after_workspace_removal() {
+    use tokio::io::AsyncReadExt;
+
+    let env = Env::new();
+    let native = env.st.native.as_ref().unwrap();
+    let id = env.response["call_id"].as_str().unwrap();
+    let binding = native.sessions.lock().unwrap().entries["session"].calls[id]
+        .binding_sha256
+        .clone();
+    let mut request: Value = serde_json::from_slice(&env.raw).unwrap();
+    let wire_fixture: Value = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../scripts/fixtures/codex-0.169.0-call.json"
+    )))
+    .unwrap();
+    request["params"]["_meta"] = wire_fixture["params"]["_meta"].clone();
+    let host_frame = format!("{request}\n");
+    let server_frame = crate::mcp::admission::codex_server_frame(host_frame.as_bytes(), &request)
+        .unwrap()
+        .unwrap();
+    let (mut child, mut server) = tokio::io::duplex(4096);
+
+    let dispatch = env
+        .context
+        .dispatch_to(&mut child, "session", id, &binding, &server_frame)
+        .await
+        .unwrap();
+    drop(child);
+    let mut observed = Vec::new();
+    server.read_to_end(&mut observed).await.unwrap();
+    assert_eq!(observed, server_frame);
+
+    let result = dispatch
+        .response(env.response["content"].as_str().unwrap().as_bytes())
+        .unwrap();
+    assert_eq!(
+        result.metadata().invocation_sha256,
+        crate::hashing::sha256_hex(&observed)
+    );
+    assert_ne!(
+        result.metadata().invocation_sha256,
+        crate::hashing::sha256_hex(host_frame.as_bytes())
+    );
+    assert!(env.finish(Some(result)).unwrap().release);
+}
+
 #[test]
 fn concurrent_dispatches_preserve_raw_identity_and_refuse_unissued_or_changed_calls() {
     let env = Env::new();

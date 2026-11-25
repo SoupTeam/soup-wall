@@ -316,7 +316,21 @@ impl SessionContext {
         matches!(self.stage.load(Ordering::Acquire), 0 | 3)
     }
 
-    pub(crate) fn dispatched(
+    /// Bind the admitted call to the exact bytes sent to the selected server.
+    pub(crate) async fn dispatch_to<W: tokio::io::AsyncWrite + Unpin>(
+        self: &Arc<Self>,
+        child: &mut W,
+        session: &str,
+        call_id: &str,
+        binding: &str,
+        server_frame: &[u8],
+    ) -> anyhow::Result<Dispatch> {
+        let dispatch = self.dispatched(session, call_id, binding, server_frame)?;
+        crate::mcp::admission::write(child, server_frame).await?;
+        Ok(dispatch)
+    }
+
+    fn dispatched(
         self: &Arc<Self>,
         session: &str,
         call_id: &str,
@@ -503,6 +517,7 @@ pub struct Metadata {
     pub channel_generation_sha256: String,
     pub session_epoch_sha256: String,
     pub native_call_id: String,
+    /// SHA-256 of the exact request frame written to the selected server.
     pub invocation_sha256: String,
     pub original_result_sha256: String,
     pub original_result_bytes: usize,

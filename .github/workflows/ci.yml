@@ -281,6 +281,17 @@ jobs:
           for witness in "${witnesses[@]}"; do
             grep -Fx "test $witness ... ok" "$RUNNER_TEMP/reader-witnesses.log"
           done
+      - name: Codex TOML connection lifecycle with a local Agent
+        run: |
+          python3 -B scripts/codex-mcp-acceptance.py --agentfw target/debug/agentfw \
+            --lifecycle-only --out target/codex-ci/lifecycle.json
+      - name: Retain Codex TOML lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: codex-toml-lifecycle
+          path: target/codex-ci/lifecycle.json
+          if-no-files-found: warn
       - name: Retain Task 3 attack scenario results
         if: always()
         uses: actions/upload-artifact@v7

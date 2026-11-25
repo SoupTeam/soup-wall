@@ -6,6 +6,8 @@ profile inside WSL2. The [native Windows backend](WINDOWS_MCP_CONNECTION.md)
 has a separate NTFS, ownership and recovery contract. macOS, project aliases,
 remote transports and nonempty server environments are refused.
 
+For Codex CLI TOML, use the explicit [Codex connection adapter](CODEX_MCP_CONNECTION.md).
+
 ## Operator flow
 
 Use absolute paths to an existing Agent executable, its reviewed `.agentfw`

@@ -15,7 +15,11 @@ use anyhow::{bail, ensure, Context};
 use futures_util::{FutureExt, StreamExt};
 use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
-use serde_json::{json, Value};
+use serde_json::{
+    json,
+    value::{to_raw_value, RawValue},
+    Value,
+};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::process::Command;
@@ -899,7 +903,7 @@ async fn line<R: AsyncBufRead + Unpin>(
     }
 }
 
-async fn write<W: AsyncWrite + Unpin>(output: &mut W, raw: &[u8]) -> anyhow::Result<()> {
+pub(crate) async fn write<W: AsyncWrite + Unpin>(output: &mut W, raw: &[u8]) -> anyhow::Result<()> {
     tokio::time::timeout(Duration::from_secs(5), async {
         output.write_all(raw).await?;
         output.flush().await
@@ -2193,6 +2197,9 @@ fn discovery_params(value: &Value) -> anyhow::Result<()> {
 /// Observed Claude and Codex identifiers are transport correlation only. They
 /// never supply native session identity, arguments, authority or provenance.
 fn call_metadata(value: &Value) -> anyhow::Result<()> {
+    if value.get("x-codex-turn-metadata").is_some() {
+        return codex_turn_metadata(value);
+    }
     keys(
         value,
         &["claudecode/toolUseId", "threadId", "progressToken"],
@@ -2208,6 +2215,137 @@ fn call_metadata(value: &Value) -> anyhow::Result<()> {
         "unsupported MCP call correlation metadata"
     );
     Ok(())
+}
+
+/// Captured CLI 0.169.0-alpha.11.1 shape. Every byte remains in the original
+/// frame/hash binding; none of these host assertions supplies native authority.
+fn codex_turn_metadata(value: &Value) -> anyhow::Result<()> {
+    const OUTER: &[&str] = &[
+        "callId",
+        "threadId",
+        "sessionId",
+        "windowId",
+        "itemId",
+        "progressToken",
+        "x-codex-turn-metadata",
+    ];
+    const TEXT: &[&str] = &[
+        "session_id",
+        "thread_id",
+        "model",
+        "turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "codex_version",
+    ];
+    const FLAGS: &[&str] = &[
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+    ];
+    let bounded = |v: &Value| {
+        v.as_str()
+            .is_some_and(|s| !s.is_empty() && s.len() <= 256 && !s.chars().any(char::is_control))
+    };
+    keys(value, OUTER)?;
+    ensure!(
+        value.as_object().is_some_and(|m| m.len() == OUTER.len())
+            && OUTER[..5].iter().all(|k| bounded(&value[k]))
+            && correlation_id(&value["threadId"])
+            && progress_token(&value["progressToken"]),
+        "unsupported Codex correlation metadata"
+    );
+    let turn = &value["x-codex-turn-metadata"];
+    let fields: Vec<_> = TEXT
+        .iter()
+        .chain(FLAGS)
+        .copied()
+        .chain(["turn_started_at_unix_ms", "workspaces"])
+        .collect();
+    keys(turn, &fields)?;
+    ensure!(
+        turn.as_object().is_some_and(
+            |m| m.len() == fields.len() - usize::from(turn.get("workspaces").is_none())
+        ) && TEXT.iter().all(|k| bounded(&turn[k]))
+            && FLAGS.iter().all(|k| turn[k].is_boolean())
+            && progress_token(&turn["turn_started_at_unix_ms"])
+            && turn["codex_version"] == "0.169.0-alpha.11.1"
+            && turn["thread_id"] == value["threadId"]
+            && turn["session_id"] == value["sessionId"],
+        "unsupported Codex turn metadata"
+    );
+    if let Some(workspaces) = turn.get("workspaces") {
+        let map = workspaces.as_object().context("invalid Codex workspaces")?;
+        ensure!(map.len() <= 16, "too many Codex workspaces");
+        for (path, workspace) in map {
+            ensure!(
+                !path.is_empty() && path.len() <= 4096 && !path.chars().any(char::is_control),
+                "invalid Codex workspace path"
+            );
+            keys(
+                workspace,
+                &[
+                    "associated_remote_urls",
+                    "latest_git_commit_hash",
+                    "has_changes",
+                ],
+            )?;
+            ensure!(
+                workspace.get("has_changes").is_none_or(Value::is_boolean)
+                    && workspace
+                        .get("latest_git_commit_hash")
+                        .is_none_or(|hash| hash.is_null()
+                            || hash.as_str().is_some_and(|s| matches!(s.len(), 40 | 64)
+                                && s.bytes().all(|b| b.is_ascii_hexdigit()))),
+                "invalid Codex workspace metadata"
+            );
+            let Some(remotes) = workspace.get("associated_remote_urls") else {
+                continue;
+            };
+            let remotes = remotes.as_object().context("invalid Codex remotes")?;
+            ensure!(
+                remotes.len() <= 16
+                    && remotes.iter().all(|(name, url)| !name.is_empty()
+                        && name.len() <= 128
+                        && !name.chars().any(char::is_control)
+                        && url.as_str().is_some_and(|u| !u.is_empty()
+                            && u.len() <= 2048
+                            && !u.chars().any(char::is_control))),
+                "invalid Codex remote metadata"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Keep the original request for admission and custody. Workspace metadata is
+/// host-local context and can include paths and credentials in Git remote URLs.
+pub(crate) fn codex_server_frame(raw: &[u8], value: &Value) -> anyhow::Result<Option<Vec<u8>>> {
+    let meta = &value["params"]["_meta"];
+    let turn = "x-codex-turn-metadata";
+    if value["method"] != "tools/call" || meta[turn].get("workspaces").is_none() {
+        return Ok(None);
+    }
+
+    let mut meta = meta.clone();
+    meta[turn]
+        .as_object_mut()
+        .context("invalid Codex turn metadata")?
+        .remove("workspaces");
+    let meta = to_raw_value(&meta)?;
+    // Preserve the original JSON values (including argument number spelling)
+    // on the server side too. Only the validated metadata value is rewritten.
+    let mut envelope: BTreeMap<String, &RawValue> = serde_json::from_slice(raw)?;
+    let mut params: BTreeMap<String, &RawValue> =
+        serde_json::from_str(envelope.get("params").context("MCP params absent")?.get())?;
+    params.insert("_meta".into(), &meta);
+    let params = to_raw_value(&params)?;
+    envelope.insert("params".into(), &params);
+    let mut bytes = serde_json::to_vec(&envelope)?;
+    bytes.push(b'\n');
+    Ok(Some(bytes))
 }
 
 fn result_kind(value: &Value) -> anyhow::Result<&'static str> {
@@ -3654,7 +3792,8 @@ where
                 };
                 pending = Some(next);
                 deadline = tokio::time::Instant::now() + IO_TIMEOUT;
-                write(child, &raw).await?;
+                let outgoing = codex_server_frame(&raw, &value)?;
+                write(child, outgoing.as_deref().unwrap_or(&raw)).await?;
                 drop(policy_boundary);
             }
             raw = line(server, &mut server_partial) => {

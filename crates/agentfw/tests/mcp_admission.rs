@@ -1713,8 +1713,75 @@ async fn native_mcp_rejects_unknown_partial_and_unbounded_correlation_metadata()
     );
 }
 
+fn codex_current_metadata() -> Value {
+    let frame: Value = serde_json::from_str(include_str!(
+        "../../../scripts/fixtures/codex-0.169.0-call.json"
+    ))
+    .unwrap();
+    frame["params"]["_meta"].clone()
+}
+
 #[tokio::test]
 async fn native_mcp_accepts_codex_discovery_and_calls_without_granting_authority() {
+    codex_metadata_acceptance(false).await;
+}
+
+#[tokio::test]
+async fn native_mcp_accepts_current_codex_without_granting_authority() {
+    codex_metadata_acceptance(true).await;
+}
+
+#[tokio::test]
+async fn native_mcp_rejects_altered_current_codex_metadata_before_execution() {
+    let valid = codex_current_metadata();
+    let mut invalid = Vec::new();
+    for (pointer, value) in [
+        (
+            "/x-codex-turn-metadata/workspaces",
+            json!({"/owned": {"authority":"allow"}}),
+        ),
+        (
+            "/x-codex-turn-metadata/workspaces/~1owned~1workspace/has_changes",
+            json!("yes"),
+        ),
+        (
+            "/x-codex-turn-metadata/workspaces/~1owned~1workspace/latest_git_commit_hash",
+            json!("bad"),
+        ),
+        ("/callId", json!("x".repeat(257))),
+        ("/windowId", json!("window\n")),
+        ("/progressToken", json!(-1)),
+        ("/x-codex-turn-metadata/codex_version", json!("unreviewed")),
+        ("/x-codex-turn-metadata/session_id", json!("different")),
+        ("/x-codex-turn-metadata/auto_review_enabled", json!("true")),
+        ("/x-codex-turn-metadata/turn_started_at_unix_ms", json!(1.5)),
+    ] {
+        let mut changed = valid.clone();
+        *changed.pointer_mut(pointer).unwrap() = value;
+        invalid.push(changed);
+    }
+    for field in valid.as_object().unwrap().keys() {
+        let mut changed = valid.clone();
+        changed.as_object_mut().unwrap().remove(field);
+        invalid.push(changed);
+    }
+    let mut changed = valid.clone();
+    changed["x-codex-turn-metadata"]["authority"] = json!("allow");
+    invalid.push(changed);
+    let mut changed = valid.clone();
+    changed["authority"] = json!("allow");
+    invalid.push(changed);
+    for metadata in invalid {
+        let mut fixture = Fixture::new("normal", true).await;
+        fixture.ready().await;
+        let request = json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
+            "name":"read_document","arguments":{},"_meta":metadata}});
+        assert!(fixture.exchange(&request.to_string()).await.is_none());
+        assert!(executed(&fixture.ledger).is_empty());
+    }
+}
+
+async fn codex_metadata_acceptance(modern: bool) {
     let mut fixture = Fixture::new("discovery-tap", true).await;
     assert!(fixture.exchange(r#"{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{"elicitation":{"form":{},"url":{}}},"clientInfo":{"name":"codex-mcp-client","title":"Codex","version":"0.148.0"}}}"#).await.is_some());
     fixture
@@ -1731,15 +1798,28 @@ async fn native_mcp_accepts_codex_discovery_and_calls_without_granting_authority
         format!("{list}\n")
     );
 
-    let thread = "01a1176d-0d01-7142-a94b-f362a2f98a8f";
-    let read = format!(
-        r#"{{ "jsonrpc":"2.0", "id":3, "method":"tools/call", "params":{{"name":"read_document","arguments":{{}},"_meta":{{"threadId":"{thread}","progressToken":1}}}} }}"#
-    );
+    let thread = "codex-thread";
+    let metadata = if modern {
+        let mut metadata = codex_current_metadata();
+        metadata["x-codex-turn-metadata"]["workspaces"]["/owned/workspace"]
+            ["associated_remote_urls"]["origin"] = json!("https://example.invalid/private-remote");
+        metadata
+    } else {
+        json!({"threadId":thread,"progressToken":1})
+    };
+    let read = format!(" {{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{{\"name\":\"read_document\",\"arguments\":{{}},\"_meta\":{metadata}}}}} ");
     assert_eq!(fixture.exchange(&read).await.as_deref(), Some(READ_RESULT));
-    assert_eq!(
-        std::fs::read_to_string(&fixture.ledger).unwrap(),
-        format!("{read}\n")
-    );
+    let forwarded = std::fs::read_to_string(&fixture.ledger).unwrap();
+    if modern {
+        let mut expected: Value = serde_json::from_str(&read).unwrap();
+        expected["params"]["_meta"]["x-codex-turn-metadata"]
+            .as_object_mut()
+            .unwrap()
+            .remove("workspaces");
+        assert_eq!(serde_json::from_str::<Value>(&forwarded).unwrap(), expected);
+    } else {
+        assert_eq!(forwarded, format!("{read}\n"));
+    }
 
     for (id, tool, args, rule) in [
         (
@@ -1756,7 +1836,7 @@ async fn native_mcp_accepts_codex_discovery_and_calls_without_granting_authority
         ),
     ] {
         let request = json!({"jsonrpc":"2.0","id":id,"method":"tools/call","params":{
-            "name":tool,"arguments":args,"_meta":{"threadId":thread,"progressToken":id}}});
+            "name":tool,"arguments":args,"_meta":metadata}});
         let refusal = fixture.exchange(&request.to_string()).await.unwrap();
         let refusal: Value = serde_json::from_str(&refusal).unwrap();
         assert_eq!(refusal["id"], id);
@@ -1775,7 +1855,7 @@ async fn native_mcp_accepts_codex_discovery_and_calls_without_granting_authority
         );
     }
     let followup = json!({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{
-        "name":"read_document","arguments":{},"_meta":{"threadId":thread,"progressToken":5}}});
+        "name":"read_document","arguments":{},"_meta":metadata}});
     assert!(fixture
         .exchange(&followup.to_string())
         .await

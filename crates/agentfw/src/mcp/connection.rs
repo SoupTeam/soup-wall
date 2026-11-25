@@ -2,8 +2,14 @@
 
 use std::path::PathBuf;
 
+mod host_config;
+pub use host_config::Host;
+
 #[derive(clap::Args)]
 pub struct Options {
+    /// Host configuration format. Codex currently requires Linux.
+    #[arg(long, value_enum, default_value = "claude")]
+    pub host: Host,
     #[arg(long)]
     pub path: PathBuf,
     #[arg(long)]
@@ -121,6 +127,17 @@ pub async fn inspect_read_only(options: &Options) -> anyhow::Result<&'static str
 }
 
 pub fn run(command: Command) -> anyhow::Result<()> {
+    #[cfg(not(target_os = "linux"))]
+    if let Command::Preview(o)
+    | Command::Connect(o)
+    | Command::Inspect(o)
+    | Command::Disconnect(o) = &command
+    {
+        anyhow::ensure!(
+            o.options.host == Host::Claude,
+            "Codex connection lifecycle currently requires Linux"
+        );
+    }
     let command = match command {
         Command::Profile { command } => return crate::mcp::profile_upgrade::run(*command),
         other => other,
@@ -479,6 +496,7 @@ pub(crate) mod linux {
         bytes: Vec<u8>,
         meta: Metadata,
         value: Value,
+        host: super::Host,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -497,6 +515,10 @@ pub(crate) mod linux {
 
     impl ConfigFile {
         fn read(path: &Path) -> Result<Self> {
+            Self::read_host(path, super::Host::Claude)
+        }
+
+        fn read_host(path: &Path, host: super::Host) -> Result<Self> {
             let dir = directory(path.parent().context("missing config parent")?)?;
             let dm = dir.metadata()?;
             ensure!(
@@ -504,13 +526,15 @@ pub(crate) mod linux {
                 "config directory must be owned and not writable by other users"
             );
             let (bytes, meta) = read_at(&dir, path.file_name().context("missing filename")?)?;
-            let value = parse(&bytes)?;
+            ensure!(bytes.len() <= LIMIT, "configuration exceeds 1 MiB");
+            let value = host.parse(&bytes)?;
             Ok(Self {
                 dir,
                 path: path.to_owned(),
                 bytes,
                 meta,
                 value,
+                host,
             })
         }
 
@@ -525,20 +549,20 @@ pub(crate) mod linux {
             );
             let servers = self
                 .value
-                .get("mcpServers")
+                .get(self.host.servers_key())
                 .and_then(Value::as_object)
-                .context("mcpServers must be an object")?;
+                .context("host MCP servers must be an object")?;
             ensure!(servers.len() <= 256, "too many MCP servers");
             let entry = servers.get(name).context("selected server not found")?;
+            self.host.validate(entry)?;
             validate_entry(entry)?;
             Ok(entry.clone())
         }
 
         fn replacement(&self, name: &str, entry: &Value) -> Result<Vec<u8>> {
             validate_entry(entry)?;
-            let mut next = self.value.clone();
-            next["mcpServers"][name] = entry.clone();
-            let bytes = serde_json::to_vec_pretty(&next)?;
+            self.host.validate(entry)?;
+            let bytes = self.host.replace(&self.bytes, name, entry)?;
             ensure!(bytes.len() <= LIMIT, "updated config exceeds 1 MiB");
             Ok(bytes)
         }
@@ -584,7 +608,7 @@ pub(crate) mod linux {
             self.unchanged()?;
             let bytes = self.replacement(name, entry)?;
             self.publish(&bytes)?;
-            let current = Self::read(&self.path)?;
+            let current = Self::read_host(&self.path, self.host)?;
             ensure!(current.bytes == bytes, "config changed after replacement");
             *self = current;
             Ok(())
@@ -741,7 +765,7 @@ pub(crate) mod linux {
             );
             archive.sync_all()?;
             self.dir.sync_all()?;
-            let current = Self::read(&self.path)?;
+            let current = Self::read_host(&self.path, self.host)?;
             current.finish_publication(&record)?;
             ensure!(
                 current.bytes == bytes
@@ -817,6 +841,7 @@ pub(crate) mod linux {
                         owner.version == 1
                             && owner.path == self.path
                             && owner.server == name
+                            && owner.host == self.host
                             && owner.original_sha256 == hash(&owner.original)
                             && owner.wrapped_sha256 == hash(&owner.wrapped),
                         "ownership metadata does not match"
@@ -898,6 +923,8 @@ pub(crate) mod linux {
     #[serde(deny_unknown_fields)]
     struct Owner {
         version: u8,
+        #[serde(default, skip_serializing_if = "super::Host::is_claude")]
+        host: super::Host,
         path: PathBuf,
         server: String,
         phase: String,
@@ -1054,6 +1081,8 @@ pub(crate) mod linux {
     pub(super) struct Report {
         pub status: &'static str,
         operation: String,
+        host: super::Host,
+        enforcement_coverage: &'static str,
         config_sha256: String,
         selected_sha256: String,
         server_id: String,
@@ -1256,7 +1285,7 @@ pub(crate) mod linux {
             o.probe_tool.is_none() || operation == "inspect",
             "controlled requests are only supported by inspect"
         );
-        let mut config = ConfigFile::read(&o.path)?;
+        let mut config = ConfigFile::read_host(&o.path, o.host)?;
         let _lock = if ["connect", "disconnect"].contains(&operation) {
             Some(config.lock()?)
         } else {
@@ -1287,10 +1316,12 @@ pub(crate) mod linux {
             )?),
             _ => None,
         };
-        let id = super::server_id(&o.path, &o.server);
+        let id = o.host.server_id(&o.path, &o.server);
         let mut report = Report {
             status: "unknown",
             operation: operation.to_owned(),
+            host: o.host,
+            enforcement_coverage: "selected_stdio_mcp_only",
             config_sha256: sha256_hex(&config.bytes),
             selected_sha256: hash(&entry),
             server_id: id.clone(),
@@ -1404,6 +1435,7 @@ pub(crate) mod linux {
                         config.snapshot_unchanged(&o.server, &owner)?;
                         owner = Some(Owner {
                             version: 1,
+                            host: o.host,
                             path: o.path.clone(),
                             server: o.server.clone(),
                             phase: "pending_connect".into(),
@@ -1518,6 +1550,7 @@ pub(crate) mod linux {
             let entry = config.entry("local").unwrap();
             Owner {
                 version: 1,
+                host: config.host,
                 path: config.path.clone(),
                 server: "local".into(),
                 phase: "connected".into(),
@@ -1586,6 +1619,7 @@ pub(crate) mod linux {
             let config = ConfigFile::read(&path).unwrap();
             let executable = trusted_fixture_executable(dir.path());
             let options = Options {
+                host: crate::mcp::connection::Host::Claude,
                 path: path.clone(),
                 server: "local".into(),
                 home: PathBuf::from("/tmp/.agentfw"),
@@ -1641,6 +1675,8 @@ pub(crate) mod linux {
             let (_dir, path) = fixture();
             let mut config = ConfigFile::read(&path).unwrap();
             config.value["padding"] = json!("x".repeat(LIMIT - 1024));
+            std::fs::write(&path, serde_json::to_vec(&config.value).unwrap()).unwrap();
+            let config = ConfigFile::read(&path).unwrap();
             let entry = json!({"command":"/usr/bin/env", "args":["x".repeat(2048)]});
             assert!(config.replacement("local", &entry).is_err());
             assert!(config.state("local").unwrap().is_none());
@@ -1828,7 +1864,12 @@ pub(crate) mod linux {
         #[test]
         fn publication_boundary_conflicts_and_crashes_retain_versions() {
             if let Some(path) = std::env::var_os("SW_PUBLICATION_CHILD") {
-                let mut config = ConfigFile::read(Path::new(&path)).unwrap();
+                let host = if std::env::var("SW_PUBLICATION_HOST").as_deref() == Ok("codex") {
+                    super::super::Host::Codex
+                } else {
+                    super::super::Host::Claude
+                };
+                let mut config = ConfigFile::read_host(Path::new(&path), host).unwrap();
                 let error = config
                     .replace("local", &json!({"command":"/usr/bin/env","args":[]}))
                     .unwrap_err();
@@ -1855,69 +1896,79 @@ pub(crate) mod linux {
                 "{}",
                 String::from_utf8_lossy(&output.stderr)
             );
-            for mode in [
-                "write-before",
-                "replace-before",
-                "held-write-after",
-                "write-after",
-                "crash-before",
-                "crash-after",
-            ] {
-                let (dir, path) = fixture();
-                let before = std::fs::read(&path).unwrap();
-                let mut external: Value = serde_json::from_slice(&before).unwrap();
-                external["settings"]["theme"] = json!("external committed edit");
-                let payload = dir.path().join("external.json");
-                let bytes = serde_json::to_vec(&external).unwrap();
-                std::fs::write(&payload, &bytes).unwrap();
-                let output = std::process::Command::new(std::env::current_exe().unwrap())
+            for host in [super::super::Host::Claude, super::super::Host::Codex] {
+                for mode in [
+                    "write-before",
+                    "replace-before",
+                    "held-write-after",
+                    "write-after",
+                    "crash-before",
+                    "crash-after",
+                ] {
+                    let (dir, path) = fixture();
+                    if host == super::super::Host::Codex {
+                        std::fs::write(&path, b"# retained\n[mcp_servers.local]\ncommand = '/usr/bin/env'\nargs = []\n[settings]\ntheme = 'light'\n").unwrap();
+                    }
+                    let before = std::fs::read(&path).unwrap();
+                    let payload = dir.path().join("external.json");
+                    let bytes = if host == super::super::Host::Codex {
+                        [before.as_slice(), b"# external committed edit\n"].concat()
+                    } else {
+                        let mut external: Value = serde_json::from_slice(&before).unwrap();
+                        external["settings"]["theme"] = json!("external committed edit");
+                        serde_json::to_vec(&external).unwrap()
+                    };
+                    std::fs::write(&payload, &bytes).unwrap();
+                    let output = std::process::Command::new(std::env::current_exe().unwrap())
                     .args(["--exact", "mcp::connection::linux::tests::publication_boundary_conflicts_and_crashes_retain_versions", "--nocapture"])
+                    .env("SW_PUBLICATION_HOST", if host == super::super::Host::Codex {"codex"} else {"claude"})
                     .env("LD_PRELOAD", &library).env("SW_PUBLICATION_MODE", mode)
                     .env("SW_PUBLICATION_EDIT", &payload).env("SW_PUBLICATION_CHILD", &path)
                     .output().unwrap();
-                assert_eq!(
-                    output.status.code(),
-                    Some(match mode {
-                        "crash-before" => 86,
-                        "crash-after" => 87,
-                        _ => 0,
-                    }),
-                    "{mode}: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                let config = ConfigFile::read(&path).unwrap();
-                let record = config.publication().unwrap().unwrap();
-                let archive = dir.path().join(&record.archive);
-                let proposed = std::fs::read(archive.join("proposed.json")).unwrap();
-                let displaced = std::fs::read(archive.join("exchanged.json")).unwrap();
-                assert_eq!(
-                    std::fs::read(archive.join("snapshot.json")).unwrap(),
-                    before,
-                    "{mode}"
-                );
-                if mode.starts_with("crash-") {
-                    config.finish_publication(&record).unwrap();
-                    assert!(config.publication().unwrap().is_none());
                     assert_eq!(
-                        config.bytes,
-                        if mode == "crash-before" {
-                            before
-                        } else {
-                            proposed
-                        }
+                        output.status.code(),
+                        Some(match mode {
+                            "crash-before" => 86,
+                            "crash-after" => 87,
+                            _ => 0,
+                        }),
+                        "{mode}: {}",
+                        String::from_utf8_lossy(&output.stderr)
                     );
-                } else {
-                    assert!(
-                        displaced == bytes || config.bytes == bytes,
-                        "{mode}: external version lost"
-                    );
-                    assert!(config.finish_publication(&record).is_err(), "{mode}");
-                    assert!(config.publication().unwrap().is_some(), "{mode}");
+                    let config = ConfigFile::read_host(&path, host).unwrap();
+                    let record = config.publication().unwrap().unwrap();
+                    let archive = dir.path().join(&record.archive);
+                    let proposed = std::fs::read(archive.join("proposed.json")).unwrap();
+                    let displaced = std::fs::read(archive.join("exchanged.json")).unwrap();
                     assert_eq!(
-                        std::fs::read(archive.join("exchanged.json")).unwrap(),
-                        displaced
+                        std::fs::read(archive.join("snapshot.json")).unwrap(),
+                        before,
+                        "{mode}"
                     );
-                    assert_eq!(std::fs::read(&path).unwrap(), config.bytes);
+                    if mode.starts_with("crash-") {
+                        config.finish_publication(&record).unwrap();
+                        assert!(config.publication().unwrap().is_none());
+                        assert_eq!(
+                            config.bytes,
+                            if mode == "crash-before" {
+                                before
+                            } else {
+                                proposed
+                            }
+                        );
+                    } else {
+                        assert!(
+                            displaced == bytes || config.bytes == bytes,
+                            "{mode}: external version lost"
+                        );
+                        assert!(config.finish_publication(&record).is_err(), "{mode}");
+                        assert!(config.publication().unwrap().is_some(), "{mode}");
+                        assert_eq!(
+                            std::fs::read(archive.join("exchanged.json")).unwrap(),
+                            displaced
+                        );
+                        assert_eq!(std::fs::read(&path).unwrap(), config.bytes);
+                    }
                 }
             }
         }
@@ -1966,6 +2017,7 @@ pub(crate) mod linux {
             std::fs::write(&path, "port: private-value-must-not-appear\n").unwrap();
             std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
             let options = Options {
+                host: crate::mcp::connection::Host::Claude,
                 path: dir.path().join("unused.json"),
                 server: "demo".into(),
                 home,
@@ -2000,6 +2052,7 @@ pub(crate) mod linux {
             let fixture_dir = tempfile::tempdir().unwrap();
             let executable = trusted_fixture_executable(fixture_dir.path());
             let options = Options {
+                host: crate::mcp::connection::Host::Claude,
                 path: PathBuf::from("/tmp/mcp.json"),
                 server: "files".into(),
                 home: PathBuf::from("/tmp/.agentfw"),

@@ -1,0 +1,43 @@
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "_meta": {
+      "callId": "call_0",
+      "x-codex-turn-metadata": {
+        "session_id": "codex-thread",
+        "thread_id": "codex-thread",
+        "model": "fixture",
+        "turn_id": "codex-turn",
+        "turn_started_at_unix_ms": 1794911278487,
+        "thread_source": "user",
+        "turn_trigger": "exec",
+        "sandbox": "seccomp",
+        "sandbox_mode": "read-only",
+        "auto_review_enabled": false,
+        "node_repl_auto_review_required": false,
+        "node_repl_disabled": false,
+        "codex_version": "0.169.0-alpha.11.1",
+        "workspaces": {
+          "/owned/workspace": {
+            "associated_remote_urls": {
+              "origin": "https://example.invalid/owned/repo"
+            },
+            "latest_git_commit_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "has_changes": true
+          }
+        }
+      },
+      "threadId": "codex-thread",
+      "sessionId": "codex-thread",
+      "windowId": "codex-thread:0",
+      "itemId": "fc_0",
+      "progressToken": 1
+    },
+    "name": "read_document",
+    "arguments": {
+      "name": "inventory"
+    }
+  }
+}

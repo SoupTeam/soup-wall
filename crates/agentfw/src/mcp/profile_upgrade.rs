@@ -44,6 +44,15 @@ pub enum Command {
 }
 
 pub fn run(command: Command) -> anyhow::Result<()> {
+    let connection = match &command {
+        Command::Preview(target) | Command::Apply { target, .. } => &target.connection,
+        Command::Status(options) | Command::Recover(options) => options,
+        Command::Collector { connection, .. } => connection,
+    };
+    anyhow::ensure!(
+        connection.host == super::connection::Host::Claude,
+        "profile transitions currently require an authenticated Claude launcher"
+    );
     #[cfg(target_os = "linux")]
     {
         let runtime = tokio::runtime::Builder::new_current_thread()
