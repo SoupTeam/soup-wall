@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Local, finite component removal. Receipts establish only the enumerated
 //! installation scope; user data and global Agent lifecycle are never targets.
+use crate::hashing::sha256_hex;
 use anyhow::{ensure, Context, Result};
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
@@ -109,9 +110,6 @@ struct Plan {
 fn canonical(v: &impl Serialize) -> Result<Vec<u8>> {
     Ok(serde_json::to_vec(&serde_json::to_value(v)?)?)
 }
-fn sha(raw: &[u8]) -> String {
-    super::sha(raw)
-}
 fn same(a: &str, b: &str) -> bool {
     crate::native::is_digest(a)
         && crate::native::is_digest(b)
@@ -120,7 +118,7 @@ fn same(a: &str, b: &str) -> bool {
 fn digest(plan: &Plan) -> Result<String> {
     let mut raw = b"agentfw/installed-pilot-removal/v1\0".to_vec();
     raw.extend(canonical(plan)?);
-    Ok(sha(&raw))
+    Ok(sha256_hex(&raw))
 }
 fn decode<T: serde::de::DeserializeOwned>(raw: &[u8]) -> Result<T> {
     let crate::mcp::admission::Strict(value) =

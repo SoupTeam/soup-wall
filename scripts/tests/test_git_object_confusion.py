@@ -10,7 +10,7 @@ import unittest
 
 SPEC = importlib.util.spec_from_file_location(
     "sou156_confusion", Path(__file__).resolve().parents[1] /
-    "reproduce-sou156-git-object-confusion.py")
+    "reproduce-git-object-confusion.py")
 DRIVER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(DRIVER)
 

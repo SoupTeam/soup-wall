@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Read-only pinned inputs; no ambient home or path aliases.
+use crate::hashing::sha256_hex;
 use anyhow::{ensure, Context, Result};
 use serde::Serialize;
 use std::{
@@ -84,7 +85,7 @@ impl Input {
             ],
             change: [m.mtime(), m.mtime_nsec(), m.ctime(), m.ctime_nsec()],
             bytes: bytes.len(),
-            sha256: super::sha(&bytes),
+            sha256: sha256_hex(&bytes),
         };
         ensure!(
             binding(&before) == binding(&file.metadata()?) && before.len() == bytes.len() as u64,

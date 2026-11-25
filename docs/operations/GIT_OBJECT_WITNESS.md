@@ -18,7 +18,7 @@ Run the owned synthetic control with an explicit original runtime and a wheel
 whose SHA-256 is already in the accepted requirements lock:
 
 ```sh
-python3 -B scripts/reproduce-sou156-git-object-confusion.py --run \
+python3 -B scripts/reproduce-git-object-confusion.py --run \
   --python /absolute/original-runtime/bin/python3 \
   --git /absolute/reviewed/git \
   --server-wheel /absolute/pinned/mcp_server_git.whl \
@@ -157,7 +157,7 @@ on macOS; it does not qualify Linux capture or original-runtime confinement):
 ```sh
 cargo test --locked --offline -p agentfw --lib object_witness -- --nocapture
 python3 -B -m unittest discover -s scripts/tests \
-  -p test_sou156_git_object_confusion.py -v
+  -p test_git_object_confusion.py -v
 ```
 
 Native capture/mount and original-server confinement acceptance must run on
@@ -247,7 +247,7 @@ reviewed base Git profile. It creates only private synthetic repositories and
 homes; it downloads nothing and makes no model calls:
 
 ~~~sh
-python3 -B scripts/verify-sou109-original-git.py \
+python3 -B scripts/verify-daemon-owned-git.py \
   --binary /absolute/current/agentfw \
   --template-profile /absolute/installed/git-profile.json \
   --expected-commit "$(git rev-parse HEAD)" \

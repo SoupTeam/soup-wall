@@ -3,6 +3,7 @@
 //! Legacy native/1 trusts the collector and does not attest runtime origin.
 //! The separate opt-in git-execute contract owns its actual original process pipes.
 
+use crate::hashing::sha256_hex;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -131,10 +132,6 @@ fn json_pointer(value: &str) -> bool {
     crate::mcp::resources::valid_pointer(value)
 }
 
-fn hash(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
-
 fn canonical(value: &Value) -> Value {
     match value {
         Value::Object(map) => serde_json::to_value(
@@ -149,11 +146,11 @@ fn canonical(value: &Value) -> Value {
 }
 
 fn args_hash(value: &Value) -> String {
-    hash(canonical(value).to_string().as_bytes())
+    sha256_hex(canonical(value).to_string().as_bytes())
 }
 
 pub fn canonical_digest(value: &Value) -> String {
-    hash(canonical(value).to_string().as_bytes())
+    sha256_hex(canonical(value).to_string().as_bytes())
 }
 
 fn binding(
@@ -693,7 +690,7 @@ impl HookAuthorityGuard<'_> {
 impl NativeState {
     pub fn from_bytes(bytes: &[u8], expected: &str, token: String) -> anyhow::Result<Self> {
         anyhow::ensure!(
-            bytes.len() <= MAX_BODY && is_digest(expected) && hash(bytes) == expected,
+            bytes.len() <= MAX_BODY && is_digest(expected) && sha256_hex(bytes) == expected,
             "native registry bytes do not match the explicit startup digest"
         );
         let registry: Registry = serde_json::from_slice(bytes)?;
@@ -993,7 +990,7 @@ impl NativeState {
         {
             return Err("native_hook_identity_mismatch");
         }
-        let digest = hash(proof.as_bytes());
+        let digest = sha256_hex(proof.as_bytes());
         let session = sessions
             .entries
             .values()
@@ -1677,7 +1674,7 @@ pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCo
             json!({
                 "host_session": s.host_session,
                 "agent_id": s.agent_id,
-                "binding_sha256": hash(s.epoch.as_bytes())
+                "binding_sha256": sha256_hex(s.epoch.as_bytes())
             })
         })
         .collect();
@@ -2055,25 +2052,6 @@ pub(crate) fn retire_sessions_terminal(
     count
 }
 
-#[allow(dead_code)]
-fn reap_lost_sessions(st: &Shared, native: &NativeState, now: Instant, now_ms: u64) -> usize {
-    let dead_targets: Vec<(String, Option<String>)> = {
-        let Ok(sessions) = native.sessions.lock() else {
-            return 0;
-        };
-        sessions
-            .entries
-            .iter()
-            .filter(|(_, s)| s.is_dead(now, now_ms, &sessions))
-            .map(|(id, s)| (id.clone(), Some(s.epoch.clone())))
-            .collect()
-    };
-    if dead_targets.is_empty() {
-        return 0;
-    }
-    retire_sessions_terminal(st, native, &dead_targets, "expired")
-}
-
 #[cfg(test)]
 fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Response, &'static str> {
     inspect_bound(st, native, request, None, None)
@@ -2167,8 +2145,8 @@ fn inspect_bound_measured(
             .ok_or("native_session_unknown")?;
         identity.verify(native, session)?;
     }
-    let mut now = native.monotonic_now();
-    let mut now_ms = wall_time_ms()? + native.test_time_offset();
+    let now = native.monotonic_now();
+    let now_ms = wall_time_ms()? + native.test_time_offset();
     for session in state.entries.values_mut() {
         session.calls.retain(|_, call| call.expires > now);
     }
@@ -2199,353 +2177,19 @@ fn inspect_bound_measured(
         release: true,
         call_id: None,
         binding_sha256: None,
-        content_sha256: request.content.as_ref().map(|c| hash(c.as_bytes())),
+        content_sha256: request.content.as_ref().map(|c| sha256_hex(c.as_bytes())),
         resources_sha256: None,
         reason_codes: vec![],
         instance_id: None,
         owner_token: None,
     };
     if request.event == "session_start" {
-        if firewall.active_managed_policy().is_some() && request.policy_transition.is_none() {
-            return Err("native_policy_transition_required");
-        }
-        if let Some(existing) = state.entries.get(&request.session_id) {
-            if existing.is_dead(now, now_ms, &state) {
-                let existing_epoch = existing.epoch.clone();
-                drop(state);
-                drop(firewall);
-                retire_sessions_terminal(
-                    st,
-                    native,
-                    &[(request.session_id.clone(), Some(existing_epoch))],
-                    "expired",
-                );
-                state = native
-                    .sessions
-                    .lock()
-                    .map_err(|_| "native_state_unavailable")?;
-                firewall = st
-                    .firewall
-                    .lock()
-                    .map_err(|_| "native_inspection_unavailable")?;
-                now = native.monotonic_now();
-                now_ms = wall_time_ms()? + native.test_time_offset();
-                response.managed_policy = firewall.active_managed_policy();
-                if response.managed_policy.is_some() && request.policy_transition.is_none() {
-                    return Err("native_policy_transition_required");
-                }
-            } else {
-                return Err("native_session_exists");
-            }
-        }
-        let dead_targets: Vec<(String, Option<String>)> = state
-            .entries
-            .iter()
-            .filter(|(_, s)| s.is_dead(now, now_ms, &state))
-            .map(|(id, s)| (id.clone(), Some(s.epoch.clone())))
-            .collect();
-        if !dead_targets.is_empty() {
-            drop(state);
-            drop(firewall);
-            retire_sessions_terminal(st, native, &dead_targets, "expired");
-            state = native
-                .sessions
-                .lock()
-                .map_err(|_| "native_state_unavailable")?;
-            firewall = st
-                .firewall
-                .lock()
-                .map_err(|_| "native_inspection_unavailable")?;
-            now = native.monotonic_now();
-            now_ms = wall_time_ms()? + native.test_time_offset();
-            response.managed_policy = firewall.active_managed_policy();
-            if response.managed_policy.is_some() && request.policy_transition.is_none() {
-                return Err("native_policy_transition_required");
-            }
-        }
-        if state.entries.len() >= MAX_SESSIONS {
-            return Err("native_session_cap");
-        }
-        let (granted_tools, granted_resources, agent_id, parent_id, authority_expires_at_ms) =
-            if let Some(host_session) = &request.host_session {
-                let token = request
-                    .child_authority
-                    .as_deref()
-                    .ok_or("native_child_authority_missing")?;
-                let key = child_authority::derive_key(&native.token);
-                let grant = child_authority::verify_token(
-                    &key,
-                    token,
-                    host_session,
-                    request.server_id.as_deref().unwrap_or(""),
-                    now_ms,
-                )
-                .map_err(|error| {
-                    use child_authority::ChildAuthorityError;
-                    match error {
-                        ChildAuthorityError::BadSignature => "native_child_authority_bad_signature",
-                        ChildAuthorityError::Expired => "native_child_authority_expired",
-                        ChildAuthorityError::NotYetValid => "native_child_authority_not_yet_valid",
-                        ChildAuthorityError::HostSessionMismatch => {
-                            "native_child_authority_host_mismatch"
-                        }
-                        ChildAuthorityError::ServerIdMismatch => {
-                            "native_child_authority_server_mismatch"
-                        }
-                        ChildAuthorityError::InvalidContract => {
-                            "native_child_authority_invalid_contract"
-                        }
-                        ChildAuthorityError::MalformedToken => "native_child_authority_malformed",
-                    }
-                })?;
-                let auth_digest = hash(token.as_bytes());
-                state.spent_authorities.retain(|_, exp| *exp > now_ms);
-                if state.spent_authorities.contains_key(&auth_digest)
-                    || state
-                        .entries
-                        .values()
-                        .any(|s| s.authority_digest.as_deref() == Some(&auth_digest))
-                {
-                    return Err("native_child_authority_already_spent");
-                }
-                let active_signed = state
-                    .entries
-                    .values()
-                    .filter(|s| s.authority_digest.is_some())
-                    .count();
-                if state.spent_authorities.len() + active_signed >= MAX_SPENT_AUTHORITIES {
-                    return Err("native_authority_ledger_saturated");
-                }
-                if let Some(req_agent) = &request.agent_id {
-                    if grant.agent_id.as_ref() != Some(req_agent) {
-                        return Err("native_invalid_identity");
-                    }
-                }
-                if let Some(req_parent) = &request.parent_id {
-                    if grant.parent_id.as_ref() != Some(req_parent) {
-                        return Err("native_invalid_identity");
-                    }
-                }
-                // Every host-bound collector shares authoritative provenance.
-                // A legacy grant lacks authenticated agent/lifecycle authority
-                // and must never be used as an alternate shared-host bootstrap.
-                if grant.agent_id.is_none() {
-                    return Err("native_child_authority_identity_required");
-                }
-                if grant.nonce.split_once('.').map(|(instance, _)| instance)
-                    != Some(native.instance_id())
-                {
-                    return Err("native_child_authority_instance_mismatch");
-                }
-                let agent_id = grant.agent_id.or_else(|| request.agent_id.clone());
-                let parent_id = grant.parent_id.or_else(|| request.parent_id.clone());
-                if agent_id.as_deref().is_some_and(|id| !identifier(id))
-                    || parent_id.as_deref().is_some_and(|id| !identifier(id))
-                    || ((parent_id.is_some() || grant.granted_resources.is_some())
-                        && agent_id.is_none())
-                {
-                    return Err("native_invalid_identity");
-                }
-                if let Some(agent) = &agent_id {
-                    let dead_sessions: Vec<(String, Option<String>)> = state
-                        .entries
-                        .iter()
-                        .filter(|(_, s)| {
-                            s.host_session.as_ref() == Some(host_session)
-                                && s.agent_id.as_ref() == Some(agent)
-                                && s.is_dead(now, now_ms, &state)
-                        })
-                        .map(|(id, s)| (id.clone(), Some(s.epoch.clone())))
-                        .collect();
-                    if !dead_sessions.is_empty() {
-                        drop(state);
-                        drop(firewall);
-                        retire_sessions_terminal(st, native, &dead_sessions, "expired");
-                        state = native
-                            .sessions
-                            .lock()
-                            .map_err(|_| "native_state_unavailable")?;
-                        firewall = st
-                            .firewall
-                            .lock()
-                            .map_err(|_| "native_inspection_unavailable")?;
-                        now = native.monotonic_now();
-                        now_ms = wall_time_ms()? + native.test_time_offset();
-                        response.managed_policy = firewall.active_managed_policy();
-                        if response.managed_policy.is_some() && request.policy_transition.is_none()
-                        {
-                            return Err("native_policy_transition_required");
-                        }
-                    }
-                    if now_ms >= grant.expires_at_ms {
-                        return Err("native_child_authority_expired");
-                    }
-                    if state
-                        .spent_authorities
-                        .contains_key(&hash(token.as_bytes()))
-                    {
-                        return Err("native_child_authority_already_spent");
-                    }
-                    if state.entries.values().any(|s| {
-                        s.host_session.as_ref() == Some(host_session)
-                            && s.agent_id.as_ref() == Some(agent)
-                    }) {
-                        return Err("native_agent_already_bound");
-                    }
-                    if !state.scoped_hosts.contains(host_session)
-                        && state.scoped_hosts.len() >= MAX_SESSIONS
-                    {
-                        return Err("native_host_binding_cap");
-                    }
-                }
-                if grant
-                    .granted_resources
-                    .as_ref()
-                    .is_some_and(|rs| rs.iter().any(|r| !scope_contains(r, r)))
-                {
-                    return Err("native_child_authority_escalation");
-                }
-                if let Some(ref parent) = parent_id {
-                    let ps = state
-                        .entries
-                        .values()
-                        .find(|s| {
-                            s.host_session.as_ref() == Some(host_session)
-                                && s.agent_id.as_ref() == Some(parent)
-                        })
-                        .ok_or("native_child_parent_unavailable")?;
-                    if grant.nonce.split('.').nth(1) != Some(hash(ps.epoch.as_bytes()).as_str()) {
-                        return Err("native_child_parent_binding_mismatch");
-                    }
-                    validate_lineage(&state, ps, now_ms, now)?;
-                    if grant
-                        .granted_tools
-                        .iter()
-                        .any(|t| !ps.granted_tools.contains(t))
-                    {
-                        return Err("native_child_authority_escalation");
-                    }
-                    for cr in grant.granted_resources.as_deref().unwrap_or(&[]) {
-                        if !ps
-                            .granted_resources
-                            .as_deref()
-                            .unwrap_or(&[])
-                            .iter()
-                            .any(|pr| scope_contains(pr, cr))
-                        {
-                            return Err("native_child_authority_escalation");
-                        }
-                    }
-                }
-                (
-                    grant.granted_tools,
-                    grant.granted_resources,
-                    agent_id,
-                    parent_id,
-                    Some(grant.expires_at_ms),
-                )
-            } else {
-                (
-                    Vec::new(),
-                    None,
-                    request.agent_id.clone(),
-                    request.parent_id.clone(),
-                    None,
-                )
-            };
-        let parent_epoch = parent_id.as_ref().and_then(|parent| {
-            state
-                .entries
-                .values()
-                .find(|s| {
-                    s.host_session == request.host_session && s.agent_id.as_ref() == Some(parent)
-                })
-                .map(|s| s.epoch.clone())
-        });
-        let owner_token = format!("owner:{}", crate::token::generate());
-        let session = Session {
-            policy_transition: request.policy_transition.is_some(),
-            parent_epoch,
-            authority_digest: request
-                .child_authority
-                .as_ref()
-                .map(|proof| hash(proof.as_bytes())),
-            epoch: format!("native:{}", crate::token::generate()),
-            owner_token: owner_token.clone(),
-            seq: 1,
-            touched: now,
-            calls: BTreeMap::new(),
-            host_session: request.host_session.clone(),
-            server_id: request.server_id.clone(),
-            agent_id,
-            parent_id,
-            granted_tools,
-            granted_resources,
-            authority_expires_at_ms,
-            liveness_lease: None,
-            terminal: false,
-        };
-        let created = register_provenance_contexts(
-            &mut firewall,
-            &session.epoch,
-            session.host_session.as_deref(),
-        )?;
-        if let Err(reason) = audit(st, &request, &session, &response, None, timing) {
-            rollback_provenance_contexts(&mut firewall, &created);
-            return Err(reason);
-        }
-        let agent_name = session.agent_id.as_deref().unwrap_or("native-runtime");
-        if let (Some(host), Some(agent)) = (&session.host_session, &session.agent_id) {
-            if let Some(parent) = &session.parent_id {
-                if firewall
-                    .spawn(host, parent, agent, &session.granted_tools)
-                    .is_some()
-                {
-                    rollback_provenance_contexts(&mut firewall, &created);
-                    return Err("native_child_authority_escalation");
-                }
-            } else {
-                firewall.set_root(host, agent, &session.granted_tools);
-            }
-            state.scoped_hosts.insert(host.clone());
-        }
-        let tools = if session.host_session.is_some() {
-            session.granted_tools.clone()
-        } else {
-            native
-                .registry
-                .tools
-                .iter()
-                .map(|t| t.name.clone())
-                .collect()
-        };
-        firewall.set_root(&session.epoch, agent_name, &tools);
-        if request.liveness.is_some() {
-            response.instance_id = Some(native.instance_id().to_string());
-            response.owner_token = Some(owner_token);
-        }
-        state.entries.insert(request.session_id, session);
-        return Ok(response);
+        return start_session(
+            st, native, request, state, firewall, response, now, now_ms, timing,
+        );
     }
     if request.event == "session_end" {
-        let session = state
-            .entries
-            .get_mut(&request.session_id)
-            .ok_or("native_session_unknown")?;
-        // The accepted end request and terminal cleanup have distinct audit rows.
-        // Consume this sequence before retirement allocates its next one.
-        session.seq += 1;
-        audit(st, &request, session, &response, None, timing)?;
-        let session_epoch = session.epoch.clone();
-        drop(state);
-        drop(firewall);
-        retire_sessions_terminal(
-            st,
-            native,
-            &[(request.session_id.clone(), Some(session_epoch))],
-            "ended",
-        );
-        return Ok(response);
+        return end_session(st, native, request, state, firewall, response, timing);
     }
     let total_calls: usize = state.entries.values().map(|s| s.calls.len()).sum();
     let session = state
@@ -2573,367 +2217,21 @@ fn inspect_bound_measured(
         .ok_or("native_tool_unknown")?;
     let args = request.args.as_ref().ok_or("native_args_missing")?;
     if request.event == "call" {
-        if firewall.provenance_session_usage(&session.epoch).is_none()
-            || session
-                .host_session
-                .as_deref()
-                .is_some_and(|host| firewall.provenance_session_usage(host).is_none())
-        {
-            response.verdict = "deny";
-            response.release = false;
-            response
-                .reason_codes
-                .push("native_provenance_context_unavailable".into());
-            let mut unavailable = Outcome::allow();
-            unavailable.verdict = Verdict::Deny;
-            unavailable.rule = Some("native_provenance_context_unavailable".into());
-            unavailable.provenance_incomplete = true;
-            audit(st, &request, session, &response, Some(&unavailable), timing)?;
-            return Ok(response);
-        }
-        if args.to_string().len() > firewall.provenance_limits().max_input_bytes {
-            firewall.mark_provenance_incomplete(&session.epoch);
-            if let Some(host) = &session.host_session {
-                firewall.mark_provenance_incomplete(host);
-            }
-            response.verdict = "deny";
-            response.release = false;
-            response.reason_codes.push("native_provenance_input".into());
-            let mut unavailable = Outcome::allow();
-            unavailable.verdict = Verdict::Deny;
-            unavailable.rule = Some("native_provenance_input".into());
-            unavailable.provenance_incomplete = true;
-            audit(st, &request, session, &response, Some(&unavailable), timing)?;
-            return Ok(response);
-        }
-        if session.host_session.is_some() {
-            if !session.granted_tools.iter().any(|tool| tool == name) {
-                return Err("native_child_authority_escalation");
-            }
-            if let Some(ref granted_res) = session.granted_resources {
-                if !child_resources_authorized(
-                    granted_res,
-                    tool.resource_policy.as_ref(),
-                    tool,
-                    args,
-                    request.resource_admission.as_ref(),
-                ) {
-                    return Err("native_child_authority_escalation");
-                }
-            } else if tool.resource_policy.is_some()
-                || ((session.agent_id.is_some() || session.parent_id.is_some())
-                    && (!tool.egress.is_empty() || tool.action_class == ActionClass::Network))
-            {
-                return Err("native_child_authority_escalation");
-            }
-        }
-        let selected_result =
-            crate::mcp::server_profile::selected(tool.mcp_result_profile.as_deref());
-        if selected_result {
-            if request.contract_version != CONTRACT
-                || !request
-                    .mcp_host_call_id
-                    .as_ref()
-                    .is_some_and(selected_host_id)
-            {
-                return Err("native_host_call_missing_or_invalid");
-            }
-        } else if request.mcp_host_call_id.is_some() {
-            return Err("native_host_call_profile_required");
-        }
-        if request.schema_sha256.as_deref() != Some(tool.schema_sha256.as_str()) {
-            return Err("native_schema_mismatch");
-        }
-        if tool.workspace_profile.is_some() {
-            if session.host_session.is_some() {
-                return Err("native_workspace_delegation_unsupported");
-            }
-            workspace::extract(tool, args)?;
-        }
-        if let Some(policy) = &tool.resource_policy {
-            if request.contract_version != policy.contract() {
-                if let Some(ref approval_id) = request.approval_id {
-                    if let Some(ref approval) = native.approval {
-                        approval.invalidate(
-                            approval_id,
-                            &request.session_id,
-                            "native_resource_contract_required",
-                        );
-                    }
-                }
-                return Err("native_resource_contract_required");
-            }
-            let Some(admission) = &request.resource_admission else {
-                if let Some(ref approval_id) = request.approval_id {
-                    if let Some(ref approval) = native.approval {
-                        approval.invalidate(
-                            approval_id,
-                            &request.session_id,
-                            "native_resource_contract_required",
-                        );
-                    }
-                }
-                return Err("native_resource_contract_required");
-            };
-            if let Err(reason) =
-                resource::authorize(policy, tool, &native.registry_sha256, args, admission)
-            {
-                if let Some(ref approval_id) = request.approval_id {
-                    if let Some(ref approval) = native.approval {
-                        approval.invalidate(approval_id, &request.session_id, reason);
-                    }
-                }
-                response.verdict = "deny";
-                response.release = false;
-                response.reason_codes.push(reason.into());
-                audit(st, &request, session, &response, None, timing)?;
-                return Ok(response);
-            }
-        } else if request.resource_admission.is_some() {
-            if let Some(ref approval_id) = request.approval_id {
-                if let Some(ref approval) = native.approval {
-                    approval.invalidate(
-                        approval_id,
-                        &request.session_id,
-                        "native_resource_policy_missing",
-                    );
-                }
-            }
-            return Err("native_resource_policy_missing");
-        }
-        if total_calls >= MAX_CALLS || session.calls.len() >= MAX_SESSION_CALLS {
-            return Err("native_call_cap");
-        }
-        let hosts = declared_hosts(tool, args)?;
-        let ev = session.event(EventKind::ToolCall {
-            tool: name.into(),
-            args: args.clone(),
-        });
-        let mut outcome = invocation::inspect(&mut firewall, &ev, tool, &hosts)?;
-        if let Some(host) = &session.host_session {
-            let ev_host = session.host_event(
-                host,
-                session.seq,
-                EventKind::ToolCall {
-                    tool: name.into(),
-                    args: args.clone(),
-                },
-            );
-            let outcome_host = invocation::inspect(&mut firewall, &ev_host, tool, &hosts)?;
-            outcome = merge_provenance_outcomes(outcome, outcome_host);
-        }
-        let mut verdict = resolved(&outcome);
-        response.reason_codes = outcome.rule.iter().cloned().collect();
-        if tool
-            .resource_policy
-            .as_ref()
-            .is_some_and(|policy| policy.is_https_get() || policy.is_https_post())
-            && !firewall.egress_hosts_allowlisted(&hosts)
-        {
-            verdict = Verdict::Deny;
-            response
-                .reason_codes
-                .push("native_https_egress_not_allowlisted".into());
-        }
-        response.verdict = verdict_label(verdict);
-        response.release = verdict == Verdict::Allow;
-        let legacy_bound = binding(
-            &native.registry_sha256,
-            &session.epoch,
+        return admit_call(
+            st,
+            native,
+            &request,
+            identity,
+            &mut firewall,
+            session,
+            total_calls,
             name,
-            &tool.schema_sha256,
+            tool,
             args,
-            request.resource_admission.as_ref(),
+            now,
+            response,
+            timing,
         );
-        let bound = if let Some(host_id) = &request.mcp_host_call_id {
-            selected_host_binding(&legacy_bound, host_id)
-        } else {
-            legacy_bound
-        };
-        // Selected original creates retain typed target/content/root evidence
-        // for ordinary Allow as well as Ask. The context binds observations;
-        // the installed profile and policy still supply all authority.
-        let bound = if let Some(context) = &request.selected_invocation {
-            let valid = context.validate(tool, args).and_then(|()| {
-                if !selected_result
-                    || request.mcp_host_call_id.as_ref() != Some(&context.host_call_id)
-                    || session
-                        .server_id
-                        .as_deref()
-                        .is_some_and(|server| server != context.server_id)
-                    || (request.approval_id.is_some() && session.server_id.is_none())
-                {
-                    Err("native_approval_selected_binding_mismatch")
-                } else {
-                    Ok(())
-                }
-            });
-            if let Err(code) = valid {
-                if let (Some(approval), Some(id)) = (&native.approval, &request.approval_id) {
-                    approval.invalidate(id, &request.session_id, code);
-                }
-                return Err(code);
-            }
-            context.binding(&bound)
-        } else {
-            bound
-        };
-        if let Some(approval_id) = &request.approval_id {
-            // Exact single-use operator approval, rechecked against the policy
-            // verdict computed just now. A hard Deny can never be rescued.
-            let approval = native.approval.as_ref().ok_or("native_approval_disabled")?;
-            let approval_bound = if selected_result {
-                if identity.is_none() {
-                    approval.invalidate(
-                        approval_id,
-                        &request.session_id,
-                        "native_approval_bound_owner_required",
-                    );
-                    return Err("native_approval_bound_owner_required");
-                }
-                let Some(context) = request.selected_invocation.as_ref() else {
-                    approval.invalidate(
-                        approval_id,
-                        &request.session_id,
-                        "native_approval_selected_context_required",
-                    );
-                    return Err("native_approval_selected_context_required");
-                };
-                let valid = context.validate(tool, args).and_then(|()| {
-                    if request.mcp_host_call_id.as_ref() != Some(&context.host_call_id)
-                        || session.server_id.as_deref() != Some(&context.server_id)
-                    {
-                        Err("native_approval_selected_binding_mismatch")
-                    } else {
-                        Ok(())
-                    }
-                });
-                if let Err(code) = valid {
-                    approval.invalidate(approval_id, &request.session_id, code);
-                    return Err(code);
-                }
-                bound.clone()
-            } else {
-                if request.selected_invocation.is_some() {
-                    approval.invalidate(
-                        approval_id,
-                        &request.session_id,
-                        "native_approval_selected_unsupported",
-                    );
-                    return Err("native_approval_selected_unsupported");
-                }
-                bound.clone()
-            };
-            if verdict == Verdict::Deny {
-                // An explicit hard Deny (including egress denial or lineage floor failure)
-                // can never be approved or redeemed. Terminally invalidate the presented approval.
-                approval.invalidate(
-                    approval_id,
-                    &request.session_id,
-                    "native_approval_hard_deny",
-                );
-                response.verdict = "deny";
-                response.release = false;
-                response
-                    .reason_codes
-                    .push("native_approval_hard_deny".into());
-            } else {
-                let revalidate = if tool.resource_policy.is_some() {
-                    resource_approval::revalidate_resource_execution(
-                        tool,
-                        args,
-                        request.resource_admission.as_ref(),
-                    )
-                } else {
-                    Ok(())
-                };
-                match revalidate {
-                    Ok(()) => {
-                        match approval.redeem(
-                            approval_id,
-                            &request.session_id,
-                            &session.epoch,
-                            name,
-                            &tool.schema_sha256,
-                            &approval_bound,
-                            verdict,
-                        ) {
-                            Ok(()) => {
-                                response.verdict = "allow";
-                                response.release = true;
-                                response
-                                    .reason_codes
-                                    .push(format!("native_approval_redeemed:{approval_id}"));
-                            }
-                            Err(code) => {
-                                response.release = false;
-                                if verdict != Verdict::Deny {
-                                    response.verdict = "ask";
-                                }
-                                response.reason_codes.push(code.into());
-                            }
-                        }
-                    }
-                    Err(code) => {
-                        // Terminal invalidation on failed presented approval:
-                        // a refused mutation must not leave an approval retryable under
-                        // the documented terminal-refusal contract.
-                        approval.invalidate(approval_id, &request.session_id, code);
-                        response.release = false;
-                        if verdict != Verdict::Deny {
-                            response.verdict = "ask";
-                        }
-                        response.reason_codes.push(code.into());
-                    }
-                }
-            }
-        }
-        if response.release {
-            response.binding_sha256 = Some(bound.clone());
-            response.call_id = Some(crate::token::generate());
-            if let Some(admission) = &request.resource_admission {
-                response.resources_sha256 = Some(admission.resources_sha256());
-            }
-        }
-        audit(st, &request, session, &response, Some(&outcome), timing)?;
-        if let Some(id) = &response.call_id {
-            session.calls.insert(
-                id.clone(),
-                Call {
-                    publication_outcome: tool
-                        .resource_policy
-                        .as_ref()
-                        .is_some_and(|p| p.is_replace_file())
-                        .then(|| outcome.clone()),
-                    publication_authorized: false,
-                    #[cfg(target_os = "linux")]
-                    execution_args: native
-                        .git_execution
-                        .as_ref()
-                        .filter(|_| {
-                            tool.mcp_result_profile
-                                .as_deref()
-                                .is_some_and(crate::mcp::server_profile::git_selected)
-                        })
-                        .map(|_| args.clone()),
-                    managed_policy: firewall.active_managed_policy(),
-                    host_call_id: request.mcp_host_call_id.clone().or_else(|| {
-                        request
-                            .resource_admission
-                            .as_ref()
-                            .map(|context| context.host_call_id.clone())
-                    }),
-                    contract_version: response.contract_version,
-                    tool: name.into(),
-                    args_sha256: args_hash(args),
-                    binding_sha256: bound,
-                    stage: Stage::Result,
-                    expires: now + TTL,
-                    result_kind: None,
-                },
-            );
-        }
-        return Ok(response);
     }
     let id = request.call_id.as_deref().ok_or("native_call_missing")?;
     // Remove before validation. A mismatched/failed completion cannot be retried
@@ -3227,7 +2525,7 @@ fn inspect_bound_measured(
                     "block": block_index, "facet": "tool_result",
                     "eligibility": if spans.is_some() { "consumed_original_formatter" } else { "baseline_no_bound_formatter" },
                     "channel": if spans.is_some() { Some(if block_index == 0 { "result.content[0].text" } else { "result.structuredContent.content" }) } else { None },
-                    "text_sha256": hash(content.as_bytes()), "comparison": comparison,
+                    "text_sha256": sha256_hex(content.as_bytes()), "comparison": comparison,
                     "correction_applied": correction_applied,
                     "production_authority": false, "task_complete": false,
                 });
@@ -3412,6 +2710,753 @@ fn inspect_bound_measured(
             call.result_kind = request.result_kind;
             session.calls.insert(id.into(), call);
         }
+    }
+    Ok(response)
+}
+
+/// Admit a new native session: retire dead sessions that would block it,
+/// verify any child authority it presents, then register and audit it.
+///
+/// Takes both guards by value because retiring dead sessions releases and
+/// re-acquires them.
+#[allow(clippy::too_many_arguments)]
+fn start_session<'a>(
+    st: &'a Shared,
+    native: &'a NativeState,
+    request: Request,
+    mut state: MutexGuard<'a, Sessions>,
+    mut firewall: MutexGuard<'a, soup_wall_agent::AgentFirewall>,
+    mut response: Response,
+    mut now: Instant,
+    mut now_ms: u64,
+    timing: &mut timing::Timing,
+) -> Result<Response, &'static str> {
+    if firewall.active_managed_policy().is_some() && request.policy_transition.is_none() {
+        return Err("native_policy_transition_required");
+    }
+    if let Some(existing) = state.entries.get(&request.session_id) {
+        if existing.is_dead(now, now_ms, &state) {
+            let existing_epoch = existing.epoch.clone();
+            drop(state);
+            drop(firewall);
+            retire_sessions_terminal(
+                st,
+                native,
+                &[(request.session_id.clone(), Some(existing_epoch))],
+                "expired",
+            );
+            state = native
+                .sessions
+                .lock()
+                .map_err(|_| "native_state_unavailable")?;
+            firewall = st
+                .firewall
+                .lock()
+                .map_err(|_| "native_inspection_unavailable")?;
+            now = native.monotonic_now();
+            now_ms = wall_time_ms()? + native.test_time_offset();
+            response.managed_policy = firewall.active_managed_policy();
+            if response.managed_policy.is_some() && request.policy_transition.is_none() {
+                return Err("native_policy_transition_required");
+            }
+        } else {
+            return Err("native_session_exists");
+        }
+    }
+    let dead_targets: Vec<(String, Option<String>)> = state
+        .entries
+        .iter()
+        .filter(|(_, s)| s.is_dead(now, now_ms, &state))
+        .map(|(id, s)| (id.clone(), Some(s.epoch.clone())))
+        .collect();
+    if !dead_targets.is_empty() {
+        drop(state);
+        drop(firewall);
+        retire_sessions_terminal(st, native, &dead_targets, "expired");
+        state = native
+            .sessions
+            .lock()
+            .map_err(|_| "native_state_unavailable")?;
+        firewall = st
+            .firewall
+            .lock()
+            .map_err(|_| "native_inspection_unavailable")?;
+        now = native.monotonic_now();
+        now_ms = wall_time_ms()? + native.test_time_offset();
+        response.managed_policy = firewall.active_managed_policy();
+        if response.managed_policy.is_some() && request.policy_transition.is_none() {
+            return Err("native_policy_transition_required");
+        }
+    }
+    if state.entries.len() >= MAX_SESSIONS {
+        return Err("native_session_cap");
+    }
+    let (granted_tools, granted_resources, agent_id, parent_id, authority_expires_at_ms) =
+        if let Some(host_session) = &request.host_session {
+            let token = request
+                .child_authority
+                .as_deref()
+                .ok_or("native_child_authority_missing")?;
+            let key = child_authority::derive_key(&native.token);
+            let grant = child_authority::verify_token(
+                &key,
+                token,
+                host_session,
+                request.server_id.as_deref().unwrap_or(""),
+                now_ms,
+            )
+            .map_err(|error| {
+                use child_authority::ChildAuthorityError;
+                match error {
+                    ChildAuthorityError::BadSignature => "native_child_authority_bad_signature",
+                    ChildAuthorityError::Expired => "native_child_authority_expired",
+                    ChildAuthorityError::NotYetValid => "native_child_authority_not_yet_valid",
+                    ChildAuthorityError::HostSessionMismatch => {
+                        "native_child_authority_host_mismatch"
+                    }
+                    ChildAuthorityError::ServerIdMismatch => {
+                        "native_child_authority_server_mismatch"
+                    }
+                    ChildAuthorityError::InvalidContract => {
+                        "native_child_authority_invalid_contract"
+                    }
+                    ChildAuthorityError::MalformedToken => "native_child_authority_malformed",
+                }
+            })?;
+            let auth_digest = sha256_hex(token.as_bytes());
+            state.spent_authorities.retain(|_, exp| *exp > now_ms);
+            if state.spent_authorities.contains_key(&auth_digest)
+                || state
+                    .entries
+                    .values()
+                    .any(|s| s.authority_digest.as_deref() == Some(&auth_digest))
+            {
+                return Err("native_child_authority_already_spent");
+            }
+            let active_signed = state
+                .entries
+                .values()
+                .filter(|s| s.authority_digest.is_some())
+                .count();
+            if state.spent_authorities.len() + active_signed >= MAX_SPENT_AUTHORITIES {
+                return Err("native_authority_ledger_saturated");
+            }
+            if let Some(req_agent) = &request.agent_id {
+                if grant.agent_id.as_ref() != Some(req_agent) {
+                    return Err("native_invalid_identity");
+                }
+            }
+            if let Some(req_parent) = &request.parent_id {
+                if grant.parent_id.as_ref() != Some(req_parent) {
+                    return Err("native_invalid_identity");
+                }
+            }
+            // Every host-bound collector shares authoritative provenance.
+            // A legacy grant lacks authenticated agent/lifecycle authority
+            // and must never be used as an alternate shared-host bootstrap.
+            if grant.agent_id.is_none() {
+                return Err("native_child_authority_identity_required");
+            }
+            if grant.nonce.split_once('.').map(|(instance, _)| instance)
+                != Some(native.instance_id())
+            {
+                return Err("native_child_authority_instance_mismatch");
+            }
+            let agent_id = grant.agent_id.or_else(|| request.agent_id.clone());
+            let parent_id = grant.parent_id.or_else(|| request.parent_id.clone());
+            if agent_id.as_deref().is_some_and(|id| !identifier(id))
+                || parent_id.as_deref().is_some_and(|id| !identifier(id))
+                || ((parent_id.is_some() || grant.granted_resources.is_some())
+                    && agent_id.is_none())
+            {
+                return Err("native_invalid_identity");
+            }
+            if let Some(agent) = &agent_id {
+                let dead_sessions: Vec<(String, Option<String>)> = state
+                    .entries
+                    .iter()
+                    .filter(|(_, s)| {
+                        s.host_session.as_ref() == Some(host_session)
+                            && s.agent_id.as_ref() == Some(agent)
+                            && s.is_dead(now, now_ms, &state)
+                    })
+                    .map(|(id, s)| (id.clone(), Some(s.epoch.clone())))
+                    .collect();
+                if !dead_sessions.is_empty() {
+                    drop(state);
+                    drop(firewall);
+                    retire_sessions_terminal(st, native, &dead_sessions, "expired");
+                    state = native
+                        .sessions
+                        .lock()
+                        .map_err(|_| "native_state_unavailable")?;
+                    firewall = st
+                        .firewall
+                        .lock()
+                        .map_err(|_| "native_inspection_unavailable")?;
+                    now = native.monotonic_now();
+                    now_ms = wall_time_ms()? + native.test_time_offset();
+                    response.managed_policy = firewall.active_managed_policy();
+                    if response.managed_policy.is_some() && request.policy_transition.is_none() {
+                        return Err("native_policy_transition_required");
+                    }
+                }
+                if now_ms >= grant.expires_at_ms {
+                    return Err("native_child_authority_expired");
+                }
+                if state
+                    .spent_authorities
+                    .contains_key(&sha256_hex(token.as_bytes()))
+                {
+                    return Err("native_child_authority_already_spent");
+                }
+                if state.entries.values().any(|s| {
+                    s.host_session.as_ref() == Some(host_session)
+                        && s.agent_id.as_ref() == Some(agent)
+                }) {
+                    return Err("native_agent_already_bound");
+                }
+                if !state.scoped_hosts.contains(host_session)
+                    && state.scoped_hosts.len() >= MAX_SESSIONS
+                {
+                    return Err("native_host_binding_cap");
+                }
+            }
+            if grant
+                .granted_resources
+                .as_ref()
+                .is_some_and(|rs| rs.iter().any(|r| !scope_contains(r, r)))
+            {
+                return Err("native_child_authority_escalation");
+            }
+            if let Some(ref parent) = parent_id {
+                let ps = state
+                    .entries
+                    .values()
+                    .find(|s| {
+                        s.host_session.as_ref() == Some(host_session)
+                            && s.agent_id.as_ref() == Some(parent)
+                    })
+                    .ok_or("native_child_parent_unavailable")?;
+                if grant.nonce.split('.').nth(1) != Some(sha256_hex(ps.epoch.as_bytes()).as_str()) {
+                    return Err("native_child_parent_binding_mismatch");
+                }
+                validate_lineage(&state, ps, now_ms, now)?;
+                if grant
+                    .granted_tools
+                    .iter()
+                    .any(|t| !ps.granted_tools.contains(t))
+                {
+                    return Err("native_child_authority_escalation");
+                }
+                for cr in grant.granted_resources.as_deref().unwrap_or(&[]) {
+                    if !ps
+                        .granted_resources
+                        .as_deref()
+                        .unwrap_or(&[])
+                        .iter()
+                        .any(|pr| scope_contains(pr, cr))
+                    {
+                        return Err("native_child_authority_escalation");
+                    }
+                }
+            }
+            (
+                grant.granted_tools,
+                grant.granted_resources,
+                agent_id,
+                parent_id,
+                Some(grant.expires_at_ms),
+            )
+        } else {
+            (
+                Vec::new(),
+                None,
+                request.agent_id.clone(),
+                request.parent_id.clone(),
+                None,
+            )
+        };
+    let parent_epoch = parent_id.as_ref().and_then(|parent| {
+        state
+            .entries
+            .values()
+            .find(|s| s.host_session == request.host_session && s.agent_id.as_ref() == Some(parent))
+            .map(|s| s.epoch.clone())
+    });
+    let owner_token = format!("owner:{}", crate::token::generate());
+    let session = Session {
+        policy_transition: request.policy_transition.is_some(),
+        parent_epoch,
+        authority_digest: request
+            .child_authority
+            .as_ref()
+            .map(|proof| sha256_hex(proof.as_bytes())),
+        epoch: format!("native:{}", crate::token::generate()),
+        owner_token: owner_token.clone(),
+        seq: 1,
+        touched: now,
+        calls: BTreeMap::new(),
+        host_session: request.host_session.clone(),
+        server_id: request.server_id.clone(),
+        agent_id,
+        parent_id,
+        granted_tools,
+        granted_resources,
+        authority_expires_at_ms,
+        liveness_lease: None,
+        terminal: false,
+    };
+    let created = register_provenance_contexts(
+        &mut firewall,
+        &session.epoch,
+        session.host_session.as_deref(),
+    )?;
+    if let Err(reason) = audit(st, &request, &session, &response, None, timing) {
+        rollback_provenance_contexts(&mut firewall, &created);
+        return Err(reason);
+    }
+    let agent_name = session.agent_id.as_deref().unwrap_or("native-runtime");
+    if let (Some(host), Some(agent)) = (&session.host_session, &session.agent_id) {
+        if let Some(parent) = &session.parent_id {
+            if firewall
+                .spawn(host, parent, agent, &session.granted_tools)
+                .is_some()
+            {
+                rollback_provenance_contexts(&mut firewall, &created);
+                return Err("native_child_authority_escalation");
+            }
+        } else {
+            firewall.set_root(host, agent, &session.granted_tools);
+        }
+        state.scoped_hosts.insert(host.clone());
+    }
+    let tools = if session.host_session.is_some() {
+        session.granted_tools.clone()
+    } else {
+        native
+            .registry
+            .tools
+            .iter()
+            .map(|t| t.name.clone())
+            .collect()
+    };
+    firewall.set_root(&session.epoch, agent_name, &tools);
+    if request.liveness.is_some() {
+        response.instance_id = Some(native.instance_id().to_string());
+        response.owner_token = Some(owner_token);
+    }
+    state.entries.insert(request.session_id, session);
+    Ok(response)
+}
+
+/// Audit an accepted session end, then retire the session. Both guards are
+/// released before retirement, which takes them again.
+fn end_session(
+    st: &Shared,
+    native: &NativeState,
+    request: Request,
+    mut state: MutexGuard<'_, Sessions>,
+    firewall: MutexGuard<'_, soup_wall_agent::AgentFirewall>,
+    response: Response,
+    timing: &mut timing::Timing,
+) -> Result<Response, &'static str> {
+    let session = state
+        .entries
+        .get_mut(&request.session_id)
+        .ok_or("native_session_unknown")?;
+    // The accepted end request and terminal cleanup have distinct audit rows.
+    // Consume this sequence before retirement allocates its next one.
+    session.seq += 1;
+    audit(st, &request, session, &response, None, timing)?;
+    let session_epoch = session.epoch.clone();
+    drop(state);
+    drop(firewall);
+    retire_sessions_terminal(
+        st,
+        native,
+        &[(request.session_id.clone(), Some(session_epoch))],
+        "ended",
+    );
+    Ok(response)
+}
+
+/// Decide a `call` event: authority, schema and resource checks, policy
+/// inspection, approval redemption, and the binding recorded for its result.
+#[allow(clippy::too_many_arguments)]
+fn admit_call(
+    st: &Shared,
+    native: &NativeState,
+    request: &Request,
+    identity: Option<&liveness::CollectorIdentity>,
+    firewall: &mut soup_wall_agent::AgentFirewall,
+    session: &mut Session,
+    total_calls: usize,
+    name: &str,
+    tool: &Tool,
+    args: &Value,
+    now: Instant,
+    mut response: Response,
+    timing: &mut timing::Timing,
+) -> Result<Response, &'static str> {
+    if firewall.provenance_session_usage(&session.epoch).is_none()
+        || session
+            .host_session
+            .as_deref()
+            .is_some_and(|host| firewall.provenance_session_usage(host).is_none())
+    {
+        response.verdict = "deny";
+        response.release = false;
+        response
+            .reason_codes
+            .push("native_provenance_context_unavailable".into());
+        let mut unavailable = Outcome::allow();
+        unavailable.verdict = Verdict::Deny;
+        unavailable.rule = Some("native_provenance_context_unavailable".into());
+        unavailable.provenance_incomplete = true;
+        audit(st, request, session, &response, Some(&unavailable), timing)?;
+        return Ok(response);
+    }
+    if args.to_string().len() > firewall.provenance_limits().max_input_bytes {
+        firewall.mark_provenance_incomplete(&session.epoch);
+        if let Some(host) = &session.host_session {
+            firewall.mark_provenance_incomplete(host);
+        }
+        response.verdict = "deny";
+        response.release = false;
+        response.reason_codes.push("native_provenance_input".into());
+        let mut unavailable = Outcome::allow();
+        unavailable.verdict = Verdict::Deny;
+        unavailable.rule = Some("native_provenance_input".into());
+        unavailable.provenance_incomplete = true;
+        audit(st, request, session, &response, Some(&unavailable), timing)?;
+        return Ok(response);
+    }
+    if session.host_session.is_some() {
+        if !session.granted_tools.iter().any(|tool| tool == name) {
+            return Err("native_child_authority_escalation");
+        }
+        if let Some(ref granted_res) = session.granted_resources {
+            if !child_resources_authorized(
+                granted_res,
+                tool.resource_policy.as_ref(),
+                tool,
+                args,
+                request.resource_admission.as_ref(),
+            ) {
+                return Err("native_child_authority_escalation");
+            }
+        } else if tool.resource_policy.is_some()
+            || ((session.agent_id.is_some() || session.parent_id.is_some())
+                && (!tool.egress.is_empty() || tool.action_class == ActionClass::Network))
+        {
+            return Err("native_child_authority_escalation");
+        }
+    }
+    let selected_result = crate::mcp::server_profile::selected(tool.mcp_result_profile.as_deref());
+    if selected_result {
+        if request.contract_version != CONTRACT
+            || !request
+                .mcp_host_call_id
+                .as_ref()
+                .is_some_and(selected_host_id)
+        {
+            return Err("native_host_call_missing_or_invalid");
+        }
+    } else if request.mcp_host_call_id.is_some() {
+        return Err("native_host_call_profile_required");
+    }
+    if request.schema_sha256.as_deref() != Some(tool.schema_sha256.as_str()) {
+        return Err("native_schema_mismatch");
+    }
+    if tool.workspace_profile.is_some() {
+        if session.host_session.is_some() {
+            return Err("native_workspace_delegation_unsupported");
+        }
+        workspace::extract(tool, args)?;
+    }
+    if let Some(policy) = &tool.resource_policy {
+        if request.contract_version != policy.contract() {
+            if let Some(ref approval_id) = request.approval_id {
+                if let Some(ref approval) = native.approval {
+                    approval.invalidate(
+                        approval_id,
+                        &request.session_id,
+                        "native_resource_contract_required",
+                    );
+                }
+            }
+            return Err("native_resource_contract_required");
+        }
+        let Some(admission) = &request.resource_admission else {
+            if let Some(ref approval_id) = request.approval_id {
+                if let Some(ref approval) = native.approval {
+                    approval.invalidate(
+                        approval_id,
+                        &request.session_id,
+                        "native_resource_contract_required",
+                    );
+                }
+            }
+            return Err("native_resource_contract_required");
+        };
+        if let Err(reason) =
+            resource::authorize(policy, tool, &native.registry_sha256, args, admission)
+        {
+            if let Some(ref approval_id) = request.approval_id {
+                if let Some(ref approval) = native.approval {
+                    approval.invalidate(approval_id, &request.session_id, reason);
+                }
+            }
+            response.verdict = "deny";
+            response.release = false;
+            response.reason_codes.push(reason.into());
+            audit(st, request, session, &response, None, timing)?;
+            return Ok(response);
+        }
+    } else if request.resource_admission.is_some() {
+        if let Some(ref approval_id) = request.approval_id {
+            if let Some(ref approval) = native.approval {
+                approval.invalidate(
+                    approval_id,
+                    &request.session_id,
+                    "native_resource_policy_missing",
+                );
+            }
+        }
+        return Err("native_resource_policy_missing");
+    }
+    if total_calls >= MAX_CALLS || session.calls.len() >= MAX_SESSION_CALLS {
+        return Err("native_call_cap");
+    }
+    let hosts = declared_hosts(tool, args)?;
+    let ev = session.event(EventKind::ToolCall {
+        tool: name.into(),
+        args: args.clone(),
+    });
+    let mut outcome = invocation::inspect(firewall, &ev, tool, &hosts)?;
+    if let Some(host) = &session.host_session {
+        let ev_host = session.host_event(
+            host,
+            session.seq,
+            EventKind::ToolCall {
+                tool: name.into(),
+                args: args.clone(),
+            },
+        );
+        let outcome_host = invocation::inspect(firewall, &ev_host, tool, &hosts)?;
+        outcome = merge_provenance_outcomes(outcome, outcome_host);
+    }
+    let mut verdict = resolved(&outcome);
+    response.reason_codes = outcome.rule.iter().cloned().collect();
+    if tool
+        .resource_policy
+        .as_ref()
+        .is_some_and(|policy| policy.is_https_get() || policy.is_https_post())
+        && !firewall.egress_hosts_allowlisted(&hosts)
+    {
+        verdict = Verdict::Deny;
+        response
+            .reason_codes
+            .push("native_https_egress_not_allowlisted".into());
+    }
+    response.verdict = verdict_label(verdict);
+    response.release = verdict == Verdict::Allow;
+    let legacy_bound = binding(
+        &native.registry_sha256,
+        &session.epoch,
+        name,
+        &tool.schema_sha256,
+        args,
+        request.resource_admission.as_ref(),
+    );
+    let bound = if let Some(host_id) = &request.mcp_host_call_id {
+        selected_host_binding(&legacy_bound, host_id)
+    } else {
+        legacy_bound
+    };
+    // Selected original creates retain typed target/content/root evidence
+    // for ordinary Allow as well as Ask. The context binds observations;
+    // the installed profile and policy still supply all authority.
+    let bound = if let Some(context) = &request.selected_invocation {
+        let valid = context.validate(tool, args).and_then(|()| {
+            if !selected_result
+                || request.mcp_host_call_id.as_ref() != Some(&context.host_call_id)
+                || session
+                    .server_id
+                    .as_deref()
+                    .is_some_and(|server| server != context.server_id)
+                || (request.approval_id.is_some() && session.server_id.is_none())
+            {
+                Err("native_approval_selected_binding_mismatch")
+            } else {
+                Ok(())
+            }
+        });
+        if let Err(code) = valid {
+            if let (Some(approval), Some(id)) = (&native.approval, &request.approval_id) {
+                approval.invalidate(id, &request.session_id, code);
+            }
+            return Err(code);
+        }
+        context.binding(&bound)
+    } else {
+        bound
+    };
+    if let Some(approval_id) = &request.approval_id {
+        // Exact single-use operator approval, rechecked against the policy
+        // verdict computed just now. A hard Deny can never be rescued.
+        let approval = native.approval.as_ref().ok_or("native_approval_disabled")?;
+        let approval_bound = if selected_result {
+            if identity.is_none() {
+                approval.invalidate(
+                    approval_id,
+                    &request.session_id,
+                    "native_approval_bound_owner_required",
+                );
+                return Err("native_approval_bound_owner_required");
+            }
+            let Some(context) = request.selected_invocation.as_ref() else {
+                approval.invalidate(
+                    approval_id,
+                    &request.session_id,
+                    "native_approval_selected_context_required",
+                );
+                return Err("native_approval_selected_context_required");
+            };
+            let valid = context.validate(tool, args).and_then(|()| {
+                if request.mcp_host_call_id.as_ref() != Some(&context.host_call_id)
+                    || session.server_id.as_deref() != Some(&context.server_id)
+                {
+                    Err("native_approval_selected_binding_mismatch")
+                } else {
+                    Ok(())
+                }
+            });
+            if let Err(code) = valid {
+                approval.invalidate(approval_id, &request.session_id, code);
+                return Err(code);
+            }
+            bound.clone()
+        } else {
+            if request.selected_invocation.is_some() {
+                approval.invalidate(
+                    approval_id,
+                    &request.session_id,
+                    "native_approval_selected_unsupported",
+                );
+                return Err("native_approval_selected_unsupported");
+            }
+            bound.clone()
+        };
+        if verdict == Verdict::Deny {
+            // An explicit hard Deny (including egress denial or lineage floor failure)
+            // can never be approved or redeemed. Terminally invalidate the presented approval.
+            approval.invalidate(
+                approval_id,
+                &request.session_id,
+                "native_approval_hard_deny",
+            );
+            response.verdict = "deny";
+            response.release = false;
+            response
+                .reason_codes
+                .push("native_approval_hard_deny".into());
+        } else {
+            let revalidate = if tool.resource_policy.is_some() {
+                resource_approval::revalidate_resource_execution(
+                    tool,
+                    args,
+                    request.resource_admission.as_ref(),
+                )
+            } else {
+                Ok(())
+            };
+            match revalidate {
+                Ok(()) => {
+                    match approval.redeem(
+                        approval_id,
+                        &request.session_id,
+                        &session.epoch,
+                        name,
+                        &tool.schema_sha256,
+                        &approval_bound,
+                        verdict,
+                    ) {
+                        Ok(()) => {
+                            response.verdict = "allow";
+                            response.release = true;
+                            response
+                                .reason_codes
+                                .push(format!("native_approval_redeemed:{approval_id}"));
+                        }
+                        Err(code) => {
+                            response.release = false;
+                            if verdict != Verdict::Deny {
+                                response.verdict = "ask";
+                            }
+                            response.reason_codes.push(code.into());
+                        }
+                    }
+                }
+                Err(code) => {
+                    // Terminal invalidation on failed presented approval:
+                    // a refused mutation must not leave an approval retryable under
+                    // the documented terminal-refusal contract.
+                    approval.invalidate(approval_id, &request.session_id, code);
+                    response.release = false;
+                    if verdict != Verdict::Deny {
+                        response.verdict = "ask";
+                    }
+                    response.reason_codes.push(code.into());
+                }
+            }
+        }
+    }
+    if response.release {
+        response.binding_sha256 = Some(bound.clone());
+        response.call_id = Some(crate::token::generate());
+        if let Some(admission) = &request.resource_admission {
+            response.resources_sha256 = Some(admission.resources_sha256());
+        }
+    }
+    audit(st, request, session, &response, Some(&outcome), timing)?;
+    if let Some(id) = &response.call_id {
+        session.calls.insert(
+            id.clone(),
+            Call {
+                publication_outcome: tool
+                    .resource_policy
+                    .as_ref()
+                    .is_some_and(|p| p.is_replace_file())
+                    .then(|| outcome.clone()),
+                publication_authorized: false,
+                #[cfg(target_os = "linux")]
+                execution_args: native
+                    .git_execution
+                    .as_ref()
+                    .filter(|_| {
+                        tool.mcp_result_profile
+                            .as_deref()
+                            .is_some_and(crate::mcp::server_profile::git_selected)
+                    })
+                    .map(|_| args.clone()),
+                managed_policy: firewall.active_managed_policy(),
+                host_call_id: request.mcp_host_call_id.clone().or_else(|| {
+                    request
+                        .resource_admission
+                        .as_ref()
+                        .map(|context| context.host_call_id.clone())
+                }),
+                contract_version: response.contract_version,
+                tool: name.into(),
+                args_sha256: args_hash(args),
+                binding_sha256: bound,
+                stage: Stage::Result,
+                expires: now + TTL,
+                result_kind: None,
+            },
+        );
     }
     Ok(response)
 }
@@ -3629,7 +3674,8 @@ mod tests {
         .into_bytes();
         Arc::new(AppState {
             native: Some(
-                NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into()).unwrap(),
+                NativeState::from_bytes(&bytes, &sha256_hex(&bytes), "native-unit-key".into())
+                    .unwrap(),
             ),
             firewall: Mutex::new(AgentFirewall::with_default_policy()),
             sessions: HookSessions::default(),
@@ -3766,7 +3812,7 @@ mod tests {
             soup_wall_agent::AgentPolicySet::from_yaml(policy).unwrap(),
             format!("revision-{sequence}"),
             sequence,
-            hash(policy.as_bytes()),
+            sha256_hex(policy.as_bytes()),
         );
     }
 
@@ -4344,7 +4390,7 @@ mod tests {
         }]}).to_string();
         assert!(NativeState::from_bytes(
             malformed.as_bytes(),
-            &hash(malformed.as_bytes()),
+            &sha256_hex(malformed.as_bytes()),
             "key".into()
         )
         .is_err());
@@ -4416,8 +4462,9 @@ mod tests {
         .to_string()
         .into_bytes();
         let mut state = fixture(dir);
-        Arc::get_mut(&mut state).unwrap().native =
-            Some(NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into()).unwrap());
+        Arc::get_mut(&mut state).unwrap().native = Some(
+            NativeState::from_bytes(&bytes, &sha256_hex(&bytes), "native-unit-key".into()).unwrap(),
+        );
         state
     }
 
@@ -4436,7 +4483,10 @@ mod tests {
             let st = fixture(dir.path());
             let response = mcp_host_completion(&st, &original, "value").unwrap();
             assert!(response.release);
-            assert_eq!(response.content_sha256, Some(hash(original.as_bytes())));
+            assert_eq!(
+                response.content_sha256,
+                Some(sha256_hex(original.as_bytes()))
+            );
             let native = st.native.as_ref().unwrap();
             let sessions = native.sessions.lock().unwrap();
             assert!(sessions.entries["mcp-test"].calls.is_empty());
@@ -4481,7 +4531,10 @@ mod tests {
         let original = r#"{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"Useful original plain text."}],"structuredContent":{"content":"Different independently inspected ordinary text."}}}"#;
         let response = mcp_host_completion(&st, original, "value").unwrap();
         assert!(response.release);
-        assert_eq!(response.content_sha256, Some(hash(original.as_bytes())));
+        assert_eq!(
+            response.content_sha256,
+            Some(sha256_hex(original.as_bytes()))
+        );
         let native = st.native.as_ref().unwrap();
         let state = native.sessions.lock().unwrap();
         assert!(state.entries["mcp-test"].calls.is_empty());
@@ -4518,7 +4571,10 @@ mod tests {
             let response = mcp_host_completion(&st, &original, "value").unwrap();
             assert!(!response.release, "{left:?} / {right:?}");
             assert_eq!(response.reason_codes, ["ask-injection-in-result"]);
-            assert_eq!(response.content_sha256, Some(hash(original.as_bytes())));
+            assert_eq!(
+                response.content_sha256,
+                Some(sha256_hex(original.as_bytes()))
+            );
             let native = st.native.as_ref().unwrap();
             let state = native.sessions.lock().unwrap();
             let session = &state.entries["mcp-test"];
@@ -4629,7 +4685,10 @@ mod tests {
             response.reason_codes,
             ["filesystem-profile-refuse-result-injection"]
         );
-        assert_eq!(response.content_sha256, Some(hash(original.as_bytes())));
+        assert_eq!(
+            response.content_sha256,
+            Some(sha256_hex(original.as_bytes()))
+        );
     }
 
     #[test]
@@ -4692,7 +4751,10 @@ mod tests {
             assert!(original.len() > MAX_CONTENT && original.len() <= MAX_MCP_RESULT_CONTENT);
             let response = mcp_host_completion(&st, &original, "value").unwrap();
             assert!(response.release, "{:?}", response.reason_codes);
-            assert_eq!(response.content_sha256, Some(hash(original.as_bytes())));
+            assert_eq!(
+                response.content_sha256,
+                Some(sha256_hex(original.as_bytes()))
+            );
             let native = st.native.as_ref().unwrap();
             let state = native.sessions.lock().unwrap();
             let session = &state.entries["mcp-test"];
@@ -4898,7 +4960,7 @@ print(json.dumps(selected, separators=(",",":")))
         let actual: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(actual["registry_id"], "filesystem-create-only-v1");
         let bytes = serde_json::to_vec(&actual).unwrap();
-        let native = NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into())
+        let native = NativeState::from_bytes(&bytes, &sha256_hex(&bytes), "native-unit-key".into())
             .expect("full exact original opt-in installer registry rejected by NativeState");
         let writable: Vec<_> = native
             .registry
@@ -4929,7 +4991,8 @@ print(json.dumps(selected, separators=(",",":")))
         let check_bad = |edited: Value| {
             let bytes = serde_json::to_vec(&edited).unwrap();
             assert!(
-                NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into()).is_err()
+                NativeState::from_bytes(&bytes, &sha256_hex(&bytes), "native-unit-key".into())
+                    .is_err()
             );
         };
         bad["registry_id"] = json!("arbitrary-registry-id");
@@ -5020,7 +5083,7 @@ print(json.dumps(selected, separators=(",",":")))
             changed["tools"][0][key] = value;
             let bytes = changed.to_string().into_bytes();
             assert!(
-                NativeState::from_bytes(&bytes, &hash(&bytes), "key".into()).is_err(),
+                NativeState::from_bytes(&bytes, &sha256_hex(&bytes), "key".into()).is_err(),
                 "{key}"
             );
         }
@@ -5190,8 +5253,9 @@ print(json.dumps(selected, separators=(",",":")))
             {"name":"publish_note","schema_sha256":"a".repeat(64),"action_class":"side_effecting","result_provenance":"untrusted","egress":[]},
             {"name":"destroy_note","schema_sha256":"a".repeat(64),"action_class":"destructive","result_provenance":"untrusted","egress":[]}
         ]}).to_string().into_bytes();
-        state.native =
-            Some(NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into()).unwrap());
+        state.native = Some(
+            NativeState::from_bytes(&bytes, &sha256_hex(&bytes), "native-unit-key".into()).unwrap(),
+        );
         state.firewall = Mutex::new(
             AgentFirewall::with_taint_limits(
                 soup_wall_agent::AgentPolicySet::from_yaml("agent_policies: []\ndefault: allow\n")

@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 import unittest
 
-SPEC = importlib.util.spec_from_file_location('prep', Path(__file__).parents[1] / 'prepare-sou157-git.py')
+SPEC = importlib.util.spec_from_file_location('prep', Path(__file__).parents[1] / 'prepare-mapped-git-cases.py')
 PREP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PREP)
 

@@ -17,7 +17,7 @@ pub(crate) struct Registration {
 
 impl Registration {
     pub(crate) fn identity(&self) -> String {
-        super::digest(&serde_json::to_vec(self).expect("typed registration"))
+        sha256_hex(&serde_json::to_vec(self).expect("typed registration"))
     }
     pub(crate) fn generation(&self) -> &str {
         &self.generation
@@ -216,9 +216,9 @@ pub(crate) fn held_fixture_with_ttl(
         authorities: BTreeMap::from([
             (
                 "filesystem".into(),
-                digest(format!("{host}:filesystem").as_bytes()),
+                sha256_hex(format!("{host}:filesystem").as_bytes()),
             ),
-            ("git".into(), digest(format!("{host}:git").as_bytes())),
+            ("git".into(), sha256_hex(format!("{host}:git").as_bytes())),
         ]),
         files: vec![],
     };

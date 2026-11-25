@@ -32,7 +32,7 @@ these pre-dispatch cases make no rollback claim.
 Dispatch `Real Git MCP profile` with `raw_boundary_only=true` on the exact
 clean candidate SHA. That focused Ubuntu 22.04 job builds the repository-pinned
 Agent, pinned Git and bubblewrap and pinned Node runtime. The private driver
-`scripts/verify-sou182-raw-mcp.py` installs both original selected profiles
+`scripts/verify-raw-mcp.py` installs both original selected profiles
 outside the source checkout. It runs 16 malformed/ambiguous raw byte cases per
 profile, plus a recoverable refusal and useful follow-up. Each fatal case uses
 a fresh owned collector and original server. A Linux inotify witness first

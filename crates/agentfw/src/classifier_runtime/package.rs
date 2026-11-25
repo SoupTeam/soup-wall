@@ -12,6 +12,7 @@
 //! manifest bytes), `current.json`, `previous.json`, `journal.json` (only while an
 //! install is in flight) and transient `staging-*` directories.
 
+use crate::hashing::sha256_hex;
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -41,8 +42,10 @@ const CLASSIFIER_FILE: &str = "rule_baseline.py";
 const WORKER_FILE: &str = "worker.py";
 const MANIFEST_FILE: &str = "manifest.json";
 
+/// Lowercase hexadecimal SHA-256 of exact package bytes. Kept under this
+/// name because the CLI and integration tests call it through this module.
 pub fn sha(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    sha256_hex(bytes)
 }
 
 fn is_digest(value: &str) -> bool {
@@ -124,7 +127,7 @@ pub struct Package {
 
 impl Package {
     pub fn id(&self) -> String {
-        sha(&self.manifest_bytes)
+        sha256_hex(&self.manifest_bytes)
     }
 }
 
@@ -246,12 +249,12 @@ fn read_bounded(path: &Path) -> anyhow::Result<Vec<u8>> {
 pub fn build(which: Which, source_root: &Path) -> anyhow::Result<Vec<u8>> {
     let classifier = read_bounded(&source_root.join(which.source_path()))?;
     ensure!(
-        sha(&classifier) == which.pinned_sha256(),
+        sha256_hex(&classifier) == which.pinned_sha256(),
         "classifier source does not match the pinned SHA-256 (line endings or edits?)"
     );
     let worker = read_bounded(&source_root.join("rule_baseline/runtime/worker.py"))?;
     ensure!(
-        sha(&worker) == WORKER_SHA256,
+        sha256_hex(&worker) == WORKER_SHA256,
         "worker.py does not match the reviewed framing code (line endings or edits?)"
     );
     Ok(assemble(which, &classifier, &worker))
@@ -275,14 +278,14 @@ pub fn assemble(which: Which, classifier: &[u8], worker: &[u8]) -> Vec<u8> {
             (
                 CLASSIFIER_FILE.to_string(),
                 FileEntry {
-                    sha256: sha(classifier),
+                    sha256: sha256_hex(classifier),
                     size: classifier.len(),
                 },
             ),
             (
                 WORKER_FILE.to_string(),
                 FileEntry {
-                    sha256: sha(worker),
+                    sha256: sha256_hex(worker),
                     size: worker.len(),
                 },
             ),
@@ -337,7 +340,7 @@ pub fn parse(bytes: &[u8]) -> anyhow::Result<Package> {
         );
         let data = &members[name];
         ensure!(
-            data.len() == entry.size && sha(data) == entry.sha256,
+            data.len() == entry.size && sha256_hex(data) == entry.sha256,
             "{name} does not match the manifest"
         );
     }
@@ -756,7 +759,7 @@ impl Store {
             "package directory has missing or unexpected entries"
         );
         let manifest_bytes = read_private(&dir.join(MANIFEST_FILE), 64 * 1024, false)?;
-        ensure!(sha(&manifest_bytes) == id, "manifest was altered");
+        ensure!(sha256_hex(&manifest_bytes) == id, "manifest was altered");
         let classifier = read_private(&dir.join(CLASSIFIER_FILE), MAX_FILE, false)?;
         let worker = read_private(&dir.join(WORKER_FILE), MAX_FILE, false)?;
         // Re-run the full archive-level validation on the installed bytes.
