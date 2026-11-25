@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-SPEC = importlib.util.spec_from_file_location("sou152", Path(__file__).resolve().parents[1] / "verify-sou152-offline-replay.py")
+SPEC = importlib.util.spec_from_file_location("sou152", Path(__file__).resolve().parents[1] / "verify-offline-replay.py")
 H = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(H)
 

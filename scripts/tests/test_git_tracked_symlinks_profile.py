@@ -90,7 +90,7 @@ class SelectionTests(unittest.TestCase):
         self.assertFalse((self.root / "selection").exists())
 
 
-spec = importlib.util.spec_from_file_location("sou150_native_driver_tests", ROOT / "scripts/verify-sou150-tracked-symlinks.py")
+spec = importlib.util.spec_from_file_location("sou150_native_driver_tests", ROOT / "scripts/verify-tracked-symlinks.py")
 NATIVE = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(NATIVE)
 
@@ -99,7 +99,7 @@ class NativeDriverTests(unittest.TestCase):
     def test_plan_does_not_execute_or_create_outputs(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "absent-output"
-            command = [sys.executable, "-B", str(ROOT / "scripts/verify-sou150-tracked-symlinks.py")]
+            command = [sys.executable, "-B", str(ROOT / "scripts/verify-tracked-symlinks.py")]
             for option in ("agentfw", "git", "bwrap", "git-launcher", "sandbox-test-binary"):
                 command.extend(["--" + option, "/absent-executable"])
             command.extend(["--output", str(output), "--git-sha256", "0" * 64, "--expected-commit", "0" * 40])

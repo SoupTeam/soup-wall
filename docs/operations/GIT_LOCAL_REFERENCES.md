@@ -128,7 +128,7 @@ registry, policy and classifier hashes before use.
 On a clean exact source checkout with the pinned runtime binaries, run:
 
 ```sh
-python3 -B scripts/verify-sou137-local-git-refs.py --run \
+python3 -B scripts/verify-local-git-refs.py --run \
   --agentfw "$PWD/target/debug/agentfw" \
   --git /owned/runtime/git --git-sha256 "$GIT_SHA256" \
   --bwrap /owned/runtime/bwrap --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \

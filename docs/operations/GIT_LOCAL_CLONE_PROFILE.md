@@ -139,7 +139,7 @@ pinned runtime provisioning. No additional per-push expensive workflow is added.
 For an already provisioned Linux test machine:
 
 ```sh
-python3 -B scripts/verify-sou107-real-git.py --run \
+python3 -B scripts/verify-git-local-clone.py --run \
   --agentfw "$PWD/target/debug/agentfw" --git /verified/git \
   --git-sha256 "$VERIFIED_GIT_SHA256" --bwrap /verified/bwrap \
   --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \

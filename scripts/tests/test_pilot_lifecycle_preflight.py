@@ -250,7 +250,7 @@ class EarlyEffects(unittest.TestCase):
 
 class ObservationWitness(unittest.TestCase):
     def test_native_observer_uses_bounded_completed_process_result(self):
-        driver = load('native_preflight_observer_controls', 'verify-sou225-lifecycle-preflight.py')
+        driver = load('native_preflight_observer_controls', 'verify-lifecycle-preflight.py')
         import subprocess
         expected = subprocess.CompletedProcess([], 0, b'{"result":true}', b'')
         with mock.patch.object(driver.TRACE, 'run_observed', return_value=expected), \
@@ -261,7 +261,7 @@ class ObservationWitness(unittest.TestCase):
         self.assertEqual(trace.name, 'case.trace')
 
     def test_syscall_names_inside_readlink_results_are_not_effects(self):
-        driver = load('native_preflight_trace_path_controls', 'verify-sou225-lifecycle-preflight.py')
+        driver = load('native_preflight_trace_path_controls', 'verify-lifecycle-preflight.py')
         import tempfile
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / 'trace'
@@ -270,7 +270,7 @@ class ObservationWitness(unittest.TestCase):
             self.assertEqual(driver.audit(path, [Path('/owned/agentfw')])['host_mutation_attempts'], 0)
 
     def test_syscall_witness_rejects_failed_exec_write_network_and_signal_attempts(self):
-        driver = load('native_preflight_trace_controls', 'verify-sou225-lifecycle-preflight.py')
+        driver = load('native_preflight_trace_controls', 'verify-lifecycle-preflight.py')
         import tempfile
         baseline = '123 execve("/owned/agentfw", ["agentfw"], 0x0) = 0\n'
         with tempfile.TemporaryDirectory() as temporary:

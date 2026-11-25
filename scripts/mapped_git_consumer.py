@@ -45,7 +45,7 @@ def load(name, filename):
     return module
 
 
-PREP = load('sou157_preparation', 'prepare-sou157-git.py')
+PREP = load('sou157_preparation', 'prepare-mapped-git-cases.py')
 sha, canonical, require = PREP.sha, PREP.canonical, PREP.require
 
 
@@ -103,7 +103,7 @@ def main(args):
     profile = json.loads(raw)
     require(profile.get('format') == 'sw-mcp/git-readonly/1', 'default_profile_only')
     base = load('sou157_transport', 'verify-sou62-real-mcp.py')
-    witness = load('sou157_git_witness', 'verify-sou146-git-file-revisions.py')
+    witness = load('sou157_git_witness', 'verify-git-file-revisions.py')
     install = load('sou157_installer', 'install-sou68-git-profile.py')
     def pins():
         for path, digest in [(profile['runtimePath'], profile['runtimeSha256']),

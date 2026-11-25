@@ -13,7 +13,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location("sou114", ROOT / "scripts/verify-sou114-pilot-doctor.py")
+spec = importlib.util.spec_from_file_location("sou114", ROOT / "scripts/verify-pilot-doctor.py")
 M = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(M)
 

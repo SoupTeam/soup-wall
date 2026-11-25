@@ -122,9 +122,9 @@ jobs:
           cargo test --locked -p agentfw server_profile --lib
           cargo test --locked -p agentfw real_server --lib
           cargo test --locked -p agentfw syscall_filter --lib
-          python3 -B -m unittest discover -s scripts/tests -p test_sou68_real_mcp.py -v
-          python3 -B -m unittest discover -s scripts/tests -p test_sou107_profile.py -v
-          python3 -B -m unittest discover -s scripts/tests -p test_sou62_real_mcp.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_real_git_mcp.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_git_local_clone_profile.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_real_filesystem_mcp.py -v
           python3 -B -m unittest discover -s rule_baseline -p 'test_*.py' -v
           python3 eval/eval_runner.py eval/fixtures/soup_task1_evaluation_cases_v0.4.json --classifier-path rule_baseline/git_readonly_v1 --out-dir target/sou68-core-evaluation
           python3 eval/eval_runner.py eval/fixtures/soup_task1_mixed_actions_urtisto_v0.1.json eval/fixtures/soup_task1_benign_comparison_urtisto_v0.1.json --classifier-path rule_baseline/git_readonly_v1 --out-dir target/sou68-mixed-evaluation
@@ -157,7 +157,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -B scripts/verify-sou244-git-first-parent.py --allow-download \
+          python3 -B scripts/verify-git-first-parent.py --allow-download \
             --agentfw "$PWD/target/debug/agentfw" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" \
@@ -167,7 +167,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -B scripts/verify-sou107-real-git.py --run --agentfw "$PWD/target/debug/agentfw" \
+          python3 -B scripts/verify-git-local-clone.py --run --agentfw "$PWD/target/debug/agentfw" \
             --git "$RUNNER_TEMP/sou107-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou107-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --sandbox-test-binary "$SOU68_TEST_BINARY" \
             --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
@@ -190,7 +190,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo test --locked -p agentfw server_profile::git --lib
-          python3 -B scripts/verify-sou137-local-git-refs.py --run --agentfw "$PWD/target/debug/agentfw" \
+          python3 -B scripts/verify-local-git-refs.py --run --agentfw "$PWD/target/debug/agentfw" \
             --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --sandbox-test-binary "$SOU68_TEST_BINARY" \
@@ -202,8 +202,8 @@ jobs:
         run: |
           set -euo pipefail
           cargo test --locked -p agentfw server_profile::git --lib
-          python3 -B -m unittest discover -s scripts/tests -p test_sou147_shallow_git.py -v
-          python3 -B scripts/verify-sou147-shallow-git.py --run --agentfw "$PWD/target/debug/agentfw" \
+          python3 -B -m unittest discover -s scripts/tests -p test_shallow_git.py -v
+          python3 -B scripts/verify-shallow-git.py --run --agentfw "$PWD/target/debug/agentfw" \
             --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --sandbox-test-binary "$SOU68_TEST_BINARY" \
@@ -215,10 +215,10 @@ jobs:
         run: |
           set -euo pipefail
           cargo test --locked -p agentfw server_profile::git --lib
-          python3 -B -m unittest discover -s scripts/tests -p test_sou146_git_file_revisions.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_git_file_revisions.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_native_git_liveness_control.py -v
           cargo test --locked -p agentfw --lib verified_git
-          python3 -B scripts/verify-sou146-git-file-revisions.py --run --agentfw "$PWD/target/debug/agentfw" \
+          python3 -B scripts/verify-git-file-revisions.py --run --agentfw "$PWD/target/debug/agentfw" \
             --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --sandbox-test-binary "$SOU68_TEST_BINARY" \
@@ -231,9 +231,9 @@ jobs:
           set -euo pipefail
           cargo test --locked -p agentfw git_tracked_symlinks --lib
           cargo test --locked -p agentfw --lib verified_git
-          python3 -B -m unittest discover -s scripts/tests -p test_sou150_profile.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_git_tracked_symlinks_profile.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_native_git_liveness_control.py -v
-          python3 -B scripts/verify-sou150-tracked-symlinks.py --run --agentfw "$PWD/target/debug/agentfw" \
+          python3 -B scripts/verify-tracked-symlinks.py --run --agentfw "$PWD/target/debug/agentfw" \
             --git "$RUNNER_TEMP/sou107-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou107-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --sandbox-test-binary "$SOU68_TEST_BINARY" \
@@ -501,7 +501,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -B scripts/verify-sou182-raw-mcp.py --run \
+          python3 -B scripts/verify-raw-mcp.py --run \
             --agentfw "$PWD/target/debug/agentfw" --node "$RUNNER_TEMP/sou182-node/bin/node" \
             --npm "$RUNNER_TEMP/sou182-node/bin/npm" --git "$RUNNER_TEMP/sou182-git/git" \
             --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \

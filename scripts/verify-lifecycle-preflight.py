@@ -28,7 +28,7 @@ def load(name, filename):
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     return module
 
-TRACE = load('sou225_existing_doctor_observation', 'verify-sou114-pilot-doctor.py')
+TRACE = load('sou225_existing_doctor_observation', 'verify-pilot-doctor.py')
 PREP = load('sou225_existing_platform', 'prepare-installed-pilot.py')
 
 def require(ok, code):
