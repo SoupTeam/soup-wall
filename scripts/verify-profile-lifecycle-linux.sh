@@ -82,4 +82,4 @@ docker run --rm --read-only --network none --user "$(id -u):$(id -g)" \
   --env "TMPDIR=$proof/tmp" \
   --env "SOU78_EVIDENCE=$proof/evidence" \
   --workdir "$proof/source" \
-  "$image" /bin/bash scripts/verify-sou78-linux.sh --isolated
+  "$image" /bin/bash scripts/verify-profile-lifecycle-linux.sh --isolated

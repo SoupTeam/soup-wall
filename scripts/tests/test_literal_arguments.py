@@ -7,7 +7,7 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location("sou110", ROOT / "scripts/verify-sou110-literal-arguments.py")
+spec = importlib.util.spec_from_file_location("sou110", ROOT / "scripts/verify-literal-arguments.py")
 M = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(M)
 

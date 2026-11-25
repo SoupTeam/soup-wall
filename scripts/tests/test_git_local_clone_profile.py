@@ -129,7 +129,7 @@ class SelectionTests(unittest.TestCase):
 @unittest.skipUnless(sys.platform == "linux", "independent inotify witness requires Linux")
 class ContinuousWitnessTests(unittest.TestCase):
     def test_real_open_burst_empty_interval_and_latched_failure(self):
-        spec = importlib.util.spec_from_file_location("sou107_verify", ROOT / "scripts/verify-sou107-real-git.py")
+        spec = importlib.util.spec_from_file_location("sou107_verify", ROOT / "scripts/verify-git-local-clone.py")
         verify = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(verify)
         with tempfile.TemporaryDirectory() as temporary:

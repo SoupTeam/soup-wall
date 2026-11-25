@@ -117,7 +117,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -B scripts/test-sou89-selected-contracts.py
+          python3 -B scripts/test-selected-liveness-contracts.py
       - name: Require original filesystem Git and independently observed crash recovery
         if: github.event.inputs.budget_membership_only != 'true'
         shell: bash

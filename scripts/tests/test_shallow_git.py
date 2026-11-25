@@ -13,7 +13,7 @@ def load(name,path):
     spec=importlib.util.spec_from_file_location(name,ROOT/path)
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
 INSTALL=load("sou147_installer","scripts/install-sou68-git-profile.py")
-VERIFY=load("sou147_driver","scripts/verify-sou147-shallow-git.py")
+VERIFY=load("sou147_driver","scripts/verify-shallow-git.py")
 
 class ShallowProfile(unittest.TestCase):
     def test_separately_selected_identity_keeps_original_upstream_schemas(self):
