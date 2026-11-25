@@ -2,6 +2,7 @@
 //! Versioned resource authorization for an authenticated, trusted collector.
 //! This checks permissions and correlation; it does not attest an executor sandbox.
 
+use crate::hashing::sha256_hex;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -42,25 +43,25 @@ pub const MACOS_CREATE_MAX_CONTENT: usize = CREATE_FILE_MAX_CONTENT;
 
 /// A semantic executor revision, not attestation of a running binary.
 pub fn create_file_executor_sha256() -> String {
-    super::hash(CREATE_FILE_EXECUTOR_PROFILE.as_bytes())
+    sha256_hex(CREATE_FILE_EXECUTOR_PROFILE.as_bytes())
 }
 
 /// A separate semantic revision preserves the existing Unix read contract.
 pub fn windows_read_executor_sha256() -> String {
-    super::hash(WINDOWS_READ_EXECUTOR_PROFILE.as_bytes())
+    sha256_hex(WINDOWS_READ_EXECUTOR_PROFILE.as_bytes())
 }
 
 /// A separate semantic revision preserves the existing Linux create contract.
 pub fn windows_create_executor_sha256() -> String {
-    super::hash(WINDOWS_CREATE_EXECUTOR_PROFILE.as_bytes())
+    sha256_hex(WINDOWS_CREATE_EXECUTOR_PROFILE.as_bytes())
 }
 
 pub fn macos_read_executor_sha256() -> String {
-    super::hash(MACOS_READ_EXECUTOR_PROFILE.as_bytes())
+    sha256_hex(MACOS_READ_EXECUTOR_PROFILE.as_bytes())
 }
 
 pub fn macos_create_executor_sha256() -> String {
-    super::hash(MACOS_CREATE_EXECUTOR_PROFILE.as_bytes())
+    sha256_hex(MACOS_CREATE_EXECUTOR_PROFILE.as_bytes())
 }
 
 /// The only read operation installed by the Windows handle-bound profile.
@@ -1466,7 +1467,7 @@ pub(crate) fn windows_create_binding_with_identity(
             &serde_json::to_value(policy).expect("policy serializes"),
         ),
         args_sha256: super::canonical_digest(args),
-        content_sha256: super::hash(content.as_bytes()),
+        content_sha256: sha256_hex(content.as_bytes()),
         workspace_sha256: super::canonical_digest(&json!({
             "workspace":policy.workspace,"cwd":policy.cwd,
             "volume_serial":identity.root_volume_serial,"file_id":identity.root_file_id,
@@ -1695,7 +1696,7 @@ pub(crate) fn macos_create_binding_with_identity(
             &serde_json::to_value(policy).expect("policy serializes"),
         ),
         args_sha256: super::canonical_digest(args),
-        content_sha256: super::hash(content.as_bytes()),
+        content_sha256: sha256_hex(content.as_bytes()),
         workspace_sha256: super::canonical_digest(&json!({
             "workspace": policy.workspace,
             "cwd": policy.cwd,
@@ -1790,7 +1791,7 @@ pub fn https_post_binding(policy: &Policy, args: &Value) -> Result<PostBinding, 
             .executor_id()
             .map_err(|_| "native_post_authority_invalid")?,
         content_type: authority.content_type.clone(),
-        body_sha256: super::hash(body.as_bytes()),
+        body_sha256: sha256_hex(body.as_bytes()),
         body_bytes: body.len(),
     })
 }
@@ -1944,7 +1945,7 @@ pub fn create_file_binding(
             &serde_json::to_value(policy).expect("policy serializes"),
         ),
         args_sha256: super::canonical_digest(args),
-        content_sha256: super::hash(content.as_bytes()),
+        content_sha256: sha256_hex(content.as_bytes()),
         workspace_sha256,
     })
 }
@@ -2655,7 +2656,7 @@ mod tests {
         );
         assert_eq!(
             bound.execution.as_ref().unwrap().content_sha256,
-            super::super::hash("Snowman: ☃\n".as_bytes())
+            sha256_hex("Snowman: ☃\n".as_bytes())
         );
         assert_eq!(
             authorize(&policy, &tool, &"r".repeat(64), &args, &bound),

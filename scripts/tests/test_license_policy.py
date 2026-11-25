@@ -444,10 +444,11 @@ decision = "unresolved"
         self.assertNotEqual(rows[-1]["decision"], "exception")
 
     def test_data_license_exception_stays_exactly_pinned_after_tls_update(self):
-        for name, version, allowed in [("webpki-roots", "1.0.10", True),
-                                       ("webpki-roots", "1.0.9", False),
+        for name, version, allowed in [("webpki-roots", "1.0.12", True),
+                                       ("webpki-roots", "1.0.10", False),
                                        ("webpki-roots", "1.0.11", False),
-                                       ("unreviewed-roots", "1.0.10", False)]:
+                                       ("webpki-roots", "1.0.13", False),
+                                       ("unreviewed-roots", "1.0.12", False)]:
             with self.subTest(name=name, version=version):
                 package = pkg(name, version, "CDLA-Permissive-2.0", self.registry, root=self.root)
                 self.packages = [self.workspace, self.vendor, package]
@@ -469,11 +470,11 @@ decision = "unresolved"
         self.assertEqual(mod.judge_spdx("CDLA-Permissive-2.0", self.policy)[0], "disallowed")
 
     def test_cdla_exception_is_limited_to_reviewed_webpki_roots_version(self):
-        self.registry_pkg.update(name="webpki-roots", version="1.0.10",
+        self.registry_pkg.update(name="webpki-roots", version="1.0.12",
                                  license="CDLA-Permissive-2.0")
         notice = self.root / "cdla-notice.txt"
         notice.write_text("synthetic CDLA review evidence\n", encoding="utf8")
-        exception = {"name": "webpki-roots", "version": "1.0.10", "source": self.registry,
+        exception = {"name": "webpki-roots", "version": "1.0.12", "source": self.registry,
                      "license": "CDLA-Permissive-2.0", "selected_license": "CDLA-Permissive-2.0",
                      "cargo_lock_checksum": "a" * 64,
                      "reason": "Exact archived data license reviewed for this package and version",
@@ -489,9 +490,9 @@ decision = "unresolved"
             return next(row["decision"] for row in rows if row["name"] == self.registry_pkg["name"])
 
         self.assertEqual(decision(), "exception")
-        self.registry_pkg["version"] = exception["version"] = "1.0.9"
-        self.assertEqual(decision(), "disallowed")
         self.registry_pkg["version"] = exception["version"] = "1.0.10"
+        self.assertEqual(decision(), "disallowed")
+        self.registry_pkg["version"] = exception["version"] = "1.0.12"
         self.registry_pkg["name"] = exception["name"] = "other-roots"
         self.assertEqual(decision(), "disallowed")
 

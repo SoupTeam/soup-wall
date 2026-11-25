@@ -81,8 +81,9 @@ consumer's own image and tuple must remain unchanged between preparation and use
 A finite parser accepts
 only the manifest and seven regular files: no extension records, links, traversal,
 extra files, special modes or unbounded declared lengths. The seven-role limits
-are 256 KiB manifest, 576 MiB compressed archive, 320 MiB per file and
-2048 MiB total payload. The initial four-role producer refused a 1 GiB aggregate. The
+are 256 KiB manifest, 576 MiB compressed archive, 384 MiB per file and
+2048 MiB total payload. The per-file limit was 320 MiB until the debug
+`agentfw` library test binary reached 347,716,912 bytes. The initial four-role producer refused a 1 GiB aggregate. The
 explicit nonincremental tuple measured at `af531a2d` then produced 1,004,034,344
 payload bytes (largest file 282,418,024) and 265,384,281 compressed bytes, with
 10.473 seconds packing time. These observations set the current refusal limits;

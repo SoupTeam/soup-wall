@@ -11,6 +11,9 @@
 //! resource executors. Actual execution witnesses live in mcp_admission's
 //! support/resource_approval_execution.rs and the collector create test.
 
+mod common;
+
+use common::sha256_hex;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -30,7 +33,6 @@ use agentfw::{app, Config};
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use soup_wall_agent::{AgentFirewall, AgentPolicySet, DEFAULT_TAINT_CAP};
 use tower::ServiceExt;
 
@@ -74,10 +76,6 @@ egress_allowlist:
   - allowed.invalid
 default: allow
 "#;
-
-fn sha(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
 
 struct WitnessFixture {
     dir: tempfile::TempDir,
@@ -157,7 +155,7 @@ impl WitnessFixture {
             },
             "workspace": workspace,
             "cwd": workspace,
-            "executor_sha256": sha(READ_DOCUMENT_EXECUTOR_PROFILE.as_bytes()),
+            "executor_sha256": sha256_hex(READ_DOCUMENT_EXECUTOR_PROFILE.as_bytes()),
             "classifier_sha256": "c".repeat(64),
             "allowed_resources": [{
                 "kind": "path",
@@ -235,7 +233,7 @@ impl WitnessFixture {
         });
 
         let bytes = serde_json::to_vec(&registry).unwrap();
-        let registry_sha256 = sha(&bytes);
+        let registry_sha256 = sha256_hex(&bytes);
 
         let mut native =
             NativeState::from_bytes(&bytes, &registry_sha256, NATIVE_TOKEN.into()).unwrap();
@@ -568,7 +566,7 @@ async fn witness_create_file_authorization_is_single_use() {
     );
     assert_eq!(
         inspected["resource_details"]["content_bytes_sha256"],
-        sha(content.as_bytes())
+        sha256_hex(content.as_bytes())
     );
 
     // 6. Operator approves

@@ -118,7 +118,7 @@ fn read_profile(config: &NativeGitExecutionCfg) -> anyhow::Result<ProfileConfig>
     let mut bytes = Vec::new();
     file.take(65_537).read_to_end(&mut bytes)?;
     anyhow::ensure!(
-        bytes.len() <= 65_536 && hash(&bytes) == config.profile_sha256,
+        bytes.len() <= 65_536 && sha256_hex(&bytes) == config.profile_sha256,
         "execution profile digest mismatch"
     );
     ProfileConfig::read(&bytes)
@@ -491,7 +491,8 @@ mod tests {
         }))
         .unwrap();
         let mut native =
-            NativeState::from_bytes(&registry, &hash(&registry), "native-unit-key".into()).unwrap();
+            NativeState::from_bytes(&registry, &sha256_hex(&registry), "native-unit-key".into())
+                .unwrap();
         native.git_execution = Some(Runtime {
             config: NativeGitExecutionCfg {
                 profile_path: dir.join("profile.json"),

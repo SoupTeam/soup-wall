@@ -5,7 +5,7 @@
   "files": {
     "deploy/docker-compose.production.yaml": "e503c9b775cad135f2a709216969509ee1955e10b0c8bed2b8cbde351e1cf5b9",
     "deploy/production.firewall.yaml": "18a0b56dac9b4dcadb72b9157ffa867908d20fb1b92b531d8977986fabe36e4f",
-    "deploy/Dockerfile": "1e953334aab52b44119d3f7731504304103a5185d8d38d9efb9f11c2b4e5857b",
+    "deploy/Dockerfile": "d5558e11a92f015bc3f3a126b5537a2bd05d3d4b5a3d59f37b02a9c717ebcd71",
     "policies/default.yaml": "f56e40101b6899a8ddc98a4dc5c8672bf1006da5a419d89d481a97c51ffc1998"
   },
   "images": {

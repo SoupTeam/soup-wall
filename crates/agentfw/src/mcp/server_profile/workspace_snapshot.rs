@@ -353,15 +353,12 @@ pub(crate) use linux::View;
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
-    use sha2::{Digest, Sha256};
+    use crate::hashing::sha256_hex;
     use std::{
         fs,
         io::Read,
         os::{fd::AsRawFd, unix::fs::PermissionsExt},
     };
-    fn sha(raw: &[u8]) -> String {
-        format!("{:x}", Sha256::digest(raw))
-    }
     fn fixture() -> (tempfile::TempDir, Binding) {
         let temp = tempfile::tempdir().unwrap();
         let generation = temp.path().join("snapshot");
@@ -383,16 +380,16 @@ mod tests {
             path: "note.txt".into(),
             kind: "file".into(),
             size: 21,
-            sha256: sha(b"owned captured bytes\n"),
+            sha256: sha256_hex(b"owned captured bytes\n"),
             identity: id(&workspace.join("note.txt")),
         }];
         let tree = crate::native::canonical_digest(
-            &serde_json::json!([{"path":"note.txt","kind":"file","size":21,"sha256":sha(b"owned captured bytes\n")} ]),
+            &serde_json::json!([{"path":"note.txt","kind":"file","size":21,"sha256":sha256_hex(b"owned captured bytes\n")} ]),
         );
         let receipt = serde_json::json!({"format":FORMAT,"entries":entries,"tree_sha256":tree,"generation_identity":id(&generation),"workspace_identity":id(&workspace)});
         let raw = serde_json::to_vec(&receipt).unwrap();
         fs::write(generation.join("receipt.json"), &raw).unwrap();
-        let complete = serde_json::json!({"format":FORMAT,"receipt_sha256":sha(&raw),"generation_identity":id(&generation)});
+        let complete = serde_json::json!({"format":FORMAT,"receipt_sha256":sha256_hex(&raw),"generation_identity":id(&generation)});
         fs::write(
             generation.join("complete.json"),
             serde_json::to_vec(&complete).unwrap(),
@@ -405,7 +402,7 @@ mod tests {
             format: FORMAT.into(),
             generation_identity: id(&generation),
             workspace_identity: id(&workspace),
-            receipt_sha256: sha(&raw),
+            receipt_sha256: sha256_hex(&raw),
             tree_sha256: tree,
             entries,
             lease_identity: id(&generation.join("lease")),

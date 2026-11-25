@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Real native inspection / signed operator grants; no upstream execution claim.
 use super::*;
-use crate::native::{canonical_digest, child_authority, hash};
+use crate::hashing::sha256_hex;
+use crate::native::{canonical_digest, child_authority};
 
 #[tokio::test]
 async fn pilot_runtime_metadata_is_authenticated_bounded_and_not_bearer_authority() {
@@ -162,7 +163,7 @@ fn fixture(format: &str) -> (Env, String, Value, String, SelectedInvocation) {
         "egress":[],"mcp_result_profile":format}]}).to_string();
     let native = NativeState::from_bytes(
         bytes.as_bytes(),
-        &hash(bytes.as_bytes()),
+        &sha256_hex(bytes.as_bytes()),
         "native-unit-key".into(),
     )
     .unwrap()
@@ -208,7 +209,7 @@ fn fixture(format: &str) -> (Env, String, Value, String, SelectedInvocation) {
                 device: 1,
                 inode: 2,
                 target: args["path"].as_str().unwrap().into(),
-                content_sha256: hash(args["content"].as_str().unwrap().as_bytes()),
+                content_sha256: sha256_hex(args["content"].as_str().unwrap().as_bytes()),
                 content_bytes: args["content"].as_str().unwrap().len(),
                 must_be_absent: true,
             }

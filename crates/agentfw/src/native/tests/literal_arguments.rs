@@ -30,8 +30,9 @@ fn literal_fixture(dir: &std::path::Path) -> Shared {
             .into_bytes();
     let mut state = fixture(dir);
     let st = Arc::get_mut(&mut state).unwrap();
-    st.native =
-        Some(NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into()).unwrap());
+    st.native = Some(
+        NativeState::from_bytes(&bytes, &sha256_hex(&bytes), "native-unit-key".into()).unwrap(),
+    );
     st.firewall = Mutex::new(AgentFirewall::new(
         soup_wall_agent::AgentPolicySet::from_yaml(include_str!(
             "../../../../../profiles/mcp/filesystem-readonly-v1/policy.yaml"

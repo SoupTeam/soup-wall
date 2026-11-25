@@ -317,7 +317,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP"
-          python3 -B "$GITHUB_WORKSPACE/scripts/verify-sou225-lifecycle-preflight.py" \
+          python3 -B "$GITHUB_WORKSPACE/scripts/verify-lifecycle-preflight.py" \
             --agentfw "$RUNNER_TEMP/sou225-agentfw" --component "$RUNNER_TEMP/sou225-component.tar" \
             --python /usr/bin/python3.12 --mode "$SOU225_MODE" \
             --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
@@ -483,8 +483,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -B -m unittest discover -s scripts/tests -p test_sou110_literal_arguments.py -v
-          python3 -B scripts/verify-sou110-literal-arguments.py --run \
+          python3 -B -m unittest discover -s scripts/tests -p test_literal_arguments.py -v
+          python3 -B scripts/verify-literal-arguments.py --run \
             --agentfw "$PWD/target/debug/agentfw" \
             --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
             --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --strace /usr/bin/strace \
@@ -521,8 +521,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -B -m unittest discover -s scripts/tests -p test_sou114_pilot_doctor.py -v
-          python3 -B scripts/verify-sou114-pilot-doctor.py --run \
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_doctor.py -v
+          python3 -B scripts/verify-pilot-doctor.py --run \
             --agentfw "$PWD/target/debug/agentfw" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
             --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --git "$RUNNER_TEMP/sou100-git-source/git" \
@@ -566,7 +566,7 @@ jobs:
       - name: Profile and evidence controls, safe archive runtime compatibility
         if: github.event.inputs.original_create_only != 'true'
         run: |
-          python3 -B -m unittest discover -s scripts/tests -p test_sou62_real_mcp.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_real_filesystem_mcp.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_wsl_preflight.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_wsl_qualification.py -v
@@ -907,7 +907,7 @@ jobs:
             "$((online_done-started))" "$((imported_done-online_done))" \
             "$((offline_done-imported_done))" > "$scratch/timings.json"
           test -z "$(git status --porcelain)"
-          python3 -B scripts/sou194-cache-evidence.py --source "$(git rev-parse HEAD)" \
+          python3 -B scripts/summarize-cache-evidence.py --source "$(git rev-parse HEAD)" \
             --scratch "$scratch" > "$scratch/evidence.json"
           cat "$scratch/evidence.json"
       - name: Retain finite evidence, including failed attempts

@@ -450,7 +450,7 @@ All five Ask cases and the existing timing bounds still require qualification.
 Select `git-readonly-first-parent-v1` with the installed pilot's `--git-profile`
 option on native Linux. For an independent private installation, select
 `--first-parent` in `scripts/install-sou68-git-profile.py` and pair the resulting
-profile and registry with the [first-parent classifier](../../rule_baseline/git_readonly_first_parent_v1/rule_baseline.py)
+profile and registry with `rule_baseline/git_readonly_first_parent_v1/rule_baseline.py`
 under the enforcing pilot policy. The [profile contract](../../profiles/mcp/git-readonly-first-parent-v1/contract.json)
 adds the single literal `HEAD~1` in `git_diff.target`.
 
@@ -473,7 +473,7 @@ inputs, the report records original response, inspection, host delivery,
 continuation and effect witnesses. Benign result refusals remain false
 interruptions in the acceptance totals.
 
-Run `scripts/verify-sou244-git-first-parent.py` with the same pinned runtime
+Run `scripts/verify-git-first-parent.py` with the same pinned runtime
 binaries and `--expected-commit`. Supply `--python-archive` and `--wheelhouse`
 for offline runs or use `--allow-download` to resolve the reviewed installation
 pins. The standalone and reusable Linux Git jobs retain the report and logs

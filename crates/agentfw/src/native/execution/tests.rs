@@ -2,6 +2,7 @@
 //! Component controls with explicit fixture custody, never native launch proof.
 use super::super::{Call, NativeState, Request, Stage, CONTRACT};
 use super::*;
+use crate::hashing::sha256_hex;
 use std::time::{Duration, Instant};
 
 struct UnusedClassifier;
@@ -307,7 +308,7 @@ impl Env {
         let runtime = Arc::new(Runtime::fixture(&profile));
         let bytes = serde_json::to_vec(&registry).unwrap();
         let mut native =
-            NativeState::from_bytes(&bytes, &super::super::hash(&bytes), token.into()).unwrap();
+            NativeState::from_bytes(&bytes, &sha256_hex(&bytes), token.into()).unwrap();
         native.execution = Some(Arc::new(Service {
             catalogue: Catalogue {
                 format: CATALOGUE_FORMAT.into(),
@@ -858,7 +859,7 @@ fn formatter_correction_requires_custody_and_preserves_attacks() {
                 assert_eq!(pair["correction_applied"], body == "ordinary");
                 assert_eq!(pair["comparison"]["contract"], "sw-mcp/policy-shadow/1");
                 assert_eq!(pair["comparison"]["production_authority"], false);
-                assert_eq!(pair["text_sha256"], super::super::hash(text.as_bytes()));
+                assert_eq!(pair["text_sha256"], sha256_hex(text.as_bytes()));
             }
             for pair in &baseline.policy_shadow {
                 assert_eq!(pair["eligibility"], "baseline_no_bound_formatter");
@@ -1019,11 +1020,11 @@ async fn verified_invocation_hash_matches_server_frame_after_workspace_removal()
         .unwrap();
     assert_eq!(
         result.metadata().invocation_sha256,
-        super::super::hash(&observed)
+        crate::hashing::sha256_hex(&observed)
     );
     assert_ne!(
         result.metadata().invocation_sha256,
-        super::super::hash(host_frame.as_bytes())
+        crate::hashing::sha256_hex(host_frame.as_bytes())
     );
     assert!(env.finish(Some(result)).unwrap().release);
 }
@@ -1041,7 +1042,7 @@ fn concurrent_dispatches_preserve_raw_identity_and_refuse_unissued_or_changed_ca
         .context
         .dispatched("session", id, &binding, &env.raw)
         .unwrap();
-    assert_eq!(a.request_sha256, super::super::hash(&env.raw));
+    assert_eq!(a.request_sha256, sha256_hex(&env.raw));
     for raw in [
         String::from_utf8(env.raw.clone())
             .unwrap()

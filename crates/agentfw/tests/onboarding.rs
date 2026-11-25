@@ -4,13 +4,15 @@
 //! `scripts/onboarding-acceptance.py` (see docs/operations/ONBOARDING.md).
 #![cfg(target_os = "linux")]
 
+mod common;
+
+use common::sha256_hex;
 use std::net::TcpListener;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
 const AGENT: &str = env!("CARGO_BIN_EXE_agentfw");
 
@@ -21,14 +23,10 @@ fn repo() -> PathBuf {
         .unwrap()
 }
 
-fn sha(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
-
 /// The debug binary is large; hash it once per test process.
 fn agent_sha() -> &'static str {
     static DIGEST: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    DIGEST.get_or_init(|| sha(&std::fs::read(AGENT).unwrap()))
+    DIGEST.get_or_init(|| sha256_hex(&std::fs::read(AGENT).unwrap()))
 }
 
 fn python() -> Option<PathBuf> {
@@ -109,7 +107,7 @@ impl Home {
             ),
             (
                 "--classifier-sha256".into(),
-                sha(&std::fs::read(&classifier).unwrap()),
+                sha256_hex(&std::fs::read(&classifier).unwrap()),
             ),
             (
                 "--classifier-python".into(),
@@ -118,7 +116,7 @@ impl Home {
             ("--registry".into(), registry.display().to_string()),
             (
                 "--registry-sha256".into(),
-                sha(&std::fs::read(&registry).unwrap()),
+                sha256_hex(&std::fs::read(&registry).unwrap()),
             ),
             (
                 "--workspace".into(),
@@ -395,13 +393,16 @@ fn recorded_onboarding(home: &Home) -> PathBuf {
     }
     for (rel, bytes) in files {
         std::fs::write(agent_home.join(rel), bytes).unwrap();
-        inventory.insert(rel.into(), json!({"kind": "file", "sha256": sha(bytes)}));
+        inventory.insert(
+            rel.into(),
+            json!({"kind": "file", "sha256": sha256_hex(bytes)}),
+        );
     }
     let journal = json!({
         "schema": "sw-onboarding/1", "plan_sha256": "0".repeat(64), "core_sha256": "0".repeat(64),
         "agent_home": agent_home, "host_config": user.join(".claude/mcp.json"), "server": "notes",
         "agent": AGENT, "agent_sha256": agent_sha(), "port": home.port, "created_home": true,
-        "files": {"config": sha(b"enforce: true\n")},
+        "files": {"config": sha256_hex(b"enforce: true\n")},
         "steps": {"create_agent_home": "done", "write_owned_files": "done", "create_token": "done"},
         "phase": "interrupted", "inventory": inventory,
     });
@@ -525,7 +526,7 @@ fn fake_profile(home: &Home, format: &str) -> (PathBuf, PathBuf) {
         "format": format,
         "workspace": home.root.join("user/work"),
         "runtimePath": home.python,
-        "runtimeSha256": sha(&std::fs::read(&home.python).unwrap()),
+        "runtimeSha256": sha256_hex(&std::fs::read(&home.python).unwrap()),
         "packageRoot": package,
         "packageTreeSha256": "0".repeat(64),
         "bwrapPath": home.root.join("opt/missing-bwrap"),
@@ -555,11 +556,14 @@ fn fake_profile(home: &Home, format: &str) -> (PathBuf, PathBuf) {
 fn profile_inputs(home: &Home, profile: &Path, registry: &Path) -> Vec<(&'static str, String)> {
     vec![
         ("--registry", registry.display().to_string()),
-        ("--registry-sha256", sha(&std::fs::read(registry).unwrap())),
+        (
+            "--registry-sha256",
+            sha256_hex(&std::fs::read(registry).unwrap()),
+        ),
         ("--server-profile", profile.display().to_string()),
         (
             "--server-profile-sha256",
-            sha(&std::fs::read(profile).unwrap()),
+            sha256_hex(&std::fs::read(profile).unwrap()),
         ),
         ("--server", "files".into()),
         ("--classifier-python", home.python.display().to_string()),
@@ -574,7 +578,10 @@ fn a_profile_registry_without_its_profile_is_refused() {
         "preview",
         home.inputs(&[
             ("--registry", registry.display().to_string()),
-            ("--registry-sha256", sha(&std::fs::read(&registry).unwrap())),
+            (
+                "--registry-sha256",
+                sha256_hex(&std::fs::read(&registry).unwrap()),
+            ),
         ]),
         "p.json",
     );
@@ -658,7 +665,7 @@ fn changed_unsupported_or_mismatched_profile_selections_are_refused() {
             ("--registry", git_registry.display().to_string()),
             (
                 "--registry-sha256",
-                sha(&std::fs::read(&git_registry).unwrap()),
+                sha256_hex(&std::fs::read(&git_registry).unwrap()),
             ),
         ],
         "3.json",
@@ -677,7 +684,7 @@ fn changed_unsupported_or_mismatched_profile_selections_are_refused() {
             ("--server-profile", unsupported.display().to_string()),
             (
                 "--server-profile-sha256",
-                sha(&std::fs::read(&unsupported).unwrap()),
+                sha256_hex(&std::fs::read(&unsupported).unwrap()),
             ),
         ],
         "5.json",
