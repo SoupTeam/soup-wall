@@ -55,15 +55,15 @@ impl Fixture {
         drop(listener);
         let selection = Selection {
             agent,
-            agent_sha256: sha(agent_bytes),
+            agent_sha256: sha256_hex(agent_bytes),
             python,
-            python_sha256: sha(python_bytes),
+            python_sha256: sha256_hex(python_bytes),
             classifier,
-            classifier_sha256: sha(classifier_bytes),
+            classifier_sha256: sha256_hex(classifier_bytes),
             registry,
-            registry_sha256: sha(&registry_bytes),
+            registry_sha256: sha256_hex(&registry_bytes),
             policy,
-            policy_sha256: sha(fixture::SHIPPED_POLICY.as_bytes()),
+            policy_sha256: sha256_hex(fixture::SHIPPED_POLICY.as_bytes()),
             host_config,
             server: "notes".into(),
             home: path(".agentfw"),
@@ -186,13 +186,13 @@ async fn occupied_foreign_port_receives_no_preview_traffic() {
 async fn invalid_registry_and_policy_fail_even_with_matching_hashes() {
     let mut fixture = Fixture::new();
     std::fs::write(&fixture.selection.registry, b"{}").unwrap();
-    fixture.selection.registry_sha256 = sha(b"{}");
+    fixture.selection.registry_sha256 = sha256_hex(b"{}");
     assert!(preview_selected(&fixture.selection).await.is_err());
     let bytes = fixture::registry();
     std::fs::write(&fixture.selection.registry, &bytes).unwrap();
-    fixture.selection.registry_sha256 = sha(&bytes);
+    fixture.selection.registry_sha256 = sha256_hex(&bytes);
     std::fs::write(&fixture.selection.policy, b"invalid: [").unwrap();
-    fixture.selection.policy_sha256 = sha(b"invalid: [");
+    fixture.selection.policy_sha256 = sha256_hex(b"invalid: [");
     assert!(preview_selected(&fixture.selection).await.is_err());
 }
 
