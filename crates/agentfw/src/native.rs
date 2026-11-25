@@ -2052,25 +2052,6 @@ pub(crate) fn retire_sessions_terminal(
     count
 }
 
-#[allow(dead_code)]
-fn reap_lost_sessions(st: &Shared, native: &NativeState, now: Instant, now_ms: u64) -> usize {
-    let dead_targets: Vec<(String, Option<String>)> = {
-        let Ok(sessions) = native.sessions.lock() else {
-            return 0;
-        };
-        sessions
-            .entries
-            .iter()
-            .filter(|(_, s)| s.is_dead(now, now_ms, &sessions))
-            .map(|(id, s)| (id.clone(), Some(s.epoch.clone())))
-            .collect()
-    };
-    if dead_targets.is_empty() {
-        return 0;
-    }
-    retire_sessions_terminal(st, native, &dead_targets, "expired")
-}
-
 #[cfg(test)]
 fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Response, &'static str> {
     inspect_bound(st, native, request, None, None)

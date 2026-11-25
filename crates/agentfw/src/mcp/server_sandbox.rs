@@ -275,7 +275,8 @@ pub(crate) fn prepare_verified_git(
 /// Prepare a *fresh* original filesystem server instance against an
 /// already-created owner-private empty staging root, not the user workspace.
 /// Only the new profile may acquire this writable host-backed namespace mount.
-#[allow(dead_code)] // this Linux-only caller has no equivalent on unsupported targets
+// The only caller is Linux-only and has no equivalent on other targets.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) fn prepare_create_stage(
     profile: &ProfileConfig,
     stage: &Path,
