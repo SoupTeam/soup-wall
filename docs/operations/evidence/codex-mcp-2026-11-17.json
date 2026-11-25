@@ -674,5 +674,30 @@
     "Windows/macOS Codex connection installation",
     "Gemini CLI, Cursor Desktop, OpenCode, Copilot adapters"
   ],
-  "qualification": "Local incremental acceptance, not complete multi-harness or release qualification"
+  "qualification": "Local incremental acceptance, not complete multi-harness or release qualification",
+  "review_followup": {
+    "recorded_date": "2026-11-19",
+    "implementation_sha": "3e3eabad5ab068fdad3eec07b3bd4f59c87c7229",
+    "environment": "Ubuntu 24.04 under WSL2, Linux x86_64, Rust 1.99.1",
+    "codex_version": "codex-cli 0.169.0-alpha.11.1",
+    "codex_sha256": "c147ac3b289a23d0ecfeef646be5dd2b0cc892bf78f0b215311dc6ad6e85b33e",
+    "wire_fixture_sha256": "bdc984e8c2bc0c1cb670eeda2a66571a4a61e45170944802298cc9e0d7f8a0a5",
+    "agentfw_sha256": "77d89ecfa7c30ceddffd9cea6b1db2844352e64d3a02144d9765ad2d7dc0defb",
+    "external_provider_requests": 0,
+    "checks": {
+      "toml_lifecycle": {
+        "passed": 37,
+        "failed": 0
+      },
+      "generic_stdio": {
+        "passed": 47,
+        "failed": 0
+      },
+      "original_filesystem": {
+        "passed": 19,
+        "failed": 0
+      }
+    },
+    "wrong_host_version_failed_report": true
+  }
 }

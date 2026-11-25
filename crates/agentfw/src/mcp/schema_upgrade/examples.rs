@@ -8,11 +8,12 @@
 //! snapshots; nothing is inferred from names or descriptions. Records are
 //! proposals for human review, never labels, approvals or permission.
 
+use crate::hashing::sha256_hex;
 use std::collections::BTreeSet;
 
 use serde_json::{json, Map, Value};
 
-use super::{canonical_json, pointer_tokens, schema_at, sha_hex, Analysis, Finding, Nature};
+use super::{canonical_json, pointer_tokens, schema_at, Analysis, Finding, Nature};
 use crate::mcp::input::InputSchema;
 
 pub const MAX_RECORDS: usize = 512;
@@ -327,7 +328,7 @@ impl Cx<'_> {
             record["check_category"],
             canonical_json(&record["arguments"])
         );
-        let id = format!("E-{}", &sha_hex(key.as_bytes())[..16]);
+        let id = format!("E-{}", &sha256_hex(key.as_bytes())[..16]);
         record["id"] = json!(id);
         self.ids.push(id);
         self.pack.records.push(record);

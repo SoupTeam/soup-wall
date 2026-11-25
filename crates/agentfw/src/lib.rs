@@ -14,6 +14,7 @@ pub mod edit_session;
 pub mod gemini_hook;
 pub mod grant;
 pub mod handlers;
+pub(crate) mod hashing;
 pub mod hook;
 pub mod install;
 pub mod judge;
@@ -136,6 +137,10 @@ pub fn app_with_diagnostics(
             post(native::verified_git::handler).layer(axum::extract::DefaultBodyLimit::max(4096)),
         )
         .route("/native/v1/instance", get(native::instance))
+        .route(
+            native::consumer::ENDPOINT,
+            post(native::consumer::handler).layer(axum::extract::DefaultBodyLimit::max(65_536)),
+        )
         .route(
             native::pilot_cleanup::ENDPOINT,
             post(native::pilot_cleanup::handler).layer(axum::extract::DefaultBodyLimit::max(4096)),

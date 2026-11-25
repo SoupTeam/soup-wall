@@ -2,9 +2,10 @@
 //! Append-only exact-object outcomes. An unlink without its durable completion
 //! record stays uncertain; missing names never silently become completed work.
 use super::{
-    canonical, decode, digest, ensure, inventory, processes, same, sha, Budget, Context, Dir,
-    Entry, Identity, Plan, Result, Retained, FORMAT, MAX_ENTRIES,
+    canonical, decode, digest, ensure, inventory, processes, same, Budget, Context, Dir, Entry,
+    Identity, Plan, Result, Retained, FORMAT, MAX_ENTRIES,
 };
+use crate::hashing::sha256_hex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
@@ -189,7 +190,7 @@ impl Journal {
                 && value.phase == phase
                 && same(
                     &value.entry_sha256,
-                    &sha(&canonical(&self.plan.entries[index])?)
+                    &sha256_hex(&canonical(&self.plan.entries[index])?)
                 ),
             "removal_progress_invalid"
         );
@@ -250,7 +251,7 @@ impl Journal {
                 plan: self.hash.clone(),
                 index,
                 attempt,
-                entry_sha256: sha(&canonical(&self.plan.entries[index])?),
+                entry_sha256: sha256_hex(&canonical(&self.plan.entries[index])?),
                 phase: phase.into(),
                 parent_after: if phase == "done" {
                     Some(Dir::open(&location(&self.plan, &self.plan.entries[index])?.0)?.id)
@@ -394,7 +395,10 @@ impl Journal {
             } else {
                 let (raw, id) = d.read(&leaf, 1024 * 1024, b)?;
                 ensure!(
-                    id == e.identity && e.sha256.as_ref().is_some_and(|h| same(&sha(&raw), h)),
+                    id == e.identity
+                        && e.sha256
+                            .as_ref()
+                            .is_some_and(|h| same(&sha256_hex(&raw), h)),
                     "removal_object_substituted"
                 );
             }
@@ -414,7 +418,7 @@ impl Journal {
             "removal_completion_invalid"
         );
         Ok(self.success_ack.as_ref().is_some_and(|ack| {
-            ack.len() == 43 && same(&sha(ack.as_bytes()), &c.success_ack_sha256)
+            ack.len() == 43 && same(&sha256_hex(ack.as_bytes()), &c.success_ack_sha256)
         }))
     }
     fn result(&self, rows: Vec<Outcome>, acknowledged: bool, ack: Option<&str>) -> Value {
@@ -510,7 +514,7 @@ impl Journal {
             &canonical(&Completion {
                 format: FORMAT.into(),
                 plan: self.hash.clone(),
-                success_ack_sha256: sha(ack.as_bytes()),
+                success_ack_sha256: sha256_hex(ack.as_bytes()),
             })?,
         )?;
         self.dir.recheck()?;

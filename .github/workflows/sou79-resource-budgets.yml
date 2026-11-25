@@ -240,7 +240,7 @@ jobs:
           sha256sum target/debug/agentfw > "$RUNNER_TEMP/sou79-binary.txt"
           python3 -B - <<'PY'
           import unittest
-          suite=unittest.defaultTestLoader.discover('scripts/tests',pattern='test_sou79_resource_budgets.py')
+          suite=unittest.defaultTestLoader.discover('scripts/tests',pattern='test_resource_budgets.py')
           if not suite.countTestCases(): raise SystemExit('required observer controls missing')
           result=unittest.TextTestRunner(verbosity=2).run(suite)
           raise SystemExit(0 if result.wasSuccessful() else 1)

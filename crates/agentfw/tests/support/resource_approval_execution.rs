@@ -215,7 +215,7 @@ async fn fixture(receiver: Option<&Receiver>, ttl: u64) -> Fixture {
         .parent()
         .unwrap()
         .join("rule_baseline/rule_baseline.py");
-    let classifier = sha(&std::fs::read(script).unwrap());
+    let classifier = sha256_hex(&std::fs::read(script).unwrap());
     Fixture::with_resource_policy_custom_approval(
         if receiver.is_some() { "sou88-https" } else { "classified-read" }, true,
         Some("rule-baseline"), Some(ASK), Some((ttl, 10)), |dir, registry| {
@@ -233,9 +233,9 @@ async fn fixture(receiver: Option<&Receiver>, ttl: u64) -> Fixture {
                 ("read_document", json!({"type":"object","properties":{"path":{"type":"string"}},
                     "required":["path"],"additionalProperties":false}), "/path", "path",
                     json!({"kind":"path","canonical":path}), Value::Null,
-                    sha(agentfw::native::resource::READ_DOCUMENT_EXECUTOR_PROFILE.as_bytes()))
+                    sha256_hex(agentfw::native::resource::READ_DOCUMENT_EXECUTOR_PROFILE.as_bytes()))
             };
-            let digest = sha(schema.to_string().as_bytes());
+            let digest = sha256_hex(schema.to_string().as_bytes());
             registry["tools"][0] = json!({"name":name,"schema_sha256":digest,
                 "action_class":if receiver.is_some() {"network"} else {"read_only"},
                 "result_provenance":"untrusted",

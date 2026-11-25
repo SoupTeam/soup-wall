@@ -25,7 +25,7 @@ jobs:
         with:
           components: rustfmt,clippy
       - name: Exact-source Linux profile and owned-process checks
-        run: bash scripts/verify-sou78-linux.sh
+        run: bash scripts/verify-profile-lifecycle-linux.sh
       - name: Retain exact-source Linux results
         if: always()
         uses: actions/upload-artifact@v7

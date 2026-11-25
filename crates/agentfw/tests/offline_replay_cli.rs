@@ -2,8 +2,10 @@
 //! Public owned synthetic CLI parity and independently calibrated effect witnesses.
 #![cfg(unix)]
 
+mod common;
+
+use common::sha256_hex;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use soup_wall_agent::{AgentEvent, AgentFirewall, AgentPolicySet, DEFAULT_TAINT_CAP};
 use std::fs;
 use std::io::{Read, Write};
@@ -19,9 +21,6 @@ const SHIPPED: &str = include_str!("../../agent/policies/agent-default.yaml");
 const SEQUENCE: &str = include_str!("fixtures/offline-replay/sequence.json");
 const WEAK: &str = include_str!("fixtures/offline-replay/weak-policy.yaml");
 const DENY: &str = include_str!("fixtures/offline-replay/deny-policy.yaml");
-fn digest(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
 fn temp() -> tempfile::TempDir {
     tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap()
 }
@@ -113,7 +112,7 @@ fn snapshot(root: &Path) -> Value {
             value["mode"] = json!(meta.mode());
         }
         if meta.is_file() {
-            value["sha256"] = json!(digest(&fs::read(path).unwrap()));
+            value["sha256"] = json!(sha256_hex(&fs::read(path).unwrap()));
         }
         rows.insert(
             path.strip_prefix(root).unwrap().to_string_lossy().into(),
@@ -222,8 +221,8 @@ fn offline_policy_cli_parity_and_effect_witnesses() {
             "offline CLI mutated state or inputs"
         );
         assert_eq!(report["protection_claim"], false);
-        cases.push(json!({"policy":name,"policy_sha256":digest(yaml.as_bytes()),"input_sha256":digest(SEQUENCE.as_bytes()),
-            "report_sha256":digest(&output.stdout),"events":verdicts,"production_parity":true,"trace_state_parity":true,"persistent_state_unchanged":true}));
+        cases.push(json!({"policy":name,"policy_sha256":sha256_hex(yaml.as_bytes()),"input_sha256":sha256_hex(SEQUENCE.as_bytes()),
+            "report_sha256":sha256_hex(&output.stdout),"events":verdicts,"production_parity":true,"trace_state_parity":true,"persistent_state_unchanged":true}));
     }
     // Explicit B has its own fresh reference context; comparisons cannot carry
     // taint from the first policy's run or silently select a default policy.
@@ -393,7 +392,7 @@ fn host_sandbox(home: &Path, input: &Path, policy: &Path) -> Value {
     // denied operation below has an independently successful owned control.
     let available = sandboxed(Path::new("/usr/bin/true"), &[]);
     if !available.status.success() {
-        return json!({"status":"unavailable","exit_code":available.status.code(),"stderr_sha256":digest(&available.stderr)});
+        return json!({"status":"unavailable","exit_code":available.status.code(),"stderr_sha256":sha256_hex(&available.stderr)});
     }
     let canary = home.join(".agentfw/token");
     let write_target = root.join("sandbox-write-control");

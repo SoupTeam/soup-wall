@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Diagnostic coordinates only. This parser has no policy/inspection API.
 //! Derived on the private original response; release still requires custody consumption.
+use crate::hashing::sha256_hex;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -94,7 +95,7 @@ pub(super) fn derive(args: &Value, raw: &str) -> Option<Attribution> {
         production_authority: false,
         original_entrypoint_sha256:
             "729dc8511e779e5cd6640851a74b25283e3af1ca3a7106722f993e864a1d9935",
-        text_sha256: super::super::hash(text.as_bytes()),
+        text_sha256: sha256_hex(text.as_bytes()),
         complete_text_bytes: text.len(),
         channels: ["result.content[0].text", "result.structuredContent.content"],
         separator_spans: spans,
@@ -146,7 +147,7 @@ mod tests {
                 let a = derive(&args, &raw.to_string()).unwrap();
                 assert_eq!(a.separator_spans.len(), count - 1);
                 assert_eq!(a.complete_text_bytes, text.len());
-                assert_eq!(a.text_sha256, super::super::super::hash(text.as_bytes()));
+                assert_eq!(a.text_sha256, sha256_hex(text.as_bytes()));
                 assert!(!a.production_authority);
                 assert_eq!(a.delimiter_hits, count - 1);
                 assert_eq!(a.formatter_delimiter_hits, count - 1);

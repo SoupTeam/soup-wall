@@ -88,7 +88,7 @@ impl Host {
                 // Only launch fields change; unrelated source text remains intact.
                 for key in ["command", "args"] {
                     if let Some(value) = entry.get(key) {
-                        let value = if key == "command" {
+                        let mut value = if key == "command" {
                             toml_edit::Value::from(value.as_str().context("invalid command")?)
                         } else {
                             let mut array = toml_edit::Array::new();
@@ -97,11 +97,15 @@ impl Host {
                             }
                             toml_edit::Value::Array(array)
                         };
-                        let mut item = toml_edit::Item::Value(value);
-                        if let Some(old) = selected.get(key).and_then(toml_edit::Item::as_value) {
-                            *item.as_value_mut().unwrap().decor_mut() = old.decor().clone();
+                        if let Some(old) = selected
+                            .get_mut(key)
+                            .and_then(toml_edit::Item::as_value_mut)
+                        {
+                            *value.decor_mut() = old.decor().clone();
+                            *old = value;
+                        } else {
+                            selected.insert(key, toml_edit::Item::Value(value));
                         }
-                        selected.insert(key, item);
                     } else {
                         selected.remove(key);
                     }
@@ -123,17 +127,21 @@ mod tests {
     use serde_json::json;
     #[test]
     fn preserves_unrelated_text_and_quoted_names() {
-        let input = b"# profile\nmodel = 'fixture' # keep\n[mcp_servers.'local.test']\ncommand = '/usr/bin/python3' # launch\nargs = ['a b']\n[mcp_servers.other]\ncommand = 'untouched'\nenv = { TOKEN = 'synthetic-secret' } # keep secret\n";
+        let input = b"# profile\nmodel = 'fixture' # keep\n[mcp_servers.'local.test']\n# selected command\ncommand = '/usr/bin/python3' # launch\nargs = ['a b']\n[mcp_servers.other]\ncommand = 'untouched'\nenv = { TOKEN = 'synthetic-secret' } # keep secret\n";
         let original = Host::Codex.parse(input).unwrap()["mcp_servers"]["local.test"].clone();
         let next = json!({"command":"/usr/bin/env", "args":["-i", "a b", "quote\"newline\n"]});
         let output = Host::Codex.replace(input, "local.test", &next).unwrap();
         let text = std::str::from_utf8(&output).unwrap();
         assert!(text.starts_with("# profile\nmodel = 'fixture' # keep\n"));
         assert!(text.ends_with("[mcp_servers.other]\ncommand = 'untouched'\nenv = { TOKEN = 'synthetic-secret' } # keep secret\n"));
+        assert!(text.contains("# selected command\ncommand"));
         assert!(text.contains("# launch"));
         let restored = Host::Codex
             .replace(&output, "local.test", &original)
             .unwrap();
+        assert!(std::str::from_utf8(&restored)
+            .unwrap()
+            .contains("# selected command\ncommand"));
         assert_eq!(
             Host::Codex.parse(&restored).unwrap(),
             Host::Codex.parse(input).unwrap()

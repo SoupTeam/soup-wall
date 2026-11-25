@@ -3,6 +3,7 @@
 //! can select this operation. Serialized bindings are correlation, not permits.
 
 use super::*;
+use crate::hashing::sha256_hex;
 use crate::mcp::replace_file::{self, Identity, RootIdentity};
 use crate::mcp::resources::{valid_pointer, ResourceKind};
 use soup_wall_agent::ActionClass;
@@ -78,7 +79,7 @@ pub fn validate(policy: &super::Policy, tool: &super::super::Tool) -> anyhow::Re
             && exec.path_selector.is_some()
             && exec.content_selector.is_some()
             && exec.response_contract.as_deref() == Some("sw-native/response/text/1")
-            && policy.executor_sha256 == super::super::hash(replace_file::PROFILE.as_bytes())
+            && policy.executor_sha256 == sha256_hex(replace_file::PROFILE.as_bytes())
             && tool.action_class == ActionClass::Destructive
             && tool.egress.is_empty()
             && tool.mcp_result_profile.is_none()

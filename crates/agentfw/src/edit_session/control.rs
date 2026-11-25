@@ -2,6 +2,7 @@
 //! Exact-run operator intent; only the existing owning supervisor can confirm
 //! revocation and cleanup. A durable record never authorizes a numeric kill.
 use super::{control_io::Dir, profile, runtime::RunRecord, FORMAT};
+use crate::hashing::sha256_hex;
 use anyhow::{ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -50,9 +51,6 @@ struct Receipt {
     cleanup_confirmed: bool,
     reason: String,
     signature: String,
-}
-fn digest(bytes: &[u8]) -> String {
-    crate::mcp::replace_file::content_sha256(bytes)
 }
 fn signature(domain: &[u8], value: &impl Serialize, key: &[u8]) -> Result<String> {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
@@ -131,10 +129,10 @@ impl Selected {
         let key = home.read("native-token")?;
         ensure!(
             control.contract == CONTRACT
-                && control.run_sha256 == digest(&record_bytes)
+                && control.run_sha256 == sha256_hex(&record_bytes)
                 && control.run_identity == dir.identity()?
                 && control.home_identity == home.identity()?
-                && control.native_token_sha256 == digest(&key)
+                && control.native_token_sha256 == sha256_hex(&key)
                 && control.instance_id == record.instance_id
                 && control.profile_sha256 == record.profile_sha256
                 && control.host_session == record.host_session,
@@ -156,7 +154,7 @@ impl Selected {
         let request: Request = serde_json::from_slice(&bytes)?;
         ensure!(
             request.contract == REQUEST
-                && request.control_sha256 == digest(&self.bytes)
+                && request.control_sha256 == sha256_hex(&self.bytes)
                 && request.nonce.len() == 43,
             "edit_stop_request_identity"
         );
@@ -170,7 +168,7 @@ impl Selected {
         let receipt: Receipt = serde_json::from_slice(&bytes)?;
         ensure!(
             receipt.contract == RECEIPT
-                && receipt.control_sha256 == digest(&self.bytes)
+                && receipt.control_sha256 == sha256_hex(&self.bytes)
                 && receipt.reason.len() <= 64,
             "edit_stop_receipt_identity"
         );
@@ -178,7 +176,7 @@ impl Selected {
         if let Some(request) = &receipt.request_sha256 {
             ensure!(
                 self.request()?
-                    .is_some_and(|bytes| digest(&bytes) == *request),
+                    .is_some_and(|bytes| sha256_hex(&bytes) == *request),
                 "edit_stop_receipt_request"
             );
         }
@@ -208,7 +206,7 @@ impl Selected {
     fn daemon(&self) -> Result<()> {
         let bytes = self.home.read("config.yaml")?;
         ensure!(
-            digest(&bytes) == self.control.config_sha256,
+            sha256_hex(&bytes) == self.control.config_sha256,
             "edit_stop_daemon_configuration_changed"
         );
         let cfg = crate::Config::from_yaml(std::str::from_utf8(&bytes)?)?;
@@ -290,14 +288,14 @@ pub(super) fn retained_completion(
             && selected.dir.read("stop-receipt.json")? == profile::canonical(&receipt)?,
         "edit_review_receipt_changed"
     );
-    profile::canonical(&(digest(&selected.bytes), receipt))
+    profile::canonical(&(sha256_hex(&selected.bytes), receipt))
 }
 
 fn retained_config(bytes: &[u8], control_digest: &str, context_digest: &str) -> Result<()> {
     // The Stop control binds exact YAML bytes. Diagnostics bind the validated
     // Config serialization. Verify both producer-owned domains independently.
     ensure!(
-        digest(bytes) == control_digest,
+        sha256_hex(bytes) == control_digest,
         "edit_review_config_bytes_changed"
     );
     let config = crate::Config::from_yaml(std::str::from_utf8(bytes)?)?;
@@ -326,14 +324,14 @@ impl Guard {
         let key = home.read("native-token")?;
         let control = Control {
             contract: CONTRACT.into(),
-            run_sha256: digest(&dir.read("run.json")?),
+            run_sha256: sha256_hex(&dir.read("run.json")?),
             run_identity: dir.identity()?,
             home_identity: home.identity()?,
             launcher_pid: std::process::id(),
             launcher_start: crate::pilot_approval::process_start(std::process::id())?,
             manifest_fd: crate::pilot_approval::descriptor(&manifest),
-            config_sha256: digest(&home.read("config.yaml")?),
-            native_token_sha256: digest(&key),
+            config_sha256: sha256_hex(&home.read("config.yaml")?),
+            native_token_sha256: sha256_hex(&key),
             instance_id: record.instance_id.clone(),
             profile_sha256: record.profile_sha256.clone(),
             host_session: record.host_session.clone(),
@@ -365,13 +363,13 @@ impl Guard {
         // keeps the interrupted evidence and can never become a successful stop.
         ensure!(
             s.dir.read("control.json")? == s.bytes
-                && digest(&s.dir.read("run.json")?) == s.control.run_sha256,
+                && sha256_hex(&s.dir.read("run.json")?) == s.control.run_sha256,
             "edit_stop_control_changed"
         );
-        let request_sha256 = s.request()?.map(|bytes| digest(&bytes));
+        let request_sha256 = s.request()?.map(|bytes| sha256_hex(&bytes));
         let mut receipt = Receipt {
             contract: RECEIPT.into(),
-            control_sha256: digest(&s.bytes),
+            control_sha256: sha256_hex(&s.bytes),
             request_sha256,
             authority_revoked: revoked,
             cleanup_confirmed: cleaned,
@@ -412,7 +410,7 @@ fn operate(path: &Path, report: &mut Value) -> Result<()> {
         if selected.request()?.is_none() {
             let mut request = Request {
                 contract: REQUEST.into(),
-                control_sha256: digest(&selected.bytes),
+                control_sha256: sha256_hex(&selected.bytes),
                 nonce: crate::token::generate(),
                 signature: String::new(),
             };
@@ -468,7 +466,7 @@ mod tests {
     fn review_binds_yaml_bytes_and_semantic_configuration_without_crossing_domains() {
         let config = crate::Config::default();
         let bytes = serde_yaml::to_string(&config).unwrap();
-        let raw = digest(bytes.as_bytes());
+        let raw = sha256_hex(bytes.as_bytes());
         let semantic = crate::protection_status::config_digest(&config);
         assert_ne!(raw, semantic);
         retained_config(bytes.as_bytes(), &raw, &semantic).unwrap();
@@ -478,7 +476,7 @@ mod tests {
         assert!(retained_config(reformatted.as_bytes(), &raw, &semantic).is_err());
         retained_config(
             reformatted.as_bytes(),
-            &digest(reformatted.as_bytes()),
+            &sha256_hex(reformatted.as_bytes()),
             &semantic,
         )
         .unwrap();

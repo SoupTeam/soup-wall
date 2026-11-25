@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::hashing::sha256_hex;
 use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -13,32 +14,11 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
-use super::fixture::{self, sha256};
+use super::fixture;
 use super::{base_report, overall, pending_scenarios, render_human, Args, Scenario, Status};
 
+use super::shared::*;
 use super::windows_safety::{self as safety, Owned, INTERRUPTED, OVERFLOW};
-
-const WORKSPACE_PREFIX: &str = "agentfw-self-test-";
-const OWNER_MARKER: &str = ".agentfw-self-test-owner";
-const MAX_REPLY_LINE: usize = 512 * 1024;
-const MAX_LOG_READ: u64 = 8 * 1024 * 1024;
-const MAX_RECEIVER_BODY: usize = 64 * 1024;
-const MAX_RECEIVER_CONNECTIONS: usize = 32;
-const REPLY_TIMEOUT: Duration = Duration::from_secs(15);
-const DAEMON_START_TIMEOUT: Duration = Duration::from_secs(30);
-
-#[derive(Debug)]
-pub(crate) struct Abort {
-    status: Status,
-    reason: String,
-}
-
-fn abort(status: Status, reason: impl Into<String>) -> Abort {
-    Abort {
-        status,
-        reason: reason.into(),
-    }
-}
 
 fn interrupted() -> bool {
     INTERRUPTED.load(Ordering::SeqCst) || OVERFLOW.load(Ordering::SeqCst)
@@ -240,31 +220,6 @@ fn lines(path: &Path) -> Vec<Vec<u8>> {
         .collect()
 }
 
-fn hash_file(path: &Path) -> std::io::Result<(String, u64)> {
-    use sha2::{Digest, Sha256};
-    let mut file = File::open(path)?;
-    let mut hasher = Sha256::new();
-    let mut buffer = vec![0u8; 1024 * 1024];
-    let mut size = 0u64;
-    loop {
-        let read = file.read(&mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        size += read as u64;
-        hasher.update(&buffer[..read]);
-    }
-    Ok((format!("{:x}", hasher.finalize()), size))
-}
-
-struct LoopbackReceiver {
-    url: String,
-    bodies: Arc<Mutex<Vec<Vec<u8>>>>,
-    connections: Arc<AtomicUsize>,
-    stop: Arc<AtomicBool>,
-    thread: Option<std::thread::JoinHandle<()>>,
-}
-
 impl LoopbackReceiver {
     fn start() -> std::io::Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", 0))?;
@@ -397,47 +352,6 @@ fn receive(mut stream: TcpStream) -> Option<Vec<u8>> {
     Some(bytes[header_end..].to_vec())
 }
 
-fn contains(haystack: &[u8], needle: &[u8]) -> bool {
-    !needle.is_empty() && haystack.windows(needle.len()).any(|w| w == needle)
-}
-
-fn http_get(port: u16, path: &str) -> Option<(u16, Vec<u8>)> {
-    let address = SocketAddr::from(([127, 0, 0, 1], port));
-    let mut stream = TcpStream::connect_timeout(&address, Duration::from_millis(500)).ok()?;
-    stream.set_read_timeout(Some(Duration::from_secs(1))).ok()?;
-    stream
-        .write_all(
-            format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
-                .as_bytes(),
-        )
-        .ok()?;
-    let mut bytes = Vec::new();
-    stream.take(64 * 1024).read_to_end(&mut bytes).ok()?;
-    let text = String::from_utf8_lossy(&bytes);
-    let status = text.split_whitespace().nth(1)?.parse().ok()?;
-    let body = text
-        .split_once("\r\n\r\n")
-        .map(|(_, b)| b.as_bytes().to_vec())
-        .unwrap_or_default();
-    Some((status, body))
-}
-
-fn free_port() -> Option<u16> {
-    TcpListener::bind(("127.0.0.1", 0))
-        .ok()?
-        .local_addr()
-        .ok()
-        .map(|a| a.port())
-}
-
-struct Assets {
-    agent: PathBuf,
-    runner: PathBuf,
-    classifier_script: PathBuf,
-    classifier_python: PathBuf,
-    identities: Value,
-}
-
 fn executable(path: &Path) -> bool {
     std::fs::metadata(path)
         .map(|m| m.is_file())
@@ -495,7 +409,7 @@ fn validate(args: &Args) -> Result<Assets, Vec<String>> {
         Some(path) => {
             match read_limited(path, 1024 * 1024 + 1) {
                 Ok(bytes) if bytes.len() <= 1024 * 1024 => {
-                    let digest = sha256(&bytes);
+                    let digest = sha256_hex(&bytes);
                     if digest != expected {
                         problems.push("the classifier source does not match --classifier-sha256 (wrong revision)".into());
                     }
@@ -558,8 +472,8 @@ fn validate(args: &Args) -> Result<Assets, Vec<String>> {
         "classifier": {"kind": args.classifier, "source": "rule-baseline/python", "source_sha256": script_sha,
                        "expected_sha256": expected, "python_version": python_version},
         "policy": {"source": "shipped default agent policy embedded in the self-test runner",
-                   "sha256": sha256(fixture::SHIPPED_POLICY.as_bytes())},
-        "registry": {"registry_id": fixture::REGISTRY_ID, "sha256": sha256(&fixture::registry())},
+                   "sha256": sha256_hex(fixture::SHIPPED_POLICY.as_bytes())},
+        "registry": {"registry_id": fixture::REGISTRY_ID, "sha256": sha256_hex(&fixture::registry())},
         "fixtures": {"version": fixture::FIXTURE_VERSION, "sha256": fixture::fixture_sha256()},
     });
     Ok(Assets {
@@ -583,7 +497,7 @@ fn start_daemon(
     configured: &mut serde_json::Map<String, Value>,
     bounded_audit_retention: bool,
 ) -> Result<Daemon, Abort> {
-    let registry_sha = sha256(&fixture::registry());
+    let registry_sha = sha256_hex(&fixture::registry());
     let mut attempts = Vec::new();
     let mut candidates: Vec<Option<u16>> = vec![preferred, None, None];
     if preferred.is_none() {
@@ -748,14 +662,6 @@ fn start_daemon(
         "the owned Agent daemon did not start in enforcing mode; see start_attempts (port collision, startup failure or timeout)"))
 }
 
-enum Reply {
-    Line(Vec<u8>),
-    Closed,
-    Timeout,
-    Malformed,
-    Interrupted,
-}
-
 struct Harness {
     process: Owned,
     stdin: Option<ChildStdin>,
@@ -890,102 +796,9 @@ impl Harness {
     }
 }
 
-fn frame(id: u64, method: &str, params: Value) -> Vec<u8> {
-    let mut value = json!({"jsonrpc": "2.0", "id": id, "method": method});
-    if !params.is_null() {
-        value["params"] = params;
-    }
-    value.to_string().into_bytes()
-}
-
-fn call_frame(id: u64, tool: &str, arguments: Value) -> Vec<u8> {
-    frame(
-        id,
-        "tools/call",
-        json!({"name": tool, "arguments": arguments,
-        "_meta": {"claudecode/toolUseId": format!("toolu_selftest_{id}"), "progressToken": id}}),
-    )
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Outcome {
-    Released(String),
-    Refused(String),
-    ResultWithheld(String),
-    PolicyNotReached,
-    Error,
-    Malformed,
-}
-
-impl Outcome {
-    fn label(&self) -> &'static str {
-        match self {
-            Outcome::Released(_) => "released",
-            Outcome::Refused(_) => "invocation_refused",
-            Outcome::ResultWithheld(_) => "result_withheld",
-            Outcome::PolicyNotReached => "policy_not_reached",
-            Outcome::Error => "error",
-            Outcome::Malformed => "malformed",
-        }
-    }
-}
-
-pub(crate) fn outcome(line: &[u8], expected_id: u64) -> Outcome {
-    let Ok(value) = serde_json::from_slice::<Value>(line) else {
-        return Outcome::Malformed;
-    };
-    if value["jsonrpc"] != "2.0" || value["id"] != json!(expected_id) {
-        return Outcome::Malformed;
-    }
-    if let Some(error) = value.get("error") {
-        let message = error["message"].as_str().unwrap_or_default();
-        return if message.contains("policy not reached") {
-            Outcome::PolicyNotReached
-        } else {
-            Outcome::Error
-        };
-    }
-    let result = &value["result"];
-    let Some(text) = result["content"]
-        .as_array()
-        .and_then(|c| c.first())
-        .and_then(|b| b["text"].as_str())
-    else {
-        return Outcome::Malformed;
-    };
-    let reason = |prefix: &str| {
-        text.strip_prefix(prefix)
-            .and_then(|r| r.strip_suffix(')'))
-            .map(str::to_owned)
-    };
-    if result["isError"] == true {
-        if let Some(reason) = reason("Soup Wall withheld MCP invocation (") {
-            return Outcome::Refused(reason);
-        }
-        if let Some(reason) = reason("Soup Wall withheld MCP result (") {
-            return Outcome::ResultWithheld(reason);
-        }
-        return Outcome::Error;
-    }
-    Outcome::Released(text.to_owned())
-}
-
 struct Witness<'a> {
     ws: &'a Workspace,
     receiver: &'a LoopbackReceiver,
-}
-
-struct Observation {
-    reply: Option<Vec<u8>>,
-    outcome: Outcome,
-    transport: &'static str,
-    frame: Vec<u8>,
-    executed: Vec<Vec<u8>>,
-    responses_before: usize,
-    deliveries: usize,
-    connections: usize,
-    audit: Vec<Value>,
-    latency_ms: f64,
 }
 
 fn audit_records(path: &Path) -> Vec<Value> {
@@ -1064,20 +877,6 @@ fn observe(
         transport,
         frame,
         latency_ms,
-    }
-}
-
-fn observed_json(o: &Observation) -> Value {
-    json!({"transport": o.transport, "outcome": o.outcome.label(),
-           "reason": match &o.outcome { Outcome::Refused(r) | Outcome::ResultWithheld(r) => json!(r), _ => Value::Null },
-           "mcp_child_executions": o.executed.len(), "receiver_deliveries": o.deliveries,
-           "receiver_connections": o.connections, "latency_ms": o.latency_ms})
-}
-
-fn not_completed(o: &Observation) -> Option<Status> {
-    match o.transport {
-        "reply" => None,
-        _ => Some(Status::Incomplete),
     }
 }
 
@@ -1666,12 +1465,6 @@ fn exercise(
         }
     });
     Exercise { abort, processes }
-}
-
-fn receiver_address_control(url: &str) -> bool {
-    fixture::receiver_address(url)
-        .map(|address| fixture::post(address, fixture::RECEIVER_CONTROL_BODY).is_ok())
-        .unwrap_or(false)
 }
 
 fn finish(

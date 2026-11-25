@@ -54,7 +54,9 @@ MAX_MANIFEST = 256 * 1024
 # change: 796,413,288 payload bytes, 215,934,064 gzip -1 bytes. The hosted
 # producer must still measure and remain under these finite refusal limits.
 MAX_ARCHIVE = 576 * 1024 * 1024
-MAX_FILE = 320 * 1024 * 1024
+# The debug agentfw library test binary reached 347,716,912 bytes with the
+# Codex MCP lifecycle (main was 314,518,976), over the earlier 320 MiB.
+MAX_FILE = 384 * 1024 * 1024
 MAX_PAYLOAD = 2048 * 1024 * 1024
 CHUNK = 1024 * 1024
 MAX_TAIL = tarfile.RECORDSIZE + 1024

@@ -208,6 +208,16 @@ jobs:
       - run: cargo fmt --all -- --check
       - name: Install Linux sandbox runtime
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y bubblewrap
+      - name: Qualify the job-scoped bubblewrap copy for reader tests
+        id: reader_sandbox
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          source=/usr/bin/bwrap
+          python3 -I -B scripts/ci_bwrap_userns.py install --source "$source" \
+            --sha256 "$(sha256sum "$source" | cut -d ' ' -f1)" \
+            --report "$RUNNER_TEMP/reader-sandbox-install.json"
       - name: Retain focused provenance-overflow regressions
         run: |
           set -o pipefail
@@ -253,6 +263,35 @@ jobs:
           if-no-files-found: warn
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
+      - name: Require all eight SOU-111 reader witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          witnesses=(
+            native::consumer::lifecycle_tests::connected_quarantine_reader
+            native::consumer::analysis_witness::connected_analysis_fixture
+            native::consumer::analysis_witness::connected_gemini_operator_capture_fixture
+            native::consumer::analysis_witness::connected_gemini_provider_fixture
+            native::consumer::analysis_witness::connected_gemini_serial_controller_fixture
+            native::consumer::crash_witness::analysis_output_daemon_crash
+            native::consumer::crash_witness::quarantine_reader_daemon_crash
+            sandbox::fixture_reader::linux::reader_kernel_witness
+          )
+          cargo test --locked -p agentfw --lib -- --ignored --exact "${witnesses[@]}" | tee "$RUNNER_TEMP/reader-witnesses.log"
+          for witness in "${witnesses[@]}"; do
+            grep -Fx "test $witness ... ok" "$RUNNER_TEMP/reader-witnesses.log"
+          done
+      - name: Codex TOML connection lifecycle with a local Agent
+        run: |
+          python3 -B scripts/codex-mcp-acceptance.py --agentfw target/debug/agentfw \
+            --lifecycle-only --out target/codex-ci/lifecycle.json
+      - name: Retain Codex TOML lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: codex-toml-lifecycle
+          path: target/codex-ci/lifecycle.json
+          if-no-files-found: warn
       - name: Retain Task 3 attack scenario results
         if: always()
         uses: actions/upload-artifact@v7
@@ -326,6 +365,12 @@ jobs:
           name: sou89-native-liveness-acceptance
           path: target/sou89-acceptance/
           if-no-files-found: warn
+      - name: Remove the job-scoped reader sandbox profile
+        if: always() && steps.reader_sandbox.outcome != 'skipped'
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: python3 -I -B scripts/ci_bwrap_userns.py cleanup --report "$RUNNER_TEMP/reader-sandbox-cleanup.json"
+
 
   python-classifier:
     name: Python classifier and evaluation
@@ -567,10 +612,10 @@ jobs:
           # PR caches remain scoped to refs/pull/<n>/merge; privileged admission never restores them.
           save-if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
           cache-bin: false
-      - name: Install Linux sandbox runtime
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y bubblewrap
       - run: cargo clippy --workspace --all-features --all-targets --locked -- -D warnings
       - run: cargo test --workspace --all-features --locked
+
+
 
   agent-windows-security:
     name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Deferred - agent-windows-security' || 'agent-windows-security' }}
