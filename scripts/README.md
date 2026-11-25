@@ -43,6 +43,9 @@ Preparing, installing, running, qualifying and maintaining the Linux pilot.
 | [`ci-pilot-cleanup.sh`](ci-pilot-cleanup.sh) |  |
 | [`ci_pilot_user_session.py`](ci_pilot_user_session.py) | Observe or quiesce an empty owned hosted-CI user session before pilot use. |
 | [`claude_pilot_acceptance.py`](claude_pilot_acceptance.py) | Portable fixture/preview controls for the Claude Code launcher (SOU-99). |
+| [`copilot-filesystem-acceptance.py`](copilot-filesystem-acceptance.py) | Actual Copilot CLI against the pinned original filesystem MCP, offline and USD0. |
+| [`copilot-hook-fault-acceptance.py`](copilot-hook-fault-acceptance.py) | Characterize Copilot 1.0.112 command-hook failures on owned local fixtures. |
+| [`copilot-mcp-acceptance.py`](copilot-mcp-acceptance.py) | Copilot CLI 1.0.112 with native stdio admission and an owned loopback provider. |
 | [`pilot-cleanup.py`](pilot-cleanup.py) | Inspect one owned preparation generation; remove it only with a matching confirmation. |
 | [`pilot-demo.py`](pilot-demo.py) | Run the prepared Linux pilot walkthrough with a local scripted provider. |
 | [`pilot-run-archive.py`](pilot-run-archive.py) | Explicit preview -> verified private archive -> apply for completed audit-only runs. |

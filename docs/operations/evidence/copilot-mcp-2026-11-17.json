@@ -1,0 +1,1135 @@
+{
+  "format": "soup-wall/copilot-mcp-acceptance/1",
+  "recorded_date": "2026-11-17",
+  "base_sha": "78175d170ca94fdb2135e57ba2f26c8ab37cd9b1",
+  "implementation_sha": "9664df083bf464a8ef4077983a758e33390ccfd6",
+  "environment": "Ubuntu 24.04 under WSL2, Linux x86_64",
+  "local_rust": "1.100.0; repository CI pins 1.99.1",
+  "acceptance": {
+    "generic_stdio": {
+      "source_sha": "9664df083bf464a8ef4077983a758e33390ccfd6",
+      "copilot_version": "GitHub Copilot CLI 1.0.112.\nRun 'copilot update' to check for updates.",
+      "agentfw_sha256": "59b67ba733dc9f6f005d765397d79552dd6e726dc774b5b60f3077c84e0af495",
+      "copilot_entry_sha256": "463978cdea4ad6973b615f1ba07b7837634218632480ef06307ea844ee369a69",
+      "external_provider_requests": 0,
+      "checks": [
+        {
+          "check": "pinned_host_version",
+          "passed": true
+        },
+        {
+          "check": "preview_exit_1",
+          "passed": true
+        },
+        {
+          "check": "preview_redacted_2",
+          "passed": true
+        },
+        {
+          "check": "preview_no_write",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_4",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_5",
+          "passed": true
+        },
+        {
+          "check": "connect_configured",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_7",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_8",
+          "passed": true
+        },
+        {
+          "check": "reconnect_idempotent",
+          "passed": true
+        },
+        {
+          "check": "unrelated_bytes_preserved",
+          "passed": true
+        },
+        {
+          "check": "inspect_exit_11",
+          "passed": true
+        },
+        {
+          "check": "inspect_redacted_12",
+          "passed": true
+        },
+        {
+          "check": "probe_verified",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_14",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_15",
+          "passed": true
+        },
+        {
+          "check": "disconnect_restores_selected_entry",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_17",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_18",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_19",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_20",
+          "passed": true
+        },
+        {
+          "check": "unrelated_edit_survives",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_22",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_23",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_24",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_25",
+          "passed": true
+        },
+        {
+          "check": "selected_conflict_preserved",
+          "passed": true
+        },
+        {
+          "check": "real_host_exit",
+          "passed": true
+        },
+        {
+          "check": "private_settings_after_host",
+          "passed": true
+        },
+        {
+          "check": "real_host_completed_sequence",
+          "passed": true
+        },
+        {
+          "check": "exact_server_executions",
+          "passed": true
+        },
+        {
+          "check": "only_allowed_delivery",
+          "passed": true
+        },
+        {
+          "check": "delete_denied",
+          "passed": true
+        },
+        {
+          "check": "useful_read",
+          "passed": true
+        },
+        {
+          "check": "result_withheld",
+          "passed": true
+        },
+        {
+          "check": "ask_withheld",
+          "passed": true
+        },
+        {
+          "check": "builtin_coverage_boundary",
+          "passed": true
+        },
+        {
+          "check": "host_result_correlations",
+          "passed": true
+        },
+        {
+          "check": "host_result_dispositions",
+          "passed": true
+        },
+        {
+          "check": "outage_no_execution",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "selected_stdio_mcp": "tested_below",
+        "builtin_tools": "not_enforced",
+        "hooks": "not_installed"
+      },
+      "runtime_tree_sha256": "04161904656f966e9c8b14252b4438afb109985678046697ab6fd8259d4047e3",
+      "runtime_file_count": 19,
+      "host_timed_out": false,
+      "observed_server_executions": [
+        "read_document",
+        "send_http",
+        "read_document",
+        "read_document"
+      ],
+      "server_witness_sha256": "53dcc04ef3b685f1df7c62b1ebafa5130b51f21432135c4d79a625f7dceac283",
+      "passed": true,
+      "source_file_count": 253,
+      "source_files_manifest_sha256": "22eaf05a84d5d9f1fc18992906e13315173749ab64ebc5aa165c003e1652f921",
+      "source_files_sha256": {
+        "Cargo.lock": "cf588b3b510deac853e55b4bcf0547f26757b33a202b66f244fcdb454ee5c78f",
+        "crates/agentfw/src/copilot_hook.rs": "1a33e89d206f9912ff75e28f11d871272abc7f1d6e3b60b20a0e92fb04f3732e",
+        "crates/agentfw/src/gemini_hook.rs": "047c353a6539108af13f80c2a24ad8dcfd91c99452b22799a299c5eb0e6daa12",
+        "crates/agentfw/src/mcp/admission/real_server.rs": "146fb37d4647380a51bdee59c44c2ebc58451e04c1c62869c3f43d8e4397024e",
+        "crates/agentfw/src/mcp/admission.rs": "fe7f04796e546b56dccebadd1a1cccaa8b04d134128b4feeeee07198dab86983",
+        "crates/agentfw/src/mcp/connection/host_config.rs": "f48aa193292f5195f1125c4f968f77a1bb1ee1868420ad5bf93540577f8337af",
+        "crates/agentfw/src/mcp/connection.rs": "a2ab1fb47bfcadb856aa19d335a155ddca9998c87c2b033391d14656f5f4f2e6",
+        "scripts/copilot-filesystem-acceptance.py": "ebe908017c7e555ec2b466f89181065be182880de9ef47f9ce2f99783ddcf61b",
+        "scripts/copilot-hook-fault-acceptance.py": "74e78e7323822fc19055cc6091c3654098a9f70c41710e92c1cb40fb7ee094f9",
+        "scripts/copilot-mcp-acceptance.py": "b5616ffd6cfd8c700d857a3559469485943b5492e84479201183c94cc4380cf8",
+        "scripts/opencode-mcp-acceptance.py": "9fba79274c5b7e18bf8944c36e4a75256c3a0bb4658f2bae16853702fadc91ab"
+      },
+      "live_model_evaluation": false
+    },
+    "signed_hooks": {
+      "source_sha": "9664df083bf464a8ef4077983a758e33390ccfd6",
+      "copilot_version": "GitHub Copilot CLI 1.0.112.\nRun 'copilot update' to check for updates.",
+      "agentfw_sha256": "59b67ba733dc9f6f005d765397d79552dd6e726dc774b5b60f3077c84e0af495",
+      "copilot_entry_sha256": "463978cdea4ad6973b615f1ba07b7837634218632480ef06307ea844ee369a69",
+      "external_provider_requests": 0,
+      "checks": [
+        {
+          "check": "pinned_host_version",
+          "passed": true
+        },
+        {
+          "check": "preview_exit_1",
+          "passed": true
+        },
+        {
+          "check": "preview_redacted_2",
+          "passed": true
+        },
+        {
+          "check": "preview_no_write",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_4",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_5",
+          "passed": true
+        },
+        {
+          "check": "connect_configured",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_7",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_8",
+          "passed": true
+        },
+        {
+          "check": "reconnect_idempotent",
+          "passed": true
+        },
+        {
+          "check": "unrelated_bytes_preserved",
+          "passed": true
+        },
+        {
+          "check": "inspect_exit_11",
+          "passed": true
+        },
+        {
+          "check": "inspect_redacted_12",
+          "passed": true
+        },
+        {
+          "check": "probe_verified",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_14",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_15",
+          "passed": true
+        },
+        {
+          "check": "disconnect_restores_selected_entry",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_17",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_18",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_19",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_20",
+          "passed": true
+        },
+        {
+          "check": "unrelated_edit_survives",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_22",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_23",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_24",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_25",
+          "passed": true
+        },
+        {
+          "check": "selected_conflict_preserved",
+          "passed": true
+        },
+        {
+          "check": "real_host_exit",
+          "passed": true
+        },
+        {
+          "check": "private_settings_after_host",
+          "passed": true
+        },
+        {
+          "check": "real_host_completed_sequence",
+          "passed": true
+        },
+        {
+          "check": "exact_server_executions",
+          "passed": true
+        },
+        {
+          "check": "only_allowed_delivery",
+          "passed": true
+        },
+        {
+          "check": "delete_denied",
+          "passed": true
+        },
+        {
+          "check": "useful_read",
+          "passed": true
+        },
+        {
+          "check": "result_withheld",
+          "passed": true
+        },
+        {
+          "check": "ask_withheld",
+          "passed": true
+        },
+        {
+          "check": "builtin_coverage_boundary",
+          "passed": true
+        },
+        {
+          "check": "host_result_correlations",
+          "passed": true
+        },
+        {
+          "check": "host_result_dispositions",
+          "passed": true
+        },
+        {
+          "check": "outage_no_execution",
+          "passed": true
+        },
+        {
+          "check": "shared_authenticated_session",
+          "passed": true
+        },
+        {
+          "check": "wrong_token_and_proof_no_execution_then_recovery",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "selected_stdio_mcp": "tested_below",
+        "builtin_tools": "refused_when_callback_runs; host_timeout_malformed_output_and_post_crash_remain_fail_open",
+        "hooks": "one_signed_native_mcp_binding"
+      },
+      "runtime_tree_sha256": "04161904656f966e9c8b14252b4438afb109985678046697ab6fd8259d4047e3",
+      "runtime_file_count": 19,
+      "host_timed_out": false,
+      "observed_server_executions": [
+        "read_document",
+        "send_http",
+        "read_document",
+        "read_document",
+        "read_document"
+      ],
+      "shared_identity_witness": {
+        "native_calls": 5,
+        "before_callbacks": 8,
+        "after_callbacks": 4
+      },
+      "binding_sha256": "49adb79935c33a9432506bbab523275f53fd87c2a609a431e572d023bcc4f52b",
+      "server_witness_sha256": "bb9a499b9cc1297f5a071df07485e693e468d1984a96d1a751c9270c59a54b07",
+      "passed": true,
+      "source_file_count": 253,
+      "source_files_manifest_sha256": "22eaf05a84d5d9f1fc18992906e13315173749ab64ebc5aa165c003e1652f921",
+      "source_files_sha256": {
+        "Cargo.lock": "cf588b3b510deac853e55b4bcf0547f26757b33a202b66f244fcdb454ee5c78f",
+        "crates/agentfw/src/copilot_hook.rs": "1a33e89d206f9912ff75e28f11d871272abc7f1d6e3b60b20a0e92fb04f3732e",
+        "crates/agentfw/src/gemini_hook.rs": "047c353a6539108af13f80c2a24ad8dcfd91c99452b22799a299c5eb0e6daa12",
+        "crates/agentfw/src/mcp/admission/real_server.rs": "146fb37d4647380a51bdee59c44c2ebc58451e04c1c62869c3f43d8e4397024e",
+        "crates/agentfw/src/mcp/admission.rs": "fe7f04796e546b56dccebadd1a1cccaa8b04d134128b4feeeee07198dab86983",
+        "crates/agentfw/src/mcp/connection/host_config.rs": "f48aa193292f5195f1125c4f968f77a1bb1ee1868420ad5bf93540577f8337af",
+        "crates/agentfw/src/mcp/connection.rs": "a2ab1fb47bfcadb856aa19d335a155ddca9998c87c2b033391d14656f5f4f2e6",
+        "scripts/copilot-filesystem-acceptance.py": "ebe908017c7e555ec2b466f89181065be182880de9ef47f9ce2f99783ddcf61b",
+        "scripts/copilot-hook-fault-acceptance.py": "74e78e7323822fc19055cc6091c3654098a9f70c41710e92c1cb40fb7ee094f9",
+        "scripts/copilot-mcp-acceptance.py": "b5616ffd6cfd8c700d857a3559469485943b5492e84479201183c94cc4380cf8",
+        "scripts/opencode-mcp-acceptance.py": "9fba79274c5b7e18bf8944c36e4a75256c3a0bb4658f2bae16853702fadc91ab"
+      },
+      "live_model_evaluation": false
+    },
+    "hook_fault_characterization": {
+      "kind": "host_hook_contract_characterization_not_native_enforcement_qualification",
+      "copilot_version": "GitHub Copilot CLI 1.0.112.\nRun 'copilot update' to check for updates.",
+      "source_sha": "9664df083bf464a8ef4077983a758e33390ccfd6",
+      "copilot_sha256": "463978cdea4ad6973b615f1ba07b7837634218632480ef06307ea844ee369a69",
+      "external_provider_requests": 0,
+      "cases": [
+        {
+          "case": "defer",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 2,
+          "deliveries": 1,
+          "result_reached_provider": true,
+          "expected_boundary": "transport_characterization",
+          "passed": true
+        },
+        {
+          "case": "deny",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 0,
+          "deliveries": 0,
+          "result_reached_provider": false,
+          "expected_boundary": "transport_characterization",
+          "passed": true
+        },
+        {
+          "case": "after_deny",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 2,
+          "deliveries": 1,
+          "result_reached_provider": false,
+          "expected_boundary": "transport_characterization",
+          "passed": true
+        },
+        {
+          "case": "exit1",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 0,
+          "deliveries": 0,
+          "result_reached_provider": false,
+          "expected_boundary": "transport_characterization",
+          "passed": true
+        },
+        {
+          "case": "exit2",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 0,
+          "deliveries": 0,
+          "result_reached_provider": false,
+          "expected_boundary": "transport_characterization",
+          "passed": true
+        },
+        {
+          "case": "timeout",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 2,
+          "deliveries": 1,
+          "result_reached_provider": true,
+          "expected_boundary": "host_fail_open",
+          "passed": true
+        },
+        {
+          "case": "malformed",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 2,
+          "deliveries": 1,
+          "result_reached_provider": true,
+          "expected_boundary": "host_fail_open",
+          "passed": true
+        },
+        {
+          "case": "after_exit1",
+          "host_exit": 0,
+          "host_timed_out": false,
+          "provider_requests": 3,
+          "executions": 2,
+          "deliveries": 1,
+          "result_reached_provider": true,
+          "expected_boundary": "host_fail_open",
+          "passed": true
+        }
+      ],
+      "passed": true,
+      "runtime_tree_sha256": "04161904656f966e9c8b14252b4438afb109985678046697ab6fd8259d4047e3",
+      "runtime_file_count": 19,
+      "source_file_count": 253,
+      "source_files_manifest_sha256": "22eaf05a84d5d9f1fc18992906e13315173749ab64ebc5aa165c003e1652f921",
+      "source_files_sha256": {
+        "Cargo.lock": "cf588b3b510deac853e55b4bcf0547f26757b33a202b66f244fcdb454ee5c78f",
+        "crates/agentfw/src/copilot_hook.rs": "1a33e89d206f9912ff75e28f11d871272abc7f1d6e3b60b20a0e92fb04f3732e",
+        "crates/agentfw/src/gemini_hook.rs": "047c353a6539108af13f80c2a24ad8dcfd91c99452b22799a299c5eb0e6daa12",
+        "crates/agentfw/src/mcp/admission/real_server.rs": "146fb37d4647380a51bdee59c44c2ebc58451e04c1c62869c3f43d8e4397024e",
+        "crates/agentfw/src/mcp/admission.rs": "fe7f04796e546b56dccebadd1a1cccaa8b04d134128b4feeeee07198dab86983",
+        "crates/agentfw/src/mcp/connection/host_config.rs": "f48aa193292f5195f1125c4f968f77a1bb1ee1868420ad5bf93540577f8337af",
+        "crates/agentfw/src/mcp/connection.rs": "a2ab1fb47bfcadb856aa19d335a155ddca9998c87c2b033391d14656f5f4f2e6",
+        "scripts/copilot-filesystem-acceptance.py": "ebe908017c7e555ec2b466f89181065be182880de9ef47f9ce2f99783ddcf61b",
+        "scripts/copilot-hook-fault-acceptance.py": "74e78e7323822fc19055cc6091c3654098a9f70c41710e92c1cb40fb7ee094f9",
+        "scripts/copilot-mcp-acceptance.py": "b5616ffd6cfd8c700d857a3559469485943b5492e84479201183c94cc4380cf8",
+        "scripts/opencode-mcp-acceptance.py": "9fba79274c5b7e18bf8944c36e4a75256c3a0bb4658f2bae16853702fadc91ab"
+      },
+      "live_model_evaluation": false
+    },
+    "original_filesystem": {
+      "source_sha": "9664df083bf464a8ef4077983a758e33390ccfd6",
+      "copilot_version": "GitHub Copilot CLI 1.0.112.\nRun 'copilot update' to check for updates.",
+      "server": "@modelcontextprotocol/server-filesystem@2026.8.31",
+      "checks": [
+        {
+          "check": "host_version",
+          "passed": true
+        },
+        {
+          "check": "original_write_positive_control",
+          "passed": true
+        },
+        {
+          "check": "daemon_ready",
+          "passed": true
+        },
+        {
+          "check": "preview",
+          "passed": true
+        },
+        {
+          "check": "connect",
+          "passed": true
+        },
+        {
+          "check": "inspect",
+          "passed": true
+        },
+        {
+          "check": "host_exit",
+          "passed": true
+        },
+        {
+          "check": "complete_sequence",
+          "passed": true
+        },
+        {
+          "check": "host_outcomes",
+          "passed": true
+        },
+        {
+          "check": "useful_original_read",
+          "passed": true
+        },
+        {
+          "check": "result_injection_withheld",
+          "passed": true
+        },
+        {
+          "check": "write_witness_unchanged",
+          "passed": true
+        },
+        {
+          "check": "disconnect",
+          "passed": true
+        }
+      ],
+      "external_provider_requests": 0,
+      "live_model_evaluation": false,
+      "passed": true,
+      "runtime_tree_sha256": "04161904656f966e9c8b14252b4438afb109985678046697ab6fd8259d4047e3",
+      "runtime_file_count": 19,
+      "pins": {
+        "profile_sha256": "4715f82808668a39092b64f9bf12ee4febb66f03aea64c7376204ee587a0164f",
+        "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+        "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+        "package_lock_sha256": "c320d8152786bcb785e41339c262c980c2c4c2106286e44fa7fd7d8ce92d23a7",
+        "node_version": "v22.23.5",
+        "bwrap_version": "bubblewrap 0.13.1"
+      },
+      "agentfw_sha256": "59b67ba733dc9f6f005d765397d79552dd6e726dc774b5b60f3077c84e0af495",
+      "host_timed_out": false,
+      "host_calls": [
+        {
+          "tool": "notes-read_text_file",
+          "status": "completed"
+        },
+        {
+          "tool": "notes-write_file",
+          "status": "failed"
+        },
+        {
+          "tool": "notes-read_text_file",
+          "status": "failed"
+        },
+        {
+          "tool": "notes-read_text_file",
+          "status": "completed"
+        }
+      ],
+      "source_file_count": 253,
+      "source_files_manifest_sha256": "22eaf05a84d5d9f1fc18992906e13315173749ab64ebc5aa165c003e1652f921",
+      "source_files_sha256": {
+        "Cargo.lock": "cf588b3b510deac853e55b4bcf0547f26757b33a202b66f244fcdb454ee5c78f",
+        "crates/agentfw/src/copilot_hook.rs": "1a33e89d206f9912ff75e28f11d871272abc7f1d6e3b60b20a0e92fb04f3732e",
+        "crates/agentfw/src/gemini_hook.rs": "047c353a6539108af13f80c2a24ad8dcfd91c99452b22799a299c5eb0e6daa12",
+        "crates/agentfw/src/mcp/admission/real_server.rs": "146fb37d4647380a51bdee59c44c2ebc58451e04c1c62869c3f43d8e4397024e",
+        "crates/agentfw/src/mcp/admission.rs": "fe7f04796e546b56dccebadd1a1cccaa8b04d134128b4feeeee07198dab86983",
+        "crates/agentfw/src/mcp/connection/host_config.rs": "f48aa193292f5195f1125c4f968f77a1bb1ee1868420ad5bf93540577f8337af",
+        "crates/agentfw/src/mcp/connection.rs": "a2ab1fb47bfcadb856aa19d335a155ddca9998c87c2b033391d14656f5f4f2e6",
+        "scripts/copilot-filesystem-acceptance.py": "ebe908017c7e555ec2b466f89181065be182880de9ef47f9ce2f99783ddcf61b",
+        "scripts/copilot-hook-fault-acceptance.py": "74e78e7323822fc19055cc6091c3654098a9f70c41710e92c1cb40fb7ee094f9",
+        "scripts/copilot-mcp-acceptance.py": "b5616ffd6cfd8c700d857a3559469485943b5492e84479201183c94cc4380cf8",
+        "scripts/opencode-mcp-acceptance.py": "9fba79274c5b7e18bf8944c36e4a75256c3a0bb4658f2bae16853702fadc91ab"
+      }
+    },
+    "gemini_signed_hook_regression": {
+      "source_sha": "9664df083bf464a8ef4077983a758e33390ccfd6",
+      "gemini_version": "0.68.0",
+      "agentfw_sha256": "59b67ba733dc9f6f005d765397d79552dd6e726dc774b5b60f3077c84e0af495",
+      "gemini_entry_sha256": "fcc38edd4f864c2f5fa582d7d133c19b1a04c697ad3143ab8045f92b77644c68",
+      "node_sha256": "2f822d544601dfff107f57d945b649d15c5bf6302595735a6bd9cdc7ee9669bd",
+      "external_provider_requests": 0,
+      "checks": [
+        {
+          "check": "pinned_host_version",
+          "passed": true
+        },
+        {
+          "check": "preview_exit_1",
+          "passed": true
+        },
+        {
+          "check": "preview_redacted_2",
+          "passed": true
+        },
+        {
+          "check": "preview_no_write",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_4",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_5",
+          "passed": true
+        },
+        {
+          "check": "connect_configured",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_7",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_8",
+          "passed": true
+        },
+        {
+          "check": "reconnect_idempotent",
+          "passed": true
+        },
+        {
+          "check": "unrelated_bytes_preserved",
+          "passed": true
+        },
+        {
+          "check": "inspect_exit_11",
+          "passed": true
+        },
+        {
+          "check": "inspect_redacted_12",
+          "passed": true
+        },
+        {
+          "check": "probe_verified",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_14",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_15",
+          "passed": true
+        },
+        {
+          "check": "disconnect_restores_selected_entry",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_17",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_18",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_19",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_20",
+          "passed": true
+        },
+        {
+          "check": "unrelated_edit_survives",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_22",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_23",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_24",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_25",
+          "passed": true
+        },
+        {
+          "check": "selected_conflict_preserved",
+          "passed": true
+        },
+        {
+          "check": "real_host_exit",
+          "passed": true
+        },
+        {
+          "check": "private_settings_after_host",
+          "passed": true
+        },
+        {
+          "check": "real_host_completed_sequence",
+          "passed": true
+        },
+        {
+          "check": "exact_server_executions",
+          "passed": true
+        },
+        {
+          "check": "only_allowed_delivery",
+          "passed": true
+        },
+        {
+          "check": "delete_denied",
+          "passed": true
+        },
+        {
+          "check": "useful_read",
+          "passed": true
+        },
+        {
+          "check": "result_withheld",
+          "passed": true
+        },
+        {
+          "check": "ask_withheld",
+          "passed": true
+        },
+        {
+          "check": "builtin_coverage_boundary",
+          "passed": true
+        },
+        {
+          "check": "host_result_correlations",
+          "passed": true
+        },
+        {
+          "check": "host_result_dispositions",
+          "passed": true
+        },
+        {
+          "check": "outage_no_execution",
+          "passed": true
+        },
+        {
+          "check": "shared_authenticated_session",
+          "passed": true
+        },
+        {
+          "check": "wrong_token_and_proof_no_execution_then_recovery",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "selected_stdio_mcp": "tested_below",
+        "builtin_tools": "refused_when_callback_runs; callback_crash_timeout_remain_host_fail_open",
+        "hooks": "one_signed_native_mcp_binding"
+      },
+      "runtime_tree_sha256": "b319cf2e0d6f8bd67a39dbba93078d68d97a67fdc4554d733cae0a7cfd9cb148",
+      "runtime_file_count": 820,
+      "shared_identity_witness": {
+        "native_calls": 5,
+        "before_callbacks": 8,
+        "after_callbacks": 5
+      },
+      "binding_sha256": "f3ce6a3f3d221c446372d7b8b76c9fac266305ae23f44f1facdc040204009a64",
+      "server_witness_sha256": "909e14a7091d00c3b1949049a5f5668797fd02cad77c034243f444d63d8af51f",
+      "passed": true,
+      "source_file_count": 252,
+      "source_files_manifest_sha256": "afd5e7bd0c632f8c8cc2931da9273ba58842f8e2d5e0cd6750a656171c30d9c0",
+      "source_files_sha256": {
+        "Cargo.lock": "cf588b3b510deac853e55b4bcf0547f26757b33a202b66f244fcdb454ee5c78f",
+        "crates/agentfw/src/copilot_hook.rs": "1a33e89d206f9912ff75e28f11d871272abc7f1d6e3b60b20a0e92fb04f3732e",
+        "crates/agentfw/src/gemini_hook.rs": "047c353a6539108af13f80c2a24ad8dcfd91c99452b22799a299c5eb0e6daa12",
+        "crates/agentfw/src/mcp/admission/real_server.rs": "146fb37d4647380a51bdee59c44c2ebc58451e04c1c62869c3f43d8e4397024e",
+        "crates/agentfw/src/mcp/admission.rs": "fe7f04796e546b56dccebadd1a1cccaa8b04d134128b4feeeee07198dab86983",
+        "crates/agentfw/src/mcp/connection/host_config.rs": "f48aa193292f5195f1125c4f968f77a1bb1ee1868420ad5bf93540577f8337af",
+        "crates/agentfw/src/mcp/connection.rs": "a2ab1fb47bfcadb856aa19d335a155ddca9998c87c2b033391d14656f5f4f2e6",
+        "scripts/gemini-filesystem-acceptance.py": "820f10bcd727939bbc3229d75c9f7fd44b641077e827362468aa32b5fdf3f0f4",
+        "scripts/gemini-hook-fault-acceptance.py": "ba59fb1c022d3892cb3a49517cf4e842b5204e5a9aea25d3924b949adb531d58",
+        "scripts/gemini-mcp-acceptance.py": "71f184102e2546d8624641ad7aa84e5093295ee008a9d92a7f92f3c41892fac2"
+      },
+      "live_model_evaluation": false
+    },
+    "opencode_signed_plugin_regression": {
+      "source_sha": "9664df083bf464a8ef4077983a758e33390ccfd6",
+      "opencode_version": "1.19.6",
+      "agentfw_sha256": "59b67ba733dc9f6f005d765397d79552dd6e726dc774b5b60f3077c84e0af495",
+      "opencode_entry_sha256": "aab0a58cd7fc5a1f17495b76c08e79989d331653d8b63156aca2f6e9e36d1173",
+      "external_provider_requests": 0,
+      "checks": [
+        {
+          "check": "pinned_host_version",
+          "passed": true
+        },
+        {
+          "check": "preview_exit_1",
+          "passed": true
+        },
+        {
+          "check": "preview_redacted_2",
+          "passed": true
+        },
+        {
+          "check": "preview_no_write",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_4",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_5",
+          "passed": true
+        },
+        {
+          "check": "connect_configured",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_7",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_8",
+          "passed": true
+        },
+        {
+          "check": "reconnect_idempotent",
+          "passed": true
+        },
+        {
+          "check": "unrelated_bytes_preserved",
+          "passed": true
+        },
+        {
+          "check": "inspect_exit_11",
+          "passed": true
+        },
+        {
+          "check": "inspect_redacted_12",
+          "passed": true
+        },
+        {
+          "check": "probe_verified",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_14",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_15",
+          "passed": true
+        },
+        {
+          "check": "disconnect_restores_selected_entry",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_17",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_18",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_19",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_20",
+          "passed": true
+        },
+        {
+          "check": "unrelated_edit_survives",
+          "passed": true
+        },
+        {
+          "check": "connect_exit_22",
+          "passed": true
+        },
+        {
+          "check": "connect_redacted_23",
+          "passed": true
+        },
+        {
+          "check": "disconnect_exit_24",
+          "passed": true
+        },
+        {
+          "check": "disconnect_redacted_25",
+          "passed": true
+        },
+        {
+          "check": "selected_conflict_preserved",
+          "passed": true
+        },
+        {
+          "check": "real_host_exit",
+          "passed": true
+        },
+        {
+          "check": "private_settings_after_host",
+          "passed": true
+        },
+        {
+          "check": "real_host_completed_sequence",
+          "passed": true
+        },
+        {
+          "check": "exact_server_executions",
+          "passed": true
+        },
+        {
+          "check": "only_allowed_delivery",
+          "passed": true
+        },
+        {
+          "check": "delete_denied",
+          "passed": true
+        },
+        {
+          "check": "useful_read",
+          "passed": true
+        },
+        {
+          "check": "result_withheld",
+          "passed": true
+        },
+        {
+          "check": "ask_withheld",
+          "passed": true
+        },
+        {
+          "check": "builtin_coverage_boundary",
+          "passed": true
+        },
+        {
+          "check": "host_result_correlations",
+          "passed": true
+        },
+        {
+          "check": "outage_no_execution",
+          "passed": true
+        },
+        {
+          "check": "shared_authenticated_session",
+          "passed": true
+        },
+        {
+          "check": "wrong_token_and_proof_no_execution_then_recovery",
+          "passed": true
+        }
+      ],
+      "coverage": {
+        "selected_stdio_mcp": "tested_below",
+        "builtin_tools": "refused_when_callback_runs; plugin_load_failure_remains_outside_coverage",
+        "hooks": "one_signed_native_mcp_binding"
+      },
+      "runtime_tree_sha256": "ec42cb4d0b8d71cefc12c631218216e587e2d1039c5982dc9c86290cc8d0e261",
+      "runtime_file_count": 9,
+      "host_calls": [
+        {
+          "tool": "demo_read_document",
+          "status": "completed"
+        },
+        {
+          "tool": "demo_send_http",
+          "status": "completed"
+        },
+        {
+          "tool": "demo_send_http",
+          "status": "error"
+        },
+        {
+          "tool": "demo_delete_note",
+          "status": "error"
+        },
+        {
+          "tool": "demo_send_http",
+          "status": "error"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "error"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "completed"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "error"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "error"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "completed"
+        },
+        {
+          "tool": "write",
+          "status": "error"
+        },
+        {
+          "tool": "demo_read_document",
+          "status": "error"
+        }
+      ],
+      "shared_identity_witness": {
+        "native_calls": 5,
+        "before_callbacks": 8,
+        "after_callbacks": 4
+      },
+      "binding_sha256": "e67f751ba1c2db321adf37171366a0a840ff57776e784a2e355b4f841295b484",
+      "server_witness_sha256": "0fa0e86ff2f2d19247c6edd8e3b01cb0bc179651ee2c1cefec2a1bc8a58c98f1",
+      "passed": true,
+      "source_file_count": 253,
+      "source_files_manifest_sha256": "299005bd24b5400f652f0129f716635910702611d7a0fb08fa6b9cdb1b8e637b",
+      "source_files_sha256": {
+        "Cargo.lock": "cf588b3b510deac853e55b4bcf0547f26757b33a202b66f244fcdb454ee5c78f",
+        "crates/agentfw/src/copilot_hook.rs": "1a33e89d206f9912ff75e28f11d871272abc7f1d6e3b60b20a0e92fb04f3732e",
+        "crates/agentfw/src/gemini_hook.rs": "047c353a6539108af13f80c2a24ad8dcfd91c99452b22799a299c5eb0e6daa12",
+        "crates/agentfw/src/mcp/admission/real_server.rs": "146fb37d4647380a51bdee59c44c2ebc58451e04c1c62869c3f43d8e4397024e",
+        "crates/agentfw/src/mcp/admission.rs": "fe7f04796e546b56dccebadd1a1cccaa8b04d134128b4feeeee07198dab86983",
+        "crates/agentfw/src/mcp/connection/host_config.rs": "f48aa193292f5195f1125c4f968f77a1bb1ee1868420ad5bf93540577f8337af",
+        "crates/agentfw/src/mcp/connection.rs": "a2ab1fb47bfcadb856aa19d335a155ddca9998c87c2b033391d14656f5f4f2e6",
+        "scripts/opencode-filesystem-acceptance.py": "92a642aea811d918ca4e4fef63c10b659295275c247a34df7fb9da084cafb2e6",
+        "scripts/opencode-mcp-acceptance.py": "9fba79274c5b7e18bf8944c36e4a75256c3a0bb4658f2bae16853702fadc91ab",
+        "scripts/opencode-plugin-fault-acceptance.py": "c48dbd111ce9ea20361d0442d761cdb44de931b03c1915f0cefebc804fb570b2",
+        "scripts/soup-wall-opencode.mjs": "2d95b9da0b7bc1ade47f8a04810cc46a77c660639399bafae5d12c39b6015e85"
+      },
+      "live_model_evaluation": false
+    }
+  },
+  "validation": {
+    "rust_workspace": {
+      "source_sha": "9664df083bf464a8ef4077983a758e33390ccfd6",
+      "passed": 2488,
+      "failed": 0,
+      "ignored": 40,
+      "binaries": 89
+    },
+    "clippy_workspace_all_targets": "passed",
+    "rustfmt": "passed",
+    "eval_unittests": 112,
+    "release_docs_unittests": 22,
+    "documentation_links_before_evidence_link": 1519
+  },
+  "limits": [
+    "Only Copilot CLI 1.0.112 Linux is qualified; no VS Code extension, Windows/macOS runtime or whole-session claim.",
+    "The actual-host selected transport is local; stdio alias preservation has unit coverage only.",
+    "Signed callback binding requires an explicit trusted run owner; no persistent launcher or multi-server binding installer.",
+    "Actual pre-hook timeouts and malformed JSON fail open, and post-hook crashes fail open. Native MCP remains the execution/result boundary.",
+    "After-hook failure withholding does not undo effects; failed MCP calls do not fire postToolUse.",
+    "Built-ins, hosted tools, background tasks and subagents remain outside native selected-MCP coverage.",
+    "Ask remains held; no interactive approval UI or combined single-use grant flow. Owned scripted local providers only; no live-model effectiveness measurement, USD0."
+  ]
+}

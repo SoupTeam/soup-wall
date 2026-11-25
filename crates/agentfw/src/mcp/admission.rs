@@ -2194,7 +2194,7 @@ fn discovery_params(value: &Value) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Observed Claude, Codex and Gemini identifiers are transport correlation only. They
+/// Observed host identifiers are transport correlation only. They
 /// never supply native session identity, arguments, authority or provenance.
 fn call_metadata(value: &Value) -> anyhow::Result<()> {
     if value.get("x-codex-turn-metadata").is_some() {
@@ -2202,7 +2202,12 @@ fn call_metadata(value: &Value) -> anyhow::Result<()> {
     }
     keys(
         value,
-        &["claudecode/toolUseId", "threadId", "progressToken"],
+        &[
+            "claudecode/toolUseId",
+            "threadId",
+            "com.github.copilot/toolCallId",
+            "progressToken",
+        ],
     )?;
     // OpenCode 1.19.6 sends only the SDK's safe nonnegative integer token.
     // It is transport correlation, never a native identity or authority claim.
@@ -2232,8 +2237,12 @@ fn call_metadata(value: &Value) -> anyhow::Result<()> {
     {
         return Ok(());
     }
-    let host_id = match (value.get("claudecode/toolUseId"), value.get("threadId")) {
-        (Some(id), None) | (None, Some(id)) => id,
+    let host_id = match (
+        value.get("claudecode/toolUseId"),
+        value.get("threadId"),
+        value.get("com.github.copilot/toolCallId"),
+    ) {
+        (Some(id), None, None) | (None, Some(id), None) | (None, None, Some(id)) => id,
         _ => bail!("unsupported MCP call correlation metadata"),
     };
     ensure!(

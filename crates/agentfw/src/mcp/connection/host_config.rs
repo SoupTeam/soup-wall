@@ -18,6 +18,7 @@ pub enum Host {
     Codex,
     Gemini,
     Opencode,
+    Copilot,
 }
 
 impl Host {
@@ -32,12 +33,13 @@ impl Host {
             Self::Codex => legacy.replacen("claude-", "codex-", 1),
             Self::Gemini => legacy.replacen("claude-", "gemini-", 1),
             Self::Opencode => legacy.replacen("claude-", "opencode-", 1),
+            Self::Copilot => legacy.replacen("claude-", "copilot-", 1),
         }
     }
     #[cfg(any(target_os = "linux", test))]
     pub(super) fn servers_key(self) -> &'static str {
         match self {
-            Self::Claude | Self::Gemini => "mcpServers",
+            Self::Claude | Self::Gemini | Self::Copilot => "mcpServers",
             Self::Codex => "mcp_servers",
             Self::Opencode => "mcp",
         }
@@ -45,7 +47,7 @@ impl Host {
     #[cfg(any(target_os = "linux", test))]
     pub(super) fn parse(self, bytes: &[u8]) -> Result<Value> {
         match self {
-            Self::Claude => {
+            Self::Claude | Self::Copilot => {
                 let super::super::admission::Strict(value) = serde_json::from_slice(bytes)
                     .map_err(|_| anyhow::anyhow!("invalid or duplicate JSON fields"))?;
                 Ok(value)
@@ -59,6 +61,24 @@ impl Host {
     // Only the selected OpenCode 1.19.6 entry is decoded; unrelated fields stay raw.
     #[cfg(any(target_os = "linux", test))]
     pub(super) fn decode(self, entry: &Value) -> Result<Value> {
+        if self == Self::Copilot {
+            let map = entry
+                .as_object()
+                .context("selected Copilot server must be an object")?;
+            ensure!(
+                map.keys()
+                    .all(|k| ["type", "command", "args", "env", "tools"].contains(&k.as_str()))
+                    && matches!(entry["type"].as_str(), Some("local" | "stdio"))
+                    && map
+                        .get("tools")
+                        .is_none_or(|v| v == &serde_json::json!(["*"])),
+                "unsupported selected Copilot server field, transport or filter"
+            );
+            let mut out = entry.clone();
+            out.as_object_mut().unwrap().remove("type");
+            out.as_object_mut().unwrap().remove("tools");
+            return Ok(out);
+        }
         if self != Self::Opencode {
             return Ok(entry.clone());
         }
@@ -84,6 +104,14 @@ impl Host {
 
     #[cfg(any(target_os = "linux", test))]
     pub(super) fn validate(self, entry: &Value) -> Result<()> {
+        if self == Self::Copilot {
+            ensure!(
+                std::iter::once(&entry["command"])
+                    .chain(entry["args"].as_array().into_iter().flatten())
+                    .all(|v| v.as_str().is_none_or(|s| !s.contains("${"))),
+                "Copilot launch interpolation is unsupported"
+            );
+        }
         if self == Self::Opencode {
             // OpenCode resolves these strings before spawning the wrapper. A
             // reviewed launch must not turn into environment/file-derived argv.
@@ -116,6 +144,21 @@ impl Host {
                 Ok(serde_json::to_vec_pretty(&value)?)
             }
             Self::Gemini => jsonc::replace(bytes, self.servers_key(), name, entry),
+            Self::Copilot => {
+                let mut encoded = self.parse(bytes)?[self.servers_key()][name].clone();
+                self.decode(&encoded)?;
+                let map = encoded
+                    .as_object_mut()
+                    .context("missing selected Copilot server")?;
+                for key in ["command", "args", "env"] {
+                    if let Some(value) = entry.get(key) {
+                        map.insert(key.to_string(), value.clone());
+                    } else {
+                        map.remove(key);
+                    }
+                }
+                jsonc::replace(bytes, self.servers_key(), name, &encoded)
+            }
             Self::Opencode => {
                 let mut command = vec![entry["command"].clone()];
                 command.extend(entry["args"].as_array().into_iter().flatten().cloned());
@@ -283,5 +326,42 @@ mod tests {
         ] {
             assert!(Host::Opencode.decode(&bad).is_err());
         }
+    }
+
+    #[test]
+    fn copilot_retains_transport_selector_and_unrelated_source() {
+        for transport in ["local", "stdio"] {
+            let original = json!({"type":transport,"command":"/usr/bin/python3","args":["argument"],"tools":["*"],"env":{}});
+            let prefix = "{\"mcpServers\":{\"demo\":";
+            let suffix=",\"other\":{\"url\":\"https://example.invalid\",\"headers\":{\"TOKEN\":\"synthetic-secret\"}}},\"setting\":true}";
+            let bytes = format!("{prefix}{original}{suffix}");
+            let decoded = Host::Copilot.decode(&original).unwrap();
+            Host::Copilot.validate(&decoded).unwrap();
+            let wrapped =
+                json!({"command":"/usr/bin/env","args":["-i","/private/agentfw"],"env":{}});
+            let output = Host::Copilot
+                .replace(bytes.as_bytes(), "demo", &wrapped)
+                .unwrap();
+            let text = std::str::from_utf8(&output).unwrap();
+            assert!(text.starts_with(prefix) && text.ends_with(suffix));
+            let selected = Host::Copilot.parse(&output).unwrap()["mcpServers"]["demo"].clone();
+            assert_eq!(selected["type"], transport);
+            assert_eq!(selected["tools"], json!(["*"]));
+            assert_eq!(Host::Copilot.decode(&selected).unwrap(), wrapped);
+            let restored = Host::Copilot.replace(&output, "demo", &decoded).unwrap();
+            assert_eq!(
+                Host::Copilot.parse(&restored).unwrap(),
+                Host::Copilot.parse(bytes.as_bytes()).unwrap()
+            );
+            let mut filtered = original;
+            filtered["tools"] = json!(["read_document"]);
+            assert!(Host::Copilot.decode(&filtered).is_err());
+        }
+        assert!(Host::Copilot
+            .decode(&json!({"type":"http","command":"/bin/true"}))
+            .is_err());
+        assert!(Host::Copilot
+            .validate(&json!({"command":"/bin/true","args":["${OWNED_FIXTURE}"]}))
+            .is_err());
     }
 }
