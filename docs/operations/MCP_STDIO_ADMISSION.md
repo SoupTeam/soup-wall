@@ -91,8 +91,11 @@ rejected. These shapes include those emitted by Codex CLI 0.148.0.
 
 Host identifiers and progress tokens grant no authority, supply no native
 session identity and do not change argument inspection. Accepted original
-request bytes, including metadata, reach the server unchanged. Other metadata
-and server progress notifications remain outside the supported contract.
+request bytes for these legacy shapes reach the server unchanged. The newer
+pinned Codex turn shape is described in [Codex MCP connection](CODEX_MCP_CONNECTION.md).
+Its workspace metadata stays local while request IDs and argument bytes are
+preserved. Other metadata and server progress notifications remain outside
+the supported contract.
 
 Codex also probes `resources/list` and `resources/templates/list` during full
 inventory discovery, even for servers advertising only tools. After the pinned
@@ -159,11 +162,13 @@ without translating tools into another format:
 | Harness frame | Collector | Native event | Classification and policy | Outcome |
 | --- | --- | --- | --- | --- |
 | `initialize`, `tools/list` | Checks the initialization result and pins each tool schema against the registry | Manifest inspection | Tool-description rules | Release the manifest, or close before tools reach the host |
-| `tools/call` | Validates arguments against the pinned schema; `_meta` stays transport correlation; an installed classifier then sees the admitted discovery snapshot, actual arguments and trusted baseline | `call` with `tool`, `args`, `schema_sha256` | Registry `action_class` and egress hosts form a `ToolCall` event for the agent policy | `allow` writes the original frame to the server; `deny` and `ask` return a correlated `isError` refusal and the server never receives the frame |
+| `tools/call` | Validates arguments against the pinned schema; `_meta` stays transport correlation; an installed classifier then sees the admitted discovery snapshot, actual arguments and trusted baseline | `call` with `tool`, `args`, `schema_sha256` | Registry `action_class` and egress hosts form a `ToolCall` event for the agent policy | `allow` forwards the call with the host metadata treatment described above; `deny` and `ask` return a correlated `isError` refusal and the server never receives the frame |
 | Server response | Binds the response to the pending call | `result` with `call_id`, `result_kind`, `delivery: mcp_host`, `content` | Decoded text blocks form `ToolResult` events with the declared provenance | `allow` writes the original bytes to the host; otherwise a correlated `isError` refusal |
 
-The JSON-RPC id, tool name, arguments and `_meta` stay in the original bytes,
-and a refusal reuses the original id. There is no approval channel in this
+Forwarding preserves the JSON-RPC ID, tool name and argument bytes. The pinned
+Codex turn shape omits workspace metadata as described above. Verified execution
+records the SHA-256 of the frame written to the server. A refusal reuses the
+original ID. There is no approval channel in this
 contract, so `ask` is enforced exactly like a denial until a reviewed
 single-use approval path exists.
 
@@ -292,8 +297,9 @@ The command does not import a host file into an executable launch configuration.
 
 Original `tools/list` definitions, descriptions, schemas and supported annotations
 remain in the admitted snapshot and `Invocation.definition`. `Invocation.args`
-holds the parsed original arguments; accepted JSON-RPC bytes, including native
-IDs, are forwarded unchanged. `Invocation.semantic_input()` excludes host call
+holds the parsed original arguments. Forwarding preserves the original request
+ID and argument bytes, including when optional Codex workspace metadata is
+removed. `Invocation.semantic_input()` excludes host call
 IDs and trusted registry classes. Schema defaults never add an absent field.
 No schema is promoted to `pinned_schema` by its own metadata.
 

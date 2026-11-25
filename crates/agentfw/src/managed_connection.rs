@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //! SOU-231: one explicit installed managed connection; no enrollment secrets in reports.
 #[cfg(unix)]
+use crate::hashing::sha256_hex;
+#[cfg(unix)]
 use anyhow::Context;
 use anyhow::{ensure, Result};
 use serde::{Deserialize, Serialize};
-#[cfg(unix)]
-use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 #[cfg(unix)]
@@ -102,12 +102,8 @@ impl Profile {
     }
 }
 #[cfg(unix)]
-fn hash(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
-#[cfg(unix)]
 fn hash_value(value: &impl Serialize) -> String {
-    hash(&serde_json::to_vec(value).expect("bounded connection value serializes"))
+    sha256_hex(&serde_json::to_vec(value).expect("bounded connection value serializes"))
 }
 #[cfg(unix)]
 fn digest_valid(s: &str) -> bool {
@@ -253,7 +249,7 @@ fn profile_inputs(profile: &Profile) -> Result<Vec<fs::Snapshot>> {
                     .settings
                     .ca_file
                     .as_ref()
-                    .map(|_| hash(&snapshots.last().unwrap().bytes)),
+                    .map(|_| sha256_hex(&snapshots.last().unwrap().bytes)),
             "managed_connection_ca_changed_preview_and_apply_before_restart"
         );
     }
@@ -504,7 +500,7 @@ fn apply(
             settings
                 .ca_file
                 .as_ref()
-                .map(|path| read_private_reference(path, 64 * 1024).map(|bytes| hash(&bytes)))
+                .map(|path| read_private_reference(path, 64 * 1024).map(|bytes| sha256_hex(&bytes)))
                 .transpose()?
         } else {
             t.profile.as_ref().and_then(|p| p.ca_sha256.clone())

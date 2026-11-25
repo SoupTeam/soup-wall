@@ -216,8 +216,8 @@ owned build and controls. Use the full 40-character source SHA, an absolute Carg
 path and a fresh output directory outside the source:
 
 ```sh
-python3 scripts/verify-sou152-offline-replay.py --expected-commit FULL_SOURCE_SHA
-python3 scripts/verify-sou152-offline-replay.py --run \
+python3 scripts/verify-offline-replay.py --expected-commit FULL_SOURCE_SHA
+python3 scripts/verify-offline-replay.py --run \
   --expected-commit FULL_SOURCE_SHA --cargo /absolute/toolchain/bin/cargo \
   --output /absolute/owned/new-qualification
 ```

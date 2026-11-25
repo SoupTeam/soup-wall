@@ -9,6 +9,7 @@
 //! verified process. Late frames of a retired process can never reach a later call
 //! because each process owns its own channels.
 
+use crate::hashing::sha256_hex;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender};
@@ -18,7 +19,7 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, ensure, Context};
 use serde::{Deserialize, Serialize};
 
-use super::package::{sha, Store, Verified, WORKER_PROTOCOL};
+use super::package::{Store, Verified, WORKER_PROTOCOL};
 #[cfg(windows)]
 use super::platform_windows as platform;
 use crate::mcp::admission::{
@@ -463,7 +464,7 @@ impl PackagedClassifier {
     fn exchange(&self, worker: &mut Worker, input: &str) -> anyhow::Result<String> {
         let id = worker.next_id;
         worker.next_id += 1;
-        let digest = sha(input.as_bytes());
+        let digest = sha256_hex(input.as_bytes());
         let mut frame = serde_json::to_vec(&Request {
             v: WORKER_PROTOCOL,
             id,

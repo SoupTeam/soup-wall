@@ -10,6 +10,8 @@
 
 pub mod fixture;
 pub(crate) mod private_edit;
+#[cfg(any(target_os = "linux", target_os = "macos", windows))]
+mod shared;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
 #[cfg(windows)]

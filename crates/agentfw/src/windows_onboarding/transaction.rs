@@ -261,7 +261,8 @@ fn endpoint_owner(state: &State) -> Result<Option<OwnedHandle>> {
             if let Some(pin) = pin_process(process.pid, &installed(state)?)? {
                 ensure!(
                     process.binary_digest == state.selection.agent_sha256
-                        && process.config_digest == sha(state.files["config.yaml"].as_bytes())
+                        && process.config_digest
+                            == sha256_hex(state.files["config.yaml"].as_bytes())
                         && process.port == state.selection.port
                         && process.bind == "127.0.0.1",
                     "managed process record does not match the owned setup"
@@ -306,7 +307,7 @@ async fn daemon(state: &State) -> Result<Value> {
         config_sha256: Some(crate::protection_status::config_digest(&cfg)),
         binary_sha256: Some(state.selection.agent_sha256.clone()),
         registry_sha256: Some(state.selection.registry_sha256.clone()),
-        policy_sha256: Some(sha(&serde_json::to_vec(&policy)?)),
+        policy_sha256: Some(sha256_hex(&serde_json::to_vec(&policy)?)),
         ..Default::default()
     };
     let snapshot = crate::protection_status::query(
@@ -511,7 +512,7 @@ async fn resume(state: &mut State, pause_after: Option<&str>) -> Result<Value> {
     }
     if state.phase == Phase::DaemonStarted {
         ensure!(
-            sha(&connection::read_file(&state.selection.host_config, FILE_LIMIT)?.0)
+            sha256_hex(&connection::read_file(&state.selection.host_config, FILE_LIMIT)?.0)
                 == state.expected_host_sha256,
             "host configuration changed since preview; preserve it"
         );
@@ -519,12 +520,12 @@ async fn resume(state: &mut State, pause_after: Option<&str>) -> Result<Value> {
         save(state)?;
         checkpoint(pause_after, "publishing");
     }
-    let runtime_digest = sha(&serde_json::to_vec(&json!({
-        "runtime": sha(state.files["runtime.json"].as_bytes()),
+    let runtime_digest = sha256_hex(&serde_json::to_vec(&json!({
+        "runtime": sha256_hex(state.files["runtime.json"].as_bytes()),
         "script": state.selection.classifier_sha256, "python": state.selection.python_sha256,
     }))?);
-    let native_digest = sha(&serde_json::to_vec(&json!({
-        "config": sha(state.files["config.yaml"].as_bytes()), "runtime": runtime_digest,
+    let native_digest = sha256_hex(&serde_json::to_vec(&json!({
+        "config": sha256_hex(state.files["config.yaml"].as_bytes()), "runtime": runtime_digest,
     }))?);
     connection::run_confirmed(
         "connect",
@@ -725,7 +726,7 @@ pub(super) async fn verify(directory: &Path) -> Result<Value> {
         "host connection changed during verification"
     );
     state.phase = Phase::Verified;
-    state.self_test_sha256 = Some(sha(&bytes));
+    state.self_test_sha256 = Some(sha256_hex(&bytes));
     state.verification_ms = Some(started.elapsed().as_millis());
     save(&state)?;
     Ok(summary(&state, true, true))

@@ -128,64 +128,7 @@ pub(crate) fn revoke_selected(
         let Ok(mut sessions) = native.sessions.lock() else {
             return Err(("native_state_unavailable", StatusCode::SERVICE_UNAVAILABLE));
         };
-        sessions.spent_authorities.retain(|_, exp| *exp > now);
-        if !sessions.scoped_hosts.contains(host)
-            && sessions.scoped_hosts.len() >= super::MAX_SESSIONS
-        {
-            return Err(("native_host_binding_cap", StatusCode::SERVICE_UNAVAILABLE));
-        }
-        let mut targets = Vec::new();
-        for (id, session) in &sessions.entries {
-            if session
-                .authority_digest
-                .as_ref()
-                .is_some_and(|digest| authorities.values().any(|v| v == digest))
-            {
-                if session.host_session.as_deref() != Some(host)
-                    || !session.server_id.as_ref().is_some_and(|server| {
-                        authorities.get(server) == session.authority_digest.as_ref()
-                    })
-                {
-                    return Err(("pilot_stop_foreign_authority", StatusCode::FORBIDDEN));
-                }
-                if session
-                    .authority_expires_at_ms
-                    .is_some_and(|expiry| expiry > expires_at_ms)
-                {
-                    return Err(("pilot_stop_expiry_invalid", StatusCode::BAD_REQUEST));
-                }
-                targets.push((id.clone(), Some(session.epoch.clone())));
-            }
-        }
-        let ledger: BTreeSet<_> = sessions
-            .spent_authorities
-            .keys()
-            .chain(
-                sessions
-                    .entries
-                    .values()
-                    .filter_map(|s| s.authority_digest.as_ref()),
-            )
-            .chain(authorities.values())
-            .collect();
-        if ledger.len() > super::MAX_SPENT_AUTHORITIES {
-            return Err((
-                "native_authority_ledger_saturated",
-                StatusCode::SERVICE_UNAVAILABLE,
-            ));
-        }
-        // Never permit an as-yet unconnected signed host to fall back to unsigned hooks.
-        sessions.scoped_hosts.insert(host.into());
-        // The same lock gates new sessions and all current lineage checks. From
-        // here onward, even a not-yet-enrolled collector cannot use either grant.
-        for digest in authorities.values() {
-            let expiry = sessions
-                .spent_authorities
-                .entry(digest.clone())
-                .or_default();
-            *expiry = (*expiry).max(expires_at_ms);
-        }
-        targets
+        withdraw_locked(&mut sessions, host, authorities, expires_at_ms, now)?
     };
     let retired = retire_sessions_terminal(st, native, &targets, "revoked");
     let audited = st
@@ -229,6 +172,75 @@ pub(crate) fn revoke_selected(
         ));
     }
     Ok(retired)
+}
+
+type WithdrawalTargets = Vec<(String, Option<String>)>;
+type WithdrawalError = (&'static str, StatusCode);
+
+/// Shared admission-lock transaction, with all fallible checks before mutation.
+pub(super) fn withdraw_locked(
+    sessions: &mut super::Sessions,
+    host: &str,
+    authorities: &BTreeMap<String, String>,
+    expires_at_ms: u64,
+    now: u64,
+) -> Result<WithdrawalTargets, WithdrawalError> {
+    sessions.spent_authorities.retain(|_, exp| *exp > now);
+    if !sessions.scoped_hosts.contains(host) && sessions.scoped_hosts.len() >= super::MAX_SESSIONS {
+        return Err(("native_host_binding_cap", StatusCode::SERVICE_UNAVAILABLE));
+    }
+    let mut targets = Vec::new();
+    for (id, session) in &sessions.entries {
+        if session
+            .authority_digest
+            .as_ref()
+            .is_some_and(|digest| authorities.values().any(|v| v == digest))
+        {
+            if session.host_session.as_deref() != Some(host)
+                || !session.server_id.as_ref().is_some_and(|server| {
+                    authorities.get(server) == session.authority_digest.as_ref()
+                })
+            {
+                return Err(("pilot_stop_foreign_authority", StatusCode::FORBIDDEN));
+            }
+            if session
+                .authority_expires_at_ms
+                .is_some_and(|expiry| expiry > expires_at_ms)
+            {
+                return Err(("pilot_stop_expiry_invalid", StatusCode::BAD_REQUEST));
+            }
+            targets.push((id.clone(), Some(session.epoch.clone())));
+        }
+    }
+    let ledger: BTreeSet<_> = sessions
+        .spent_authorities
+        .keys()
+        .chain(
+            sessions
+                .entries
+                .values()
+                .filter_map(|s| s.authority_digest.as_ref()),
+        )
+        .chain(authorities.values())
+        .collect();
+    if ledger.len() > super::MAX_SPENT_AUTHORITIES {
+        return Err((
+            "native_authority_ledger_saturated",
+            StatusCode::SERVICE_UNAVAILABLE,
+        ));
+    }
+    // Never permit an as-yet unconnected signed host to fall back to unsigned hooks.
+    sessions.scoped_hosts.insert(host.into());
+    // The same lock gates new sessions and all current lineage checks. From
+    // here onward, even a not-yet-enrolled collector cannot use either grant.
+    for digest in authorities.values() {
+        let expiry = sessions
+            .spent_authorities
+            .entry(digest.clone())
+            .or_default();
+        *expiry = (*expiry).max(expires_at_ms);
+    }
+    Ok(targets)
 }
 
 #[cfg(test)]

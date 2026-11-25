@@ -31,6 +31,12 @@ jobs:
       SOU166_ARCHIVE_SHA256: ''
       SOU166_MANIFEST_SHA256: ''
     steps:
+      - name: Align shared-build glibc from signed Ubuntu packages
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          sudo apt-get -o APT::Update::Error-Mode=any update
+          sudo apt-get install --only-upgrade --no-install-recommends -y libc6
+          dpkg-query -W libc6
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -76,7 +82,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou73-unit-use.json" -- test --locked --offline -p agentfw --lib -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou73-native-unit.log"
+          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou73-unit-use.json" -- test --locked --offline -p agentfw --lib -- --quiet 2>&1 | tee "$RUNNER_TEMP/sou73-native-unit.log"
           python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou73-router-use.json" -- test --locked --offline -p agentfw --test native_endpoint -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou73-native-router.log"
           python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou73-clippy-use.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings 2>&1 | tee "$RUNNER_TEMP/sou73-clippy.log"
       - name: Require nonempty passing native evidence

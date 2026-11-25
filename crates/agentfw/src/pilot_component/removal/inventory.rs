@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 use super::{
-    decode, ensure, separate, sha, Budget, Context, Dir, Entry, Plan, Result, RetainedInventory,
+    decode, ensure, separate, Budget, Context, Dir, Entry, Plan, Result, RetainedInventory,
     Selection, FORMAT, MAX_ENTRIES,
 };
+use crate::hashing::sha256_hex;
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
@@ -41,7 +42,7 @@ fn walk(root: &Path, base: &Path, entries: &mut Vec<Entry>, b: &mut Budget) -> R
             entries.push(Entry {
                 name: relative,
                 identity,
-                sha256: Some(sha(&raw)),
+                sha256: Some(sha256_hex(&raw)),
             });
         }
     }
@@ -124,7 +125,7 @@ fn retained(path: &Path, b: &mut Budget) -> Result<RetainedInventory> {
         let (selected, _) = parent.read("selection.json", 65536, b)?;
         ensure!(
             super::same(
-                &sha(&selected),
+                &sha256_hex(&selected),
                 value["selection_sha256"].as_str().unwrap_or("")
             ),
             "removal_selection_changed"
@@ -138,7 +139,7 @@ fn retained(path: &Path, b: &mut Budget) -> Result<RetainedInventory> {
             "removal_invalid_preparation_receipt"
         );
         row.identity = id;
-        row.sha256 = Some(sha(&raw));
+        row.sha256 = Some(sha256_hex(&raw));
     }
     // Known generation receipts are inventoried, never their user workspaces.
     for kind in ["preparation", "native"] {
@@ -167,7 +168,7 @@ fn retained(path: &Path, b: &mut Budget) -> Result<RetainedInventory> {
             entries.push(Entry {
                 name: format!("{kind}/current.json"),
                 identity: id,
-                sha256: Some(sha(&raw)),
+                sha256: Some(sha256_hex(&raw)),
             });
         }
         for name in names {
@@ -203,7 +204,7 @@ fn retained(path: &Path, b: &mut Budget) -> Result<RetainedInventory> {
             entries.push(Entry {
                 name: format!("{kind}/generations/{name}/{receipt}"),
                 identity: id,
-                sha256: Some(sha(&raw)),
+                sha256: Some(sha256_hex(&raw)),
             });
         }
     }
@@ -264,14 +265,18 @@ pub(super) fn preview(s: &Selection, b: &mut Budget) -> Result<Plan> {
         let (raw, id) = component.read(n, 16384, b)?;
         expected.insert(
             n.clone(),
-            (Some(sha(&raw)), Some(raw.len() as u64), id.mode & 0o7777),
+            (
+                Some(sha256_hex(&raw)),
+                Some(raw.len() as u64),
+                id.mode & 0o7777,
+            ),
         );
     }
     for id in &ids {
         let dir = Dir::open(&root.join("components").join(id))?;
         let (raw, _) = dir.read("manifest.json", 65536, b)?;
         ensure!(
-            super::same(&sha(&raw), id),
+            super::same(&sha256_hex(&raw), id),
             "removal_component_manifest_changed"
         );
         let manifest = super::super::parse_manifest(&raw)?;

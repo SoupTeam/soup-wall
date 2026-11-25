@@ -4,6 +4,7 @@
 mod incident;
 mod io;
 
+use crate::hashing::sha256_hex;
 use crate::{
     doctor::{check, Check, DoctorArgs, Outcome},
     mcp::server_profile,
@@ -13,7 +14,6 @@ use crate::{
 use clap::Args;
 use serde::Serialize;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::{
     path::{Path, PathBuf},
     time::Duration,
@@ -71,9 +71,6 @@ pub(crate) fn combine(a: Outcome, b: Outcome) -> Outcome {
         }
     }
     Outcome::Ready
-}
-fn sha(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
 }
 fn strict(bytes: &[u8]) -> anyhow::Result<Value> {
     let crate::mcp::admission::Strict(value) = serde_json::from_slice(bytes)?;
@@ -209,9 +206,9 @@ fn profile(
             receipt["format"] == receipt_format
                 && receipt["profile"] == strict(&bytes)?
                 && receipt["upstream_identity"] == strict(upstream.as_bytes())?
-                && receipt["profile_sha256"] == sha(&bytes)
-                && receipt["registry_sha256"] == sha(&registry_bytes)
-                && receipt["policy_sha256"] == sha(&policy_bytes)
+                && receipt["profile_sha256"] == sha256_hex(&bytes)
+                && receipt["registry_sha256"] == sha256_hex(&registry_bytes)
+                && receipt["policy_sha256"] == sha256_hex(&policy_bytes)
                 && policy_bytes == policy.as_bytes()
                 && strict(&registry_bytes)? == registry_for(format)?,
             "installed receipt/schema/registry mismatch"
@@ -281,7 +278,7 @@ fn profile(
             "git_profile"
         };
         Ok(vec![
-        digest_check(id, "private_installed_profile_and_receipt", "original_profile_pins_verified", sha(&bytes),
+        digest_check(id, "private_installed_profile_and_receipt", "original_profile_pins_verified", sha256_hex(&bytes),
             "Installed profile, original schema/registry, policy, package tree and selected runtime assets match their pins."),
         digest_check(if id == "filesystem_profile" {"filesystem_schema"} else {"git_schema"}, "compiled_original_discovery", "original_schema_identity", crate::native::canonical_digest(&server_profile::original_manifest_for(format)?),
             "This schema identity is the accepted original discovery; doctor does not run discovery."),
@@ -364,7 +361,10 @@ pub(crate) async fn diagnose(
         if let Some(native) = &cfg.native {
             if let Ok(bytes) = crate::doctor::read_private(&native.registry_path, 1024 * 1024) {
                 let valid = (|| -> anyhow::Result<()> {
-                    anyhow::ensure!(sha(&bytes) == native.registry_sha256, "registry digest");
+                    anyhow::ensure!(
+                        sha256_hex(&bytes) == native.registry_sha256,
+                        "registry digest"
+                    );
                     let value = strict(&bytes)?;
                     let parsed = crate::native::NativeState::from_bytes(
                         &bytes,
@@ -417,7 +417,7 @@ pub(crate) async fn diagnose(
                     "../../agent/policies/agent-default.yaml"
                 ))?
             };
-            Ok(sha(&serde_json::to_vec(&policy)?))
+            Ok(sha256_hex(&serde_json::to_vec(&policy)?))
         })()
         .ok();
         if let Some(digest) = &policy {
@@ -475,7 +475,7 @@ pub(crate) async fn diagnose(
                     if active{"Current authenticated instance matches selected binary/config/policy/registry and supports native admission; no host call was tested."}
                     else{"Authenticated daemon is present, but this installed pilot is not active for enforcing native admission."},
                     "Use the existing operator lifecycle workflow if activation is needed; doctor never starts or restarts the daemon.");
-                c.sha256=Some(sha(snapshot.runtime.instance.as_bytes())); report.checks.push(c);
+                c.sha256=Some(sha256_hex(snapshot.runtime.instance.as_bytes())); report.checks.push(c);
             }
             Err(code) => report.checks.push(if code == "pilot_selected_pins_incomplete" {
                 check("pilot_runtime", "selected_identity_comparison_prerequisites", Outcome::Unknown,
@@ -516,7 +516,7 @@ mod tests {
         let source = root.join("PRIVATE-CLASSIFIER-CANARY.py");
         std::fs::write(&source, b"# PRIVATE-SOURCE-CANARY\n").unwrap();
         std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o600)).unwrap();
-        let wanted = sha(&std::fs::read(&source).unwrap());
+        let wanted = sha256_hex(&std::fs::read(&source).unwrap());
         assert_eq!(
             classifier_check(Some(&source), Some(&wanted)).outcome,
             Outcome::Ready

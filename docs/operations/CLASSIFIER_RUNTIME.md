@@ -365,7 +365,7 @@ that fails leaves no worker behind. Separate collector sessions have separate wo
   reported separately on purpose. These numbers come from one container and are not a
   guarantee; a preparation that exceeds the start deadline fails, it is not retried and the
   deadline is not raised.
-- Real servers: `scripts/verify-sou102-prepared-classifier.py` runs the real collector with
+- Real servers: `scripts/verify-prepared-classifier.py` runs the real collector with
   the installed package in front of the pinned original filesystem MCP server and the
   original Git MCP server and witnesses every effect by a kernel syscall trace (first useful
   call, continuation, killed and hung worker, altered package, recovery, session isolation,

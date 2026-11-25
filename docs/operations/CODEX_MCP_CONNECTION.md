@@ -73,13 +73,18 @@ Retain them during operator reconciliation; they may contain secrets.
 The live acceptance pins **Codex CLI 0.169.0-alpha.11.1**. Its sanitized
 [captured call](../../scripts/fixtures/codex-0.169.0-call.json) adds bounded
 turn/session/window/item correlation and optional Git workspace metadata.
-The parser accepts only the observed keys, types and version. Malformed,
-partial, oversized or unknown metadata closes transport before forwarding.
+The parser accepts only the supported keys, bounded types and observed version.
+Workspace fields may be absent; a missing or null Git commit covers an unborn
+HEAD, and both 40- and 64-character hex commit IDs are accepted. Other Codex
+builds require separate wire qualification; a different version in turn
+metadata is refused.
 The earlier 0.148.0 `threadId`/`progressToken` form remains covered by regression.
 
-All metadata is untrusted correlation. Original frame bytes remain in the
-collector's bindings and are forwarded only after native admission. Claimed
-sandbox, approval flags, paths, remotes and session IDs confer no authority.
+All metadata is untrusted correlation. The collector retains the original
+frame for admission and custody. After Allow it forwards the call with
+`workspaces` removed from Codex turn metadata, keeping local paths and Git
+remote URLs private. It preserves the request ID, arguments and progress
+token. Claimed sandbox, approval flags and session IDs confer no authority.
 Native identity still comes from the authenticated collector/daemon protocol.
 
 | Surface | This increment |
@@ -111,7 +116,19 @@ python3 scripts/codex-mcp-acceptance.py --agentfw target/debug/agentfw \
   --codex "$(command -v codex)" --out target/codex-acceptance/report.json
 ```
 
-The acceptance uses an isolated home, local scripted Responses provider,
+Workspace CI exercises preview, connect, inspect, a controlled probe,
+disconnect and conflict handling with a real local Agent and a fixture MCP
+server, without a Codex binary:
+
+```sh
+python3 -B scripts/codex-mcp-acceptance.py --agentfw target/debug/agentfw \
+  --lifecycle-only --out target/codex-acceptance/lifecycle.json
+```
+
+Use a fresh output path for each run. Actual-host reports include the Codex
+executable and wire-fixture digests.
+
+The actual-host acceptance uses an isolated home, local scripted Responses provider,
 synthetic secret, owned note server, independent execution ledger and loopback
 receiver. No paid model or personal Codex credentials are used. It records the
 source SHA, source-file and executable hashes, exact host version, checks and

@@ -43,7 +43,7 @@ fn fixture() -> (tempfile::TempDir, Journal) {
             Entry {
                 name: "owned".into(),
                 identity: id,
-                sha256: Some(sha(&raw)),
+                sha256: Some(sha256_hex(&raw)),
             },
             Entry {
                 name: String::new(),
@@ -219,7 +219,7 @@ fn visible_completion_cannot_reconstruct_withheld_success_ack() {
             &canonical(&Completion {
                 format: FORMAT.into(),
                 plan: j.hash.clone(),
-                success_ack_sha256: sha(b"private-unreturned-acknowledgement-value-00000"),
+                success_ack_sha256: sha256_hex(b"private-unreturned-acknowledgement-value-00000"),
             })
             .unwrap(),
         )

@@ -578,7 +578,7 @@ class DriverGrade(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tests = load("sou97_sou62_tests", "scripts/tests/test_sou62_real_mcp.py")
+        cls.tests = load("sou97_sou62_tests", "scripts/tests/test_real_filesystem_mcp.py")
         cls.verify = cls.tests.VERIFY
 
     def test_default_mode_still_requires_the_directory_tree_ask(self):

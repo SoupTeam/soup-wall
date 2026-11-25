@@ -21,10 +21,14 @@
 !crates/adapter/tests/schema_validation.rs
 !crates/adapter/tests/attack_scenarios.rs
 !crates/agentfw/tests/
+!crates/agentfw/tests/common/
+!crates/agentfw/tests/common/mod.rs
 !crates/agentfw/tests/mcp_admission.rs
 !crates/agentfw/tests/support/
 !crates/agentfw/tests/support/resource_approval_execution.rs
 !crates/agentfw/tests/native_endpoint.rs
+!crates/agentfw/tests/native_endpoint/
+!crates/agentfw/tests/native_endpoint/*.rs
 !crates/agentfw/tests/judge_endpoint.rs
 !vendor/
 !vendor/kryptering/
