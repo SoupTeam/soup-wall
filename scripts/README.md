@@ -415,7 +415,6 @@ Everything else: demos, reports, benchmarks, diagnostics and shared modules.
 | [`private_edit_self_test.py`](private_edit_self_test.py) | Installed, opt-in private-output self-test over the accepted edit-session API. |
 | [`probe-result-context-boundary.py`](probe-result-context-boundary.py) | SOU-218 complete-input countercontrols using the existing production adapter. |
 | [`probe-result-padding-context.py`](probe-result-padding-context.py) | Bounded SOU-157 counterexamples for a repeated-character encoding discount. |
-| [`report_sou157_nli.py`](report_sou157_nli.py) | Offline report only: never loads a model or changes production outcomes. |
 | [`repro-profile-recovery-port.py`](repro-profile-recovery-port.py) | Run the absent-config recovery test while an owned listener holds port 8787. |
 | [`reproduce-git-object-confusion.py`](reproduce-git-object-confusion.py) | Capture unchanged original Git MCP replies for distinct commit/blob objects. |
 | [`run-sou18-acceptance.py`](run-sou18-acceptance.py) | Run the existing disposable setup, status/MCP and paired latency probes together. |
