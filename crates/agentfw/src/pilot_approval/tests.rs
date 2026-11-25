@@ -254,7 +254,7 @@ async fn ordinary_exit_refuses_unsupported_owner_contract_before_network() {
     run.home = home;
     run.files = vec![FileIdentity {
         path: config.clone(),
-        sha256: digest(&fs::read(config).unwrap()),
+        sha256: sha256_hex(&fs::read(config).unwrap()),
     }];
     let guard = RunGuard {
         _manifest: fs::File::create(dir.join("fixture-manifest")).unwrap(),
