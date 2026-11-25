@@ -302,7 +302,7 @@ before sharing it.
 
 ### Exact-source installed acceptance
 
-`scripts/verify-sou114-pilot-doctor.py --run` is the focused acceptance driver
+`scripts/verify-pilot-doctor.py --run` is the focused acceptance driver
 in the required Linux original-filesystem lane. It alone creates disposable
 original filesystem/Git installations, starts its owned managed enforcing
 daemon and generates a real refused request after a useful original read. Each

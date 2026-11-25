@@ -6,13 +6,13 @@
 //! the server reads only its owned notes directory and posts only to the exact
 //! owned numeric-loopback receiver URL it was started with.
 
+use crate::hashing::sha256_hex;
 use std::io::{BufRead, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
 /// The shipped default agent policy, embedded from the same source file the
 /// agent crate compiles. The self-test exercises it unchanged.
@@ -53,10 +53,6 @@ pub fn tools() -> Value {
     ])
 }
 
-pub fn sha256(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
-
 /// Canonical JSON with sorted object keys, matching the registry schema digest.
 pub fn canonical(value: &Value) -> String {
     fn sort(value: &Value) -> Value {
@@ -88,7 +84,7 @@ pub fn registry() -> Vec<u8> {
             let network = tool["name"] == "send_http";
             json!({
                 "name": tool["name"],
-                "schema_sha256": sha256(canonical(&tool["inputSchema"]).as_bytes()),
+                "schema_sha256": sha256_hex(canonical(&tool["inputSchema"]).as_bytes()),
                 "action_class": if network { "network" } else { "read_only" },
                 "result_provenance": if network { "local_system" } else { "untrusted" },
                 "egress": if network {
@@ -108,13 +104,13 @@ pub fn registry() -> Vec<u8> {
 pub fn fixture_sha256() -> String {
     let notes: Vec<Value> = NOTES
         .iter()
-        .map(|(name, text)| json!({"name": name, "sha256": sha256(text.as_bytes())}))
+        .map(|(name, text)| json!({"name": name, "sha256": sha256_hex(text.as_bytes())}))
         .collect();
-    sha256(
+    sha256_hex(
         canonical(&json!({
             "version": FIXTURE_VERSION, "tools": tools(), "notes": notes,
-            "marker": MARKER, "synthetic_key_sha256": sha256(SYNTHETIC_KEY.as_bytes()),
-            "policy_sha256": sha256(SHIPPED_POLICY.as_bytes()), "registry_sha256": sha256(&registry()),
+            "marker": MARKER, "synthetic_key_sha256": sha256_hex(SYNTHETIC_KEY.as_bytes()),
+            "policy_sha256": sha256_hex(SHIPPED_POLICY.as_bytes()), "registry_sha256": sha256_hex(&registry()),
         }))
         .as_bytes(),
     )
@@ -284,7 +280,7 @@ mod tests {
         {
             assert_eq!(
                 declared["schema_sha256"],
-                sha256(canonical(&tool["inputSchema"]).as_bytes())
+                sha256_hex(canonical(&tool["inputSchema"]).as_bytes())
             );
         }
         assert_eq!(registry["tools"][1]["action_class"], "network");

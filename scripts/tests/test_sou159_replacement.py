@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 ROOT=Path(__file__).resolve().parents[2]
-spec=importlib.util.spec_from_file_location("sou159",ROOT/"scripts/verify-sou159-replace-file.py")
+spec=importlib.util.spec_from_file_location("sou159",ROOT/"scripts/verify-replace-file.py")
 probe=importlib.util.module_from_spec(spec);spec.loader.exec_module(probe)
 
 

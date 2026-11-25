@@ -115,6 +115,7 @@ struct Call {
     tool: String,
     args: Value,
     raw: Vec<u8>,
+    server_raw: Option<Vec<u8>>,
     request_sha256: String,
     phase: Phase,
     cancelled: bool,
@@ -824,6 +825,7 @@ fn detached(call: &Call) -> Call {
         tool: call.tool.clone(),
         args: call.args.clone(),
         raw: Vec::new(),
+        server_raw: None,
         request_sha256: call.request_sha256.clone(),
         phase: Phase::Admitting,
         cancelled: call.cancelled,
@@ -1406,6 +1408,7 @@ where
                             tool: name.into(),
                             args,
                             request_sha256: sha(&raw),
+                            server_raw: super::codex_server_frame(&raw, &value)?,
                             raw,
                             create_lease,
                             phase: Phase::Queued,
@@ -1528,12 +1531,19 @@ where
                                         }));
                                         continue;
                                     }
-                                    if let Some(context)=&collector.execution {
-                                        grant.source=Some(Box::new(context.dispatched(&collector.session,
+                                    let server_frame = call.server_raw.as_deref().unwrap_or(&call.raw);
+                                    if let Some(context) = &collector.execution {
+                                        let source = context.dispatch_to(
+                                            child,
+                                            &collector.session,
                                             grant.call_id.as_str().context("private native call")?,
-                                            grant.binding.as_str().context("private native binding")?,&call.raw)?));
+                                            grant.binding.as_str().context("private native binding")?,
+                                            server_frame,
+                                        ).await?;
+                                        grant.source = Some(Box::new(source));
+                                    } else {
+                                        write(child, server_frame).await?;
                                     }
-                                    write(child, &call.raw).await?;
                                     call.dispatched = true;
                                     if let Some(timing) = &mut grant.continuation {
                                         timing.record(call, "original_dispatch", true);
@@ -2867,6 +2877,29 @@ mod tests {
         .unwrap();
         let mut params = frame["params"].clone();
         assert_eq!(metadata(&params).unwrap(), Some(json!(1)));
+        let raw = frame
+            .to_string()
+            .replace(r#"{"name":"inventory"}"#, r#"{ "name": "inventory" }"#);
+        let outgoing = super::super::codex_server_frame(raw.as_bytes(), &frame)
+            .unwrap()
+            .unwrap();
+        assert!(std::str::from_utf8(&outgoing)
+            .unwrap()
+            .contains(r#"{ "name": "inventory" }"#));
+        let mut expected = frame.clone();
+        expected["params"]["_meta"]["x-codex-turn-metadata"]
+            .as_object_mut()
+            .unwrap()
+            .remove("workspaces");
+        assert_eq!(parse(&outgoing).unwrap(), expected);
+        for git in [
+            json!({}),
+            json!({"latest_git_commit_hash": null}),
+            json!({"latest_git_commit_hash": "a".repeat(64), "has_changes": false}),
+        ] {
+            params["_meta"]["x-codex-turn-metadata"]["workspaces"]["/owned/workspace"] = git;
+            assert_eq!(metadata(&params).unwrap(), Some(json!(1)));
+        }
         params["_meta"]["x-codex-turn-metadata"]["authority"] = json!("allow");
         assert!(metadata(&params).is_err());
         params["_meta"] = json!({"x-codex-turn-metadata":{}});

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Opt-in Linux user services. State locks are never held across systemctl waits.
 
+use crate::hashing::sha256_hex;
 use anyhow::{bail, ensure, Context, Result};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -88,7 +88,7 @@ impl Service {
         let home = home.canonicalize()?;
         let name = format!(
             "agentfw-{}.service",
-            digest(home.as_os_str().as_encoded_bytes())
+            sha256_hex(home.as_os_str().as_encoded_bytes())
         );
         Ok(Self {
             root: home.join("service"),
@@ -165,7 +165,7 @@ impl Service {
             uid: uid(),
             home: self.home.clone(),
             unit: self.unit_path(),
-            unit_digest: digest(preview.unit.as_bytes()),
+            unit_digest: sha256_hex(preview.unit.as_bytes()),
             launcher: self.launcher(),
             launcher_digest: sha256_file(&source)?,
             unit_identity: None,
@@ -745,7 +745,7 @@ impl Service {
             "service ownership does not match this profile and user"
         );
         ensure!(
-            record.unit_digest == digest(self.preview()?.unit.as_bytes()),
+            record.unit_digest == sha256_hex(self.preview()?.unit.as_bytes()),
             "recorded unit does not match the supported service definition"
         );
         Ok(record)
@@ -854,9 +854,6 @@ fn property<'a>(shown: &'a BTreeMap<String, String>, key: &str) -> &'a str {
 }
 fn uid() -> u32 {
     unsafe { libc::geteuid() }
-}
-fn digest(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
 }
 
 fn user_home() -> Result<PathBuf> {
@@ -1124,7 +1121,7 @@ mod tests {
         fs::write(&path, b"").unwrap();
         let id = identity(&path).unwrap();
         fs::write(&path, b"partial copy").unwrap();
-        let expected_hash = digest(b"complete copy");
+        let expected_hash = sha256_hex(b"complete copy");
         assert!(verify_removable(Phase::Installed, &path, &expected_hash, Some(&id)).is_err());
         assert!(verify_removable(Phase::Installing, &path, &expected_hash, Some(&id)).is_ok());
         fs::rename(&path, temp.path().join("original")).unwrap();

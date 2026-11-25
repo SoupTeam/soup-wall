@@ -360,6 +360,7 @@ mod cli_tests {
 pub(crate) mod linux {
     pub(crate) mod profile_upgrade;
     use super::Options;
+    use crate::hashing::sha256_hex;
     use anyhow::{ensure, Context, Result};
     use serde::{Deserialize, Serialize};
     use serde_json::{json, Value};
@@ -377,12 +378,8 @@ pub(crate) mod linux {
 
     const LIMIT: usize = 1024 * 1024;
 
-    fn sha(bytes: &[u8]) -> String {
-        format!("{:x}", Sha256::digest(bytes))
-    }
-
     fn hash(value: &Value) -> String {
-        sha(&serde_json::to_vec(value).expect("JSON value serializes"))
+        sha256_hex(&serde_json::to_vec(value).expect("JSON value serializes"))
     }
 
     fn parse(bytes: &[u8]) -> Result<Value> {
@@ -584,7 +581,7 @@ pub(crate) mod linux {
         fn state_name(&self, name: &str) -> String {
             format!(
                 ".soup-wall-{}.json",
-                sha(format!("{}\0{name}", self.path.display()).as_bytes())
+                sha256_hex(format!("{}\0{name}", self.path.display()).as_bytes())
             )
         }
 
@@ -622,7 +619,7 @@ pub(crate) mod linux {
         fn publication_name(&self) -> String {
             format!(
                 ".soup-wall-publication-{}.json",
-                sha(self.path.as_os_str().as_bytes())
+                sha256_hex(self.path.as_os_str().as_bytes())
             )
         }
 
@@ -679,7 +676,8 @@ pub(crate) mod linux {
             let (exchanged, meta) = read_at(&archive, "exchanged.json".as_ref())?;
             self.unchanged()?;
             ensure!(
-                sha(&before) == record.before_sha256 && sha(&proposed) == record.proposed_sha256,
+                sha256_hex(&before) == record.before_sha256
+                    && sha256_hex(&proposed) == record.proposed_sha256,
                 "publication snapshots changed; retain the journal and archive"
             );
             let before_exchange = self.bytes == before
@@ -733,8 +731,8 @@ pub(crate) mod linux {
                 version: 1,
                 path: self.path.clone(),
                 archive: archive_name,
-                before_sha256: sha(&self.bytes),
-                proposed_sha256: sha(bytes),
+                before_sha256: sha256_hex(&self.bytes),
+                proposed_sha256: sha256_hex(bytes),
                 before_dev: self.meta.dev(),
                 before_ino: self.meta.ino(),
                 proposed_dev: proposed.dev(),
@@ -1035,10 +1033,10 @@ pub(crate) mod linux {
         Ok(Launch {
             format: config.format,
             profile: profile.to_path_buf(),
-            profile_sha256: sha(&bytes),
+            profile_sha256: sha256_hex(&bytes),
             workspace: config.workspace,
             classifier_script: classifier_script.to_path_buf(),
-            classifier_sha256: sha(&script),
+            classifier_sha256: sha256_hex(&script),
             classifier_python: classifier_python.to_path_buf(),
             classifier_python_sha256: python,
         })
@@ -1157,7 +1155,7 @@ pub(crate) mod linux {
             binary,
             registry: installed.registry_sha256.clone(),
             registry_path: installed.registry_path.clone(),
-            config: sha(&bytes),
+            config: sha256_hex(&bytes),
             policy: snapshot.policy.sha256,
         })
     }
@@ -1326,7 +1324,7 @@ pub(crate) mod linux {
             operation: operation.to_owned(),
             host: o.host,
             enforcement_coverage: "selected_stdio_mcp_only",
-            config_sha256: sha(&config.bytes),
+            config_sha256: sha256_hex(&config.bytes),
             selected_sha256: hash(&entry),
             server_id: id.clone(),
             agent_sha256: None,
@@ -1531,7 +1529,7 @@ pub(crate) mod linux {
         } else {
             snapshot?;
         }
-        report.config_sha256 = sha(&config.bytes);
+        report.config_sha256 = sha256_hex(&config.bytes);
         report.selected_sha256 = hash(&config.entry(&o.server)?);
         report.elapsed_ms = start.elapsed().as_millis();
         Ok(report)

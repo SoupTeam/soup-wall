@@ -15,6 +15,7 @@
 //! Any after-identity that differs from the before-identity is reported as
 //! **unaccepted**; no finding, however inert, changes that.
 
+use crate::hashing::sha256_hex;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Read;
@@ -152,10 +153,6 @@ pub struct Outcome {
     pub pack: Value,
     pub files: Vec<(&'static str, Vec<u8>)>,
     pub exit: i32,
-}
-
-pub(crate) fn sha_hex(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
 }
 
 /// Sorted-key compact JSON used only for comparison and stable ids. Exact
@@ -320,7 +317,7 @@ impl FileIdentity {
     fn of(file: &InputFile) -> Self {
         Self {
             name: file.name.clone(),
-            raw_sha256: sha_hex(&file.bytes),
+            raw_sha256: sha256_hex(&file.bytes),
             bytes: file.bytes.len(),
         }
     }
@@ -527,7 +524,7 @@ fn verify_referenced(dir: Option<&Path>, relative: &str, expected: &str) -> R<Va
         code: "invalid_referenced_path",
         detail: format!("referenced file {relative:?} is missing, not regular or too large"),
     })?;
-    let actual = sha_hex(&bytes);
+    let actual = sha256_hex(&bytes);
     if actual != expected {
         return refuse(
             "referenced_digest_mismatch",
@@ -2259,7 +2256,7 @@ pub fn analyze(request: &Request) -> Result<Outcome, Refusal> {
             f.before.as_ref().map(canonical_json).unwrap_or_default(),
             f.after.as_ref().map(canonical_json).unwrap_or_default()
         );
-        f.id = format!("F-{}", &sha_hex(key.as_bytes())[..16]);
+        f.id = format!("F-{}", &sha256_hex(key.as_bytes())[..16]);
     }
     findings.sort_by(|x, y| {
         (&x.tool, &x.pointer, x.kind, &x.id).cmp(&(&y.tool, &y.pointer, y.kind, &y.id))

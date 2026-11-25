@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //! One fixed-size, payload-free timing row per native admission. Durations use
 //! a monotonic clock; no samples, sessions or input bytes are retained here.
-use super::{hash, Request, Response};
+use super::{Request, Response};
+use crate::hashing::sha256_hex;
 use serde_json::json;
 use std::io::Write;
 use std::time::Instant;
@@ -25,9 +26,15 @@ impl Timing {
         Self {
             started: Instant::now(),
             event: request.event.clone(),
-            session: hash(request.session_id.as_bytes()),
-            call: request.call_id.as_deref().map(|id| hash(id.as_bytes())),
-            content: request.content.as_deref().map(|text| hash(text.as_bytes())),
+            session: sha256_hex(request.session_id.as_bytes()),
+            call: request
+                .call_id
+                .as_deref()
+                .map(|id| sha256_hex(id.as_bytes())),
+            content: request
+                .content
+                .as_deref()
+                .map(|text| sha256_hex(text.as_bytes())),
             session_wait_us: 0,
             firewall_wait_us: 0,
             evidence_us: 0,
@@ -53,7 +60,7 @@ impl Timing {
             "event":"native_admission_timing", "version":1,
             "request_event":self.event, "session_sha256":self.session,
             "call_sha256": self.call.clone().or_else(|| result.as_ref().ok()
-                .and_then(|r| r.call_id.as_deref()).map(|id| hash(id.as_bytes()))),
+                .and_then(|r| r.call_id.as_deref()).map(|id| sha256_hex(id.as_bytes()))),
             "content_sha256":self.content, "outcome":outcome,
             "release_decision":released, "total_us":total,
         "state_and_decode_us":total.saturating_sub(self.session_wait_us + self.firewall_wait_us + self.evidence_us + self.detectors_us + self.tracking_us + self.audit_us),

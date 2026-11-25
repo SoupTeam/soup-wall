@@ -11,16 +11,16 @@ the isolated SDK environment once:
 
 ```sh
 python3 -m venv /tmp/soup-sdk-venv
-/tmp/soup-sdk-venv/bin/python -m pip install --require-hashes -r scripts/requirements-sou92.txt
+/tmp/soup-sdk-venv/bin/python -m pip install --require-hashes -r scripts/requirements-sdk-compat.txt
 cargo build --locked -p llm-firewall --bin llm-firewall --message-format=json > /tmp/sou92-build.jsonl
-/tmp/soup-sdk-venv/bin/python -B -m unittest discover -s scripts/tests -p test_sou92_sdk.py -v
+/tmp/soup-sdk-venv/bin/python -B -m unittest discover -s scripts/tests -p test_sdk.py -v
 ```
 
 Then run the complete acceptance with one command, using a fresh output path
 outside the repository:
 
 ```sh
-/tmp/soup-sdk-venv/bin/python -B scripts/verify-sou92-sdk.py --run \
+/tmp/soup-sdk-venv/bin/python -B scripts/verify-sdk.py --run \
   --gateway "$PWD/target/debug/llm-firewall" --expected-commit "$(git rev-parse HEAD)" \
   --output /tmp/sou92-results.json
 ```

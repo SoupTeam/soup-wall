@@ -2,6 +2,9 @@
 //! Actual stdio process boundary, real native daemon, and a harmless local MCP server.
 //! These custom-policy checks establish integration, not live model effectiveness.
 
+mod common;
+
+use common::sha256_hex;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -16,7 +19,6 @@ use axum::extract::{Request, State};
 use axum::middleware::{self, Next};
 use axum::response::Response;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use soup_wall_agent::{AgentFirewall, AgentPolicySet, DEFAULT_TAINT_CAP};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
@@ -296,10 +298,6 @@ fn windows_long_path(path: &Path) -> std::path::PathBuf {
     }
 }
 
-fn sha(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
-
 fn registry_with_read_path(classified_read: bool) -> Value {
     let read = if classified_read {
         json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false})
@@ -309,9 +307,9 @@ fn registry_with_read_path(classified_read: bool) -> Value {
     let send = json!({"type":"object","properties":{"url":{"type":"string"},"body":{"type":"string"}},"required":["url","body"],"additionalProperties":false});
     let delete = json!({"type":"object","properties":{"name":{"type":"string"}},"required":["name"],"additionalProperties":false});
     json!({"contract_version": CONTRACT, "registry_id":"fixture-mcp-registry", "tools":[
-        {"name":"read_document","schema_sha256":sha(read.to_string().as_bytes()),"action_class":"read_only","result_provenance":"untrusted","egress":[]},
-        {"name":"send_http","schema_sha256":sha(send.to_string().as_bytes()),"action_class":"network","result_provenance":"local_system","egress":[{"pointer":"/url","kind":"url_host","optional":false}]},
-        {"name":"delete_note","schema_sha256":sha(delete.to_string().as_bytes()),"action_class":"destructive","result_provenance":"local_system","egress":[]}
+        {"name":"read_document","schema_sha256":sha256_hex(read.to_string().as_bytes()),"action_class":"read_only","result_provenance":"untrusted","egress":[]},
+        {"name":"send_http","schema_sha256":sha256_hex(send.to_string().as_bytes()),"action_class":"network","result_provenance":"local_system","egress":[{"pointer":"/url","kind":"url_host","optional":false}]},
+        {"name":"delete_note","schema_sha256":sha256_hex(delete.to_string().as_bytes()),"action_class":"destructive","result_provenance":"local_system","egress":[]}
     ]})
 }
 
@@ -472,7 +470,7 @@ fn fixture_state_with_policy(
     policy_str: &str,
 ) -> Arc<AppState> {
     let bytes = std::fs::read(home.parent().unwrap().join("registry.json")).unwrap();
-    let digest = sha(&bytes);
+    let digest = sha256_hex(&bytes);
     let mut native = NativeState::from_bytes(&bytes, &digest, TOKEN.into()).unwrap();
     if let Some(ttl) = approval_ttl {
         native = native
@@ -930,10 +928,11 @@ impl Fixture {
                 serde_json::from_str(include_str!("fixtures/mcp_inputs/nested_schema.json"))
                     .unwrap();
             registry["tools"][0]["name"] = json!("inventory_lookup");
-            registry["tools"][0]["schema_sha256"] = json!(sha(schema.to_string().as_bytes()));
+            registry["tools"][0]["schema_sha256"] =
+                json!(sha256_hex(schema.to_string().as_bytes()));
         }
         let bytes = registry.to_string().into_bytes();
-        let digest = sha(&bytes);
+        let digest = sha256_hex(&bytes);
         let registry_path = dir.path().join("registry.json");
         std::fs::write(&registry_path, &bytes).unwrap();
         // Create through the same protected API as the daemon, then replace only
@@ -1065,7 +1064,7 @@ impl Fixture {
         let mut registry = registry_with_read_path(classified_read);
         policy_builder(dir.path(), &mut registry);
         let bytes = registry.to_string().into_bytes();
-        let digest = sha(&bytes);
+        let digest = sha256_hex(&bytes);
         let registry_path = dir.path().join("registry.json");
         std::fs::write(&registry_path, &bytes).unwrap();
         agentfw::token::load_or_create(&home.join("native-token")).unwrap();
@@ -1394,7 +1393,10 @@ async fn classified_read_keeps_original_call_and_result_bytes() {
     assert_eq!(classification["classification"]["unknown"], false);
     assert_eq!(classification["mapped_action_class"], "read_only");
     assert_eq!(classification["trusted_baseline"], "read_only");
-    assert_eq!(classification["args_sha256"], sha(br#"{"path":"memo-1"}"#));
+    assert_eq!(
+        classification["args_sha256"],
+        sha256_hex(br#"{"path":"memo-1"}"#)
+    );
     assert_eq!(
         classification["schema_sha256"],
         registry_with_read_path(true)["tools"][0]["schema_sha256"]
@@ -1435,8 +1437,8 @@ fn evidence_value(
     let registry_bytes = std::fs::read(ledger.parent().unwrap().join("registry.json")).unwrap();
     json!({
         "schema_version": "sou17-native-evidence/0.1",
-        "registry_sha256": sha(&registry_bytes),
-        "policy_sha256": sha(POLICY.as_bytes()),
+        "registry_sha256": sha256_hex(&registry_bytes),
+        "policy_sha256": sha256_hex(POLICY.as_bytes()),
         "test": test,
         "call_id": call_id,
         "execution_count": executions,
@@ -1471,8 +1473,9 @@ fn assert_real_baseline_calls(stderr: &Path, ledger: &Path, calls: &[&str]) -> V
         .parent()
         .unwrap()
         .join("rule_baseline/rule_baseline.py");
-    let classifier_sha = sha(&std::fs::read(script).unwrap());
-    let registry_sha = sha(&std::fs::read(ledger.parent().unwrap().join("registry.json")).unwrap());
+    let classifier_sha = sha256_hex(&std::fs::read(script).unwrap());
+    let registry_sha =
+        sha256_hex(&std::fs::read(ledger.parent().unwrap().join("registry.json")).unwrap());
     for (row, raw) in rows.iter().zip(calls) {
         let call: Value = serde_json::from_str(raw).unwrap();
         let action = match call["params"]["name"].as_str().unwrap() {
@@ -1488,7 +1491,7 @@ fn assert_real_baseline_calls(stderr: &Path, ledger: &Path, calls: &[&str]) -> V
         assert_eq!(row["tool"], call["params"]["name"]);
         assert_eq!(
             row["args_sha256"],
-            sha(call["params"]["arguments"].to_string().as_bytes())
+            sha256_hex(call["params"]["arguments"].to_string().as_bytes())
         );
         assert_eq!(row["classification"]["actions"], json!([action]));
         assert_eq!(row["classification"]["unknown"], false);
@@ -1735,7 +1738,10 @@ async fn native_mcp_accepts_codex_discovery_and_calls_without_granting_authority
 
 #[tokio::test]
 async fn native_mcp_accepts_current_codex_without_granting_authority() {
-    host_metadata_acceptance(codex_current_metadata()).await;
+    let mut metadata = codex_current_metadata();
+    metadata["x-codex-turn-metadata"]["workspaces"]["/owned/workspace"]["associated_remote_urls"]
+        ["origin"] = json!("https://example.invalid/private-remote");
+    host_metadata_acceptance(metadata).await;
 }
 
 #[tokio::test]
@@ -1892,10 +1898,20 @@ async fn host_metadata_acceptance(metadata: Value) {
     let thread = "codex-thread";
     let read = format!(" {{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{{\"name\":\"read_document\",\"arguments\":{{}},\"_meta\":{metadata}}}}} ");
     assert_eq!(fixture.exchange(&read).await.as_deref(), Some(READ_RESULT));
-    assert_eq!(
-        std::fs::read_to_string(&fixture.ledger).unwrap(),
-        format!("{read}\n")
-    );
+    let forwarded = std::fs::read_to_string(&fixture.ledger).unwrap();
+    if metadata
+        .pointer("/x-codex-turn-metadata/workspaces")
+        .is_some()
+    {
+        let mut expected: Value = serde_json::from_str(&read).unwrap();
+        expected["params"]["_meta"]["x-codex-turn-metadata"]
+            .as_object_mut()
+            .unwrap()
+            .remove("workspaces");
+        assert_eq!(serde_json::from_str::<Value>(&forwarded).unwrap(), expected);
+    } else {
+        assert_eq!(forwarded, format!("{read}\n"));
+    }
 
     for (id, tool, args, rule) in [
         (
@@ -2988,7 +3004,7 @@ async fn resource_profiles_cannot_promote_a_generic_executor_to_confined() {
         &profiles,
         json!([{
             "server_id":"fixture", "tool_name":"send_http",
-            "schema_sha256":sha(schema.to_string().as_bytes()),
+            "schema_sha256":sha256_hex(schema.to_string().as_bytes()),
             "selectors":[{"pointer":"/url","kind":"url"}]
         }])
         .to_string(),
@@ -3035,7 +3051,7 @@ async fn path_profiles_also_refuse_missing_execution_time_confinement() {
         &profiles,
         json!([{
             "server_id":"fixture","tool_name":"read_document",
-            "schema_sha256":sha(schema.to_string().as_bytes()),
+            "schema_sha256":sha256_hex(schema.to_string().as_bytes()),
             "selectors":[{"pointer":"/path","kind":"path"}]
         }])
         .to_string(),
@@ -3170,7 +3186,7 @@ async fn sou15_refusal_capacity_leak_prevented_and_continuation_succeeds() {
 #[tokio::test]
 async fn sou15_generic_resource_executor_refuses_both_destinations() {
     let send_schema = json!({"type":"object","properties":{"url":{"type":"string"},"body":{"type":"string"}},"required":["url","body"],"additionalProperties":false});
-    let send_schema_digest = sha(send_schema.to_string().as_bytes());
+    let send_schema_digest = sha256_hex(send_schema.to_string().as_bytes());
     let profiles_file =
         std::env::temp_dir().join(format!("res_profiles_auth_{}.json", std::process::id()));
     let profiles_data = json!([
@@ -3437,7 +3453,7 @@ async fn sou15_operation_constrained_resource_executor_enforces_boundaries() {
             let profile = json!({
                 "server_id": "fixture",
                 "tool_name": "read_document",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "schema_sha256": sha256_hex(schema.to_string().as_bytes()),
                 "selectors": [{ "pointer": "/path", "kind": "path" }]
             });
             registry["tools"][0]["resource_policy"] = json!({
@@ -3599,7 +3615,7 @@ async fn sou15_parent_swap_symlink_traversal_refuses_outside_canary() {
             let profile = json!({
                 "server_id": "fixture",
                 "tool_name": "read_document",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "schema_sha256": sha256_hex(schema.to_string().as_bytes()),
                 "selectors": [{ "pointer": "/path", "kind": "path" }]
             });
             registry["tools"][0]["resource_policy"] = json!({
@@ -3732,7 +3748,7 @@ async fn sou15_post_admission_read_failure_capacity_leak_prevented_and_continuat
             let profile = json!({
                 "server_id": "fixture",
                 "tool_name": "read_document",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "schema_sha256": sha256_hex(schema.to_string().as_bytes()),
                 "selectors": [{ "pointer": "/path", "kind": "path" }]
             });
             registry["tools"][0]["resource_policy"] = json!({
@@ -3920,7 +3936,7 @@ async fn sou15_root_directory_swap_refused_and_pinned_continuation() {
             let profile = json!({
                 "server_id": "fixture",
                 "tool_name": "read_document",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "schema_sha256": sha256_hex(schema.to_string().as_bytes()),
                 "selectors": [{ "pointer": "/path", "kind": "path" }]
             });
             registry["tools"][0]["resource_policy"] = json!({
@@ -4079,7 +4095,7 @@ async fn sou17_post_admission_fifo_refused_and_same_session_read_recovers() {
                 "required":["path"],"additionalProperties":false});
             registry["tools"][0]["resource_policy"] = json!({
                 "profile":{"server_id":"fixture","tool_name":"read_document",
-                    "schema_sha256":sha(schema.to_string().as_bytes()),
+                    "schema_sha256":sha256_hex(schema.to_string().as_bytes()),
                     "selectors":[{"pointer":"/path","kind":"path"}]},
                 "workspace":workspace,"cwd":workspace,
                 "executor_sha256":"e".repeat(64),"classifier_sha256":"c".repeat(64),
@@ -4179,7 +4195,7 @@ async fn sou17_resource_gate_fixture(classifier: Option<&str>) -> Fixture {
                 "required":["path"],"additionalProperties":false});
             registry["tools"][0]["resource_policy"] = json!({
                 "profile":{"server_id":"fixture","tool_name":"read_document",
-                    "schema_sha256":sha(schema.to_string().as_bytes()),
+                    "schema_sha256":sha256_hex(schema.to_string().as_bytes()),
                     "selectors":[{"pointer":"/path","kind":"path"}]},
                 "workspace":workspace,"cwd":workspace,
                 "executor_sha256":"e".repeat(64),"classifier_sha256":"c".repeat(64),
@@ -5063,16 +5079,16 @@ fn sou63_acceptance_evidence(fixture: &Fixture, scenario: &str, proofs: &[&str],
             let grant = agentfw::child_authority::decode_token(proof).unwrap();
             json!({"host_session":grant.host_session,"server_id":grant.server_id,
             "agent_id":grant.agent_id,"parent_id":grant.parent_id,
-            "tools":grant.granted_tools,"binding_sha256":sha(proof.as_bytes())})
+            "tools":grant.granted_tools,"binding_sha256":sha256_hex(proof.as_bytes())})
         })
         .collect();
     eprintln!(
         "SOU63_ACCEPTANCE {}",
         json!({
-            "scenario":scenario,"policy_sha256":sha(POLICY.as_bytes()),
-            "registry_sha256":sha(&std::fs::read(fixture._dir.path().join("registry.json")).unwrap()),
+            "scenario":scenario,"policy_sha256":sha256_hex(POLICY.as_bytes()),
+            "registry_sha256":sha256_hex(&std::fs::read(fixture._dir.path().join("registry.json")).unwrap()),
             "agentfw_binary_sha256":agentfw::lifecycle::sha256_file(Path::new(agentfw_test_binary())).unwrap(),
-            "owned_server_source_sha256":sha(SERVER.as_bytes()),
+            "owned_server_source_sha256":sha256_hex(SERVER.as_bytes()),
             "bindings":bindings,"backend_execution_counts":ledgers,
             "withheld_rule":"fixture-mcp-reuse"
         })
@@ -5467,12 +5483,12 @@ async fn sou67_operator_owned_tool_bindings_allow_arbitrary_tool_name_under_cons
             let profile = json!({
                 "server_id": "fixture",
                 "tool_name": "fetch_document",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "schema_sha256": sha256_hex(schema.to_string().as_bytes()),
                 "selectors": [{ "pointer": "/path", "kind": "path" }]
             });
             registry["tools"][0] = json!({
                 "name": "fetch_document",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "schema_sha256": sha256_hex(schema.to_string().as_bytes()),
                 "action_class": "read_only",
                 "result_provenance": "untrusted",
                 "egress": [],
@@ -5572,7 +5588,7 @@ async fn sou67_operator_owned_tool_bindings_allow_arbitrary_create_tool_name_und
         .parent()
         .unwrap()
         .join("rule_baseline/rule_baseline.py");
-    let classifier_digest = sha(&std::fs::read(&rule_baseline_path).unwrap());
+    let classifier_digest = sha256_hex(&std::fs::read(&rule_baseline_path).unwrap());
 
     const CREATE_POLICY: &str = "agent_policies:
   - name: fixture-mcp-reuse
@@ -5616,12 +5632,12 @@ default: allow
             let profile = json!({
                 "server_id": "fixture",
                 "tool_name": "save_artifact",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "schema_sha256": sha256_hex(schema.to_string().as_bytes()),
                 "selectors": [{ "pointer": "/spec/destination", "kind": "path", "allow_missing_leaf": true }]
             });
             registry["tools"][0] = json!({
                 "name": "save_artifact",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "schema_sha256": sha256_hex(schema.to_string().as_bytes()),
                 "action_class": "side_effecting",
                 "result_provenance": "untrusted",
                 "egress": [],
@@ -5759,12 +5775,12 @@ async fn sou67_read_policy_server_id_mismatch_refused() {
             let profile = json!({
                 "server_id": "other-server",
                 "tool_name": "fetch_document",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "schema_sha256": sha256_hex(schema.to_string().as_bytes()),
                 "selectors": [{ "pointer": "/path", "kind": "path" }]
             });
             registry["tools"][0] = json!({
                 "name": "fetch_document",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "schema_sha256": sha256_hex(schema.to_string().as_bytes()),
                 "action_class": "read_only",
                 "result_provenance": "untrusted",
                 "egress": [],
@@ -5877,7 +5893,7 @@ async fn sou64_installed_package_satisfies_constrained_create_profile_and_wrong_
         .and_then(Path::parent)
         .expect("workspace root is embedded in the test")
         .join("rule_baseline/rule_baseline.py");
-    let real_digest = sha(&std::fs::read(&rule_baseline_path).unwrap());
+    let real_digest = sha256_hex(&std::fs::read(&rule_baseline_path).unwrap());
     const CREATE_POLICY: &str = "agent_policies:
   - name: fixture-destructive-confirmation
     when: { action_class: destructive }
@@ -5902,10 +5918,10 @@ default: allow
                     "required":["destination","payload"],"additionalProperties":false}},
                     "required":["spec"],"additionalProperties":false});
                 let profile = json!({"server_id":"fixture","tool_name":"save_artifact",
-                    "schema_sha256":sha(schema.to_string().as_bytes()),
+                    "schema_sha256":sha256_hex(schema.to_string().as_bytes()),
                     "selectors":[{"pointer":"/spec/destination","kind":"path","allow_missing_leaf":true}]});
                 registry["tools"][0] = json!({"name":"save_artifact",
-                    "schema_sha256":sha(schema.to_string().as_bytes()),
+                    "schema_sha256":sha256_hex(schema.to_string().as_bytes()),
                     "action_class":"side_effecting","result_provenance":"untrusted","egress":[],
                     "resource_policy":{"profile":profile,"workspace":canonical_dir,"cwd":canonical_dir,
                         "executor_sha256":create_file_executor_sha256(),
@@ -5959,7 +5975,7 @@ async fn sou88_resource_create_ask_operator_approval_runs_once_and_reject_zero_e
         .parent()
         .unwrap()
         .join("rule_baseline/rule_baseline.py");
-    let classifier_digest = sha(&std::fs::read(&rule_baseline_path).unwrap());
+    let classifier_digest = sha256_hex(&std::fs::read(&rule_baseline_path).unwrap());
 
     const ASK_CREATE_POLICY: &str = "agent_policies:
   - name: ask-side-effecting
@@ -6000,12 +6016,12 @@ default: allow
             let profile = json!({
                 "server_id": "fixture",
                 "tool_name": "save_artifact",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "schema_sha256": sha256_hex(schema.to_string().as_bytes()),
                 "selectors": [{ "pointer": "/spec/destination", "kind": "path", "allow_missing_leaf": true }]
             });
             registry["tools"][0] = json!({
                 "name": "save_artifact",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "schema_sha256": sha256_hex(schema.to_string().as_bytes()),
                 "action_class": "side_effecting",
                 "result_provenance": "untrusted",
                 "egress": [],
@@ -6199,7 +6215,7 @@ else:
         ),
     )
     .unwrap();
-    let classifier_digest = sha(&std::fs::read(&script).unwrap());
+    let classifier_digest = sha256_hex(&std::fs::read(&script).unwrap());
     let selection = format!("script:{}", script.display());
 
     const ASK_CREATE_POLICY: &str = "agent_policies:
@@ -6241,12 +6257,12 @@ default: allow
             let profile = json!({
                 "server_id": "fixture",
                 "tool_name": "save_artifact",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "schema_sha256": sha256_hex(schema.to_string().as_bytes()),
                 "selectors": [{ "pointer": "/spec/destination", "kind": "path", "allow_missing_leaf": true }]
             });
             registry["tools"][0] = json!({
                 "name": "save_artifact",
-                "schema_sha256": sha(schema.to_string().as_bytes()),
+                "schema_sha256": sha256_hex(schema.to_string().as_bytes()),
                 "action_class": "side_effecting",
                 "result_provenance": "untrusted",
                 "egress": [],
@@ -6393,7 +6409,7 @@ async fn sou89_failed_enrollment_cannot_end_a_rebound_useful_peer() {
     })
     .await
     .expect("old collector must reach enrollment");
-    let digest = sha(&std::fs::read(fixture._dir.path().join("registry.json")).unwrap());
+    let digest = sha256_hex(&std::fs::read(fixture._dir.path().join("registry.json")).unwrap());
     let ended: Value = reqwest::Client::new()
         .post(format!("http://127.0.0.1:{}/native/v1", fixture.port))
         .bearer_auth(TOKEN)
@@ -6471,7 +6487,7 @@ async fn sou89_failed_enrollment_reclaims_owned_bootstrap(mode: &str) {
         .json()
         .await
         .unwrap();
-    let digest = sha(&std::fs::read(fixture._dir.path().join("registry.json")).unwrap());
+    let digest = sha256_hex(&std::fs::read(fixture._dir.path().join("registry.json")).unwrap());
     let response = reqwest::Client::new()
         .post(format!("http://127.0.0.1:{}/native/liveness/v1", fixture.port)).bearer_auth(TOKEN)
         .json(&json!({"contract_version":"sw-native-liveness/1", "registry_sha256":digest,
@@ -6489,7 +6505,7 @@ async fn sou89_failed_enrollment_reclaims_owned_bootstrap(mode: &str) {
 async fn sou89_active_old_collector_cannot_inherit_a_rebound_peers_admission() {
     let mut old = Fixture::new("lease-enroll-active-rebind", true).await;
     old.ready().await;
-    let digest = sha(&std::fs::read(old._dir.path().join("registry.json")).unwrap());
+    let digest = sha256_hex(&std::fs::read(old._dir.path().join("registry.json")).unwrap());
     let ended: Value = reqwest::Client::new()
         .post(format!("http://127.0.0.1:{}/native/v1", old.port))
         .bearer_auth(TOKEN)

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Bounded lookup, not history search. Untrusted records contribute only fixed
 //! reason codes and digests. They never become authenticated runtime evidence.
-use super::{sha, strict, PilotArgs};
+use super::{strict, PilotArgs};
+use crate::hashing::sha256_hex;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -258,7 +259,7 @@ pub(super) fn lookup(
     let Ok(bytes) = crate::doctor::read_private(path, FILE_CAP) else {
         return report;
     };
-    report.file_sha256 = Some(sha(&bytes));
+    report.file_sha256 = Some(sha256_hex(&bytes));
     let result = lookup_bytes(args, &bytes, registry, classifier, &mut report);
     if let Err(code) = result {
         let digest = report.file_sha256.take();

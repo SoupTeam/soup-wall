@@ -63,8 +63,8 @@ Use the accepted installer prerequisites: pinned official Node 22.23.5, its npm,
 and bubblewrap 0.13.1 with `--ro-bind-fd`. Then run:
 
 ```bash
-python3 -B -m unittest discover -s scripts/tests -p test_sou110_literal_arguments.py -v
-python3 -B scripts/verify-sou110-literal-arguments.py --run \
+python3 -B -m unittest discover -s scripts/tests -p test_literal_arguments.py -v
+python3 -B scripts/verify-literal-arguments.py --run \
   --agentfw "$PWD/target/debug/agentfw" \
   --node /path/to/pinned/node --npm /path/to/pinned/npm \
   --bwrap /path/to/bwrap --strace /usr/bin/strace \
