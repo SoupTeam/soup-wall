@@ -1167,7 +1167,6 @@ async fn signal_owned_group(pgid: u32, kind: i32) -> Result<()> {
 }
 
 #[cfg(unix)]
-#[allow(dead_code)]
 async fn terminate_process_group(pgid: u32, grace: Duration) -> Result<()> {
     let term = signal_owned_group(pgid, libc::SIGTERM).await;
     tokio::time::sleep(grace).await;
@@ -1178,7 +1177,6 @@ async fn terminate_process_group(pgid: u32, grace: Duration) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-#[allow(dead_code)]
 async fn terminate_process_group(_pgid: u32, _grace: Duration) -> Result<()> {
     Ok(())
 }
