@@ -402,10 +402,18 @@ Everything else: demos, reports, benchmarks, diagnostics and shared modules.
 | [`benchmark-native-results.py`](benchmark-native-results.py) | Finite old/candidate original-filesystem result trials; no deadline overrides. |
 | [`classifier-runtime-demo.sh`](classifier-runtime-demo.sh) | SOU-64: clean-directory lifecycle of the installable classifier package (Linux). |
 | [`classifier-runtime-windows-acceptance.py`](classifier-runtime-windows-acceptance.py) | SOU-81: the production collector, run from a clean installed directory, with the installed classifier package. |
+| [`codex-filesystem-acceptance.py`](codex-filesystem-acceptance.py) | Actual Codex CLI against the pinned original filesystem MCP, offline and USD0. |
+| [`codex-mcp-acceptance.py`](codex-mcp-acceptance.py) | Owned Codex CLI + native MCP acceptance; loopback scripted Responses, USD0. |
+| [`gemini-filesystem-acceptance.py`](gemini-filesystem-acceptance.py) | Actual Gemini CLI against the pinned original filesystem MCP, offline and USD0. |
+| [`gemini-hook-fault-acceptance.py`](gemini-hook-fault-acceptance.py) | Characterize the actual Gemini 0.68.0 callback boundary, including fail-open cases. |
+| [`gemini-mcp-acceptance.py`](gemini-mcp-acceptance.py) | Gemini CLI 0.68.0 with native stdio admission and an owned loopback provider. |
 | [`import-agentdojo-history.py`](import-agentdojo-history.py) | Import pinned public AgentDojo traces for offline policy replay, without execution. |
 | [`mapped_git_consumer.py`](mapped_git_consumer.py) | Opt-in mapped original Git consumer; public plans never provide authority. |
 | [`measure-sou17-latency.py`](measure-sou17-latency.py) | Paired local read latency: production admission versus a measurement-only control. |
 | [`obfuscate-dataset.py`](obfuscate-dataset.py) | Obfuscate the MALICIOUS rows of a {text,label} jsonl using the same evasion |
+| [`opencode-filesystem-acceptance.py`](opencode-filesystem-acceptance.py) | Actual OpenCode against the pinned original filesystem MCP, offline and USD0. |
+| [`opencode-mcp-acceptance.py`](opencode-mcp-acceptance.py) | OpenCode 1.19.6 with native stdio admission and an owned loopback provider. |
+| [`opencode-plugin-fault-acceptance.py`](opencode-plugin-fault-acceptance.py) | Characterize the pinned real host/plugin transport using only owned fixtures. |
 | [`prepared_budget_observer.py`](prepared_budget_observer.py) | Read-only, bounded observations of every leaf in one prepared pilot root. |
 | [`prepared_budget_pressure.py`](prepared_budget_pressure.py) | Owned actual-host calibration attempts over original FS/Git servers. |
 | [`prepared_stop_witness.py`](prepared_stop_witness.py) | Owned native Linux witnesses for the existing prepared-pilot stop command. |
@@ -431,6 +439,7 @@ Everything else: demos, reports, benchmarks, diagnostics and shared modules.
 | [`sou91_ruleset_patch.py`](sou91_ruleset_patch.py) | Prepare, never apply, a reviewable additive SOU-91 main ruleset update. |
 | [`sou95_windows_owned_acceptance.py`](sou95_windows_owned_acceptance.py) | One-command native standard-user acceptance for Windows audit retention. |
 | [`sou97_runtime_replay.py`](sou97_runtime_replay.py) | SOU-97 candidate-mode replay of the frozen public matrix through the protected original-server chain. |
+| [`soup-wall-opencode.mjs`](soup-wall-opencode.mjs) | Qualified against opencode-ai 1.19.6's tool.execute.before/after plugin API. |
 | [`summarize-cache-evidence.py`](summarize-cache-evidence.py) | Summarize the finite native SOU-194 exchange witness without archive bytes. |
 | [`test_agent_command_help.py`](test_agent_command_help.py) |  |
 | [`test_agent_diagnostic_diff.py`](test_agent_diagnostic_diff.py) |  |
