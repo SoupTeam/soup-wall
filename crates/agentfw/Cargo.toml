@@ -75,7 +75,7 @@ aws-lc-rs = { version = "1", features = ["prebuilt-nasm"] }
 # for the proxy CSRF proofs; declared here for the approval-grant HMAC.
 hmac = "0.12"
 base64 = "0.22"
-toml_edit = { version = "0.22.27", features = ["serde"] }
+toml_edit = { version = "0.25.20", features = ["serde"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
