@@ -33,7 +33,7 @@ tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 anyhow = "1"
 aes-gcm = "0.11.1"
 base64 = "0.23"
-jsonwebtoken = { version = "11.0.0", default-features = false, features = ["aws_lc_rs"] }
+jsonwebtoken = { version = "12.0.0", default-features = false, features = ["aws_lc_rs"] }
 # Enables AWS-LC's bundled assembler on Windows where NASM is not installed.
 # Feature unification applies this build option to jsonwebtoken's backend.
 aws-lc-rs = { version = "1", features = ["prebuilt-nasm"] }
