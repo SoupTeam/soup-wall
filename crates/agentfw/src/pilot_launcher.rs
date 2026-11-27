@@ -229,6 +229,11 @@ pub struct PilotLaunchArgs {
     #[arg(long, default_value = "claude-sonnet-4-20250514")]
     pub model: String,
 
+    /// Effort level written to the host's private settings as `effortLevel`;
+    /// omitted, Claude Code keeps its own default.
+    #[arg(long, value_enum)]
+    pub effort: Option<crate::pilot_host::Effort>,
+
     /// Mock daemon token for testing/dry-run when daemon is not running.
     #[arg(long, hide = true)]
     pub mock_daemon_token: Option<String>,
@@ -269,6 +274,7 @@ pub struct ValidatedConfig {
     pub git_runtime_cmd: Vec<String>,
     pub prompt: String,
     pub model: String,
+    pub effort: Option<crate::pilot_host::Effort>,
 }
 
 /// JSON report produced by dry-run or full execution.
@@ -527,6 +533,7 @@ impl PilotLaunchArgs {
             git_runtime_cmd,
             prompt,
             model,
+            effort: self.effort,
         })
     }
 }
@@ -1806,7 +1813,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         }
     }
 
-    crate::pilot_host::isolate(&mut cmd, &guard.path, provider)?;
+    crate::pilot_host::isolate(&mut cmd, &guard.path, provider, config.effort)?;
     #[cfg(target_os = "linux")]
     if let Some(ca) = &selected_ca {
         ca.install(&mut cmd);

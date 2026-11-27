@@ -31,6 +31,41 @@ pub(crate) const PROVIDER_ENV: &[&str] = &[
     "SSL_CERT_FILE",
 ];
 
+/// Claude Code effort level selected by the operator's provider profile.
+///
+/// Some providers accept only part of Claude Code's effort range, so the
+/// default request (`high`) fails there. The selected level reaches the host
+/// only as `effortLevel` in its private flag settings; no environment changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum Effort {
+    Low,
+    Medium,
+    High,
+    Xhigh,
+}
+
+impl Effort {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Xhigh => "xhigh",
+        }
+    }
+}
+
+/// The host's only settings source: hooks and plugins off, plus the optional effort.
+fn host_settings(effort: Option<Effort>) -> Vec<u8> {
+    let mut settings = serde_json::json!({"disableAllHooks": true, "enabledPlugins": {}});
+    if let Some(effort) = effort {
+        settings["effortLevel"] = effort.as_str().into();
+    }
+    let mut bytes = settings.to_string().into_bytes();
+    bytes.push(b'\n');
+    bytes
+}
+
 fn reject_managed_sources(root: &Path) -> Result<()> {
     for name in [
         "managed-settings.json",
@@ -133,14 +168,16 @@ pub(crate) fn isolate(
     command: &mut Command,
     private: &Path,
     provider: Vec<(OsString, OsString)>,
+    effort: Option<Effort>,
 ) -> Result<()> {
-    configure(command, private, provider)
+    configure(command, private, provider, effort)
 }
 
 fn configure(
     command: &mut Command,
     private: &Path,
     provider: Vec<(OsString, OsString)>,
+    effort: Option<Effort>,
 ) -> Result<()> {
     let home = private.join("host-home");
     let temporary = private.join("host-tmp");
@@ -149,10 +186,7 @@ fn configure(
     fs::create_dir(&temporary)?;
     fs::create_dir(&helper_path)?;
     let settings = private.join("host-settings.json");
-    fs::write(
-        &settings,
-        b"{\"disableAllHooks\":true,\"enabledPlugins\":{}}\n",
-    )?;
+    fs::write(&settings, host_settings(effort))?;
     command
         .env_clear()
         .envs(provider)
@@ -213,6 +247,7 @@ mod tests {
             &mut command,
             private.path(),
             vec![("ANTHROPIC_API_KEY".into(), "owned-provider".into())],
+            None,
         )
         .unwrap();
         let env = command
@@ -271,9 +306,59 @@ else: raise AssertionError('ambient helper executed')
             &mut command,
             private.path(),
             vec![("ANTHROPIC_API_KEY".into(), "owned-host-only".into())],
+            None,
         )
         .unwrap();
         assert!(command.status().unwrap().success());
+    }
+
+    #[test]
+    fn selected_effort_reaches_only_the_private_host_settings() {
+        let private = tempfile::tempdir().unwrap();
+        let mut command = Command::new("/trusted/claude");
+        configure(
+            &mut command,
+            private.path(),
+            Vec::new(),
+            Some(Effort::Medium),
+        )
+        .unwrap();
+        let settings: serde_json::Value =
+            serde_json::from_slice(&fs::read(private.path().join("host-settings.json")).unwrap())
+                .unwrap();
+        assert_eq!(
+            settings,
+            serde_json::json!({
+                "disableAllHooks": true,
+                "enabledPlugins": {},
+                "effortLevel": "medium",
+            })
+        );
+        // The choice travels in the settings file only, never as an argument
+        // or environment variable such as CLAUDE_CODE_EFFORT_LEVEL.
+        assert!(command
+            .get_args()
+            .all(|arg| arg.to_str().is_some_and(|arg| !arg.contains("effort"))));
+        assert!(command
+            .get_envs()
+            .all(|(key, _)| !key.to_string_lossy().contains("EFFORT")));
+    }
+
+    #[test]
+    fn effort_values_match_the_pinned_host_setting() {
+        use clap::ValueEnum;
+        for (effort, name) in [
+            (Effort::Low, "low"),
+            (Effort::Medium, "medium"),
+            (Effort::High, "high"),
+            (Effort::Xhigh, "xhigh"),
+        ] {
+            assert_eq!(effort.as_str(), name);
+            assert_eq!(Effort::from_str(name, false), Ok(effort));
+        }
+        for name in ["max", "auto", "Medium", ""] {
+            assert!(Effort::from_str(name, false).is_err());
+        }
     }
 
     #[test]
@@ -313,13 +398,21 @@ else: raise AssertionError('ambient helper executed')
             }
             file.into_raw_fd()
         }
+        fn identity(fd: i32) -> Option<(u64, u64)> {
+            let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+            (unsafe { libc::fstat(fd, &mut stat) } == 0).then_some((stat.st_dev, stat.st_ino))
+        }
         let fd = carrier(br#"{"ANTHROPIC_API_KEY":"owned-api-canary"}"#, true);
+        let carrier_identity = identity(fd);
+        assert!(carrier_identity.is_some());
         let values = provider_inputs(Some(fd)).unwrap();
         assert_eq!(
             values,
             vec![("ANTHROPIC_API_KEY".into(), "owned-api-canary".into())]
         );
-        assert_eq!(unsafe { libc::fcntl(fd, libc::F_GETFD) }, -1);
+        // A parallel test may reuse the closed descriptor number, but never for
+        // this memfd: the number must no longer refer to the consumed carrier.
+        assert_ne!(identity(fd), carrier_identity);
         for bytes in [
             br#"{"LD_PRELOAD":"owned-loader"}"#.as_slice(),
             br#"{"ANTHROPIC_API_KEY":"a","ANTHROPIC_API_KEY":"b"}"#.as_slice(),

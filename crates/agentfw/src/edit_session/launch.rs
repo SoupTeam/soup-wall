@@ -424,7 +424,15 @@ pub(super) fn command(action: Action) -> Result<()> {
             prompt_file,
             timeout_seconds,
             model,
-        } => super::runtime::run(plan, sha256, state, prompt_file, timeout_seconds, model)?,
+            effort,
+        } => super::runtime::run(
+            plan,
+            sha256,
+            state,
+            prompt_file,
+            timeout_seconds,
+            super::runtime::HostRequest { model, effort },
+        )?,
         Action::Stop { run, output } => super::control::stop(&run, output)?,
         Action::Refresh {
             plan,

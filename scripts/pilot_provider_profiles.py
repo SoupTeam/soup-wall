@@ -37,9 +37,13 @@ VERSIONED_FILE = ".versioned-v2"
 DIRECTORY = "pilot-providers"
 NAME = re.compile(r"[a-z][a-z0-9_-]{0,31}\Z")
 MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,99}\Z")
+# Claude Code effort levels; the host receives the choice as its effortLevel setting.
+EFFORTS = ("low", "medium", "high", "xhigh")
 SHA = re.compile(r"[0-9a-f]{64}\Z")
 SECRET_KEYS = frozenset(("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"))
 PUBLIC_KEYS = frozenset(PROVIDER.KEYS) - SECRET_KEYS
+# Nonsecret host options kept beside the transport fields; never in the carrier.
+HOST_KEYS = frozenset(("model", "effort"))
 MAX_PROFILES = 16
 MAX_VERSIONS = 64
 MAX_FILE = PROVIDER.MAX_BYTES
@@ -121,9 +125,10 @@ def _url(value, *, endpoint):
 
 
 def validate_public(public):
-    require(type(public) is dict and set(public) <= PUBLIC_KEYS | {"model"}
+    require(type(public) is dict and set(public) <= PUBLIC_KEYS | HOST_KEYS
             and type(public.get("model")) is str and MODEL.fullmatch(public["model"]),
             "provider_profile_invalid")
+    require("effort" not in public or public["effort"] in EFFORTS, "provider_effort_invalid")
     for key, value in public.items():
         require(type(value) is str and "\0" not in value, "provider_profile_invalid")
         if key == "ANTHROPIC_BASE_URL":
@@ -595,7 +600,8 @@ class Store:
                                 if index is not None else {}),
                              "public_sha256": digest(encoded(public)), "model": public["model"],
                              "endpoint_sha256": digest(public.get("ANTHROPIC_BASE_URL", "").encode()),
-                             "transport_fields": sorted(set(public) - {"model", "ANTHROPIC_BASE_URL"})})
+                             "effort": public.get("effort"),
+                             "transport_fields": sorted(set(public) - HOST_KEYS - {"ANTHROPIC_BASE_URL"})})
         valid = selected is None
         selected_is_current = selected is None
         selected_model = None
@@ -685,7 +691,7 @@ class Store:
 
     @staticmethod
     def _changed_public(value, changes):
-        require(type(changes) is dict and set(changes) <= PUBLIC_KEYS | {"model"},
+        require(type(changes) is dict and set(changes) <= PUBLIC_KEYS | HOST_KEYS,
                 "provider_profile_invalid")
         public = dict(value["public"])
         public.update(changes)
@@ -803,6 +809,15 @@ class Store:
         return {"name": profile_name, "removed_version": version}
 
 
+def host_inputs(profile):
+    """Split a validated profile into carrier values, model and optional effort."""
+    values = dict(profile["public"])
+    model = values.pop("model")
+    effort = values.pop("effort", None)
+    values.update(profile["secrets"])
+    return values, model, effort
+
+
 def chosen(home, environment):
     """Read the exact selected profile; ambient provider fields cannot combine."""
     with Store(home) as store:
@@ -810,15 +825,13 @@ def chosen(home, environment):
         if selected is None:
             values = PROVIDER.selected(environment)
             PROVIDER.require_access(values)
-            return values, None, None, None
+            return values, None, None, None, None
         require(not PROVIDER.selected(environment), "provider_source_conflict")
         profile, identity = store.profile(selected["name"], selected.get("version"))
         require(identity == selected["profile_sha256"], "provider_selection_stale")
-        values = dict(profile["public"])
-        model = values.pop("model")
-        values.update(profile["secrets"])
+        values, model, effort = host_inputs(profile)
         token = (selected["version"] + ":" + identity if "version" in selected else identity)
-        return values, model, selected["name"], token
+        return values, model, effort, selected["name"], token
 
 
 def unchanged(home, profile_name, identity):

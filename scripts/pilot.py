@@ -58,7 +58,7 @@ PROFILE_FAILURE_CODES = frozenset({"provider_home_invalid", "provider_home_chang
     "provider_selection_stale", "provider_source_conflict", "provider_name_invalid", "provider_transport_invalid",
     "provider_secret_input_invalid", "provider_terminal_required", "provider_consent_required", "provider_unavailable",
     "provider_version_required", "provider_version_stale", "provider_version_missing", "provider_version_in_use",
-    "provider_version_limit", "provider_index_invalid", "provider_update_no_changes"})
+    "provider_version_limit", "provider_index_invalid", "provider_update_no_changes", "provider_effort_invalid"})
 HINTS = {
     "scope_unknown": "Only the `linux-v1` scope exists. Omit --scope or use --scope linux-v1.",
     "scope_not_selected": "This prefix was not prepared with --scope linux-v1. Prepare a new prefix with --scope linux-v1; a prefix never changes scope silently.",
@@ -992,6 +992,8 @@ def provider_command(args):
                     "executed": False, "redacted": True, **inventory}
         if args.provider_action == "create":
             public = {"model": args.model}
+            if args.effort is not None:
+                public["effort"] = args.effort
             for flag, key in (("base_url", "ANTHROPIC_BASE_URL"), ("http_proxy", "HTTP_PROXY"),
                               ("https_proxy", "HTTPS_PROXY"), ("no_proxy", "NO_PROXY"),
                               ("ssl_cert_file", "SSL_CERT_FILE")):
@@ -1004,7 +1006,7 @@ def provider_command(args):
                     "executed": False, **store.create(args.name, public, secrets, replace=args.replace)}
         if args.provider_action == "update":
             changes = {}
-            for flag, key in (("model", "model"), ("base_url", "ANTHROPIC_BASE_URL"),
+            for flag, key in (("model", "model"), ("effort", "effort"), ("base_url", "ANTHROPIC_BASE_URL"),
                               ("http_proxy", "HTTP_PROXY"), ("https_proxy", "HTTPS_PROXY"),
                               ("no_proxy", "NO_PROXY"), ("ssl_cert_file", "SSL_CERT_FILE")):
                 value = getattr(args, flag)
@@ -1145,6 +1147,7 @@ def parser():
     create = actions.add_parser("create", help="save one private profile with explicit consent")
     create.add_argument("--name", required=True)
     create.add_argument("--model", default="claude-sonnet-4-20250514")
+    create.add_argument("--effort", help="Claude Code effort level sent to the provider: low, medium, high or xhigh; omit to keep the host default")
     for flag in ("base-url", "http-proxy", "https-proxy", "no-proxy", "ssl-cert-file"):
         create.add_argument("--" + flag)
     source = create.add_mutually_exclusive_group(required=True)
@@ -1157,6 +1160,7 @@ def parser():
     update.add_argument("--name", required=True)
     update.add_argument("--expected-version", help="non-secret version from preview; required with --apply")
     update.add_argument("--model")
+    update.add_argument("--effort", help="Claude Code effort level sent to the provider: low, medium, high or xhigh; omit to keep the host default")
     for flag in ("base-url", "http-proxy", "https-proxy", "no-proxy", "ssl-cert-file"):
         update.add_argument("--" + flag)
     update_secret = update.add_mutually_exclusive_group()
