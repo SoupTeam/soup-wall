@@ -233,6 +233,16 @@ class Preflight(unittest.TestCase):
             self.assertEqual(before, self.snapshot())
             self.assertEqual(server.received, [])
 
+    def test_selected_effort_is_revalidated_locally(self):
+        self.select("http://127.0.0.1:9/v1", extras={"effort": "medium"})
+        self.assertEqual(self.check()["status"], "configuration-valid")
+        if self.installed:
+            return
+        # A stored level the current build no longer accepts refuses before any host starts.
+        with mock.patch.object(PROFILES, "EFFORTS", ("low",)):
+            result = self.check()
+        self.assertEqual((result["status"], result["reason"]), ("refused", "selection_invalid"))
+
     def test_missing_and_stale_selected_profile_refuse_without_network(self):
         missing = self.check()
         self.assertEqual((missing["status"], missing["reason"]),

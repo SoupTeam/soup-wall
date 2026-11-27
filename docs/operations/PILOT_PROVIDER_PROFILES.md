@@ -157,6 +157,40 @@ paths are refused. An optional CA file must be a canonical, bounded regular
 file not writable by a group or others. Unsupported fields and mixed API
 key/auth-token profiles refuse.
 
+### Effort level for providers with a narrower range
+
+`--effort` on `provider create` or `provider update` stores an optional
+Claude Code effort level: `low`, `medium`, `high` or `xhigh`. Any other value
+refuses with `provider_effort_invalid` before anything is written, and
+`provider check` revalidates the stored value. Like the model, the effort sits
+in the profile's nonsecret section, never in the credential FD, and preview
+shows it as `effort`.
+
+At run time the effort reaches only the selected host, as `effortLevel` in
+the private `host-settings.json` that the pilot already passes with
+`--settings`. User and project settings stay disabled and the host gets no
+new environment variable. Without `--effort`, the settings file is unchanged
+and Claude Code sends its own default, `high`.
+
+Set it when the provider does not accept `high`. For example, an
+OpenAI-compatible LiteLLM gateway that accepts only `low`, `medium` and
+`xhigh` answers the default request with HTTP 400, and the run fails with
+`restricted_launcher_failed`. Store a level the gateway does accept:
+
+```bash
+agentfw pilot provider create --name alem-qwen \
+  --model qwen3-8 \
+  --base-url https://GATEWAY_HOST/v1 \
+  --effort medium \
+  --prompt-api-key --apply
+agentfw pilot provider select --name alem-qwen --apply
+```
+
+For an existing profile, preview and apply the change with `provider update
+--name alem-qwen --effort medium`, then `--expected-version VERSION --apply`.
+To drop a stored effort, recreate the profile with `create --replace` and no
+`--effort`.
+
 The store stays in the owner-only 0700 Agent home and `pilot-providers/`
 directory. Existing flat 0600 files remain usable until the first explicit
 update migrates them inside that directory. Migration and later updates write

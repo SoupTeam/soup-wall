@@ -271,7 +271,7 @@ async fn owned(
         .arg("--model")
         .arg(model)
         .current_dir(&profile.root);
-    crate::pilot_host::isolate(&mut command, &run, provider)?;
+    crate::pilot_host::isolate(&mut command, &run, provider, None)?;
     let guard = crate::pilot_host::ChildEnvironmentGuard::install(&mut command, &run)?;
     for key in [
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",

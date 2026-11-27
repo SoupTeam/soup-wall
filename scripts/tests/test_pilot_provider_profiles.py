@@ -44,10 +44,11 @@ class ProviderProfiles(unittest.TestCase):
             self.assertEqual(inventory["profiles"][0]["model"], self.public["model"])
             self.assertNotIn(self.secret, json.dumps(inventory))
             store.select("owned")
-        values, model, selected, identity = PROFILE.chosen(self.home, {})
+        values, model, effort, selected, identity = PROFILE.chosen(self.home, {})
         self.assertEqual(values["ANTHROPIC_API_KEY"], self.secret)
         self.assertEqual(values["ANTHROPIC_BASE_URL"], self.public["ANTHROPIC_BASE_URL"])
         self.assertEqual(model, self.public["model"])
+        self.assertIsNone(effort, "a profile without effort keeps the host default")
         self.assertEqual(selected, "owned")
         PROFILE.unchanged(self.home, selected, identity)
         with PROFILE.PROVIDER.carrier(values) as fd:
@@ -65,7 +66,7 @@ class ProviderProfiles(unittest.TestCase):
         for ambient in ({"ANTHROPIC_API_KEY": "other"}, {"HTTP_PROXY": "http://127.0.0.1:7"}):
             with self.assertRaisesRegex(PROFILE.Refusal, "provider_source_conflict"):
                 PROFILE.chosen(self.home, ambient)
-        values, model, selected, identity = PROFILE.chosen(self.home, {})
+        values, model, effort, selected, identity = PROFILE.chosen(self.home, {})
         with PROFILE.Store(self.home) as store:
             replacement = dict(self.public, model="claude-sonnet-4-20250515",
                                ANTHROPIC_BASE_URL="http://127.0.0.1:19002/v1")
@@ -153,6 +154,41 @@ class ProviderProfiles(unittest.TestCase):
             PROFILE.Store(self.home)
         self.assertEqual((external / "sentinel").read_text(), "untouched")
 
+    def test_effort_is_a_host_option_outside_the_carrier(self):
+        self.public["effort"] = "medium"
+        self.create()
+        with PROFILE.Store(self.home) as store:
+            row = store.inspect()["profiles"][0]
+            self.assertEqual(row["effort"], "medium")
+            self.assertNotIn("effort", row["transport_fields"])
+            store.select("owned")
+        values, model, effort, selected, _identity = PROFILE.chosen(self.home, {})
+        self.assertEqual((model, effort, selected), (self.public["model"], "medium", "owned"))
+        self.assertNotIn("effort", values)
+        self.assertLessEqual(set(values), set(PROFILE.PROVIDER.KEYS))
+        with PROFILE.PROVIDER.carrier(values) as fd:
+            self.assertNotIn("effort", json.loads(os.read(fd, 16385)))
+
+    def test_effort_accepts_only_claude_code_levels(self):
+        for effort in PROFILE.EFFORTS:
+            PROFILE.validate_public(dict(self.public, effort=effort))
+        for effort in ("max", "auto", "MEDIUM", "", None, 2):
+            with self.assertRaisesRegex(PROFILE.Refusal, "provider_effort_invalid"):
+                PROFILE.validate_public(dict(self.public, effort=effort))
+        with PROFILE.Store(self.home, create=True) as store:
+            with self.assertRaisesRegex(PROFILE.Refusal, "provider_effort_invalid"):
+                store.create("owned", dict(self.public, effort="max"),
+                             {"ANTHROPIC_API_KEY": self.secret})
+            self.assertEqual(store.names(), [])
+        self.create()
+        with PROFILE.Store(self.home) as store:
+            preview = store.preview_update("owned", {"effort": "low"}, False)
+            self.assertEqual(preview["changed_fields"], ["effort"])
+            with self.assertRaisesRegex(PROFILE.Refusal, "provider_effort_invalid"):
+                store.update("owned", {"effort": "max"}, None, preview["version"])
+            store.update("owned", {"effort": "low"}, None, preview["version"])
+            self.assertEqual(store.inspect()["profiles"][0]["effort"], "low")
+
     def test_schema_endpoint_name_and_limits_refuse(self):
         for bad in ("../x", "UPPER", "x" * 33, "two parts", "selected"):
             with self.assertRaisesRegex(PROFILE.Refusal, "provider_name_invalid"):
@@ -210,11 +246,31 @@ class ProviderProfiles(unittest.TestCase):
             self.assertNotIn(self.secret.encode(), result.stdout + result.stderr)
         self.assertEqual(json.loads(preview.stdout)["selected"], "owned")
 
+    def test_cli_create_stores_effort_and_refuses_unknown_level(self):
+        base = [sys.executable, "-I", "-B", str(ROOT / "scripts/pilot.py"), "--agent-home", str(self.home),
+                "provider"]
+        with tempfile.TemporaryFile(mode="w+b") as source:
+            os.fchmod(source.fileno(), 0o600)
+            source.write(PROFILE.encoded({"ANTHROPIC_API_KEY": self.secret}))
+            source.seek(0)
+            command = [*base, "create", "--model", "qwen3-8", "--base-url", self.public["ANTHROPIC_BASE_URL"],
+                       "--secret-fd", str(source.fileno()), "--apply"]
+            refused = subprocess.run([*command, "--name", "refused", "--effort", "max"],
+                                     pass_fds=(source.fileno(),), capture_output=True, timeout=15)
+            created = subprocess.run([*command, "--name", "owned", "--effort", "medium"],
+                                     pass_fds=(source.fileno(),), capture_output=True, timeout=15)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn(b"provider_effort_invalid", refused.stdout + refused.stderr)
+        self.assertEqual(created.returncode, 0, created.stderr)
+        with PROFILE.Store(self.home) as store:
+            self.assertEqual(store.names(), ["owned"])
+            self.assertEqual(store.inspect()["profiles"][0]["effort"], "medium")
+
     def test_update_preview_is_inert_and_rotation_pins_old_and_new_launches(self):
         self.create()
         with PROFILE.Store(self.home) as store:
             store.select("owned")
-        old_values, _, selected, old_identity = PROFILE.chosen(self.home, {})
+        old_values, _, _, selected, old_identity = PROFILE.chosen(self.home, {})
         new_secret = "SOU181-SYNTHETIC-NEW-7d52"
         new_url = "http://127.0.0.1:19002/v1"
         cli = [sys.executable, "-I", "-B", str(ROOT / "scripts/pilot.py"),
@@ -254,7 +310,7 @@ class ProviderProfiles(unittest.TestCase):
         self.assertEqual(old_values["ANTHROPIC_BASE_URL"], self.public["ANTHROPIC_BASE_URL"])
         with self.assertRaisesRegex(PROFILE.Refusal, "provider_selection_stale"):
             PROFILE.unchanged(self.home, selected, old_identity)
-        new_values, _, new_name, new_identity = PROFILE.chosen(self.home, {})
+        new_values, _, _, new_name, new_identity = PROFILE.chosen(self.home, {})
         self.assertEqual(new_name, "owned")
         self.assertEqual(new_values["ANTHROPIC_API_KEY"], new_secret)
         self.assertEqual(new_values["ANTHROPIC_BASE_URL"], new_url)

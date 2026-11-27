@@ -340,8 +340,8 @@ def preset_provider(args):
     require(args.provider_home is not None and not PROVIDER.selected(os.environ), 'provider_source_conflict')
     presets = load('pilot_run_project_presets', 'pilot_project_presets.py')
     profile, binding = presets.provider_reference(args.provider_home, *fields, PROFILES)
-    values = dict(profile['public']); model = values.pop('model'); values.update(profile['secrets'])
-    return values, model, binding['name'], binding['version'] + ':' + binding['sha256']
+    values, model, effort = PROFILES.host_inputs(profile)
+    return values, model, effort, binding['name'], binding['version'] + ':' + binding['sha256']
 
 
 def preset_state(args):
@@ -376,14 +376,15 @@ def run_owned(args, report, maintenance=None):
     provider_home = getattr(args, "provider_home", None)
     explicit_provider = preset_provider(args)
     if explicit_provider is not None:
-        provider, model, provider_name, provider_identity = explicit_provider
+        provider, model, effort, provider_name, provider_identity = explicit_provider
     elif provider_home is not None:
-        provider, model, provider_name, provider_identity = PROFILES.chosen(provider_home, os.environ)
+        provider, model, effort, provider_name, provider_identity = PROFILES.chosen(provider_home, os.environ)
     else:
-        provider, model, provider_name, provider_identity = PROVIDER.selected(os.environ), None, None, None
+        provider, model, effort, provider_name, provider_identity = PROVIDER.selected(os.environ), None, None, None, None
         PROVIDER.require_access(provider)
     report["provider"] = {"source": "named-profile" if provider_name else "explicit-environment",
-                          "name": provider_name, "model": model or "claude-sonnet-4-20250514"}
+                          "name": provider_name, "model": model or "claude-sonnet-4-20250514",
+                          **({"effort": effort} if effort is not None else {})}
     # Main has already validated the selection under the lifetime lock. Refuse
     # an occupied explicit port before the additional full generation recheck.
     # The later bind remains authoritative if the port changes meanwhile.
@@ -566,6 +567,8 @@ def run_owned(args, report, maintenance=None):
                     "--maintenance-run", maintenance_context["run_id"]])
             if model is not None:
                 command.extend(["--model", model])
+            if effort is not None:
+                command.extend(["--effort", effort])
             if budget_snapshot is not None:
                 command.extend(["--linux-budget", str(budget_snapshot),
                                 "--linux-budget-sha256", report["resource_budget"]["budget_sha256"]])
