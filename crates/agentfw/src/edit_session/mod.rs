@@ -116,6 +116,10 @@ enum Action {
         timeout_seconds: u64,
         #[arg(long, default_value = "claude-sonnet-4-20250514")]
         model: String,
+        /// Effort level written to the host's private settings as `effortLevel`;
+        /// omitted, Claude Code keeps its own default.
+        #[arg(long, value_enum)]
+        effort: Option<crate::pilot_host::Effort>,
     },
     /// Inspect or decide existing exact native Ask requests for this run.
     Ask {
@@ -335,5 +339,33 @@ mod grammar_tests {
             "--consent-private-content",
         ]);
         assert_eq!(parsed.is_ok(), cfg!(target_os = "linux"));
+    }
+    #[test]
+    fn run_effort_is_optional_and_limited_to_host_levels() {
+        let run = |extra: &[&str]| {
+            let mut words = vec![
+                "agentfw",
+                "run",
+                "--plan",
+                "/private/plan.json",
+                "--sha256",
+                "digest",
+                "--state",
+                "/private/state",
+                "--prompt-file",
+                "/private/prompt",
+            ];
+            words.extend_from_slice(extra);
+            Grammar::try_parse_from(words).map(|grammar| match grammar.cli.command {
+                Action::Run { effort, .. } => effort,
+                _ => unreachable!("run subcommand"),
+            })
+        };
+        assert_eq!(run(&[]).unwrap(), None);
+        assert_eq!(
+            run(&["--effort", "medium"]).unwrap(),
+            Some(crate::pilot_host::Effort::Medium)
+        );
+        assert!(run(&["--effort", "max"]).is_err());
     }
 }

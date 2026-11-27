@@ -316,11 +316,16 @@ else: raise AssertionError('ambient helper executed')
     fn selected_effort_reaches_only_the_private_host_settings() {
         let private = tempfile::tempdir().unwrap();
         let mut command = Command::new("/trusted/claude");
-        configure(&mut command, private.path(), Vec::new(), Some(Effort::Medium)).unwrap();
-        let settings: serde_json::Value = serde_json::from_slice(
-            &fs::read(private.path().join("host-settings.json")).unwrap(),
+        configure(
+            &mut command,
+            private.path(),
+            Vec::new(),
+            Some(Effort::Medium),
         )
         .unwrap();
+        let settings: serde_json::Value =
+            serde_json::from_slice(&fs::read(private.path().join("host-settings.json")).unwrap())
+                .unwrap();
         assert_eq!(
             settings,
             serde_json::json!({
@@ -393,13 +398,21 @@ else: raise AssertionError('ambient helper executed')
             }
             file.into_raw_fd()
         }
+        fn identity(fd: i32) -> Option<(u64, u64)> {
+            let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+            (unsafe { libc::fstat(fd, &mut stat) } == 0).then_some((stat.st_dev, stat.st_ino))
+        }
         let fd = carrier(br#"{"ANTHROPIC_API_KEY":"owned-api-canary"}"#, true);
+        let carrier_identity = identity(fd);
+        assert!(carrier_identity.is_some());
         let values = provider_inputs(Some(fd)).unwrap();
         assert_eq!(
             values,
             vec![("ANTHROPIC_API_KEY".into(), "owned-api-canary".into())]
         );
-        assert_eq!(unsafe { libc::fcntl(fd, libc::F_GETFD) }, -1);
+        // A parallel test may reuse the closed descriptor number, but never for
+        // this memfd: the number must no longer refer to the consumed carrier.
+        assert_ne!(identity(fd), carrier_identity);
         for bytes in [
             br#"{"LD_PRELOAD":"owned-loader"}"#.as_slice(),
             br#"{"ANTHROPIC_API_KEY":"a","ANTHROPIC_API_KEY":"b"}"#.as_slice(),

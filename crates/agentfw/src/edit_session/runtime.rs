@@ -25,15 +25,23 @@ pub(super) struct RunRecord {
     pub(super) instance_id: String,
 }
 
+/// Operator-selected model request settings for the pinned host.
+pub(super) struct HostRequest {
+    pub(super) model: String,
+    /// Reaches the host only as `effortLevel` in its private settings.
+    pub(super) effort: Option<crate::pilot_host::Effort>,
+}
+
 pub(super) fn run(
     plan: PathBuf,
     digest: String,
     parent: PathBuf,
     prompt_file: PathBuf,
     seconds: u64,
-    model: String,
+    host: HostRequest,
 ) -> Result<()> {
     ensure!((1..=180).contains(&seconds), "edit_timeout_out_of_bounds");
+    let model = &host.model;
     ensure!(
         !model.is_empty()
             && model.len() <= 128
@@ -58,7 +66,7 @@ pub(super) fn run(
         .enable_all()
         .build()?;
     rt.block_on(owned(
-        profile, digest, parent, prompt, seconds, model, provider,
+        profile, digest, parent, prompt, seconds, host, provider,
     ))
 }
 
@@ -102,7 +110,7 @@ async fn owned(
     parent: PathBuf,
     prompt: Vec<u8>,
     seconds: u64,
-    model: String,
+    request: HostRequest,
     provider: Vec<(std::ffi::OsString, std::ffi::OsString)>,
 ) -> Result<()> {
     use std::os::{
@@ -269,9 +277,9 @@ async fn owned(
         .arg("--permission-mode")
         .arg("dontAsk")
         .arg("--model")
-        .arg(model)
+        .arg(&request.model)
         .current_dir(&profile.root);
-    crate::pilot_host::isolate(&mut command, &run, provider, None)?;
+    crate::pilot_host::isolate(&mut command, &run, provider, request.effort)?;
     let guard = crate::pilot_host::ChildEnvironmentGuard::install(&mut command, &run)?;
     for key in [
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",

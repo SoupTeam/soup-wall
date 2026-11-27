@@ -72,6 +72,12 @@ settings, user home, plugins, hooks and executable search path are isolated;
 builtins and unselected MCP servers are disabled. There is no paid-provider
 requirement for the qualification: it uses an owned scripted loopback provider.
 
+`--model` selects the model, and the optional `--effort` (`low`, `medium`, `high`
+or `xhigh`) selects the Claude Code effort level. The effort reaches only the host,
+as `effortLevel` in its private settings file. Without `--effort`, Claude Code sends
+its default `high`; set a level the provider accepts when it has no `high`, as
+described in [provider profiles](PILOT_PROVIDER_PROFILES.md#effort-level-for-providers-with-a-narrower-range).
+
 The command prints the private run directory. From a second terminal:
 
 ```sh
